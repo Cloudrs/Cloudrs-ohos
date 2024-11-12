@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Cloudreve"
+    },
+    {
+      "name": "login_address",
+      "value": "Address"
+    },
+    {
+      "name": "login_continue",
+      "value": "Continue"
+    }
+  ]
+}

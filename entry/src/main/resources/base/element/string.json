@@ -1,0 +1,32 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Cloudreve"
+    },
+    {
+      "name": "login_address",
+      "value": "网站地址"
+    },
+    {
+      "name": "login_continue",
+      "value": "继续"
+    },
+    {
+      "name": "login_tips",
+      "value": "请输入访问web端的站点地址，请确保站点协议（http/https）和web站点相同"
+    },
+    {
+      "name": "login_title",
+      "value": "站点绑定"
+    }
+  ]
+}

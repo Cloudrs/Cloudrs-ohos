@@ -9,6 +9,15 @@
       "tablet",
       "2in1"
     ],
+    "requestPermissions": [{
+      "name": "ohos.permission.INTERNET",
+      "usedScene": {
+        "abilities": [
+          "FormAbility"
+        ],
+        "when":"always"
+      }
+    }],
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",

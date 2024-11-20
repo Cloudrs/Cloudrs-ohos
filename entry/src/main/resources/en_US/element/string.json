@@ -19,6 +19,18 @@
     {
       "name": "login_continue",
       "value": "Continue"
+    },
+    {
+      "name": "login_title",
+      "value": "Cloudreve"
+    },
+    {
+      "name": "login_user",
+      "value": "Mail"
+    },
+    {
+      "name": "login_password",
+      "value": "Passsword"
     }
   ]
 }

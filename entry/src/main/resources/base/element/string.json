@@ -26,6 +26,18 @@
     },
     {
       "name": "login_title",
+      "value": "Cloudreve"
+    },
+    {
+      "name": "login_user",
+      "value": "用户邮箱"
+    },
+    {
+      "name": "login_password",
+      "value": "登录密码"
+    },
+    {
+      "name": "website_title",
       "value": "站点绑定"
     }
   ]

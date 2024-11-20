@@ -5,8 +5,16 @@
       "value": "#FFFFFF"
     },
     {
+      "name": "main_window_background",
+      "value": "#FFFFFF"
+    },
+    {
       "name": "select_primary",
       "value": "#0A59F7"
+    },
+    {
+      "name": "textinput_background",
+      "value": "#f4f6f5"
     },
     {
       "name": "light_gray",

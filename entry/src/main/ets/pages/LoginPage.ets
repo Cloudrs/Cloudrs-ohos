@@ -2,6 +2,7 @@ import { LengthMetrics } from '@kit.ArkUI'
 import axios, { AxiosResponse, AxiosRequestConfig } from '@ohos/axios'
 import { JSON } from '@kit.ArkTS'
 import { window } from '@kit.ArkUI';
+import { baseUrlSet, pingRequest } from '../utils/AxiosRequest';
 
 const REQUEST_TIMEOUT: number = 3000;
 
@@ -123,33 +124,20 @@ struct LoginPage {
   buttonContinue() {
     Button($r("app.string.login_continue"))
       .width("100%")
-      .onClick(() => {
+      .onClick(async () => {
         if (!this.websiteInvalid) {
           if (this.address.length == 0) {
             AlertDialog.show({message: '输入的网站地址不能为空'})
             return
           }
-
-          let urlPing = this.protocol + this.address + '/api/v3/site/ping'
-          axios.get(urlPing, {timeout: REQUEST_TIMEOUT})
-            .then((response: AxiosResponse) => {
-              if (response.status !== 200) {
-                AlertDialog.show({message: '访问失败，请检查网址是否正确'})
-              }
-              else {
-                // let json = JSON.parse(response.data)
-                if (0 === 0) {
-                  console.log("loginPage", "请求成功", JSON.stringify(response.data));
-                  this.websiteInvalid = true;
-                }
-                else {
-                  AlertDialog.show({message: '访问失败，请检查网址是否正确'})
-                }
-              }
-            })
-            .catch((reason: string) => {
-              AlertDialog.show({message: '请求失败，错误：' + JSON.stringify(reason)})
-            })
+          baseUrlSet(this.address)
+          let isOk = await pingRequest();
+          if (isOk) {
+            this.websiteInvalid = true;
+          }
+          else {
+            AlertDialog.show({message: '站点请求失败'})
+          }
         }
         else {
           if (this.username.length == 0 || this.password.length == 0) {

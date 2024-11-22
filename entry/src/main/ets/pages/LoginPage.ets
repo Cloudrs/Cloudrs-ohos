@@ -1,8 +1,9 @@
-import { LengthMetrics } from '@kit.ArkUI'
+import { LengthMetrics, router } from '@kit.ArkUI'
 import axios, { AxiosResponse, AxiosRequestConfig } from '@ohos/axios'
 import { JSON } from '@kit.ArkTS'
 import { window } from '@kit.ArkUI';
-import { baseUrlSet, pingRequest } from '../utils/AxiosRequest';
+import { baseUrlSet, cloudLogin, cloudPingRequest } from '../utils/AxiosRequest';
+import { UserInfo } from '../model/Response';
 
 const REQUEST_TIMEOUT: number = 3000;
 
@@ -77,8 +78,7 @@ struct LoginPage {
           if (!this.websiteInvalid) {
             // 网站地址输入
             this.showWebsiteInput()
-          }
-          else {
+          } else {
             // 登录用户名密码输入
             this.showLoginInput()
           }
@@ -87,10 +87,12 @@ struct LoginPage {
           this.buttonContinue();
 
           // 提示
-          Text($r("app.string.login_tips"))
-            .fontSize(11)
-            .fontColor($r("app.color.light_gray"))
-            .margin({left: 10, right: 10})
+          if (!this.websiteInvalid) {
+            Text($r("app.string.login_tips"))
+              .fontSize(11)
+              .fontColor($r("app.color.light_gray"))
+              .margin({ left: 10, right: 10 })
+          }
         }
       }
       .width('100%')
@@ -131,42 +133,33 @@ struct LoginPage {
             return
           }
           baseUrlSet(this.address)
-          let isOk = await pingRequest();
+          let isOk = await cloudPingRequest();
           if (isOk) {
             this.websiteInvalid = true;
-          }
-          else {
+          } else {
             AlertDialog.show({message: '站点请求失败'})
           }
-        }
-        else {
+        } else {
           if (this.username.length == 0 || this.password.length == 0) {
             AlertDialog.show({message: '无效用户名或密码'})
             return
           }
 
-          let urlLogin = this.protocol + this.address + '/api/v3/user/session'
-          axios.get(urlLogin, {timeout: REQUEST_TIMEOUT})
-            .then((response: AxiosResponse) => {
-              if (response.status !== 200) {
-                console.log("loginPage", "访问失败，请检查网址是否正确");
-                return
+          let userInfo: UserInfo | null = await cloudLogin(this.username, this.password);
+          if (userInfo !== null) {
+            //登录成功，跳转到主页
+            router.replaceUrl({
+              url: 'pages/Index' // 目标url
+            }, router.RouterMode.Standard, (err) => {
+              if (err) {
+                console.error(`Invoke replaceUrl failed, code is ${err.code}, message is ${err.message}`);
+                return;
               }
-
-              let json = JSON.parse(response.data)
-              if ((json as object)?.['code'] === 0) {
-                console.log("loginPage", "请求成功", JSON.stringify(response.data));
-                this.loginInvalid = true;
-                //TODO: 跳转到导航页
-
-              }
-              else {
-                console.log("loginPage", "访问失败，请检查网址是否正确");
-              }
+              console.info('Invoke replaceUrl succeeded.');
             })
-            .catch((reason: string) => {
-              console.log("loginPage", "请求失败，错误：", JSON.stringify(reason));
-            })
+          } else {
+            AlertDialog.show({message: '登录失败，请检查用户名密码'})
+          }
         }
       })
   }
@@ -206,6 +199,7 @@ struct LoginPage {
           .margin({ left: 5, right: 5 })
 
         Text(this.protocol)
+          .fontColor($r('app.color.light_gray'))
           .bindMenu(this.protocolMenu)
 
         TextInput({
@@ -223,7 +217,6 @@ struct LoginPage {
     }
     .alignContent(Alignment.Start)
     .width("100%")
-    .transition( TransitionEffect.SLIDE_SWITCH.animation({ duration: 500, curve: Curve.EaseInOut }))
   }
 
   @Builder
@@ -283,8 +276,9 @@ struct LoginPage {
       }
       .alignContent(Alignment.Start)
       .width("100%")
+      .transition(TransitionEffect.OPACITY.animation({duration: 500})
+        .combine(TransitionEffect.translate({y: -30}).animation({duration: 500})))
     }
-    .transition( TransitionEffect.SLIDE_SWITCH.animation({ duration: 500, curve: Curve.EaseInOut }))
   }
 
   @Builder

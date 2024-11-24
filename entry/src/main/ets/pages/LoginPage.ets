@@ -1,17 +1,8 @@
-import { LengthMetrics, router } from '@kit.ArkUI'
-import axios, { AxiosResponse, AxiosRequestConfig } from '@ohos/axios'
+import { LengthMetrics, router, window } from '@kit.ArkUI'
 import { JSON } from '@kit.ArkTS'
-import { window } from '@kit.ArkUI';
 import { baseUrlSet, cloudLogin, cloudPingRequest } from '../utils/AxiosRequest';
-import { UserInfo } from '../model/Response';
-
-const REQUEST_TIMEOUT: number = 3000;
-
-class DataResponse {
-  code: string = ''
-  data: string = ''
-  msg: string = ''
-}
+import { UserInfo } from '../types/ApiTypes';
+import { showToastTips, ToastType } from '../common/Components';
 
 @Entry
 @Component
@@ -129,24 +120,26 @@ struct LoginPage {
       .onClick(async () => {
         if (!this.websiteInvalid) {
           if (this.address.length == 0) {
-            AlertDialog.show({message: '输入的网站地址不能为空'})
+            showToastTips('无效网站地址', ToastType.Error)
             return
           }
-          baseUrlSet(this.address)
+          // cloudBaseUrl(this.address)
+          baseUrlSet(this.protocol + this.address)
           let isOk = await cloudPingRequest();
           if (isOk) {
             this.websiteInvalid = true;
           } else {
-            AlertDialog.show({message: '站点请求失败'})
+            showToastTips('站点请求失败', ToastType.Error)
           }
         } else {
           if (this.username.length == 0 || this.password.length == 0) {
-            AlertDialog.show({message: '无效用户名或密码'})
+            showToastTips('无效用户名或密码', ToastType.Error)
             return
           }
 
           let userInfo: UserInfo | null = await cloudLogin(this.username, this.password);
           if (userInfo !== null) {
+            console.log('LoginPage', 'userInfo: ', JSON.stringify(userInfo))
             //登录成功，跳转到主页
             router.replaceUrl({
               url: 'pages/Index' // 目标url
@@ -158,7 +151,7 @@ struct LoginPage {
               console.info('Invoke replaceUrl succeeded.');
             })
           } else {
-            AlertDialog.show({message: '登录失败，请检查用户名密码'})
+            showToastTips('登录失败，请检查用户邮箱及密码', ToastType.Error);
           }
         }
       })

@@ -1,19 +1,10 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from "@ohos/axios";
-import { UserInfo, GroupInfo, SiteCommon } from "../model/Response";
-
-const CLOUDREVE_URL_PREFIX:string = '/api/v3'
-const CLOUDREVE_URL_PING: string = '/site/ping'
-const CLOUDREVE_URL_LOGIN: string = '/user/session'
-
-interface LoginData {
-  userName: string,
-  Password: string,
-  captchaCode: string
-}
+import { UserInfo, GroupInfo, SiteCommon } from "../types/ApiTypes";
+import { REQUEST_TIMEOUT, CLOUDREVE_URL_PREFIX, CLOUDREVE_URL_LOGIN, CLOUDREVE_URL_PING } from "../common/Common";
 
 const axiosInstance = axios.create({
   baseURL: 'https://cloudrs.cn/api/v3',
-  timeout: 3000,
+  timeout: REQUEST_TIMEOUT,
   method: 'get',
 })
 
@@ -30,6 +21,7 @@ axiosInstance.interceptors.request.use(
 );
 
 export function baseUrlSet(url: string) {
+  console.log('AxiosRequest', `baseUrl: ${url}`)
   axiosInstance.defaults.baseURL = url + CLOUDREVE_URL_PREFIX
 }
 
@@ -38,6 +30,10 @@ export function cookieSet(cookie: string) {
   axiosInstance.defaults.headers.common['Cookie'] = cookie
 }
 
+/**
+ * 网站测试
+ * @returns
+ */
 export async function cloudPingRequest(): Promise<boolean> {
   try {
     let resp: AxiosResponse<SiteCommon<string>> = await axiosInstance.get<SiteCommon<string>, AxiosResponse<SiteCommon<string>>, null>(CLOUDREVE_URL_PING)
@@ -45,37 +41,45 @@ export async function cloudPingRequest(): Promise<boolean> {
       console.log('AxiosRequest', "success : ", JSON.stringify(resp))
       return true
     } else {
-      console.log('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
+      console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
       return false
     }
   } catch (e) {
-    console.log('AxiosRequest', `failed : ${e}`)
+    console.error('AxiosRequest', `failed : ${e}`)
     return false
   }
 }
 
+/**
+ * 网站登录
+ * @param username  用户邮箱
+ * @param password  用户密码
+ * @returns Promise<UserInfo | null>
+ */
 export async function cloudLogin(username: string, password: string): Promise<UserInfo | null> {
   try {
-    let loginData: LoginData = {
-      userName: username,
-      Password: password,
+    let resp: AxiosResponse<SiteCommon<UserInfo>> = await axiosInstance.post<SiteCommon<UserInfo>>(CLOUDREVE_URL_LOGIN, {
+      username: username,
+      password: password,
       captchaCode: ''
-    };
-
-    let resp: AxiosResponse<SiteCommon<UserInfo>> = await axiosInstance.post<SiteCommon<UserInfo>>(CLOUDREVE_URL_LOGIN, loginData)
+    })
     if ( resp.status === 200 && resp.data.code === 0) {
       console.log('AxiosRequest', "success :", JSON.stringify(resp))
       let cookie: string | undefined = resp.headers["set-cookie"]?.toString()
       if (cookie) {
-        cookieSet(cookie.split(';')[0])
+        let regex = /cloudreve-session=([^;]+);/;
+        let match = cookie.match(regex)
+        if (match) {
+          cookieSet(match[1])
+        }
       }
       return resp.data.data
     } else {
-      console.log('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
+      console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
       return null
     }
   } catch (e) {
-    console.log('AxiosRequest', `failed : ${e}`)
+    console.error('AxiosRequest', `failed : ${e}`)
     return null
   }
 }

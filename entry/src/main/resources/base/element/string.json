@@ -39,6 +39,22 @@
     {
       "name": "website_title",
       "value": "站点绑定"
+    },
+    {
+      "name": "navigation_toolbar_files",
+      "value": "文件"
+    },
+    {
+      "name": "navigation_toolbar_photos",
+      "value": "相册"
+    },
+    {
+      "name": "navigation_toolbar_remote_download",
+      "value": "下载"
+    },
+    {
+      "name": "navigation_toolbar_me",
+      "value": "我的"
     }
   ]
 }

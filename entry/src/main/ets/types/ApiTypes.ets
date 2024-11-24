@@ -5,6 +5,12 @@ export interface SiteCommon<T> {
   msg: string;
 }
 
+export interface LoginData {
+  username: string,
+  password: string,
+  captchaCode: string
+}
+
 export interface GroupInfo {
   id: string;
   name: string;

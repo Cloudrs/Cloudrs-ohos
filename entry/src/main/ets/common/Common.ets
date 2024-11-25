@@ -1,9 +1,30 @@
+export const USERPRIVDATA_NAME = 'UserPrivData'
 
-const REQUEST_TIMEOUT: number = 3000;
+export const WEBSITE_PROTOCOL_KEY = 'website_protocol'
+export const WEBSITE_URL_KEY = 'website_url'
+export const WEBSITE_COOKIE_KEY = 'website_cookie'
 
-const CLOUDREVE_URL_PREFIX:string = '/api/v3'
-const CLOUDREVE_URL_CONFIG: string = '/site/config'
-const CLOUDREVE_URL_PING: string = '/site/ping'
-const CLOUDREVE_URL_LOGIN: string = '/user/session'
+/**
+ * 站点请求超时时间
+ */
+export const CLOUDREVE_REQUEST_TIMEOUT: number = 3000;
 
-export {REQUEST_TIMEOUT, CLOUDREVE_URL_PREFIX, CLOUDREVE_URL_CONFIG, CLOUDREVE_URL_PING, CLOUDREVE_URL_LOGIN}
+/**
+ * 网站url前缀
+ */
+export const CLOUDREVE_URL_PREFIX:string = '/api/v3'
+
+/**
+ * 站点配置路径
+ */
+export const CLOUDREVE_CONFIG: string = '/site/config'
+
+/**
+ * 站点ping请求路径
+ */
+export const CLOUDREVE_PING: string = '/site/ping'
+
+/**
+ * 站点登录请求路径
+ */
+export const CLOUDREVE_LOGIN: string = '/user/session'

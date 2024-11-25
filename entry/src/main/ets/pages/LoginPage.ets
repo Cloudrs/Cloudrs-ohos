@@ -1,8 +1,13 @@
 import { LengthMetrics, router, window } from '@kit.ArkUI'
 import { JSON } from '@kit.ArkTS'
-import { baseUrlSet, cloudLogin, cloudPingRequest } from '../utils/AxiosRequest';
-import { UserInfo } from '../types/ApiTypes';
+import { baseUrlSet, cloudGet, cloudPost, cookieSet } from '../utils/AxiosRequest';
+import { LoginData, SiteConfig, UserInfo } from '../types/ApiTypes';
 import { showToastTips, ToastType } from '../common/Components';
+import { CLOUDREVE_CONFIG, CLOUDREVE_LOGIN, CLOUDREVE_PING, USERPRIVDATA_NAME,
+  WEBSITE_COOKIE_KEY,
+  WEBSITE_PROTOCOL_KEY,
+  WEBSITE_URL_KEY} from '../common/Common';
+import UserPrivData from '../utils/UserPrivData';
 
 @Entry
 @Component
@@ -14,12 +19,20 @@ struct LoginPage {
   @State websiteInvalid: boolean = false;
   @State loginInvalid: boolean = false;
 
+  private cookie: string = ''
   private address: string = ''
   private username: string = ''
   private password: string = ''
   scroller: Scroller = new Scroller();
 
   aboutToAppear() {
+    this.protocol = UserPrivData.getPreferences(USERPRIVDATA_NAME, WEBSITE_PROTOCOL_KEY, 'https://') as string
+    this.address = UserPrivData.getPreferences(USERPRIVDATA_NAME, WEBSITE_URL_KEY, '') as string
+    this.cookie = UserPrivData.getPreferences(USERPRIVDATA_NAME, WEBSITE_COOKIE_KEY, '') as string
+
+    baseUrlSet(this.protocol + this.address)
+    cookieSet(this.cookie)
+
     window.getLastWindow(getContext(this)).then(currentWindow => {
       // 设置窗口的布局为沉浸式布局
       currentWindow.setWindowLayoutFullScreen(true);
@@ -123,10 +136,12 @@ struct LoginPage {
             showToastTips('无效网站地址', ToastType.Error)
             return
           }
-          // cloudBaseUrl(this.address)
           baseUrlSet(this.protocol + this.address)
-          let isOk = await cloudPingRequest();
-          if (isOk) {
+          let data: string | null = await cloudGet(CLOUDREVE_PING);
+          if (data) {
+            UserPrivData.putPreferences(USERPRIVDATA_NAME, WEBSITE_PROTOCOL_KEY, this.protocol)
+            UserPrivData.putPreferences(USERPRIVDATA_NAME, WEBSITE_URL_KEY, this.address)
+            let siteConfig: SiteConfig|null = await cloudGet(CLOUDREVE_CONFIG);
             this.websiteInvalid = true;
           } else {
             showToastTips('站点请求失败', ToastType.Error)
@@ -136,10 +151,10 @@ struct LoginPage {
             showToastTips('无效用户名或密码', ToastType.Error)
             return
           }
-
-          let userInfo: UserInfo | null = await cloudLogin(this.username, this.password);
+          let loginData: LoginData = {username: this.username, password: this.password, captchaCode: ''};
+          let userInfo: UserInfo | null = await cloudPost(CLOUDREVE_LOGIN, loginData);
           if (userInfo !== null) {
-            console.log('LoginPage', 'userInfo: ', JSON.stringify(userInfo))
+            console.debug('LoginPage', 'userInfo: ', JSON.stringify(userInfo))
             //登录成功，跳转到主页
             router.replaceUrl({
               url: 'pages/Index' // 目标url

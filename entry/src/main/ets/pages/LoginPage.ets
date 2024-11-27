@@ -1,13 +1,12 @@
 import { LengthMetrics, router, window } from '@kit.ArkUI'
 import { JSON } from '@kit.ArkTS'
-import { baseUrlSet, cloudGet, cloudPost, cookieSet } from '../utils/AxiosRequest';
-import { LoginData, SiteConfig, UserInfo } from '../types/ApiTypes';
+import { baseUrlSet, cloudGet, cloudPost, cookieGet, cookieSet } from '../utils/AxiosRequest';
+import { DbUserInfo, LoginData, SiteConfig, UserInfo } from '../types/ApiTypes';
 import { showToastTips, ToastType } from '../common/Components';
 import { CLOUDREVE_CONFIG, CLOUDREVE_LOGIN, CLOUDREVE_PING, USERPRIVDATA_NAME,
-  WEBSITE_COOKIE_KEY,
-  WEBSITE_PROTOCOL_KEY,
-  WEBSITE_URL_KEY} from '../common/Common';
+  WEBSITE_CURRENT_USER_KEY} from '../common/Common';
 import UserPrivData from '../utils/UserPrivData';
+import UserDatabase from '../utils/UserDatabase';
 
 @Entry
 @Component
@@ -26,13 +25,6 @@ struct LoginPage {
   scroller: Scroller = new Scroller();
 
   aboutToAppear() {
-    this.protocol = UserPrivData.getPreferences(USERPRIVDATA_NAME, WEBSITE_PROTOCOL_KEY, 'https://') as string
-    this.address = UserPrivData.getPreferences(USERPRIVDATA_NAME, WEBSITE_URL_KEY, '') as string
-    this.cookie = UserPrivData.getPreferences(USERPRIVDATA_NAME, WEBSITE_COOKIE_KEY, '') as string
-
-    baseUrlSet(this.protocol + this.address)
-    cookieSet(this.cookie)
-
     window.getLastWindow(getContext(this)).then(currentWindow => {
       // 设置窗口的布局为沉浸式布局
       currentWindow.setWindowLayoutFullScreen(true);
@@ -55,71 +47,71 @@ struct LoginPage {
 
   build() {
     Column({space: 10}) {
-      Row() {
-        Button() {
-          Image($r('app.media.ic_arrow_left_circle'))
-        }
-        .width(30)
-        .backgroundColor($r("app.color.main_window_background"))
-        .borderRadius(15)
-        .onClick(() => {
-          this.websiteInvalid = false
-        })
-      }
-      .height(30)
-      .margin({top: 20})
-      .width('100%')
-      .justifyContent(FlexAlign.Start)
-      .visibility(this.websiteInvalid ? Visibility.Visible : Visibility.Hidden)
-      .animation({duration:500})
-
-      Scroll(this.scroller) {
-        Column({space: 10}) {
-          // 显示login及标题
-          this.showLoginHeader()
-
-          // 根据状态显示不同输入框
-          if (!this.websiteInvalid) {
-            // 网站地址输入
-            this.showWebsiteInput()
-          } else {
-            // 登录用户名密码输入
-            this.showLoginInput()
+      Column() {
+        Row() {
+          Button() {
+            Image($r('app.media.ic_arrow_left_circle'))
           }
+          .width(30)
+          .backgroundColor($r("app.color.main_window_background"))
+          .borderRadius(15)
+          .onClick(() => {
+            this.websiteInvalid = false
+          })
+        }
+        .height(30)
+        .margin({ top: 20 })
+        .width('100%')
+        .justifyContent(FlexAlign.Start)
+        .visibility(this.websiteInvalid ? Visibility.Visible : Visibility.Hidden)
+        .animation({ duration: 500 })
 
-          // 按键
-          this.buttonContinue();
+        Scroll(this.scroller) {
+          Column({ space: 10 }) {
+            // 显示login及标题
+            this.showLoginHeader()
 
-          // 提示
-          if (!this.websiteInvalid) {
-            Text($r("app.string.login_tips"))
-              .fontSize(11)
-              .fontColor($r("app.color.light_gray"))
-              .margin({ left: 10, right: 10 })
+            // 根据状态显示不同输入框
+            if (!this.websiteInvalid) {
+              this.showWebsiteInput()
+            } else {
+              this.showLoginInput()
+            }
+
+            // 继续按钮
+            this.buttonContinue();
+
+            // 提示
+            if (!this.websiteInvalid) {
+              Text($r("app.string.login_tips"))
+                .fontSize(11)
+                .fontColor($r("app.color.light_gray"))
+                .margin({ left: 10, right: 10 })
+            }
           }
         }
+        .width('100%')
+        .scrollBar(BarState.Off)
       }
-      .width('100%')
-      .height(this.scrollHeight)
-      .layoutWeight(1)
-      .align(Alignment.Center)
 
-      // 扫描添加及历史账户
-      this.buttonScanAndUsers()
+      Column({space: 12}) {
+        // 扫描添加及历史账户
+        this.buttonScanAndUsers()
 
-      // 隐私条款声明
-      this.privacyText()
+        // 隐私条款声明
+        this.privacyText()
+      }
     }
     .height("100%")
     .padding({top: 20, left: 20, right: 20, bottom: this.keyHeight ? 0 : 20})
     .backgroundColor($r("app.color.main_window_background"))
+    .justifyContent(FlexAlign.SpaceBetween)
   }
 
   @Builder
   showLoginHeader() {
-    Image($r("app.media.cloudreve"))
-      .width(100)
-      .margin({ bottom: 20 })
+    Image($r("app.media.cloudrs"))
+      .width(180)
 
     Text(this.websiteInvalid ? $r("app.string.login_title") : $r("app.string.website_title"))
       .fontSize(20)
@@ -139,8 +131,6 @@ struct LoginPage {
           baseUrlSet(this.protocol + this.address)
           let data: string | null = await cloudGet(CLOUDREVE_PING);
           if (data) {
-            UserPrivData.putPreferences(USERPRIVDATA_NAME, WEBSITE_PROTOCOL_KEY, this.protocol)
-            UserPrivData.putPreferences(USERPRIVDATA_NAME, WEBSITE_URL_KEY, this.address)
             let siteConfig: SiteConfig|null = await cloudGet(CLOUDREVE_CONFIG);
             this.websiteInvalid = true;
           } else {
@@ -155,9 +145,23 @@ struct LoginPage {
           let userInfo: UserInfo | null = await cloudPost(CLOUDREVE_LOGIN, loginData);
           if (userInfo !== null) {
             console.debug('LoginPage', 'userInfo: ', JSON.stringify(userInfo))
+            let dbUserInfo: DbUserInfo = {
+              url: this.protocol + this.address,
+              username: this.username,
+              password: this.password,
+              cookie: cookieGet()?.toString() ?? '',
+              expires: '',
+              userinfo: userInfo
+            }
+            //保存当前用户
+            UserPrivData.putSync(USERPRIVDATA_NAME, WEBSITE_CURRENT_USER_KEY, this.username)
+
+            // 插入到数据库
+            UserDatabase.insertUserInfo(dbUserInfo)
+
             //登录成功，跳转到主页
             router.replaceUrl({
-              url: 'pages/Index' // 目标url
+              url: 'pages/IndexPage', // 目标url
             }, router.RouterMode.Standard, (err) => {
               if (err) {
                 console.error(`Invoke replaceUrl failed, code is ${err.code}, message is ${err.message}`);
@@ -247,7 +251,6 @@ struct LoginPage {
           })
             .backgroundColor($r("app.color.textinput_background"))
             .borderRadius(10)
-            .padding({ left: 0 })
             .layoutWeight(1)
             .onChange((value) => {
               this.username = value
@@ -275,7 +278,6 @@ struct LoginPage {
             .type(InputType.Password)
             .backgroundColor($r("app.color.textinput_background"))
             .borderRadius(10)
-            .padding({ left: 0 })
             .layoutWeight(1)
             .onChange((value) => {
               this.password = value
@@ -321,7 +323,7 @@ struct LoginPage {
   @Builder
   privacyText() {
     Flex({wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center}) {
-      Text("使用Cloudreve即表示您接受我们的 ")
+      Text("使用Cloudrs即表示您接受我们的 ")
         .fontSize(11)
         .fontColor($r("app.color.light_gray"))
 

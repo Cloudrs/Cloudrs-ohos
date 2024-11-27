@@ -11,9 +11,9 @@ export interface SiteCommon<T> {
  * 登录请求信息
  */
 export interface LoginData {
-  username: string,
-  password: string,
-  captchaCode: string
+  username: string;
+  password: string;
+  captchaCode: string;
 }
 
 /**
@@ -78,4 +78,16 @@ export interface UserStorage {
   used: number;
   free: number;
   total: number;
+}
+
+/**
+ * 保存数据数据结构
+ */
+export interface DbUserInfo {
+  url: string,
+  username: string;
+  password: string;
+  cookie: string;
+  expires: string;
+  userinfo: UserInfo;
 }

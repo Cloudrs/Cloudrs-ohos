@@ -3,8 +3,9 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { DialogHelper } from '@pura/harmony-dialog'
 import { PreferencesUtil } from '@pura/harmony-utils';
+import { USERPRIVDATA_NAME, WEBSITE_CURRENT_USER_KEY } from '../common/Common';
 import UserPrivData from '../utils/UserPrivData'
-import { USERPRIVDATA_NAME } from '../common/Common';
+import UserDatabase from '../utils/UserDatabase';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -18,14 +19,27 @@ export default class EntryAbility extends UIAbility {
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onDestroy');
   }
 
-  onWindowStageCreate(windowStage: window.WindowStage): void {
+  async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
     // Main window is created, set main page for this ability
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
 
-    // 加载用户加密首选项
-    UserPrivData.loadPreferences(this.context, USERPRIVDATA_NAME)
+    // 初始化用户加密首选项
+    UserPrivData.init(this.context, USERPRIVDATA_NAME)
 
-    windowStage.loadContent('pages/LoginPage', (err) => {
+    // 初始化用户信息数据库
+    await UserDatabase.init(this.context)
+
+    // 根据当前保存用户进行跳转页面
+    let defaultPagePath: string = 'pages/LoginPage'
+    let currentUser = UserPrivData.getSync(USERPRIVDATA_NAME, WEBSITE_CURRENT_USER_KEY);
+    if (currentUser && currentUser !== '') {
+      //UserDatabase.deleteUserInfo(currentUser as string) //调试使用
+      if (UserDatabase.checkUserValid(currentUser as string) ) {
+        defaultPagePath = 'pages/IndexPage'
+      }
+    }
+
+    windowStage.loadContent(defaultPagePath, (err) => {
       if (err.code) {
         hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
         return;

@@ -1,8 +1,6 @@
 export const USERPRIVDATA_NAME = 'UserPrivData'
 
-export const WEBSITE_PROTOCOL_KEY = 'website_protocol'
-export const WEBSITE_URL_KEY = 'website_url'
-export const WEBSITE_COOKIE_KEY = 'website_cookie'
+export const WEBSITE_CURRENT_USER_KEY = 'current_user_key'
 
 /**
  * 站点请求超时时间
@@ -28,3 +26,8 @@ export const CLOUDREVE_PING: string = '/site/ping'
  * 站点登录请求路径
  */
 export const CLOUDREVE_LOGIN: string = '/user/session'
+
+/**
+ * 用户存储信息请求路径
+ */
+export const CLOUDREVE_USER_STORAGE: string = '/user/storage'

@@ -1,7 +1,6 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "@ohos/axios";
 import {SiteCommon } from "../types/ApiTypes";
-import { CLOUDREVE_REQUEST_TIMEOUT, CLOUDREVE_URL_PREFIX, USERPRIVDATA_NAME,
-  WEBSITE_COOKIE_KEY} from "../common/Common";
+import { CLOUDREVE_REQUEST_TIMEOUT, CLOUDREVE_URL_PREFIX, USERPRIVDATA_NAME} from "../common/Common";
 import UserPrivData from "./UserPrivData";
 
 const axiosInstance = axios.create({
@@ -30,6 +29,10 @@ export function baseUrlSet(url: string) {
 export function cookieSet(cookie: string) {
   console.debug('AxiosRequest', "Set-Cookie :", cookie);
   axiosInstance.defaults.headers.common['Cookie'] = cookie
+}
+
+export function cookieGet() {
+  return axiosInstance.defaults.headers.common['Cookie']
 }
 
 /**
@@ -70,8 +73,7 @@ export async function cloudPost<T, V>(path: string, body: V): Promise<T | null> 
         let match = cookies.match(regex)
         if (match) {
           let cookie = match[1]
-          cookieSet(cookie)
-          UserPrivData.putPreferences(USERPRIVDATA_NAME, WEBSITE_COOKIE_KEY, cookie)
+          cookieSet(`cloudreve-session=${cookie}`)
         }
       }
       return resp.data.data

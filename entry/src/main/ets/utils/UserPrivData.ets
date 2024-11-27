@@ -1,10 +1,11 @@
-import { sendablePreferences } from '@kit.ArkData';
+import { relationalStore, sendablePreferences } from '@kit.ArkData';
 import { lang } from '@kit.ArkTS';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 class UserPrivData {
   perfMap: Map<string, sendablePreferences.Preferences> = new Map()
 
-  loadPreferences(context: Context, name: string) {
+  init(context: Context, name: string) {
     try {
       let options: sendablePreferences.Options = { name };
       let perf = sendablePreferences.getPreferencesSync(context, options)
@@ -14,7 +15,7 @@ class UserPrivData {
     }
   }
 
-  putPreferences(name: string, key: string, value: lang.ISendable) {
+  putSync(name: string, key: string, value: lang.ISendable) {
     try {
       if (!this.perfMap.has(name)) {
         console.error('UserPrivData', `首选项${name}尚未初始化`)
@@ -31,7 +32,7 @@ class UserPrivData {
     }
   }
 
-  getPreferences(name: string, key: string, defValue: lang.ISendable): lang.ISendable|undefined {
+  getSync(name: string, key: string, defValue: lang.ISendable = ''): lang.ISendable | undefined {
     try {
       if (!this.perfMap.has(name)) {
         console.error('UserPrivData', `首选项${name}尚未初始化`)
@@ -47,7 +48,24 @@ class UserPrivData {
       return undefined
     }
   }
+
+  deleteSync(name: string, key: string) {
+    try {
+      if (!this.perfMap.has(name)) {
+        console.error('UserPrivData', `首选项${name}尚未初始化`)
+        return
+      }
+      let perf = this.perfMap.get(name)!
+      // 删除数据
+      perf.deleteSync(key)
+      // 刷入磁盘
+      perf.flush()
+      console.debug('UserPrivData', `删除首选项${name}.${key} 成功`)
+    } catch (e) {
+      console.error('UserPrivData', `删除首选项${name}.${key} 失败, 错误: `, e)
+    }
+  }
 }
 
-const globalUserData = new UserPrivData();
-export default globalUserData as UserPrivData;
+const userData = new UserPrivData();
+export default userData as UserPrivData;

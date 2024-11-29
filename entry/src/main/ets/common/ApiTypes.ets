@@ -1,3 +1,12 @@
+export enum SiteURI {
+  PREFIX = '/api/v3',
+  CONFIG = '/site/config',
+  PING = '/site/ping',
+  LOGIN = '/user/session',
+  USER_STORAGE = '/user/storage',
+  LIST_DIR = '/directory',
+}
+
 /**
  * 站点通用结构，T为具体
  */
@@ -84,10 +93,36 @@ export interface UserStorage {
  * 保存数据数据结构
  */
 export interface DbUserInfo {
-  url: string,
+  url: string;
   username: string;
   password: string;
   cookie: string;
   expires: string;
   userinfo: UserInfo;
+}
+
+export interface ObjectInfo {
+  id: string;
+  name: string;
+  path: string;
+  thumb: boolean;
+  size: number;
+  type: string;
+  date: string;
+  create_date: string;
+  source_enabled: boolean;
+}
+
+export interface Policy {
+  id: string;
+  name: string;
+  type: string;
+  max_size: number;
+  file_type: null
+}
+
+export interface DirectoryInfo {
+  parent: string;
+  objects: ObjectInfo[];
+  policy: Policy;
 }

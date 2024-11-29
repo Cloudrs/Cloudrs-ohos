@@ -1,6 +1,6 @@
 import { relationalStore } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { DbUserInfo } from '../types/ApiTypes';
+import { DbUserInfo } from '../common/ApiTypes';
 
 class UserDatabase {
   rdbStore?: relationalStore.RdbStore

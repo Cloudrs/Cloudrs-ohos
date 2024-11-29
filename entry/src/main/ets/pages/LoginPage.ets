@@ -1,28 +1,30 @@
-import { LengthMetrics, router, window } from '@kit.ArkUI'
+import { LengthMetrics, Router, router, window } from '@kit.ArkUI'
 import { JSON } from '@kit.ArkTS'
 import { baseUrlSet, cloudGet, cloudPost, cookieGet, cookieSet } from '../utils/AxiosRequest';
-import { DbUserInfo, LoginData, SiteConfig, UserInfo } from '../types/ApiTypes';
+import { DbUserInfo, LoginData, SiteConfig, SiteURI, UserInfo } from '../common/ApiTypes';
 import { showToastTips, ToastType } from '../common/Components';
-import { CLOUDREVE_CONFIG, CLOUDREVE_LOGIN, CLOUDREVE_PING, USERPRIVDATA_NAME,
-  WEBSITE_CURRENT_USER_KEY} from '../common/Common';
-import UserPrivData from '../utils/UserPrivData';
-import UserDatabase from '../utils/UserDatabase';
+import Constant from '../common/Constant';
+import UserPrivData from '../model/UserPreferences';
+import UserDatabase from '../model/UserDatabase';
+import { HMParamType, HMRouter, HMRouterMgr } from '@hadss/hmrouter';
+import { LoginParam } from '../model/LoginParam';
 
-@Entry
+@HMRouter({pageUrl: Constant.LOGIN_PAGE})
 @Component
-struct LoginPage {
+export struct LoginPage {
   @State protocolIndex: number = 0
   @State protocol: string = 'https://'
   @State scrollHeight: number = 0;
   @State keyHeight: number = 0;
   @State websiteInvalid: boolean = false;
   @State loginInvalid: boolean = false;
+  @State loginTitle: string|Resource = $r('app.string.website_title');
 
-  private cookie: string = ''
   private address: string = ''
   private username: string = ''
   private password: string = ''
   scroller: Scroller = new Scroller();
+  private nextPage: string|null = null
 
   aboutToAppear() {
     window.getLastWindow(getContext(this)).then(currentWindow => {
@@ -43,6 +45,11 @@ struct LoginPage {
         }
       })
     })
+
+    if (HMRouterMgr.getCurrentParam()) {
+      this.nextPage = (HMRouterMgr.getCurrentParam() as LoginParam).nextPage
+      console.debug('LoginPage', `NextPage: ${this.nextPage}`)
+    }
   }
 
   build() {
@@ -56,6 +63,7 @@ struct LoginPage {
           .backgroundColor($r("app.color.main_window_background"))
           .borderRadius(15)
           .onClick(() => {
+            this.loginTitle = $r('app.string.website_title')
             this.websiteInvalid = false
           })
         }
@@ -66,32 +74,29 @@ struct LoginPage {
         .visibility(this.websiteInvalid ? Visibility.Visible : Visibility.Hidden)
         .animation({ duration: 500 })
 
-        Scroll(this.scroller) {
-          Column({ space: 10 }) {
-            // 显示login及标题
-            this.showLoginHeader()
+        Column({ space: 10 }) {
+          // 显示login及标题
+          this.showLoginHeader()
 
-            // 根据状态显示不同输入框
-            if (!this.websiteInvalid) {
-              this.showWebsiteInput()
-            } else {
-              this.showLoginInput()
-            }
+          // 根据状态显示不同输入框
+          if (!this.websiteInvalid) {
+            this.showWebsiteInput()
+          } else {
+            this.showLoginInput()
+          }
 
-            // 继续按钮
-            this.buttonContinue();
+          // 继续按钮
+          this.buttonContinue();
 
-            // 提示
-            if (!this.websiteInvalid) {
-              Text($r("app.string.login_tips"))
-                .fontSize(11)
-                .fontColor($r("app.color.light_gray"))
-                .margin({ left: 10, right: 10 })
-            }
+          // 提示
+          if (!this.websiteInvalid) {
+            Text($r("app.string.login_tips"))
+              .fontSize(11)
+              .fontColor($r("app.color.light_gray"))
+              .margin({ left: 10, right: 10 })
           }
         }
         .width('100%')
-        .scrollBar(BarState.Off)
       }
 
       Column({space: 12}) {
@@ -113,7 +118,7 @@ struct LoginPage {
     Image($r("app.media.cloudrs"))
       .width(180)
 
-    Text(this.websiteInvalid ? $r("app.string.login_title") : $r("app.string.website_title"))
+    Text(this.loginTitle)
       .fontSize(20)
       .fontWeight(FontWeight.Bold)
   }
@@ -129,9 +134,12 @@ struct LoginPage {
             return
           }
           baseUrlSet(this.protocol + this.address)
-          let data: string | null = await cloudGet(CLOUDREVE_PING);
+          let data: string | null = await cloudGet(SiteURI.PING);
           if (data) {
-            let siteConfig: SiteConfig|null = await cloudGet(CLOUDREVE_CONFIG);
+            let siteConfig: SiteConfig|null = await cloudGet(SiteURI.CONFIG);
+            if (siteConfig) {
+              this.loginTitle = siteConfig.title
+            }
             this.websiteInvalid = true;
           } else {
             showToastTips('站点请求失败', ToastType.Error)
@@ -142,7 +150,7 @@ struct LoginPage {
             return
           }
           let loginData: LoginData = {username: this.username, password: this.password, captchaCode: ''};
-          let userInfo: UserInfo | null = await cloudPost(CLOUDREVE_LOGIN, loginData);
+          let userInfo: UserInfo | null = await cloudPost(SiteURI.LOGIN, loginData);
           if (userInfo !== null) {
             console.debug('LoginPage', 'userInfo: ', JSON.stringify(userInfo))
             let dbUserInfo: DbUserInfo = {
@@ -154,21 +162,13 @@ struct LoginPage {
               userinfo: userInfo
             }
             //保存当前用户
-            UserPrivData.putSync(USERPRIVDATA_NAME, WEBSITE_CURRENT_USER_KEY, this.username)
+            UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
 
             // 插入到数据库
             UserDatabase.insertUserInfo(dbUserInfo)
 
-            //登录成功，跳转到主页
-            router.replaceUrl({
-              url: 'pages/IndexPage', // 目标url
-            }, router.RouterMode.Standard, (err) => {
-              if (err) {
-                console.error(`Invoke replaceUrl failed, code is ${err.code}, message is ${err.message}`);
-                return;
-              }
-              console.info('Invoke replaceUrl succeeded.');
-            })
+            //登录成功，跳转到上一页
+            HMRouterMgr.push({pageUrl: this.nextPage})
           } else {
             showToastTips('登录失败，请检查用户邮箱及密码', ToastType.Error);
           }

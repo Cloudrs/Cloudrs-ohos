@@ -23,6 +23,18 @@
     {
       "name": "light_light_gray",
       "value": "#30C6C3C3"
+    },
+    {
+      "name": "nav_toolbar_background",
+      "value": "#eef2f1"
+    },
+    {
+      "name": "nav_toolbar_default",
+      "value": "#a9aba8"
+    },
+    {
+      "name": "nav_background",
+      "value": "#f2f3f5"
     }
   ]
 }

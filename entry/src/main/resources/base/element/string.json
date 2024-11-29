@@ -55,6 +55,14 @@
     {
       "name": "navigation_toolbar_me",
       "value": "我的"
+    },
+    {
+      "name": "navigation_menu_search",
+      "value": "搜索"
+    },
+    {
+      "name": "navigation_main_title",
+      "value": "存储"
     }
   ]
 }

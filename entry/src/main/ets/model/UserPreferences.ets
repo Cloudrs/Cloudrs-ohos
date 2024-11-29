@@ -1,8 +1,7 @@
-import { relationalStore, sendablePreferences } from '@kit.ArkData';
+import { sendablePreferences } from '@kit.ArkData';
 import { lang } from '@kit.ArkTS';
-import { BusinessError } from '@kit.BasicServicesKit';
 
-class UserPrivData {
+class UserPreferences {
   perfMap: Map<string, sendablePreferences.Preferences> = new Map()
 
   init(context: Context, name: string) {
@@ -67,5 +66,5 @@ class UserPrivData {
   }
 }
 
-const userData = new UserPrivData();
-export default userData as UserPrivData;
+const userPreferences = new UserPreferences();
+export default userPreferences as UserPreferences;

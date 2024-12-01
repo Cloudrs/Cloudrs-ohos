@@ -1,10 +1,11 @@
 import { HMInterceptor, HMInterceptorAction, HMInterceptorInfo, HMRouterMgr, IHMInterceptor } from "@hadss/hmrouter";
-import { DbUserInfo } from "../common/ApiTypes";
-import Constant from "../common/Constant";
-import { LoginParam } from "../model/LoginParam";
+import { DbUserInfo } from "../model/net/ApiTypes";
+import Constant from "../model/Constant";
+import { LoginParam } from "../model/net/LoginParam";
 import UserDatabase from "../model/UserDatabase";
 import UserPreferences from "../model/UserPreferences";
 import { baseUrlSet, cookieSet } from "../utils/AxiosRequest";
+import { showToastTips, ToastType } from "../utils/ToastUtil";
 
 @HMInterceptor({ interceptorName: Constant.ACCESS_INTERCEPTOR, global: false })
 export class LoginInterceptor implements IHMInterceptor {
@@ -20,13 +21,18 @@ export class LoginInterceptor implements IHMInterceptor {
       if (currentUser !== '') {
         dbUserInfo = UserDatabase.getUserInfo(currentUser)
         if (dbUserInfo) {
-          console.debug('Interceptor', `获取用户信息成功，url:${dbUserInfo.url}, cookie:${dbUserInfo.cookie}`)
-
-          //TODO: 判断cookie是否过期，暂时写死不过期
-          if (true) {
+          console.debug('Interceptor', `获取用户信息成功，url:${dbUserInfo.url}, cookie:${dbUserInfo.cookie}, expires:${dbUserInfo.expires}`)
+          let expiresDate = new Date(dbUserInfo.expires)
+          let now = new Date()
+          console.debug('Interceptor', `expiresDate:${expiresDate.toString()}, now: ${now.toString()}`)
+          //判断cookie是否过期，过期怎重新登录
+          if (now < expiresDate) {
             baseUrlSet(dbUserInfo.url)
             cookieSet(dbUserInfo.cookie)
             return HMInterceptorAction.DO_NEXT;
+          }
+          else {
+            showToastTips('登录信息过期，重新登录!', ToastType.Warn)
           }
         }
       }

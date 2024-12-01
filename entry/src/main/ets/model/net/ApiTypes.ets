@@ -7,10 +7,20 @@ export enum SiteURI {
   LIST_DIR = '/directory',
 }
 
+export const enum HttpCode {
+  SUCCESS = 0
+}
+
+export interface HttpCallback<T> {
+  onStart?: () => void
+  onSuccess: (data: T) => void
+  onFailure: (msg: string) => void
+}
+
 /**
  * 站点通用结构，T为具体
  */
-export interface SiteCommon<T> {
+export interface BaseResponse<T> {
   code: number;
   data: T;
   msg: string;

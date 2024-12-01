@@ -41,28 +41,48 @@
       "value": "站点绑定"
     },
     {
-      "name": "navigation_toolbar_files",
+      "name": "tab_bar_files",
       "value": "文件"
     },
     {
-      "name": "navigation_toolbar_photos",
+      "name": "tab_bar_pictures",
       "value": "相册"
     },
     {
-      "name": "navigation_toolbar_remote_download",
+      "name": "tab_bar_remote_down",
       "value": "下载"
     },
     {
-      "name": "navigation_toolbar_me",
+      "name": "tab_bar_mine",
       "value": "我的"
     },
     {
-      "name": "navigation_menu_search",
+      "name": "header_search",
       "value": "搜索"
     },
     {
-      "name": "navigation_main_title",
+      "name": "files_main_title",
       "value": "存储"
+    },
+    {
+      "name": "files_sub_title",
+      "value": "默认存储策略"
+    },
+    {
+      "name": "logout",
+      "value": "退出登录"
+    },
+    {
+      "name": "login_service_prefix",
+      "value": "使用Cloudrs即表示您接受我们的 "
+    },
+    {
+      "name": "hypelink_app_service",
+      "value": "服务条款"
+    },
+    {
+      "name": "hypelink_app_privace",
+      "value": "隐私政策"
     }
   ]
 }

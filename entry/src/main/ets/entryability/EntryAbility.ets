@@ -2,7 +2,7 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { DialogHelper } from '@pura/harmony-dialog'
-import Constant from '../common/Constant';
+import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
 import { HMRouterMgr } from '@hadss/hmrouter';
 import UserPreferences from '../model/UserPreferences';
@@ -29,11 +29,11 @@ export default class EntryAbility extends UIAbility {
     let bottomRectHeight = windowClass
       .getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
       .bottomRect.height
-    AppStorage.setOrCreate(Constant.STORAGE_BOTTOM_RECT_HEIGHT, px2vp(bottomRectHeight))
+    AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, px2vp(bottomRectHeight))
     let topRectHeight = windowClass
       .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
       .topRect.height
-    AppStorage.setOrCreate(Constant.STORAGE_TOP_RECT_HEIGHT, px2vp(topRectHeight))
+    AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, px2vp(topRectHeight))
 
     // Main window is created, set main page for this ability
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');

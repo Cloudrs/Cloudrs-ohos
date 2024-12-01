@@ -2,7 +2,6 @@ import { promptAction } from '@kit.ArkUI'
 import { DialogHelper } from '@pura/harmony-dialog'
 
 export enum ToastType {Error, Warn, Info}
-
 let customDialogId: number = 0
 
 @Builder
@@ -114,5 +113,13 @@ export function showToastTips(message: string|Resource, toastType: ToastType = T
     backgroundColor: '#ffeeeeee',
     offset: {dx: 0, dy: 20},
   })
+}
 
+/**
+ * 显示toast，支持文本显示
+ * @param message   需要显示的文本
+ * @param duration  显示时长，单位：毫秒，默认：3000
+ */
+export function showToast(message: string|Resource, duration: number = 3000) {
+  DialogHelper.showToast(message, {duration})
 }

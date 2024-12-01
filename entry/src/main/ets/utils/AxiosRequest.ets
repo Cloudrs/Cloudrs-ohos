@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "@ohos/axios";
-import {SiteCommon, SiteURI } from "../common/ApiTypes";
-import Constant from "../common/Constant";
+import {BaseResponse, HttpCallback, HttpCode, SiteURI } from "../model/net/ApiTypes";
+import Constant from "../model/Constant";
+import { JSON } from "@kit.ArkTS";
 
 const axiosInstance = axios.create({
   baseURL: 'https://cloudrs.cn/api/v3',
@@ -39,20 +40,29 @@ export function cookieGet() {
  * @param
  * @returns Promise<T | null>
  */
-export async function cloudGet<T>(path: string): Promise<T | null> {
-  try {
-    let resp: AxiosResponse<SiteCommon<T>> = await axiosInstance.get<SiteCommon<T>>(path)
-    if ( resp.status === 200 && resp.data.code === 0) {
-      console.debug('AxiosRequest', "success :", JSON.stringify(resp))
-      return resp.data.data
-    } else {
-      console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
-      return null
-    }
-  } catch (e) {
-    console.error('AxiosRequest', `failed : ${e}`)
-    return null
+export function cloudGet<T>(path: string, callback?:HttpCallback<T>) {
+  if (callback?.onStart) {
+    callback.onStart()
   }
+  axiosInstance.get<BaseResponse<T>>(path)
+    .then((resp: AxiosResponse<BaseResponse<T>>) => {
+      if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
+        console.debug('AxiosRequest', "success :", JSON.stringify(resp))
+        if (callback?.onSuccess) {
+          callback.onSuccess(resp.data.data)
+        }
+      } else {
+        console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
+        if (callback?.onFailure) {
+          callback.onFailure(resp.data.msg)
+        }
+      }
+    }).catch((error: AxiosError) => {
+    console.error('AxiosRequest', `error : ${error.message}`)
+    if (callback?.onFailure) {
+      callback.onFailure(error.message)
+    }
+  })
 }
 
 /**
@@ -60,28 +70,45 @@ export async function cloudGet<T>(path: string): Promise<T | null> {
  * @param
  * @returns Promise<T | null>
  */
-export async function cloudPost<T, V>(path: string, body: V): Promise<T | null> {
-  try {
-    let resp: AxiosResponse<SiteCommon<T>> = await axiosInstance.post<SiteCommon<T>>(path, body)
-    if ( resp.status === 200 && resp.data.code === 0) {
-      console.debug('AxiosRequest', "success :", JSON.stringify(resp))
-      /* 返回cookies进行保存 */
-      let cookies: string | undefined = resp.headers["set-cookie"]?.toString()
-      if (cookies) {
-        let regex = /cloudreve-session=([^;]+);/;
-        let match = cookies.match(regex)
-        if (match) {
-          let cookie = match[1]
-          cookieSet(`cloudreve-session=${cookie}`)
+export function cloudPost<T, V>(path: string, body: V, callback?:HttpCallback<T>) {
+  if (callback?.onStart) {
+    callback.onStart()
+  }
+  axiosInstance.post<BaseResponse<T>>(path, body)
+    .then((resp: AxiosResponse<BaseResponse<T>>) => {
+      if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
+        console.debug('AxiosRequest', "success :", JSON.stringify(resp))
+
+        /* 返回cookies进行保存 */
+        let cookies: string | undefined = resp.headers["set-cookie"]?.toString()
+        if (cookies) {
+          let regexSession = /cloudreve-session=([^;]+);/;
+          let matchCookie = cookies.match(regexSession)
+          if (matchCookie) {
+            let cookie = matchCookie[1]
+            AppStorage.setOrCreate(Constant.CLOUD_COOKIE, `cloudreve-session=${cookie}`)
+          }
+
+          let regexExpires = /Expires=([^;]+);/;
+          let matchExpires = cookies.match(regexExpires)
+          if (matchExpires) {
+            let expires = matchExpires[1]
+            AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, expires)
+          }
+        }
+        if (callback?.onSuccess) {
+          callback.onSuccess(resp.data.data)
+        }
+      } else {
+        console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
+        if (callback?.onFailure) {
+          callback.onFailure(resp.data.msg)
         }
       }
-      return resp.data.data
-    } else {
-      console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
-      return null
-    }
-  } catch (e) {
-    console.error('AxiosRequest', `failed : ${e}`)
-    return null
-  }
+    }).catch((error: AxiosError) => {
+      console.error('AxiosRequest', `error : ${error.message}`)
+      if (callback?.onFailure) {
+        callback.onFailure(error.message)
+      }
+    })
 }

@@ -1,6 +1,6 @@
 import { HMDefaultGlobalAnimator, HMNavigation } from "@hadss/hmrouter";
 import { AttributeUpdater } from "@kit.ArkUI";
-import Constant from "../common/Constant";
+import Constant from "../model/Constant";
 
 @Entry
 @Component

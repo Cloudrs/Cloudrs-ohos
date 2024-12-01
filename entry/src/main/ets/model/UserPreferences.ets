@@ -66,5 +66,4 @@ class UserPreferences {
   }
 }
 
-const userPreferences = new UserPreferences();
-export default userPreferences as UserPreferences;
+export default new UserPreferences();

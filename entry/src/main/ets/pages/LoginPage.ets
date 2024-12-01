@@ -1,17 +1,29 @@
-import { LengthMetrics, Router, router, window } from '@kit.ArkUI'
+import { LengthMetrics, window } from '@kit.ArkUI'
 import { JSON } from '@kit.ArkTS'
-import { baseUrlSet, cloudGet, cloudPost, cookieGet, cookieSet } from '../utils/AxiosRequest';
-import { DbUserInfo, LoginData, SiteConfig, SiteURI, UserInfo } from '../common/ApiTypes';
-import { showToastTips, ToastType } from '../common/Components';
-import Constant from '../common/Constant';
+import { baseUrlSet, cloudGet, cloudPost, cookieGet } from '../utils/AxiosRequest';
+import { DbUserInfo, LoginData, SiteConfig, SiteURI, UserInfo } from '../model/net/ApiTypes';
+import { showToastTips, ToastType } from '../utils/ToastUtil';
+import Constant from '../model/Constant';
 import UserPrivData from '../model/UserPreferences';
 import UserDatabase from '../model/UserDatabase';
-import { HMParamType, HMRouter, HMRouterMgr } from '@hadss/hmrouter';
-import { LoginParam } from '../model/LoginParam';
+import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
+import { LoginParam } from '../model/net/LoginParam';
+import { cloudLogin, cloudPing, cloudSiteConfig } from '../model/net/Api';
 
-@HMRouter({pageUrl: Constant.LOGIN_PAGE})
+@Extend(Stack)
+function loginStackStyle() {
+  .borderRadius(10)
+  .backgroundColor($r("app.color.textinput_background"))
+  .width('100%')
+  .height(40)
+  .alignContent(Alignment.Start)
+}
+
+@HMRouter({pageUrl: Constant.LOGIN_PAGE, singleton: true})
 @Component
 export struct LoginPage {
+  @StorageProp(Constant.CLOUD_COOKIE) cookie: string = '';
+  @StorageProp(Constant.CLOUD_COOKIE_EXPIRES) cookieExpires: string = '';
   @State protocolIndex: number = 0
   @State protocol: string = 'https://'
   @State scrollHeight: number = 0;
@@ -24,7 +36,7 @@ export struct LoginPage {
   private username: string = ''
   private password: string = ''
   scroller: Scroller = new Scroller();
-  private nextPage: string|null = null
+  private nextPage: string|null = Constant.HOME_PAGE
 
   aboutToAppear() {
     window.getLastWindow(getContext(this)).then(currentWindow => {
@@ -77,17 +89,14 @@ export struct LoginPage {
         Column({ space: 10 }) {
           // 显示login及标题
           this.showLoginHeader()
-
           // 根据状态显示不同输入框
           if (!this.websiteInvalid) {
             this.showWebsiteInput()
           } else {
             this.showLoginInput()
           }
-
           // 继续按钮
           this.buttonContinue();
-
           // 提示
           if (!this.websiteInvalid) {
             Text($r("app.string.login_tips"))
@@ -113,6 +122,61 @@ export struct LoginPage {
     .justifyContent(FlexAlign.SpaceBetween)
   }
 
+  private websiteTest() {
+    if (this.address.length == 0) {
+      showToastTips('无效网站地址', ToastType.Error)
+      return
+    }
+    baseUrlSet(this.protocol + this.address)
+    cloudPing({
+      onSuccess: (data) => {
+        cloudSiteConfig({
+          onSuccess: (data: SiteConfig) => {
+            this.loginTitle = data.title
+            this.websiteInvalid = true
+          },
+          onFailure: (msg) => {
+            console.debug('LoginPage', '站点获取配置失败 错误信息:', msg)
+            showToastTips('站点获取配置失败', ToastType.Error)
+          }
+        })
+      },
+      onFailure: (msg) => {
+        console.debug('LoginPage', '站点请求失败 错误信息:', msg)
+        showToastTips('站点请求失败', ToastType.Error)
+      }
+    })
+  }
+
+  private login() {
+    if (this.username.length == 0 || this.password.length == 0) {
+      showToastTips('无效用户名或密码', ToastType.Error)
+      return
+    }
+    cloudLogin(this.username, this.password, {
+      onSuccess: (data: UserInfo) => {
+        let dbUserInfo: DbUserInfo = {
+          url: this.protocol + this.address,
+          username: this.username,
+          password: this.password,
+          cookie: this.cookie,
+          expires: this.cookieExpires,
+          userinfo: data
+        }
+        // 保存当前用户
+        UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
+        // 插入到数据库
+        UserDatabase.insertUserInfo(dbUserInfo)
+        // 登录成功，跳转到上一页
+        HMRouterMgr.push({pageUrl: this.nextPage})
+      },
+      onFailure: (msg: string) => {
+        console.debug('LoginPage', '登录失败 错误信息:', msg)
+        showToastTips('登录失败，请检查用户邮箱及密码', ToastType.Error);
+      }
+    })
+  }
+
   @Builder
   showLoginHeader() {
     Image($r("app.media.cloudrs"))
@@ -127,51 +191,11 @@ export struct LoginPage {
   buttonContinue() {
     Button($r("app.string.login_continue"))
       .width("100%")
-      .onClick(async () => {
+      .onClick(() => {
         if (!this.websiteInvalid) {
-          if (this.address.length == 0) {
-            showToastTips('无效网站地址', ToastType.Error)
-            return
-          }
-          baseUrlSet(this.protocol + this.address)
-          let data: string | null = await cloudGet(SiteURI.PING);
-          if (data) {
-            let siteConfig: SiteConfig|null = await cloudGet(SiteURI.CONFIG);
-            if (siteConfig) {
-              this.loginTitle = siteConfig.title
-            }
-            this.websiteInvalid = true;
-          } else {
-            showToastTips('站点请求失败', ToastType.Error)
-          }
+         this.websiteTest()
         } else {
-          if (this.username.length == 0 || this.password.length == 0) {
-            showToastTips('无效用户名或密码', ToastType.Error)
-            return
-          }
-          let loginData: LoginData = {username: this.username, password: this.password, captchaCode: ''};
-          let userInfo: UserInfo | null = await cloudPost(SiteURI.LOGIN, loginData);
-          if (userInfo !== null) {
-            console.debug('LoginPage', 'userInfo: ', JSON.stringify(userInfo))
-            let dbUserInfo: DbUserInfo = {
-              url: this.protocol + this.address,
-              username: this.username,
-              password: this.password,
-              cookie: cookieGet()?.toString() ?? '',
-              expires: '',
-              userinfo: userInfo
-            }
-            //保存当前用户
-            UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
-
-            // 插入到数据库
-            UserDatabase.insertUserInfo(dbUserInfo)
-
-            //登录成功，跳转到上一页
-            HMRouterMgr.push({pageUrl: this.nextPage})
-          } else {
-            showToastTips('登录失败，请检查用户邮箱及密码', ToastType.Error);
-          }
+          this.login()
         }
       })
   }
@@ -198,12 +222,26 @@ export struct LoginPage {
     .menuItemDivider({strokeWidth: LengthMetrics.px(1), color: $r('app.color.light_gray')})
   }
 
+  @Styles
+  loginTextStyle() {
+    .borderRadius(10)
+    .backgroundColor($r("app.color.textinput_background"))
+  }
+
+  @Styles
+  loginTextInputStyle() {
+    .borderRadius(0)
+    .layoutWeight(1)
+    .padding(0)
+    .backgroundColor($r("app.color.textinput_background"))
+  }
+
   @Builder
   showWebsiteInput() {
     Stack() {
-      TextInput()
-        .borderRadius(10)
-        .backgroundColor($r("app.color.textinput_background"))
+      Text()
+        .loginTextStyle()
+        .width('100%')
 
       Row() {
         Image($r("app.media.ic_worldclock_fill"))
@@ -212,23 +250,17 @@ export struct LoginPage {
 
         Text(this.protocol)
           .fontColor($r('app.color.light_gray'))
+          .textAlign(TextAlign.Center)
           .bindMenu(this.protocolMenu)
 
-        TextInput({
-          placeholder: $r("app.string.login_address"),
-          text: this.address
-        })
-          .backgroundColor($r("app.color.textinput_background"))
-          .borderRadius(10)
-          .padding({ left: 0})
-          .layoutWeight(1)
+        TextInput({ placeholder: $r("app.string.login_address"), text: this.address })
+          .loginTextInputStyle()
           .onChange((value) => {
             this.address = value
           })
       }
     }
-    .alignContent(Alignment.Start)
-    .width("100%")
+    .loginStackStyle()
   }
 
   @Builder
@@ -236,59 +268,57 @@ export struct LoginPage {
     Column({space: 10}) {
       // 用户名
       Stack() {
-        TextInput()
-          .borderRadius(10)
-          .backgroundColor($r("app.color.textinput_background"))
+        Text()
+          .loginTextStyle()
+          .width('100%')
 
         Row() {
           Image($r("app.media.ic_envelope"))
             .width(20)
             .margin({ left: 10, right: 10 })
 
-          TextInput({
-            placeholder: $r("app.string.login_user"),
-            text: this.username
-          })
-            .backgroundColor($r("app.color.textinput_background"))
-            .borderRadius(10)
-            .layoutWeight(1)
+          TextInput({ placeholder: $r("app.string.login_user"), text: this.username })
+            .loginTextInputStyle()
             .onChange((value) => {
               this.username = value
             })
         }
       }
-      .alignContent(Alignment.Start)
-      .width("100%")
+      .loginStackStyle()
 
       // 密码
       Stack() {
-        TextInput()
-          .borderRadius(10)
-          .backgroundColor($r("app.color.textinput_background"))
+        Text()
+          .loginTextStyle()
+          .width('100%')
 
         Row() {
           Image($r("app.media.ic_key_horizontal"))
             .width(20)
             .margin({ left: 10, right: 10 })
 
-          TextInput({
-            placeholder: $r("app.string.login_password"),
-            text: this.password
-          })
+          TextInput({ placeholder: $r("app.string.login_password"), text: this.password })
             .type(InputType.Password)
-            .backgroundColor($r("app.color.textinput_background"))
-            .borderRadius(10)
-            .layoutWeight(1)
+            .loginTextInputStyle()
             .onChange((value) => {
               this.password = value
             })
         }
       }
-      .alignContent(Alignment.Start)
-      .width("100%")
+      .loginStackStyle()
       .transition(TransitionEffect.OPACITY.animation({duration: 500})
         .combine(TransitionEffect.translate({y: -30}).animation({duration: 500})))
     }
+  }
+
+  @Styles
+  scanAndUsersCommon() {
+    .height(30)
+    .width(30)
+    .borderColor($r("app.color.light_light_gray"))
+    .borderWidth(1)
+    .borderRadius(15)
+    .backgroundColor($r("app.color.main_window_background"))
   }
 
   @Builder
@@ -299,35 +329,25 @@ export struct LoginPage {
           .padding(5)
           .fillColor('#ffb110b1')
       }
-      .height(30)
-      .width(30)
-      .borderColor($r("app.color.light_light_gray"))
-      .borderWidth(1)
-      .borderRadius(15)
-      .backgroundColor($r("app.color.main_window_background"))
+      .scanAndUsersCommon()
 
       Button() {
         Image($r("app.media.ic_person_2"))
           .padding(5)
           .fillColor('#ff9d765d')
       }
-      .height(30)
-      .width(30)
-      .borderColor($r("app.color.light_light_gray"))
-      .borderWidth(1)
-      .borderRadius(15)
-      .backgroundColor($r("app.color.main_window_background"))
+      .scanAndUsersCommon()
     }
   }
 
   @Builder
   privacyText() {
     Flex({wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center}) {
-      Text("使用Cloudrs即表示您接受我们的 ")
+      Text($r('app.string.login_service_prefix'))
         .fontSize(11)
         .fontColor($r("app.color.light_gray"))
 
-      Hyperlink('https://cloudreve.org/privacy-policy', '服务条款') {
+      Hyperlink('https://cloudreve.org/privacy-policy', $r('app.string.hypelink_app_service')) {
       }
       .color($r("app.color.select_primary"))
       .height(13)
@@ -336,7 +356,7 @@ export struct LoginPage {
         .fontSize(11)
         .fontColor($r("app.color.light_gray"))
 
-      Hyperlink('https://cloudreve.org/privacy-policy', '隐私政策') {
+      Hyperlink('https://cloudreve.org/privacy-policy', $r('app.string.hypelink_app_privace')) {
       }
       .color($r("app.color.select_primary"))
       .height(13)

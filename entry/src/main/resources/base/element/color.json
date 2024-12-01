@@ -25,16 +25,44 @@
       "value": "#30C6C3C3"
     },
     {
-      "name": "nav_toolbar_background",
+      "name": "tab_bar_background",
       "value": "#eef2f1"
     },
     {
-      "name": "nav_toolbar_default",
+      "name": "tab_bar_default",
       "value": "#a9aba8"
+    },
+    {
+      "name": "tab_bar_select",
+      "value": "#cd0e2d"
+    },
+    {
+      "name": "tab_bar_select_blue",
+      "value": "#0a58f6"
     },
     {
       "name": "nav_background",
       "value": "#f2f3f5"
+    },
+    {
+      "name": "file_folder",
+      "value": "#ffc654"
+    },
+    {
+      "name": "default_line_color",
+      "value": "#e5e5e5"
+    },
+    {
+      "name": "logout_background",
+      "value": "#ffeaeb"
+    },
+    {
+      "name": "file_default",
+      "value": "#8f8e94"
+    },
+    {
+      "name": "file_icon_background",
+      "value": "#e9e9eb"
     }
   ]
 }

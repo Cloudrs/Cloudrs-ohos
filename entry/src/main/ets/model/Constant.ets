@@ -6,8 +6,10 @@ class Constant {
   USER_PREFERENCES = 'UserPreference'
   ACTIVE_USER_KEY = 'ActiveUser'
   REQUEST_TIMEOUT: number = 3000
-  STORAGE_TOP_RECT_HEIGHT: string = 'TopRectHeight'
-  STORAGE_BOTTOM_RECT_HEIGHT: string = 'BottomRectHeight'
+  SYSTEM_TOP_RECT_HEIGHT: string = 'sysTopRectHeight'
+  NAV_BOTTOM_RECT_HEIGHT: string = 'navBottomRectHeight'
+  CLOUD_COOKIE: string = 'cloudCookie'
+  CLOUD_COOKIE_EXPIRES: string = 'cloudCookieExpires'
   HOME_PAGE = 'HomePage'
   LOGIN_PAGE = 'LoginPage'
   ACCESS_INTERCEPTOR = 'AccessInterceptor'

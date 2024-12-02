@@ -6,7 +6,7 @@ import { TabPictures } from './tabs/TabPictures';
 import { TabRemoteDown } from './tabs/TabRemoteDown';
 import { TabMine } from './tabs/TabMine';
 
-@HMRouter({pageUrl: Constant.HOME_PAGE, interceptors: [Constant.ACCESS_INTERCEPTOR]})
+@HMRouter({pageUrl: Constant.HOME_PAGE, interceptors: [Constant.ACCESS_INTERCEPTOR], lifecycle: 'ExitLifecycle'})
 @Preview
 @Component
 export struct HomePage {
@@ -39,7 +39,8 @@ export struct HomePage {
     .height('100%')
     .barHeight(80)
     .barWidth('100%')
-    .barOverlap(true)
+    // .barOverlap(true)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_ULTRA_THICK)
     .barMode(BarMode.Fixed)
     .divider({ strokeWidth: 1, color: $r("app.color.default_line_color") })
     .barBackgroundColor($r('app.color.nav_background'))

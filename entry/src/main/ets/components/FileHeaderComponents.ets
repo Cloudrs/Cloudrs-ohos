@@ -19,7 +19,7 @@ export struct FileHeader {
             .borderRadius(18)
             .backgroundColor(Color.White)
             .onClick(() => {
-              HMRouterMgr.pop()
+
             })
             .transition(TransitionEffect.OPACITY.animation({duration: 200})
               .combine(TransitionEffect.scale({x: 0, y: 0}).animation({duration: 200})))

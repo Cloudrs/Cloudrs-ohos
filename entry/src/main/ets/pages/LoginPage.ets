@@ -177,8 +177,7 @@ export struct LoginPage {
     })
   }
 
-  @Builder
-  showLoginHeader() {
+  @Builder showLoginHeader() {
     Image($r("app.media.cloudrs"))
       .width(180)
 
@@ -187,8 +186,7 @@ export struct LoginPage {
       .fontWeight(FontWeight.Bold)
   }
 
-  @Builder
-  buttonContinue() {
+  @Builder buttonContinue() {
     Button($r("app.string.login_continue"))
       .width("100%")
       .onClick(() => {
@@ -200,8 +198,7 @@ export struct LoginPage {
       })
   }
 
-  @Builder
-  protocolMenu() {
+  @Builder protocolMenu() {
     Menu() {
       MenuItem({ content: 'https' })
         .selectIcon(true)
@@ -219,25 +216,22 @@ export struct LoginPage {
         })
     }
     .width(200)
-    .menuItemDivider({strokeWidth: LengthMetrics.px(1), color: $r('app.color.light_gray')})
+    .menuItemDivider({strokeWidth: LengthMetrics.px(1), color: $r("app.color.menu_divider_line")})
   }
 
-  @Styles
-  loginTextStyle() {
+  @Styles loginTextStyle() {
     .borderRadius(10)
     .backgroundColor($r("app.color.textinput_background"))
   }
 
-  @Styles
-  loginTextInputStyle() {
+  @Styles loginTextInputStyle() {
     .borderRadius(0)
     .layoutWeight(1)
     .padding(0)
     .backgroundColor($r("app.color.textinput_background"))
   }
 
-  @Builder
-  showWebsiteInput() {
+  @Builder showWebsiteInput() {
     Stack() {
       Text()
         .loginTextStyle()
@@ -263,8 +257,7 @@ export struct LoginPage {
     .loginStackStyle()
   }
 
-  @Builder
-  showLoginInput() {
+  @Builder showLoginInput() {
     Column({space: 10}) {
       // 用户名
       Stack() {
@@ -311,8 +304,7 @@ export struct LoginPage {
     }
   }
 
-  @Styles
-  scanAndUsersCommon() {
+  @Styles scanAndUsersCommon() {
     .height(30)
     .width(30)
     .borderColor($r("app.color.light_light_gray"))
@@ -321,8 +313,7 @@ export struct LoginPage {
     .backgroundColor($r("app.color.main_window_background"))
   }
 
-  @Builder
-  buttonScanAndUsers() {
+  @Builder buttonScanAndUsers() {
     Row({space: 10}) {
       Button() {
         Image($r("app.media.ic_line_viewfinder"))
@@ -340,8 +331,7 @@ export struct LoginPage {
     }
   }
 
-  @Builder
-  privacyText() {
+  @Builder privacyText() {
     Flex({wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center}) {
       Text($r('app.string.login_service_prefix'))
         .fontSize(11)

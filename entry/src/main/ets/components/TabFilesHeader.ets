@@ -1,8 +1,10 @@
-import { HMRouterMgr } from "@hadss/hmrouter";
 
 @Component
-export struct FileHeader {
+export struct TabFilesHeader {
   @Prop isRoot: boolean;
+  onBackClick?: () => void;
+  onTransportClick?: () => void;
+  onPersionClick?: () => void;
 
   build() {
     Column() {
@@ -19,7 +21,9 @@ export struct FileHeader {
             .borderRadius(18)
             .backgroundColor(Color.White)
             .onClick(() => {
-
+              if (this.onBackClick) {
+                this.onBackClick()
+              }
             })
             .transition(TransitionEffect.OPACITY.animation({duration: 200})
               .combine(TransitionEffect.scale({x: 0, y: 0}).animation({duration: 200})))
@@ -41,6 +45,11 @@ export struct FileHeader {
           .height(36)
           .borderRadius(18)
           .backgroundColor($r('app.color.light_light_gray'))
+          .onClick(() => {
+            if (this.onTransportClick) {
+              this.onTransportClick()
+            }
+          })
 
           Button() {
             Image($r('app.media.ic_person'))
@@ -51,6 +60,11 @@ export struct FileHeader {
           .height(36)
           .borderRadius(18)
           .backgroundColor(Color.White)
+          .onClick(() => {
+            if (this.onPersionClick) {
+              this.onPersionClick()
+            }
+          })
         }
         .width(100)
         .justifyContent(FlexAlign.Center)
@@ -61,6 +75,8 @@ export struct FileHeader {
     }
     .padding({ left: 10, right: 10 })
     .width('100%')
+    .height(40)
+    .align(Alignment.Center)
     .justifyContent(FlexAlign.Center)
   }
 }

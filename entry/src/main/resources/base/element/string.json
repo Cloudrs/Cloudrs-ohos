@@ -83,6 +83,34 @@
     {
       "name": "hypelink_app_privace",
       "value": "隐私政策"
+    },
+    {
+      "name": "dir_enter",
+      "value": "进入文件夹"
+    },
+    {
+      "name": "file_details",
+      "value": "详细信息"
+    },
+    {
+      "name": "rename",
+      "value": "重命名"
+    },
+    {
+      "name": "copy",
+      "value": "复制"
+    },
+    {
+      "name": "move",
+      "value": "移动"
+    },
+    {
+      "name": "cloud_share",
+      "value": "创建分享"
+    },
+    {
+      "name": "delete",
+      "value": "删除"
     }
   ]
 }

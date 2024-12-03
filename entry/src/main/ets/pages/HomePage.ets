@@ -17,33 +17,28 @@ export struct HomePage {
     Tabs({barPosition: BarPosition.End}) {
       TabContent() {
         TabFiles()
-      }
-      .tabBar(this.TabBuilder(TabList[TabId.FILES]))
+      }.tabBar(this.TabBuilder(TabList[TabId.FILES]))
 
       TabContent() {
         TabPictures()
-      }
-      .tabBar(this.TabBuilder(TabList[TabId.PICTURES]))
+      }.tabBar(this.TabBuilder(TabList[TabId.PICTURES]))
 
       TabContent() {
         TabRemoteDown()
-      }
-      .tabBar(this.TabBuilder(TabList[TabId.REMOTE_DOWN]))
+      }.tabBar(this.TabBuilder(TabList[TabId.REMOTE_DOWN]))
 
       TabContent() {
         TabMine()
-      }
-      .tabBar(this.TabBuilder(TabList[TabId.MINE]))
+      }.tabBar(this.TabBuilder(TabList[TabId.MINE]))
     }
     .width('100%')
     .height('100%')
     .barHeight(80)
     .barWidth('100%')
-    // .barOverlap(true)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_ULTRA_THICK)
+    .barBackgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .barOverlap(true)
     .barMode(BarMode.Fixed)
     .divider({ strokeWidth: 1, color: $r("app.color.default_line_color") })
-    .barBackgroundColor($r('app.color.nav_background'))
     .onChange((index) => {
       this.currentIndex = index;
     })

@@ -5,7 +5,8 @@ export enum SiteURI {
   LOGIN = '/user/session',
   USER_STORAGE = '/user/storage',
   LIST_DIR = '/directory',
-  THUMB = '/file/thumb'
+  THUMB = '/file/thumb',
+  PREVIEW = '/file/preview'
 }
 
 export const enum HttpCode {

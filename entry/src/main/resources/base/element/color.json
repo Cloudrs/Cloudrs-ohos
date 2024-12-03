@@ -53,6 +53,10 @@
       "value": "#e5e5e5"
     },
     {
+      "name": "menu_divider_line",
+      "value": "#A09E9E"
+    },
+    {
       "name": "logout_background",
       "value": "#ffeaeb"
     },
@@ -63,6 +67,14 @@
     {
       "name": "file_icon_background",
       "value": "#e9e9eb"
+    },
+    {
+      "name": "file_menu_background",
+      "value": "#f1f1f3"
+    },
+    {
+      "name": "menu_divider_group_line",
+      "value": "#dbdbdc"
     }
   ]
 }

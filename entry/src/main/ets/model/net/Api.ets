@@ -1,4 +1,4 @@
-import { cloudGet, cloudPost } from "../../utils/AxiosRequest";
+import { cloudGet, cloudGetFile, cloudPost } from "../../utils/AxiosRequest";
 import { DirectoryInfo, HttpCallback, LoginData, SiteConfig, SiteURI, UserInfo, UserStorage } from "./ApiTypes";
 
 /**
@@ -37,9 +37,25 @@ export function cloudUserStorage(callback?: HttpCallback<UserStorage>): void {
 }
 
 /**
- * 获取指定路径下的文件
+ * 获取指定路径下的文件信息
  * @param callback  回调
  */
-export function cloudGetFiles(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
+export function cloudGetFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
   return cloudGet(SiteURI.LIST_DIR + path, callback)
+}
+
+/**
+ * 获取指定id的缩略图
+ * @param callback  回调
+ */
+export function cloudGetThumb(id: string, callback?: HttpCallback<ArrayBuffer>): void {
+  return cloudGetFile(SiteURI.THUMB + '/' + id, callback)
+}
+
+/**
+ * 获取指定id的图标
+ * @param callback  回调
+ */
+export function cloudGetPreview(id: string, callback?: HttpCallback<ArrayBuffer>): void {
+  return cloudGet(SiteURI.PREVIEW + '/' + id, callback)
 }

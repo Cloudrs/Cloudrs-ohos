@@ -12,7 +12,7 @@ const axiosInstance = axios.create({
 // 请求拦截器
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    console.debug('AxiosRequest:', JSON.stringify(config));
+    //console.debug('AxiosRequest:', JSON.stringify(config));
     return config;
   },
   (error: AxiosError) => {
@@ -135,7 +135,7 @@ export function cloudGetFile(path: string, callback?:HttpCallback<ArrayBuffer>) 
       // 这里认为返回的数据小于500为异常，可能返回的是json状态错误码
       if ( resp.status === 200 && resp.data.byteLength > 500) {
         if (callback?.onSuccess) {
-          console.debug('AxiosRequest', "get file success")
+          console.debug('AxiosRequest', `get file: ${path} success`)
           callback.onSuccess(resp.data)
         }
       } else {

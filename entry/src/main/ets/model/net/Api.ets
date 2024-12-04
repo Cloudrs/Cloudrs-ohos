@@ -57,5 +57,5 @@ export function cloudGetThumb(id: string, callback?: HttpCallback<ArrayBuffer>):
  * @param callback  回调
  */
 export function cloudGetPreview(id: string, callback?: HttpCallback<ArrayBuffer>): void {
-  return cloudGet(SiteURI.PREVIEW + '/' + id, callback)
+  return cloudGetFile(SiteURI.PREVIEW + '/' + id, callback)
 }

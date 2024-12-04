@@ -9,6 +9,9 @@ import { FileItem } from "../../components/FileItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
 import { FileMenu } from "../../components/FileMenu";
 import { LengthMetrics } from "@kit.ArkUI";
+import { FileUtil } from "@pura/harmony-utils";
+import { HMRouterMgr } from "@hadss/hmrouter";
+import { ImagePreview } from "../../model/Params";
 
 @Component
 export struct TabFiles {
@@ -18,6 +21,7 @@ export struct TabFiles {
   @State mainTitle: string|Resource = $r('app.string.files_main_title')
   @State subTitle: string|Resource = $r('app.string.files_sub_title')
   @Provide thumbImage: Map<string, PixelMap> = new Map()
+  @State isRefreshing:boolean = false;
   private currentPath: string = '/'
   private scrollerForScroll: Scroller = new Scroller()
   private scrollerForList: Scroller = new Scroller()
@@ -73,10 +77,6 @@ export struct TabFiles {
   }
 
   async getFileList(isRefresh: boolean, path: string) {
-    if (isRefresh) {
-      this.thumbImage.clear()
-      this.dataSource.clear()
-    }
     if (path === '/') {
       this.isRoot = true
     }
@@ -87,6 +87,11 @@ export struct TabFiles {
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : this.getLastDirectoryName(path)
     cloudGetFilesInfo(path, {
       onSuccess: (data: DirectoryInfo) => {
+        if (isRefresh) {
+          this.thumbImage.clear()
+          this.dataSource.clear()
+        }
+
         this.policy = data.policy
         this.subTitle = this.policy.name
         data.objects.forEach((value: ObjectInfo, index: number) => {
@@ -95,66 +100,83 @@ export struct TabFiles {
           }
           this.dataSource.pushData(value)
         })
+        this.isRefreshing = false
       },
       onFailure: (msg) => {
         showToastTips('获取文件失败', ToastType.Error)
         //决定是否重新登录
+        this.isRefreshing = false
       }
     })
   }
 
   build() {
-    Scroll(this.scrollerForScroll) {
-      Column() {
-        Blank().height(this.sysTopRectHeight)
+    Column() {
+      Blank().height(this.sysTopRectHeight)
 
-        Column({ space: 10 }) {
-          TabFilesHeader({
-            isRoot: this.isRoot,
-            onBackClick: async () => {
-              await this.getFileList(true, this.getDirectoryPath(this.currentPath))
-            }
+      Column({ space: 10 }) {
+        TabFilesHeader({
+          isRoot: this.isRoot,
+          onBackClick: (async () => {
+            await this.getFileList(true, this.getDirectoryPath(this.currentPath))
           })
-          TabFilesTitle({ mainTitle: this.mainTitle, subTitle: this.subTitle})
-        }
-        .height(80)
-        .margin({top: 20})
-        .justifyContent(FlexAlign.Center)
+        })
+        TabFilesTitle({ mainTitle: this.mainTitle, subTitle: this.subTitle})
+      }
+      .height(80)
+      .margin({top: 20})
+      .justifyContent(FlexAlign.Center)
 
-        Grid(this.scrollerForList) {
-          LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
-            GridItem() {
-              FileItem({
-                item,
-                onItemClick: async (item) => {
-                  await this.getFileList(true, item.path === '/' ? item.path+item.name : `${item.path}/${item.name}`)
-                }
-              })
-            }
-          }, (item: ObjectInfo, index: number) => JSON.stringify(item) + index)
+      Refresh({refreshing: $$this.isRefreshing}) {
+        Scroll(this.scrollerForList) {
+          Grid() {
+            LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
+              GridItem() {
+                FileItem({
+                  item,
+                  onItemClick: (async (item) => {
+                    if (item.type == 'dir') {
+                      await this.getFileList(true,
+                        item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`)
+                    }
+                    else {
+                      let fileType = FileUtil.getFileExtention(item.name).toLowerCase()
+                      if (fileType == 'png' || fileType == 'jpg') {
+                        HMRouterMgr.push({pageUrl: Constant.IAMGE_PREVIEW_PAGE, param: new ImagePreview(item.name, item.id)})
+                      }
+                    }
+                  })
+                })
+              }
+            }, (item: ObjectInfo, index: number) => JSON.stringify(item) + index)
+          }
+          .maxCount(2)
+          .padding({ left: 10, right: 10, bottom: 10 })
+          .width('100%')
+          .rowsGap(10)
+          .columnsGap(10)
+          .columnsTemplate('1fr 1fr')
+          .scrollBar(BarState.Off)
         }
-        .maxCount(2)
-        .padding(10)
-        .width('100%')
-        .margin({ top: 20 })
-        .layoutWeight(1)
-        .rowsGap(10)
-        .columnsGap(10)
-        .columnsTemplate('1fr 1fr')
-        .edgeEffect(EdgeEffect.None)
-        .friction(0.6)
+        .edgeEffect(EdgeEffect.Spring)
         .scrollBarWidth(2)
-        .nestedScroll({
-          scrollForward: NestedScrollMode.PARENT_FIRST,
-          scrollBackward: NestedScrollMode.SELF_FIRST,
+        .onWillScroll((xOffset: number, yOffset: number) => {
+          console.debug('TabFiles', `xOffset: ${xOffset}, yOffset: ${yOffset}`)
+        })
+        .onReachEnd(() => {
+          console.debug('TabFiles', `onReachEnd`)
         })
       }
-      .width('100%')
-      .height('100%')
+      .margin({ top: 20 })
+      .layoutWeight(1)
+      .refreshOffset(64)
+      .pullToRefresh(true)
+      .onRefreshing(async () => {
+        await this.getFileList(true, this.currentPath);
+      })
     }
+    .width('100%')
+    .height('100%')
     .backgroundColor($r('app.color.nav_background'))
-    .align(Alignment.Top)
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring)
   }
 }

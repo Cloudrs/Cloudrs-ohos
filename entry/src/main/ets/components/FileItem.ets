@@ -1,12 +1,13 @@
 
 import { DateUtil } from "@pura/harmony-utils";
 import { ObjectInfo } from "../model/net/ApiTypes";
-import { LengthMetrics } from "@kit.ArkUI";
+import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 
 @Extend(Column)
 function itemStyle() {
   .width('100%')
-  .borderRadius(7)
+  .borderRadius(10)
+  .clip(true)
   .alignItems(HorizontalAlign.Start)
   .justifyContent(FlexAlign.Center)
   .backgroundColor(Color.White)
@@ -56,6 +57,7 @@ export struct FileItem {
           .width(40)
           .height(40)
           .fillColor($r('app.color.file_folder'))
+          .draggable(false)
 
         Column({ space: 3 }) {
           Text(item.name)
@@ -93,6 +95,7 @@ export struct FileItem {
       Text() {
         ImageSpan(item.thumb ? this.getThumbData(item.id) : $r('app.media.ic_doc_text_fill'))
           .objectFit(item.thumb ? ImageFit.Cover : ImageFit.CENTER)
+          .draggable(false)
       }
       .textAlign(TextAlign.Center)
       .width('100%')
@@ -107,14 +110,14 @@ export struct FileItem {
           .itemFileDateStyle()
       }
       .height(40)
-      .padding({left: 10, right: 10})
+      .padding({left: 7, right: 7, bottom: 5})
       .alignItems(HorizontalAlign.Start)
       .justifyContent(FlexAlign.Center)
     }
     .bindContextMenu(this.fileMenu(), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {
-        hoverScale: [1.0, 0.95]
+        hoverScale: [1.0, 1.0]
       }
     })
     .height(160)
@@ -143,19 +146,20 @@ export struct FileItem {
           .contentFontColor(Color.Red)
       }
     }
-    .width(250)
+    .width(220)
+    .padding(0)
+    .margin(0)
+    .backgroundColor($r('app.color.file_menu_background'))
     .menuItemDivider({
-      strokeWidth: LengthMetrics.px(1),
       color: $r("app.color.menu_divider_line"),
-      startMargin: LengthMetrics.px(0),
-      endMargin: LengthMetrics.px(0),
+      strokeWidth: {value: 2, unit: LengthUnit.PX}
     })
     .menuItemGroupDivider({
       color: $r("app.color.menu_divider_group_line"),
-      strokeWidth: LengthMetrics.px(15),
-      startMargin: LengthMetrics.px(0),
-      endMargin:LengthMetrics.px(0)
+      strokeWidth: LengthMetrics.vp(5),
+      startMargin: LengthMetrics.vp(0),
+      endMargin: LengthMetrics.vp(0)
     })
-    .backgroundColor($r('app.color.file_menu_background'))
+
   }
 }

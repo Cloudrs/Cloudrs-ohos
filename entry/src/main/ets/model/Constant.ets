@@ -12,6 +12,7 @@ class Constant {
   CLOUD_COOKIE_EXPIRES: string = 'cloudCookieExpires'
   HOME_PAGE = 'HomePage'
   LOGIN_PAGE = 'LoginPage'
+  IAMGE_PREVIEW_PAGE = 'ImagePreviewPage'
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
 }
 

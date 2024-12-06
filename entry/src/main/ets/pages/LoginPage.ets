@@ -8,7 +8,7 @@ import UserPrivData from '../model/UserPreferences';
 import UserDatabase from '../model/UserDatabase';
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { LoginParam } from '../model/net/LoginParam';
-import { cloudLogin, cloudPing, cloudSiteConfig } from '../model/net/Api';
+import { cloudLogin, cloudPing, cloudSiteConfig } from '../model/net/CloudApi';
 
 @Extend(Stack)
 function loginStackStyle() {

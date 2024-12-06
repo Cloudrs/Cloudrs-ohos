@@ -1,5 +1,8 @@
-import { cloudGet, cloudGetFile, cloudPost } from "../../utils/AxiosRequest";
-import { DirectoryInfo, HttpCallback, LoginData, SiteConfig, SiteURI, UserInfo, UserStorage } from "./ApiTypes";
+import { cloudDelete, cloudGet, cloudGetFile, cloudPost } from "../../utils/AxiosRequest";
+import { DirectoryInfo, HttpCallback, LoginData,
+  ObjectDetail,
+  SiteConfig, SiteURI, UserInfo, UserStorage } from "./ApiTypes";
+import { ObjectNew, ObjectSrc } from "./ObjectParam";
 
 /**
  * 网站测试
@@ -41,7 +44,7 @@ export function cloudUserStorage(callback?: HttpCallback<UserStorage>): void {
  * @param callback  回调
  */
 export function cloudGetFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
-  return cloudGet(SiteURI.LIST_DIR + path, callback)
+  return cloudGet(SiteURI.DIRECTORY + path, callback)
 }
 
 /**
@@ -58,4 +61,31 @@ export function cloudGetThumb(id: string, callback?: HttpCallback<ArrayBuffer>):
  */
 export function cloudGetPreview(id: string, callback?: HttpCallback<ArrayBuffer>): void {
   return cloudGetFile(SiteURI.PREVIEW + '/' + id, callback)
+}
+
+/**
+ * 获取指定id的详细信息
+ * @param callback  回调
+ */
+export function cloudGetObjectDetail(id: string, isFolder: boolean, callback?: HttpCallback<ObjectDetail>): void {
+  let uri = `/${id}?is_folder=${isFolder}&trace_root=false`
+  return cloudGet(SiteURI.OBJECT_DETAIL + uri, callback)
+}
+
+/**
+ * 新建对象
+ * @param path 新建的路径名
+ * @param callback  回调
+ */
+export function cloudNewObject(path: string, callback?: HttpCallback<null>): void {
+  return cloudPost(SiteURI.DIRECTORY, new ObjectNew(path), callback)
+}
+
+/**
+ * 删除指定路径下对象，可一次删除多个文件及文件夹
+ * @param src 需要删除的对象
+ * @param callback  回调
+ */
+export function cloudDeleteObjects(src: ObjectSrc, callback?: HttpCallback<null>): void {
+  return cloudDelete(SiteURI.OBJECT, src, callback)
 }

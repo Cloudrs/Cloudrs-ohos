@@ -14,6 +14,7 @@ class Constant {
   LOGIN_PAGE = 'LoginPage'
   IAMGE_PREVIEW_PAGE = 'ImagePreviewPage'
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
+  CURRENT_PATH = 'currentPath'
 }
 
 const constant = new Constant();

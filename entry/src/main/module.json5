@@ -15,6 +15,24 @@
       "name": "ohos.permission.GET_NETWORK_INFO"
     },{
       "name": "ohos.permission.GET_WIFI_INFO"
+    },{
+      "name": "ohos.permission.WRITE_IMAGEVIDEO",
+      "reason": "$string:image_video_write_permission",
+      "usedScene" : {
+        "abilities": [
+          "FormAbility"
+        ],
+        "when": "always",
+      }
+    },{
+      "name": "ohos.permission.READ_IMAGEVIDEO",
+      "reason": "$string:image_video_read_permission",
+      "usedScene" : {
+        "abilities": [
+          "FormAbility"
+        ],
+        "when": "always",
+      }
     }],
     "deliveryWithInstall": true,
     "installationFree": false,

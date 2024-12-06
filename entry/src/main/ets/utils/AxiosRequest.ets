@@ -49,15 +49,82 @@ export function cloudGet<T>(path: string, callback?:HttpCallback<T>) {
   if (callback?.onStart) {
     callback.onStart()
   }
+  axiosInstance.defaults.timeout = Constant.REQUEST_TIMEOUT
   axiosInstance.get<BaseResponse<T>>(encodeURI(path))
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "success :", JSON.stringify(resp))
+        console.debug('AxiosRequest', "GET success :", JSON.stringify(resp))
         if (callback?.onSuccess) {
           callback.onSuccess(resp.data.data)
         }
       } else {
-        console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
+        console.error('AxiosRequest', `GET failed : ${resp.status}`, JSON.stringify(resp))
+        if (callback?.onFailure) {
+          callback.onFailure(resp.data.msg)
+        }
+      }
+    }).catch((error: AxiosError) => {
+    console.error('AxiosRequest', `error : ${error.message}`)
+    if (callback?.onFailure) {
+      callback.onFailure(error.message)
+    }
+  })
+}
+
+/**
+ * 网站通用DELETE请求,T为返回json结构中data数据
+ * @param path  请求uri路径
+ * @param body  请求数据体
+ * @param callback 回调函数
+ * @returns Promise<T | null>
+ */
+export function cloudDelete<T, V>(path: string, body: V, callback?:HttpCallback<T>) {
+  if (callback?.onStart) {
+    callback.onStart()
+  }
+  axiosInstance.defaults.timeout = Constant.REQUEST_TIMEOUT
+  axiosInstance.delete<BaseResponse<T>>(encodeURI(path), {data: body})
+    .then((resp: AxiosResponse<BaseResponse<T>>) => {
+      if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
+        console.debug('AxiosRequest', "DELETE success :", JSON.stringify(resp))
+        if (callback?.onSuccess) {
+          callback.onSuccess(resp.data.data)
+        }
+      } else {
+        console.error('AxiosRequest', `DELETE failed : ${resp.status}`, JSON.stringify(resp))
+        if (callback?.onFailure) {
+          callback.onFailure(resp.data.msg)
+        }
+      }
+    }).catch((error: AxiosError) => {
+    console.error('AxiosRequest', `error : ${error.message}`)
+    if (callback?.onFailure) {
+      callback.onFailure(error.message)
+    }
+  })
+}
+
+/**
+ * 网站通用PUT请求,T为返回json结构中data数据
+ * @param path  请求uri路径
+ * @param body  请求数据体
+ * @param callback 回调函数
+ * @returns Promise<T | null>
+ */
+export function cloudPut<T, V>(path: string, body: V, callback?:HttpCallback<T>) {
+  if (callback?.onStart) {
+    callback.onStart()
+  }
+  axiosInstance.defaults.timeout = Constant.REQUEST_TIMEOUT
+  axiosInstance.put<BaseResponse<T>>(encodeURI(path), {data: body})
+    .then((resp: AxiosResponse<BaseResponse<T>>) => {
+      if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
+        console.debug('AxiosRequest', "PUT success :", JSON.stringify(resp))
+        if (callback?.onSuccess) {
+          callback.onSuccess(resp.data.data)
+        }
+      } else {
+        console.error('AxiosRequest', `PUT failed : ${resp.status}`, JSON.stringify(resp))
         if (callback?.onFailure) {
           callback.onFailure(resp.data.msg)
         }
@@ -81,10 +148,11 @@ export function cloudPost<T, V>(path: string, body: V, callback?:HttpCallback<T>
   if (callback?.onStart) {
     callback.onStart()
   }
+  axiosInstance.defaults.timeout = Constant.REQUEST_TIMEOUT
   axiosInstance.post<BaseResponse<T>>(encodeURI(path), body)
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "success :", JSON.stringify(resp))
+        console.debug('AxiosRequest', "POST success :", JSON.stringify(resp))
 
         /* 返回cookies进行保存 */
         let cookies: string | undefined = resp.headers["set-cookie"]?.toString()
@@ -107,13 +175,13 @@ export function cloudPost<T, V>(path: string, body: V, callback?:HttpCallback<T>
           callback.onSuccess(resp.data.data)
         }
       } else {
-        console.error('AxiosRequest', `failed : ${resp.status}`, JSON.stringify(resp))
+        console.error('AxiosRequest', `POST failed : ${resp.status}`, JSON.stringify(resp))
         if (callback?.onFailure) {
           callback.onFailure(resp.data.msg)
         }
       }
     }).catch((error: AxiosError) => {
-      console.error('AxiosRequest', `error : ${error.message}`)
+      console.error('AxiosRequest', `POST error : ${error.message}`)
       if (callback?.onFailure) {
         callback.onFailure(error.message)
       }
@@ -130,12 +198,13 @@ export function cloudGetFile(path: string, callback?:HttpCallback<ArrayBuffer>) 
   if (callback?.onStart) {
     callback.onStart()
   }
+  axiosInstance.defaults.timeout = 15000
   axiosInstance.get<ArrayBuffer>(encodeURI(path))
     .then((resp: AxiosResponse<ArrayBuffer>) => {
       // 这里认为返回的数据小于500为异常，可能返回的是json状态错误码
       if ( resp.status === 200 && resp.data.byteLength > 500) {
         if (callback?.onSuccess) {
-          console.debug('AxiosRequest', `get file: ${path} success`)
+          console.debug('AxiosRequest', `GET file: ${path} success`)
           callback.onSuccess(resp.data)
         }
       } else {
@@ -143,14 +212,14 @@ export function cloudGetFile(path: string, callback?:HttpCallback<ArrayBuffer>) 
         let data = JSON.parse(json)
           if (data) {
             let baseResp = data as BaseResponse<string>
-            console.error('AxiosRequest', `failed : ${resp.status}, code : ${baseResp.code}, msg: ${baseResp.msg}`, JSON.stringify(resp))
+            console.error('AxiosRequest', `GET file failed : ${resp.status}, code : ${baseResp.code}, msg: ${baseResp.msg}`, JSON.stringify(resp))
             if (callback?.onFailure) {
               callback.onFailure(baseResp.msg)
             }
           }
       }
     }).catch((error: AxiosError) => {
-    console.error('AxiosRequest', `error : ${error.message}`)
+    console.error('AxiosRequest', `GET file error : ${error.message}`)
     if (callback?.onFailure) {
       callback.onFailure(error.message)
     }

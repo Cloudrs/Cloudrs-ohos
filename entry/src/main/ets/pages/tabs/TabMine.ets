@@ -3,7 +3,7 @@ import { UserStorage } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import UserDatabase from "../../model/UserDatabase";
 import UserPreferences from "../../model/UserPreferences";
-import { cloudUserStorage } from "../../model/net/Api";
+import { cloudUserStorage } from "../../model/net/CloudApi";
 
 @Component
 export struct TabMine {

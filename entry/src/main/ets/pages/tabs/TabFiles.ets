@@ -1,17 +1,20 @@
-import { DirectoryInfo, ObjectInfo, Policy } from "../../model/net/ApiTypes";
+import { DirectoryInfo, ObjectDetail, ObjectInfo, Policy } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { TabFilesTitle } from "../../components/TabFilesTitle";
-import { cloudGetFilesInfo, cloudGetThumb } from "../../model/net/Api";
-import { showToastTips, ToastType } from "../../utils/ToastUtil";
+import { cloudGetFilesInfo, cloudGetObjectDetail, cloudGetThumb } from "../../model/net/CloudApi";
+import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { image } from "@kit.ImageKit";
 import { FileItem } from "../../components/FileItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
-import { FileMenu } from "../../components/FileMenu";
-import { LengthMetrics } from "@kit.ArkUI";
 import { FileUtil } from "@pura/harmony-utils";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../../model/Params";
+import { ExitLifecycle } from "../../lifecycle/ExitLifecycle";
+import { FileMenuType } from "../../model/FileMenuType";
+import { filePreview } from "@kit.PreviewKit";
+import { DetailData } from "../../model/DetailData";
+import { DetailSheet } from "../../components/DetailSheet";
 
 @Component
 export struct TabFiles {
@@ -21,9 +24,10 @@ export struct TabFiles {
   @State mainTitle: string|Resource = $r('app.string.files_main_title')
   @State subTitle: string|Resource = $r('app.string.files_sub_title')
   @Provide thumbImage: Map<string, PixelMap> = new Map()
-  @State isRefreshing:boolean = false;
+  @State isRefreshing:boolean = false
+  @State showObjectDetail: boolean = false
+  @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
   private currentPath: string = '/'
-  private scrollerForScroll: Scroller = new Scroller()
   private scrollerForList: Scroller = new Scroller()
   private dataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
 
@@ -38,7 +42,18 @@ export struct TabFiles {
     return undefined
   }
 
+  onBackPressedCallback(): boolean {
+    console.debug('TabFiles', 'onBackPressedCallback ....')
+    if (this.currentPath === '/') {
+      return false
+    }
+
+    this.getFileList(true, this.getDirectoryPath(this.currentPath))
+    return true
+  }
+
   aboutToAppear() {
+    (HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as ExitLifecycle).onBackPressedCallback = this.onBackPressedCallback.bind(this)
     this.getFileList(true, '/')
   }
 
@@ -134,20 +149,14 @@ export struct TabFiles {
               GridItem() {
                 FileItem({
                   item,
-                  onItemClick: (async (item) => {
-                    if (item.type == 'dir') {
-                      await this.getFileList(true,
-                        item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`)
-                    }
-                    else {
-                      let fileType = FileUtil.getFileExtention(item.name).toLowerCase()
-                      if (fileType == 'png' || fileType == 'jpg') {
-                        HMRouterMgr.push({pageUrl: Constant.IAMGE_PREVIEW_PAGE, param: new ImagePreview(item.name, item.id)})
-                      }
-                    }
+                  onMenuClick: (async (item, type) => {
+                    await this.onMenuClick(item, type)
                   })
                 })
               }
+              .onClick(async () => {
+                this.onItemClick(item)
+              })
             }, (item: ObjectInfo, index: number) => JSON.stringify(item) + index)
           }
           .maxCount(2)
@@ -161,7 +170,7 @@ export struct TabFiles {
         .edgeEffect(EdgeEffect.Spring)
         .scrollBarWidth(2)
         .onWillScroll((xOffset: number, yOffset: number) => {
-          console.debug('TabFiles', `xOffset: ${xOffset}, yOffset: ${yOffset}`)
+          //console.debug('TabFiles', `xOffset: ${this.scrollerForList.currentOffset().xOffset}, yOffset: ${this.scrollerForList.currentOffset().yOffset}`)
         })
         .onReachEnd(() => {
           console.debug('TabFiles', `onReachEnd`)
@@ -169,7 +178,7 @@ export struct TabFiles {
       }
       .margin({ top: 20 })
       .layoutWeight(1)
-      .refreshOffset(64)
+      .refreshOffset(77)
       .pullToRefresh(true)
       .onRefreshing(async () => {
         await this.getFileList(true, this.currentPath);
@@ -178,5 +187,63 @@ export struct TabFiles {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.nav_background'))
+    .bindSheet($$this.showObjectDetail, this.detailSheetBuilder(), {
+      detents: [SheetSize.FIT_CONTENT],
+      backgroundColor: Color.White,
+      title: {title: $r('app.string.detail_title')}
+    })
+  }
+
+  @Builder detailSheetBuilder() {
+    DetailSheet({detailData: this.detailData})
+  }
+
+  async onItemClick(item: ObjectInfo) {
+    if (item.type == 'dir') {
+      await this.getFileList(true,
+        item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`)
+    }
+    else {
+      let fileType = FileUtil.getFileExtention(item.name).toLowerCase()
+      if (fileType == 'png' || fileType == 'jpg') {
+        HMRouterMgr.push({pageUrl: Constant.IAMGE_PREVIEW_PAGE, param: new ImagePreview(item.name, item.id, fileType)})
+      } else {
+        //filePreview.openPreview(getContext(), {title: item.name, uri: '', mimeType: ''})
+        showToast('该类型不支持预览')
+      }
+    }
+  }
+
+  async onMenuClick(item: ObjectInfo, type: FileMenuType) {
+    console.debug('TabFiles', 'onMenuClick type: ' + type)
+    switch (type){
+      case FileMenuType.PREVIEW:
+      case FileMenuType.DIR_ENTER:
+        this.onItemClick(item)
+        break
+      case FileMenuType.DETAIL:
+        cloudGetObjectDetail(item.id, item.type == 'dir', {
+          onSuccess: (data) => {
+            this.detailData.isDir = item.type == 'dir'
+            this.detailData.name = item.name
+            this.detailData.detailInfo = data
+            this.showObjectDetail = true
+          },
+          onFailure: () => {
+            showToast('获取详细信息失败')
+          }
+        })
+        break
+      case FileMenuType.RENAME:
+        break
+      case FileMenuType.COPY:
+        break
+      case FileMenuType.MOVE:
+        break
+      case FileMenuType.DOWNLOAD:
+        break
+      case FileMenuType.DELETE:
+        break
+    }
   }
 }

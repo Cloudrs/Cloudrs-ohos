@@ -4,9 +4,14 @@ export enum SiteURI {
   PING = '/site/ping',
   LOGIN = '/user/session',
   USER_STORAGE = '/user/storage',
-  LIST_DIR = '/directory',
+  DIRECTORY = '/directory',
   THUMB = '/file/thumb',
-  PREVIEW = '/file/preview'
+  PREVIEW = '/file/preview',
+  OBJECT = '/object',
+  OBJECT_DETAIL = '/object/property',
+  OBJECT_RENAME = '/object/rename',
+  OBJECT_COPY = '/object/copy',
+  SEARCH = '/file/search/keywords'
 }
 
 export const enum HttpCode {
@@ -137,4 +142,15 @@ export interface DirectoryInfo {
   parent: string;
   objects: ObjectInfo[];
   policy: Policy;
+}
+
+export class ObjectDetail {
+  created_at: string = ''
+  updated_at: string = ''
+  policy: string = ''
+  size: number = 0
+  child_folder_num: number = 0
+  child_file_num: number = 0
+  path: string = ''
+  query_date: string = ''
 }

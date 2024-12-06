@@ -111,6 +111,74 @@
     {
       "name": "delete",
       "value": "删除"
+    },
+    {
+      "name": "share",
+      "value": "分享"
+    },
+    {
+      "name": "save_to_gallery",
+      "value": "保存到相册"
+    },
+    {
+      "name": "image_video_write_permission",
+      "value": "用于保存获取图片或视频到图库。"
+    },
+    {
+      "name": "image_video_read_permission",
+      "value": "用于上传图片或视频到云上。"
+    },
+    {
+      "name": "preview",
+      "value": "预览"
+    },
+    {
+      "name": "file_download",
+      "value": "下载"
+    },
+    {
+      "name": "detail_created_at",
+      "value": "创建时间："
+    },
+    {
+      "name": "detail_updated_at",
+      "value": "修改时间："
+    },
+    {
+      "name": "detail_policy",
+      "value": "存储策略："
+    },
+    {
+      "name": "detail_include",
+      "value": "包括："
+    },
+    {
+      "name": "detail_include_dirs",
+      "value": "文件夹数量："
+    },
+    {
+      "name": "details_include_files",
+      "value": "文件数量："
+    },
+    {
+      "name": "detail_size",
+      "value": "大小："
+    },
+    {
+      "name": "detail_filename",
+      "value": "文件名称："
+    },
+    {
+      "name": "detail_dir_name",
+      "value": "文件夹名称："
+    },
+    {
+      "name": "detail_policy_default",
+      "value": "跟随父目录"
+    },
+    {
+      "name": "detail_title",
+      "value": "详细信息"
     }
   ]
 }

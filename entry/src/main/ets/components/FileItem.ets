@@ -2,6 +2,7 @@
 import { DateUtil } from "@pura/harmony-utils";
 import { ObjectInfo } from "../model/net/ApiTypes";
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
+import { FileMenuType } from "../model/FileMenuType";
 
 @Extend(Column)
 function itemStyle() {
@@ -33,7 +34,7 @@ function itemFileDateStyle() {
 export struct FileItem {
   @Prop item: ObjectInfo
   @Consume thumbImage: Map<string, PixelMap>
-  onItemClick?: (item: ObjectInfo) => void
+  onMenuClick?: (item: ObjectInfo, type: FileMenuType) => void
 
   getThumbData(id: string): PixelMap|undefined {
     if (this.thumbImage.has(id)) {
@@ -83,11 +84,6 @@ export struct FileItem {
         hoverScale: [1.0, 0.95]
       }
     })
-    .onClick(async () => {
-      if (this.onItemClick) {
-        this.onItemClick(item)
-      }
-    })
   }
 
   @Builder fileItem(item: ObjectInfo) {
@@ -124,26 +120,75 @@ export struct FileItem {
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     .itemStyle()
-    .onClick(() => {
-      if (this.onItemClick) {
-        this.onItemClick(item)
-      }
-    })
   }
 
   @Builder fileMenu() {
     Menu() {
       MenuItemGroup() {
-        MenuItem({ content: $r('app.string.dir_enter') })
+        if (this.item.type == 'dir') {
+          MenuItem({ content: $r('app.string.dir_enter') })
+            .onClick(() => {
+              if (this.onMenuClick) {
+                this.onMenuClick(this.item, FileMenuType.DIR_ENTER)
+              }
+            })
+        } else {
+          MenuItem({ content: $r('app.string.preview') })
+            .onClick(() => {
+              if (this.onMenuClick) {
+                this.onMenuClick(this.item, FileMenuType.PREVIEW)
+              }
+            })
+        }
         MenuItem({ content: $r('app.string.file_details') })
+          .onClick(() => {
+            if (this.onMenuClick) {
+              this.onMenuClick(this.item, FileMenuType.DETAIL)
+            }
+          })
         MenuItem({ content: $r('app.string.rename') })
+          .onClick(() => {
+            if (this.onMenuClick) {
+              this.onMenuClick(this.item, FileMenuType.RENAME)
+            }
+          })
         MenuItem({ content: $r('app.string.copy') })
+          .onClick(() => {
+            if (this.onMenuClick) {
+              this.onMenuClick(this.item, FileMenuType.COPY)
+            }
+          })
         MenuItem({ content: $r('app.string.move') })
+          .onClick(() => {
+            if (this.onMenuClick) {
+              this.onMenuClick(this.item, FileMenuType.MOVE)
+            }
+          })
         MenuItem({ content: $r('app.string.cloud_share') })
+          .onClick(() => {
+            if (this.onMenuClick) {
+              this.onMenuClick(this.item, FileMenuType.CREATE_SHARE)
+            }
+          })
+      }
+      if (this.item.type == 'file') {
+        MenuItemGroup() {
+          MenuItem({content: $r('app.string.file_download')})
+            .onClick(() => {
+              if (this.onMenuClick) {
+                this.onMenuClick(this.item, FileMenuType.DOWNLOAD)
+              }
+            })
+        }
       }
       MenuItemGroup() {
         MenuItem({content: $r('app.string.delete')})
           .contentFontColor(Color.Red)
+          .onClick(() => {
+            if (this.onMenuClick) {
+              this.onMenuClick(this.item, FileMenuType.DELETE)
+            }
+          })
       }
     }
     .width(220)
@@ -160,6 +205,5 @@ export struct FileItem {
       startMargin: LengthMetrics.vp(0),
       endMargin: LengthMetrics.vp(0)
     })
-
   }
 }

@@ -75,6 +75,10 @@
     {
       "name": "menu_divider_group_line",
       "value": "#dbdbdc"
+    },
+    {
+      "name": "sheet_default_background",
+      "value": "#ffffff"
     }
   ]
 }

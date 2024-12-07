@@ -25,6 +25,10 @@
       "value": "#30C6C3C3"
     },
     {
+      "name": "toast_custom_background",
+      "value": "#eeeeee"
+    },
+    {
       "name": "tab_bar_background",
       "value": "#eef2f1"
     },

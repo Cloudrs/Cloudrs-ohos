@@ -17,7 +17,15 @@ export function cloudPing(callback?: HttpCallback<string>): void {
  * @param callback  回调
  */
 export function cloudSiteConfig(callback?: HttpCallback<SiteConfig>): void {
-  return cloudGet(SiteURI.PING, callback)
+  return cloudGet(SiteURI.CONFIG, callback)
+}
+
+/**
+ * 获取指定网站图标
+ * @param callback  回调
+ */
+export function cloudGetLogo(baseUrl?: string, callback?: HttpCallback<ArrayBuffer>): void {
+  return cloudGetFile(baseUrl ? baseUrl + SiteURI.LOGO : SiteURI.LOGO, callback)
 }
 
 /**

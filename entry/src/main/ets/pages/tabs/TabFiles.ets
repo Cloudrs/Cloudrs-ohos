@@ -101,12 +101,14 @@ export struct TabFiles {
     this.currentPath = path
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : this.getLastDirectoryName(path)
     cloudGetFilesInfo(path, {
-      onSuccess: (data: DirectoryInfo) => {
+      onStart: () => {
         if (isRefresh) {
           this.thumbImage.clear()
           this.dataSource.clear()
+          console.debug('TabFiles', 'Get file on start')
         }
-
+      },
+      onSuccess: (data: DirectoryInfo) => {
         this.policy = data.policy
         this.subTitle = this.policy.name
         data.objects.forEach((value: ObjectInfo, index: number) => {

@@ -159,7 +159,7 @@ export struct iamgePreview {
     if (this.fileParam) {
       try {
         let context = getContext(this) as common.UIAbilityContext;
-        let path = context.tempDir + '/' + 'tempImage'
+        let path = context.tempDir + '/' + this.fileParam.fileName
         let uri = FileUtil.getUriFromPath(path)
         console.debug('ImagePreview', 'uri: ' + uri)
         await FileUtil.writeEasy(uri, this.imageData, false)
@@ -173,6 +173,10 @@ export struct iamgePreview {
         controller.show(context, {
           previewMode: systemShare.SharePreviewMode.DEFAULT,
           selectionMode: systemShare.SelectionMode.SINGLE
+        })
+        controller.on('dismiss', () => {
+          console.debug('ImagePreview', 'share dismiss, unlink image file!')
+          FileUtil.unlink(path)
         })
       } catch(err) {
         console.error('ImagePreview', `share image failed with error: ${err.code}, ${err.message}`);

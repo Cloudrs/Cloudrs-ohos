@@ -1,22 +1,23 @@
 import { LengthMetrics, window } from '@kit.ArkUI'
-import { JSON } from '@kit.ArkTS'
-import { baseUrlSet, cloudGet, cloudPost, cookieGet } from '../utils/AxiosRequest';
-import { DbUserInfo, LoginData, SiteConfig, SiteURI, UserInfo } from '../model/net/ApiTypes';
+import { baseUrlSet } from '../utils/AxiosRequest';
+import { DbUserInfo, SiteConfig, UserInfo } from '../model/net/ApiTypes';
 import { showToastTips, ToastType } from '../utils/ToastUtil';
 import Constant from '../model/Constant';
 import UserPrivData from '../model/UserPreferences';
 import UserDatabase from '../model/UserDatabase';
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { LoginParam } from '../model/net/LoginParam';
-import { cloudLogin, cloudPing, cloudSiteConfig } from '../model/net/CloudApi';
+import { cloudGetLogo, cloudLogin, cloudPing, cloudSiteConfig } from '../model/net/CloudApi';
+import { image } from '@kit.ImageKit';
 
-@Extend(Stack)
-function loginStackStyle() {
+@Extend(Row)
+function rowCommonStyle() {
   .borderRadius(10)
   .backgroundColor($r("app.color.textinput_background"))
   .width('100%')
   .height(40)
-  .alignContent(Alignment.Start)
+  .alignItems(VerticalAlign.Center)
+  .shadow(ShadowStyle.OUTER_DEFAULT_SM)
 }
 
 @HMRouter({pageUrl: Constant.LOGIN_PAGE, singleton: true})
@@ -31,6 +32,7 @@ export struct LoginPage {
   @State websiteInvalid: boolean = false;
   @State loginInvalid: boolean = false;
   @State loginTitle: string|Resource = $r('app.string.website_title');
+  @State websiteLogo: Resource|PixelMap = $r('app.media.cloudrs')
 
   private address: string = ''
   private username: string = ''
@@ -140,6 +142,17 @@ export struct LoginPage {
             showToastTips('站点获取配置失败', ToastType.Error)
           }
         })
+        cloudGetLogo(this.protocol + this.address, {
+          onSuccess: (data) => {
+            let imageSource: image.ImageSource = image.createImageSource(data)
+            imageSource.createPixelMap().then((pixMap: PixelMap) => {
+              this.websiteLogo = pixMap
+            })
+          },
+          onFailure: (msg) => {
+
+          }
+        })
       },
       onFailure: (msg) => {
         console.debug('LoginPage', '站点请求失败 错误信息:', msg)
@@ -178,7 +191,8 @@ export struct LoginPage {
   }
 
   @Builder showLoginHeader() {
-    Image($r("app.media.cloudrs"))
+    Image(this.websiteLogo)
+      .draggable(false)
       .width(180)
 
     Text(this.loginTitle)
@@ -188,6 +202,8 @@ export struct LoginPage {
 
   @Builder buttonContinue() {
     Button($r("app.string.login_continue"))
+      .margin({top: 10})
+      .shadow(ShadowStyle.OUTER_FLOATING_SM)
       .width("100%")
       .onClick(() => {
         if (!this.websiteInvalid) {
@@ -219,11 +235,6 @@ export struct LoginPage {
     .menuItemDivider({strokeWidth: LengthMetrics.px(1), color: $r("app.color.menu_divider_line")})
   }
 
-  @Styles loginTextStyle() {
-    .borderRadius(10)
-    .backgroundColor($r("app.color.textinput_background"))
-  }
-
   @Styles loginTextInputStyle() {
     .borderRadius(0)
     .layoutWeight(1)
@@ -232,76 +243,61 @@ export struct LoginPage {
   }
 
   @Builder showWebsiteInput() {
-    Stack() {
-      Text()
-        .loginTextStyle()
-        .width('100%')
+    Row() {
+      Image($r("app.media.ic_worldclock_fill"))
+        .width(20)
+        .margin({ left: 5, right: 5 })
 
-      Row() {
-        Image($r("app.media.ic_worldclock_fill"))
-          .width(20)
-          .margin({ left: 5, right: 5 })
+      Text(this.protocol)
+        .fontColor($r('app.color.light_gray'))
+        .textAlign(TextAlign.Center)
+        .bindMenu(this.protocolMenu)
 
-        Text(this.protocol)
-          .fontColor($r('app.color.light_gray'))
-          .textAlign(TextAlign.Center)
-          .bindMenu(this.protocolMenu)
-
-        TextInput({ placeholder: $r("app.string.login_address"), text: this.address })
-          .loginTextInputStyle()
-          .onChange((value) => {
-            this.address = value
-          })
-      }
+      TextInput({ placeholder: $r("app.string.login_address"), text: this.address })
+        .loginTextInputStyle()
+        .onChange((value) => {
+          this.address = value
+        })
     }
-    .loginStackStyle()
+    .rowCommonStyle()
   }
 
   @Builder showLoginInput() {
     Column({space: 10}) {
       // 用户名
-      Stack() {
-        Text()
-          .loginTextStyle()
-          .width('100%')
+      Row() {
+        Image($r("app.media.ic_envelope"))
+          .width(20)
+          .margin({ left: 10, right: 10 })
+          .draggable(false)
 
-        Row() {
-          Image($r("app.media.ic_envelope"))
-            .width(20)
-            .margin({ left: 10, right: 10 })
-
-          TextInput({ placeholder: $r("app.string.login_user"), text: this.username })
-            .loginTextInputStyle()
-            .onChange((value) => {
-              this.username = value
-            })
-        }
+        TextInput({ placeholder: $r("app.string.login_user"), text: this.username })
+          .loginTextInputStyle()
+          .onChange((value) => {
+            this.username = value
+          })
       }
-      .loginStackStyle()
+      .rowCommonStyle()
 
       // 密码
-      Stack() {
-        Text()
-          .loginTextStyle()
-          .width('100%')
+      Row() {
+        Image($r("app.media.ic_key_horizontal"))
+          .width(20)
+          .margin({ left: 10, right: 10 })
+          .draggable(false)
 
-        Row() {
-          Image($r("app.media.ic_key_horizontal"))
-            .width(20)
-            .margin({ left: 10, right: 10 })
-
-          TextInput({ placeholder: $r("app.string.login_password"), text: this.password })
-            .type(InputType.Password)
-            .loginTextInputStyle()
-            .onChange((value) => {
-              this.password = value
-            })
-        }
+        TextInput({ placeholder: $r("app.string.login_password"), text: this.password })
+          .type(InputType.Password)
+          .loginTextInputStyle()
+          .onChange((value) => {
+            this.password = value
+          })
       }
-      .loginStackStyle()
+      .rowCommonStyle()
       .transition(TransitionEffect.OPACITY.animation({duration: 500})
         .combine(TransitionEffect.translate({y: -30}).animation({duration: 500})))
     }
+    .transition(TransitionEffect.asymmetric(undefined, TransitionEffect.OPACITY.animation({delay: 500, duration: 500})))
   }
 
   @Styles scanAndUsersCommon() {

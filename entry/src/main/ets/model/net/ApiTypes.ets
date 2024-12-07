@@ -2,6 +2,7 @@ export enum SiteURI {
   PREFIX = '/api/v3',
   CONFIG = '/site/config',
   PING = '/site/ping',
+  LOGO = '/static/img/logo512.png',
   LOGIN = '/user/session',
   USER_STORAGE = '/user/storage',
   DIRECTORY = '/directory',

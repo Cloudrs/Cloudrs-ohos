@@ -47,7 +47,7 @@ export struct DetailSheet {
         .fontSize(16)
       Text(value)
         .fontColor(Color.Black)
-        .fontSize(16)
+        .fontSize(14)
         .wordBreak(WordBreak.BREAK_ALL)
         .maxLines(1)
         .textOverflow({overflow: TextOverflow.MARQUEE})

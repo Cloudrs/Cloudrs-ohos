@@ -17,6 +17,7 @@ export struct iamgePreview {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State imagePixelMap:PixelMap | undefined | Resource = undefined;
   @State imageWidth: number | string = '100%';
+  @State isLoading: boolean = true;
   private fileParam: ImagePreview|null = null;
   private imageData: ArrayBuffer|null = null;
 
@@ -35,11 +36,13 @@ export struct iamgePreview {
           imageSource.createPixelMap().then((pixMap: PixelMap) => {
             this.imagePixelMap = pixMap
             this.imageWidth = '100%'
+            this.isLoading = false
           })
         },
         onFailure: (msg) => {
           this.imagePixelMap = $r('app.media.ic_picture_damage')
           this.imageWidth = 128
+          this.isLoading = false
         }
       })
     }
@@ -59,9 +62,17 @@ export struct iamgePreview {
       this.previewHeader()
 
       Column() {
-        Image(this.imagePixelMap)
-          .width(this.imageWidth)
+        if (this.isLoading) {
+          LoadingProgress()
+            .width(40)
+            .height(40)
+        }
+        else {
+          Image(this.imagePixelMap)
+            .width(this.imageWidth)
+        }
       }
+      .width('100%')
       .backgroundColor(Color.Black)
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)

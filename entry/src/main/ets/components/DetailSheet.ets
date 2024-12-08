@@ -24,7 +24,7 @@ export struct DetailSheet {
         this.commonRow($r('app.string.detail_include_dirs'), this.detailData.detailInfo.child_folder_num.toFixed(0))
         this.commonDivider()
 
-        this.commonRow($r('app.string.details_include_files'), this.detailData.detailInfo.child_file_num.toFixed(0))
+        this.commonRow($r("app.string.detail_include_files"), this.detailData.detailInfo.child_file_num.toFixed(0))
         this.commonDivider()
       }
 

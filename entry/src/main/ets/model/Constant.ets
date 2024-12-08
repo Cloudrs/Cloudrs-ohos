@@ -15,6 +15,9 @@ class Constant {
   IAMGE_PREVIEW_PAGE = 'ImagePreviewPage'
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
   CURRENT_PATH = 'currentPath'
+  CURRENT_SORT_TYPE = 'sortType'
+  CURRENT_SORT_TYPE_RESERVE = 'sortTypeReverse'
+  CURRENT_SHOW_TYPE = 'showType'
 }
 
 const constant = new Constant();

@@ -11,7 +11,7 @@ import { FileUtil } from "@pura/harmony-utils";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../../model/Params";
 import { ExitLifecycle } from "../../lifecycle/ExitLifecycle";
-import { FileMenuType } from "../../model/FileMenuType";
+import { FileMenuType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";

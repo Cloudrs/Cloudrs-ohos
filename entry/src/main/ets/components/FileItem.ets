@@ -2,7 +2,7 @@
 import { DateUtil } from "@pura/harmony-utils";
 import { ObjectInfo } from "../model/net/ApiTypes";
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
-import { FileMenuType } from "../model/FileMenuType";
+import { FileMenuType } from "../model/MenuModel";
 import { image } from "@kit.ImageKit";
 import LazyDataSource from "../utils/LazyDataSource";
 
@@ -135,63 +135,25 @@ export struct FileItem {
     Menu() {
       MenuItemGroup() {
         if (item.type == 'dir') {
-          MenuItem({ content: $r('app.string.dir_enter') })
-            .onClick(() => {
-              if (this.onMenuClick) {
-                this.onMenuClick(item, FileMenuType.DIR_ENTER)
-              }
-            })
+          this.commonMenuItem($r('app.string.dir_enter'), FileMenuType.DIR_ENTER)
         } else {
-          MenuItem({ content: $r('app.string.preview') })
-            .onClick(() => {
-              if (this.onMenuClick) {
-                this.onMenuClick(item, FileMenuType.PREVIEW)
-              }
-            })
+          this.commonMenuItem($r('app.string.preview'), FileMenuType.PREVIEW)
         }
-        MenuItem({ content: $r('app.string.file_details') })
-          .onClick(() => {
-            if (this.onMenuClick) {
-              this.onMenuClick(item, FileMenuType.DETAIL)
-            }
-          })
-        MenuItem({ content: $r('app.string.rename') })
-          .onClick(() => {
-            if (this.onMenuClick) {
-              this.onMenuClick(item, FileMenuType.RENAME)
-            }
-          })
-        MenuItem({ content: $r('app.string.copy') })
-          .onClick(() => {
-            if (this.onMenuClick) {
-              this.onMenuClick(item, FileMenuType.COPY)
-            }
-          })
-        MenuItem({ content: $r('app.string.move') })
-          .onClick(() => {
-            if (this.onMenuClick) {
-              this.onMenuClick(item, FileMenuType.MOVE)
-            }
-          })
-        MenuItem({ content: $r('app.string.cloud_share') })
-          .onClick(() => {
-            if (this.onMenuClick) {
-              this.onMenuClick(item, FileMenuType.CREATE_SHARE)
-            }
-          })
+        this.commonMenuItem($r('app.string.file_details'), FileMenuType.DETAIL)
+        this.commonMenuItem($r('app.string.rename'), FileMenuType.RENAME)
+        this.commonMenuItem($r('app.string.copy'), FileMenuType.COPY)
+        this.commonMenuItem($r('app.string.move'), FileMenuType.MOVE)
+        this.commonMenuItem($r('app.string.cloud_share'), FileMenuType.CREATE_SHARE)
       }
+
       if (item.type == 'file') {
         MenuItemGroup() {
-          MenuItem({content: $r('app.string.file_download')})
-            .onClick(() => {
-              if (this.onMenuClick) {
-                this.onMenuClick(item, FileMenuType.DOWNLOAD)
-              }
-            })
+          this.commonMenuItem($r('app.string.file_download'), FileMenuType.DOWNLOAD)
         }
       }
+
       MenuItemGroup() {
-        MenuItem({content: $r('app.string.delete')})
+        MenuItem(this.commonMenuBuilder($r('app.string.delete')))
           .contentFontColor(Color.Red)
           .onClick(() => {
             if (this.onMenuClick) {
@@ -214,5 +176,33 @@ export struct FileItem {
       startMargin: LengthMetrics.vp(0),
       endMargin: LengthMetrics.vp(0)
     })
+  }
+
+  @Builder commonMenuItem(title: ResourceStr, type: FileMenuType) {
+    MenuItem(this.commonMenuBuilder(title))
+      .onClick(() => {
+        if (this.onMenuClick) {
+          this.onMenuClick(this.item, type)
+        }
+      })
+  }
+
+  @Builder commonMenuBuilder(content: ResourceStr, isSelected?: boolean) {
+    Row() {
+      Text(content)
+        .fontSize(15)
+        .fontWeight(FontWeight.Medium)
+        .height(50)
+        .layoutWeight(1)
+
+      Image(isSelected ? $r('app.media.ic_selected') : '')
+        .width(24)
+        .height(24)
+    }
+    .padding({left: 20, right: 20})
+    .width('100%')
+    .height(50)
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.SpaceBetween)
   }
 }

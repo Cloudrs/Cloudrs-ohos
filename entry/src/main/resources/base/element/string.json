@@ -157,7 +157,7 @@
       "value": "文件夹数量："
     },
     {
-      "name": "details_include_files",
+      "name": "detail_include_files",
       "value": "文件数量："
     },
     {
@@ -179,6 +179,46 @@
     {
       "name": "detail_title",
       "value": "详细信息"
+    },
+    {
+      "name": "more_multi_select",
+      "value": "多选"
+    },
+    {
+      "name": "more_show_icon",
+      "value": "图标"
+    },
+    {
+      "name": "more_show_list",
+      "value": "列表"
+    },
+    {
+      "name": "more_sort_by_time",
+      "value": "时间"
+    },
+    {
+      "name": "more_sort_by_size",
+      "value": "大小"
+    },
+    {
+      "name": "more_sort_by_type",
+      "value": "类型"
+    },
+    {
+      "name": "more_sort_by_name",
+      "value": "名称"
+    },
+    {
+      "name": "more_new_dir",
+      "value": "新建文件夹"
+    },
+    {
+      "name": "more_new_file",
+      "value": "新建文件"
+    },
+    {
+      "name": "more_upload_file",
+      "value": "上传文件"
     }
   ]
 }

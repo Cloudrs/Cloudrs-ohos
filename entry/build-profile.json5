@@ -3,6 +3,11 @@
   "buildOption": {
     "externalNativeOptions": {
       "abiFilters": ["arm64-v8a", "x86_64"]
+    },
+    "nativeLib": {
+      "debugSymbol": {
+        "strip": false
+      }
     }
   },
   "buildOptionSet": [

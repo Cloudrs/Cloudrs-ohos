@@ -3,6 +3,10 @@ import { DateUtil } from "@pura/harmony-utils";
 import { ObjectInfo } from "../model/net/ApiTypes";
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import { FileMenuType } from "../model/FileMenuType";
+import { image } from "@kit.ImageKit";
+import LazyDataSource from "../utils/LazyDataSource";
+
+const TAG = 'TabItem';
 
 @Extend(Column)
 function itemStyle() {
@@ -32,9 +36,14 @@ function itemFileDateStyle() {
 
 @Component
 export struct FileItem {
+  @Prop index: number
   @Prop item: ObjectInfo
   @Consume thumbImage: Map<string, PixelMap>
   onMenuClick?: (item: ObjectInfo, type: FileMenuType) => void
+
+  aboutToAppear(): void {
+    console.debug(TAG, 'aboutToAppear')
+  }
 
   getThumbData(id: string): PixelMap|undefined {
     if (this.thumbImage.has(id)) {
@@ -78,7 +87,7 @@ export struct FileItem {
     .height(60)
     .padding({left: 10, right: 10})
     .itemStyle()
-    .bindContextMenu(this.fileMenu(), ResponseType.LongPress, {
+    .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {
         hoverScale: [1.0, 0.95]
@@ -89,8 +98,8 @@ export struct FileItem {
   @Builder fileItem(item: ObjectInfo) {
     Column({space: 10}) {
       Text() {
-        ImageSpan(item.thumb ? this.getThumbData(item.id) : $r('app.media.ic_doc_text_fill'))
-          .objectFit(item.thumb ? ImageFit.Cover : ImageFit.CENTER)
+        ImageSpan(this.getThumbData(item.id) ?? $r('app.media.ic_doc_text_fill'))
+          .objectFit(this.getThumbData(item.id) ? ImageFit.Cover : ImageFit.CENTER)
           .draggable(false)
       }
       .textAlign(TextAlign.Center)
@@ -110,7 +119,7 @@ export struct FileItem {
       .alignItems(HorizontalAlign.Start)
       .justifyContent(FlexAlign.Center)
     }
-    .bindContextMenu(this.fileMenu(), ResponseType.LongPress, {
+    .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {
         hoverScale: [1.0, 1.0]
@@ -122,61 +131,61 @@ export struct FileItem {
     .itemStyle()
   }
 
-  @Builder fileMenu() {
+  @Builder fileMenu(item: ObjectInfo) {
     Menu() {
       MenuItemGroup() {
-        if (this.item.type == 'dir') {
+        if (item.type == 'dir') {
           MenuItem({ content: $r('app.string.dir_enter') })
             .onClick(() => {
               if (this.onMenuClick) {
-                this.onMenuClick(this.item, FileMenuType.DIR_ENTER)
+                this.onMenuClick(item, FileMenuType.DIR_ENTER)
               }
             })
         } else {
           MenuItem({ content: $r('app.string.preview') })
             .onClick(() => {
               if (this.onMenuClick) {
-                this.onMenuClick(this.item, FileMenuType.PREVIEW)
+                this.onMenuClick(item, FileMenuType.PREVIEW)
               }
             })
         }
         MenuItem({ content: $r('app.string.file_details') })
           .onClick(() => {
             if (this.onMenuClick) {
-              this.onMenuClick(this.item, FileMenuType.DETAIL)
+              this.onMenuClick(item, FileMenuType.DETAIL)
             }
           })
         MenuItem({ content: $r('app.string.rename') })
           .onClick(() => {
             if (this.onMenuClick) {
-              this.onMenuClick(this.item, FileMenuType.RENAME)
+              this.onMenuClick(item, FileMenuType.RENAME)
             }
           })
         MenuItem({ content: $r('app.string.copy') })
           .onClick(() => {
             if (this.onMenuClick) {
-              this.onMenuClick(this.item, FileMenuType.COPY)
+              this.onMenuClick(item, FileMenuType.COPY)
             }
           })
         MenuItem({ content: $r('app.string.move') })
           .onClick(() => {
             if (this.onMenuClick) {
-              this.onMenuClick(this.item, FileMenuType.MOVE)
+              this.onMenuClick(item, FileMenuType.MOVE)
             }
           })
         MenuItem({ content: $r('app.string.cloud_share') })
           .onClick(() => {
             if (this.onMenuClick) {
-              this.onMenuClick(this.item, FileMenuType.CREATE_SHARE)
+              this.onMenuClick(item, FileMenuType.CREATE_SHARE)
             }
           })
       }
-      if (this.item.type == 'file') {
+      if (item.type == 'file') {
         MenuItemGroup() {
           MenuItem({content: $r('app.string.file_download')})
             .onClick(() => {
               if (this.onMenuClick) {
-                this.onMenuClick(this.item, FileMenuType.DOWNLOAD)
+                this.onMenuClick(item, FileMenuType.DOWNLOAD)
               }
             })
         }
@@ -186,7 +195,7 @@ export struct FileItem {
           .contentFontColor(Color.Red)
           .onClick(() => {
             if (this.onMenuClick) {
-              this.onMenuClick(this.item, FileMenuType.DELETE)
+              this.onMenuClick(item, FileMenuType.DELETE)
             }
           })
       }

@@ -1,3 +1,5 @@
+import { image } from "@kit.ImageKit";
+
 export enum SiteURI {
   PREFIX = '/api/v3',
   CONFIG = '/site/config',

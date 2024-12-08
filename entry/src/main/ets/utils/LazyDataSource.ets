@@ -1,7 +1,7 @@
 import Logger from './Logger';
 import { ObservedArray } from './ObservedArray';
 
-const TAG = '[BasicDataSource]';
+const TAG = 'LazyDataSource';
 
 class BasicDataSource <T> implements IDataSource {
   private listeners: DataChangeListener[] = [];
@@ -63,12 +63,16 @@ class BasicDataSource <T> implements IDataSource {
 @Observed
 export default class LazyDataSource<T> extends BasicDataSource<T> {
   dataArray: T[] = [];
+  onDataGet?: (index: number, data: T) => void;
 
   public totalCount(): number {
     return this.dataArray.length;
   }
 
   public getData(index: number): T {
+    if (this.onDataGet) {
+      this.onDataGet(index, this.dataArray[index])
+    }
     return this.dataArray[index];
   }
 
@@ -98,6 +102,7 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
 
   public clear(): void {
     this.dataArray.splice(0, this.dataArray?.length);
+    this.notifyDataReload();
   }
 
   public isEmpty(): boolean {

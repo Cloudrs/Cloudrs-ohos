@@ -16,6 +16,8 @@ import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";
 
+const TAG = 'TabFiles';
+
 @Component
 export struct TabFiles {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
@@ -43,7 +45,7 @@ export struct TabFiles {
   }
 
   onBackPressedCallback(): boolean {
-    console.debug('TabFiles', 'onBackPressedCallback ....')
+    console.debug(TAG, 'onBackPressedCallback ....')
     if (this.currentPath === '/') {
       return false
     }
@@ -53,6 +55,10 @@ export struct TabFiles {
   }
 
   aboutToAppear() {
+    this.dataSource.onDataGet = (index: number, item: ObjectInfo) => {
+      console.debug(TAG, `onDataGet: index:${index}`)
+      this.getThumbFile(index, item)
+    }
     (HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as ExitLifecycle).onBackPressedCallback = this.onBackPressedCallback.bind(this)
     this.getFileList(true, '/')
   }
@@ -63,20 +69,18 @@ export struct TabFiles {
       return '/';
     }
     const directoryPath = filePath.substring(0, lastSlashIndex);
-    //console.debug('TabFiles', `filePath:`, filePath, 'dir:', directoryPath)
     return directoryPath === '' ? '/' : directoryPath;
   }
 
   getLastDirectoryName(filePath: string): string {
     // 分割路径并去除空字符串
     const parts = filePath.split('/').filter(part => part !== '');
-    // console.debug('TabFiles', `split:` + JSON.stringify(parts))
     const lastDirectoryName = parts.length >= 1 ? parts[parts.length - 1] : '/';
     return lastDirectoryName;
   }
 
-  async getThumbFile(item: ObjectInfo) {
-    if (item.thumb) {
+  async getThumbFile(index: number, item: ObjectInfo) {
+    if (item.thumb && !this.getThumbData(item.id)) {
       cloudGetThumb(item.id, {
         onSuccess: (data: ArrayBuffer) => {
           let imageSource: image.ImageSource = image.createImageSource(data)
@@ -85,7 +89,7 @@ export struct TabFiles {
           })
         },
         onFailure: (msg) => {
-
+          console.error(TAG, `Get thumb failed, msg:${msg}`)
         }
       })
     }
@@ -103,18 +107,15 @@ export struct TabFiles {
     cloudGetFilesInfo(path, {
       onStart: () => {
         if (isRefresh) {
-          this.thumbImage.clear()
           this.dataSource.clear()
-          console.debug('TabFiles', 'Get file on start')
+          this.thumbImage.clear()
+          this.scrollerForList.scrollEdge(Edge.Start)
         }
       },
       onSuccess: (data: DirectoryInfo) => {
         this.policy = data.policy
         this.subTitle = this.policy.name
-        data.objects.forEach((value: ObjectInfo, index: number) => {
-          if (value.thumb) {
-            this.getThumbFile(value)
-          }
+        data.objects.forEach((value, index) => {
           this.dataSource.pushData(value)
         })
         this.isRefreshing = false
@@ -145,37 +146,31 @@ export struct TabFiles {
       .justifyContent(FlexAlign.Center)
 
       Refresh({refreshing: $$this.isRefreshing}) {
-        Scroll(this.scrollerForList) {
-          Grid() {
-            LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
-              GridItem() {
-                FileItem({
-                  item,
-                  onMenuClick: (async (item, type) => {
-                    await this.onMenuClick(item, type)
-                  })
+        Grid(this.scrollerForList) {
+          LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
+            GridItem() {
+              FileItem({index, item, onMenuClick : (async (item, type) => {
+                  await this.onMenuClick(item, type)
                 })
-              }
-              .onClick(async () => {
-                this.onItemClick(item)
               })
-            }, (item: ObjectInfo, index: number) => JSON.stringify(item) + index)
-          }
-          .maxCount(2)
-          .padding({ left: 10, right: 10, bottom: 10 })
-          .width('100%')
-          .rowsGap(10)
-          .columnsGap(10)
-          .columnsTemplate('1fr 1fr')
-          .scrollBar(BarState.Off)
+            }
+            .onClick(async () => {
+              this.onItemClick(item)
+            })
+          }, (item: ObjectInfo, index: number) => item.id)
         }
+        .cachedCount(2)
+        .maxCount(2)
+        .padding({ left: 10, right: 10, bottom: 10 })
+        .width('100%')
+        .height('100%') //!!!使用lazyforeach必须设置高度才能有效
+        .rowsGap(10)
+        .columnsGap(10)
+        .columnsTemplate('1fr 1fr')
         .edgeEffect(EdgeEffect.Spring)
         .scrollBarWidth(2)
-        .onWillScroll((xOffset: number, yOffset: number) => {
-          //console.debug('TabFiles', `xOffset: ${this.scrollerForList.currentOffset().xOffset}, yOffset: ${this.scrollerForList.currentOffset().yOffset}`)
-        })
-        .onReachEnd(() => {
-          console.debug('TabFiles', `onReachEnd`)
+        .onScrollIndex((first, last) => {
+          console.debug(TAG, `onScrollIndex: first:${first}, last:${last}`)
         })
       }
       .margin({ top: 20 })
@@ -201,6 +196,7 @@ export struct TabFiles {
   }
 
   async onItemClick(item: ObjectInfo) {
+    console.debug(TAG)
     if (item.type == 'dir') {
       await this.getFileList(true,
         item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`)
@@ -217,7 +213,7 @@ export struct TabFiles {
   }
 
   async onMenuClick(item: ObjectInfo, type: FileMenuType) {
-    console.debug('TabFiles', 'onMenuClick type: ' + type)
+    console.debug(TAG, 'onMenuClick type: ' + type)
     switch (type){
       case FileMenuType.PREVIEW:
       case FileMenuType.DIR_ENTER:

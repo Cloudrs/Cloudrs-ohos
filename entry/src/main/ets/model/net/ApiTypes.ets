@@ -10,6 +10,7 @@ export enum SiteURI {
   DIRECTORY = '/directory',
   THUMB = '/file/thumb',
   PREVIEW = '/file/preview',
+  NEW_FILE = '/file/create',
   OBJECT = '/object',
   OBJECT_DETAIL = '/object/property',
   OBJECT_RENAME = '/object/rename',

@@ -2,6 +2,15 @@
 export class ObjectSrc {
   items: string[] = []
   dirs: string[] = []
+
+  constructor(items?: string[], dirs?: string[]) {
+    if (items) {
+      this.items = items
+    }
+    if (dirs) {
+      this.dirs = dirs
+    }
+  }
 }
 
 export class ObjectRename {

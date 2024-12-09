@@ -23,12 +23,6 @@ export struct TabFilesTitle {
   @Prop subTitle: string | Resource;
   onMoreClick?: (menuType: MoreMenuType, isReverse?: boolean) => void;
 
-  aboutToAppear(): void {
-    console.debug(TAG, 'sortResevese:' + JSON.stringify(this.sortTypeReverse))
-    console.debug(TAG, 'sortType:' + JSON.stringify(this.sortType))
-    console.debug(TAG, 'showType:' + JSON.stringify(this.showType))
-  }
-
   isSortTypeReverse(type: SortType): boolean {
     if (this.sortTypeReverse.has(type)) {
       return this.sortTypeReverse.get(type)!
@@ -66,7 +60,7 @@ export struct TabFilesTitle {
           .width(30)
           .height(30)
           .onClick(() => {
-            console.debug(TAG, 'sortResevese:' + JSON.stringify(this.sortTypeReverse))
+            //console.debug(TAG, 'sortResevese:' + JSON.stringify(this.sortTypeReverse))
           })
           .bindMenu(this.moreMenu())
       }
@@ -214,7 +208,7 @@ export struct TabFilesTitle {
     }
     .padding({left: 20, right: 20})
     .width('100%')
-    .height(50)
+    .height(45)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }
@@ -240,7 +234,7 @@ export struct TabFilesTitle {
     }
     .padding({left: 20, right: 20})
     .width('100%')
-    .height(50)
+    .height(45)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }

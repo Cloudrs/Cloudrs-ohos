@@ -1,8 +1,8 @@
-import { cloudDelete, cloudGet, cloudGetFile, cloudPost } from "../../utils/AxiosRequest";
+import { cloudDelete, cloudGet, cloudGetFile, cloudPost, cloudPut } from "../../utils/AxiosRequest";
 import { DirectoryInfo, HttpCallback, LoginData,
   ObjectDetail,
   SiteConfig, SiteURI, UserInfo, UserStorage } from "./ApiTypes";
-import { ObjectNew, ObjectSrc } from "./ObjectParam";
+import { ObjectNew, ObjectRename, ObjectSrc } from "./ObjectParam";
 
 /**
  * 网站测试
@@ -83,10 +83,15 @@ export function cloudGetObjectDetail(id: string, isFolder: boolean, callback?: H
 /**
  * 新建对象
  * @param path 新建的路径名
+ * @param isDir 是否为文件夹
  * @param callback  回调
  */
-export function cloudNewObject(path: string, callback?: HttpCallback<null>): void {
-  return cloudPost(SiteURI.DIRECTORY, new ObjectNew(path), callback)
+export function cloudNewObject(path: string, isDir: boolean, callback?: HttpCallback<null>): void {
+  if (isDir) {
+    return cloudPut(SiteURI.DIRECTORY, new ObjectNew(path), callback)
+  } else {
+    return cloudPost(SiteURI.NEW_FILE, new ObjectNew(path), callback)
+  }
 }
 
 /**
@@ -96,4 +101,28 @@ export function cloudNewObject(path: string, callback?: HttpCallback<null>): voi
  */
 export function cloudDeleteObjects(src: ObjectSrc, callback?: HttpCallback<null>): void {
   return cloudDelete(SiteURI.OBJECT, src, callback)
+}
+
+/**
+ * 删除指定路径下对象
+ * @param id 需要删除的id
+ * @param isDir 是否为文件夹
+ * @param callback  回调
+ */
+export function cloudDeleteObject(id: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
+  let src = isDir ? new ObjectSrc(undefined, [id]) : new ObjectSrc([id], undefined)
+  return cloudDelete(SiteURI.OBJECT, src, callback)
+}
+
+/**
+ * 重命名指定ID对象
+ * @param id 需要重命名的id
+ * @param newName 需要重命名的名称
+ * @param isDir 是否为文件夹
+ * @param callback  回调
+ */
+export function cloudRenameObject(id: string, newName: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
+  let src = isDir ? new ObjectSrc(undefined, [id]) : new ObjectSrc([id], undefined)
+  let rename = new ObjectRename(src, newName)
+  return cloudPost(SiteURI.OBJECT_RENAME, rename, callback)
 }

@@ -18,6 +18,8 @@ class Constant {
   CURRENT_SORT_TYPE = 'sortType'
   CURRENT_SORT_TYPE_RESERVE = 'sortTypeReverse'
   CURRENT_SHOW_TYPE = 'showType'
+  OBJECT_DIR_TYPE = 'dir'
+  OBJECT_FILE_TYPE = 'file'
 }
 
 const constant = new Constant();

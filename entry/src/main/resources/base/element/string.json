@@ -219,6 +219,22 @@
     {
       "name": "more_upload_file",
       "value": "上传文件"
+    },
+    {
+      "name": "dialog_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "dialog_delete",
+      "value": "删除"
+    },
+    {
+      "name": "new_dir_placeholder",
+      "value": "新文件夹名"
+    },
+    {
+      "name": "new_file_placeholder",
+      "value": "新文件名"
     }
   ]
 }

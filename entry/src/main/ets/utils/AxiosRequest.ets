@@ -116,7 +116,7 @@ export function cloudPut<T, V>(path: string, body: V, callback?:HttpCallback<T>)
     callback.onStart()
   }
   axiosInstance.defaults.timeout = Constant.REQUEST_TIMEOUT
-  axiosInstance.put<BaseResponse<T>>(encodeURI(path), {data: body})
+  axiosInstance.put<BaseResponse<T>>(encodeURI(path), body)
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
         console.debug('AxiosRequest', "PUT success :", JSON.stringify(resp))

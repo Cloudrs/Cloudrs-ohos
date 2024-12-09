@@ -5,6 +5,7 @@ import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import { FileMenuType } from "../model/MenuModel";
 import { image } from "@kit.ImageKit";
 import LazyDataSource from "../utils/LazyDataSource";
+import Constant from "../model/Constant";
 
 const TAG = 'TabItem';
 
@@ -53,7 +54,7 @@ export struct FileItem {
   }
 
   build() {
-    if (this.item.type === 'dir') {
+    if (this.item.type === Constant.OBJECT_DIR_TYPE) {
       this.directoryItem(this.item)
     } else if (this.item.type === 'file') {
       this.fileItem(this.item)
@@ -134,7 +135,7 @@ export struct FileItem {
   @Builder fileMenu(item: ObjectInfo) {
     Menu() {
       MenuItemGroup() {
-        if (item.type == 'dir') {
+        if (item.type == Constant.OBJECT_DIR_TYPE) {
           this.commonMenuItem($r('app.string.dir_enter'), FileMenuType.DIR_ENTER)
         } else {
           this.commonMenuItem($r('app.string.preview'), FileMenuType.PREVIEW)

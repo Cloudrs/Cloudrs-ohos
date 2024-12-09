@@ -2,7 +2,12 @@ import { DirectoryInfo, ObjectDetail, ObjectInfo, Policy } from "../../model/net
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { TabFilesTitle } from "../../components/TabFilesTitle";
-import { cloudGetFilesInfo, cloudGetObjectDetail, cloudGetThumb } from "../../model/net/CloudApi";
+import {
+  cloudDeleteObject,
+  cloudGetFilesInfo, cloudGetObjectDetail,
+  cloudGetThumb,
+  cloudNewObject,
+  cloudRenameObject} from "../../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { image } from "@kit.ImageKit";
 import { FileItem } from "../../components/FileItem";
@@ -11,10 +16,11 @@ import { FileUtil } from "@pura/harmony-utils";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../../model/Params";
 import { ExitLifecycle } from "../../lifecycle/ExitLifecycle";
-import { FileMenuType } from "../../model/MenuModel";
+import { FileMenuType, MoreMenuType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";
+import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
 
 const TAG = 'TabFiles';
 
@@ -31,7 +37,7 @@ export struct TabFiles {
   @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
   private currentPath: string = '/'
   private scrollerForList: Scroller = new Scroller()
-  private dataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
+  @State dataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -115,9 +121,7 @@ export struct TabFiles {
       onSuccess: (data: DirectoryInfo) => {
         this.policy = data.policy
         this.subTitle = this.policy.name
-        data.objects.forEach((value, index) => {
-          this.dataSource.pushData(value)
-        })
+        this.dataSource.pushArrayData(data.objects)
         this.isRefreshing = false
       },
       onFailure: (msg) => {
@@ -139,7 +143,7 @@ export struct TabFiles {
             await this.getFileList(true, this.getDirectoryPath(this.currentPath))
           })
         })
-        TabFilesTitle({ mainTitle: this.mainTitle, subTitle: this.subTitle})
+        TabFilesTitle({ mainTitle: this.mainTitle, subTitle: this.subTitle, onMoreClick: this.onMoreClick.bind(this)})
       }
       .height(80)
       .margin({top: 20})
@@ -150,7 +154,7 @@ export struct TabFiles {
           LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
             GridItem() {
               FileItem({index, item, onMenuClick : (async (item, type) => {
-                  await this.onMenuClick(item, type)
+                  await this.onMenuClick(index, item, type)
                 })
               })
             }
@@ -196,8 +200,7 @@ export struct TabFiles {
   }
 
   async onItemClick(item: ObjectInfo) {
-    console.debug(TAG)
-    if (item.type == 'dir') {
+    if (item.type == Constant.OBJECT_DIR_TYPE) {
       await this.getFileList(true,
         item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`)
     }
@@ -212,7 +215,7 @@ export struct TabFiles {
     }
   }
 
-  async onMenuClick(item: ObjectInfo, type: FileMenuType) {
+  async onMenuClick(index: number, item: ObjectInfo, type: FileMenuType) {
     console.debug(TAG, 'onMenuClick type: ' + type)
     switch (type){
       case FileMenuType.PREVIEW:
@@ -220,19 +223,10 @@ export struct TabFiles {
         this.onItemClick(item)
         break
       case FileMenuType.DETAIL:
-        cloudGetObjectDetail(item.id, item.type == 'dir', {
-          onSuccess: (data) => {
-            this.detailData.isDir = item.type == 'dir'
-            this.detailData.name = item.name
-            this.detailData.detailInfo = data
-            this.showObjectDetail = true
-          },
-          onFailure: () => {
-            showToast('获取详细信息失败')
-          }
-        })
+        this.itemDetail(item)
         break
       case FileMenuType.RENAME:
+        this.itemRename(index, item)
         break
       case FileMenuType.COPY:
         break
@@ -241,7 +235,127 @@ export struct TabFiles {
       case FileMenuType.DOWNLOAD:
         break
       case FileMenuType.DELETE:
+        this.itemDelete(index, item)
         break
     }
+  }
+
+  onMoreClick(type: MoreMenuType, isReserve?: boolean) {
+    console.debug(TAG, 'onMoreClick type: ' + type)
+    switch (type){
+      case MoreMenuType.MULTI_SELECT:
+
+        break;
+      case MoreMenuType.SHOW_ICON:
+        break
+      case MoreMenuType.SHOW_LIST:
+        break
+      case MoreMenuType.SORT_BY_NAME:
+        break
+      case MoreMenuType.SORT_BY_TYPE:
+        break
+      case MoreMenuType.SORT_BY_TIME:
+        break
+      case MoreMenuType.SORT_BY_SIZE:
+        break
+      case MoreMenuType.NEW_DIR:
+        this.itemNew(this.currentPath, true)
+        break
+      case MoreMenuType.NEW_FILE:
+        this.itemNew(this.currentPath, false)
+        break
+      case MoreMenuType.UPLOAD_FILE:
+        break
+    }
+  }
+
+  itemDetail(item: ObjectInfo) {
+    cloudGetObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+      onSuccess: (data) => {
+        this.detailData.isDir = item.type == Constant.OBJECT_DIR_TYPE
+        this.detailData.name = item.name
+        this.detailData.detailInfo = data
+        this.showObjectDetail = true
+      },
+      onFailure: (msg) => {
+        console.error(TAG, '获取详细信息失败 msg: ' + msg)
+        showToast('获取详细信息失败')
+      }
+    })
+  }
+
+  itemRename(index: number, item: ObjectInfo) {
+    DialogHelper.showTextInputDialog({
+      primaryTitle: $r('app.string.rename'),
+      text: item.name,
+      onAction: (action: number, dialogId: string, content: string) => {
+        if (action == DialogAction.TWO) {
+          console.debug(TAG, `action: ${action}, content: ${content}`)
+          if (item.name != content) {
+            cloudRenameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
+              onSuccess: (data) => {
+                item.name = content
+                this.dataSource.deleteData(index)
+                this.dataSource.addData(index, item)
+                showToast('重命名成功')
+              },
+              onFailure: (msg) => {
+                console.error(TAG, '重命名失败 msg: ' + msg)
+                showToast('重命名失败')
+              }
+            })
+          }
+        }
+      }
+    })
+  }
+
+  itemNew(path: string, isDir: boolean) {
+    DialogHelper.showTextInputDialog({
+      primaryTitle: isDir ? $r('app.string.more_new_dir') : $r('app.string.more_new_file'),
+      text: '',
+      placeholder: isDir ? $r('app.string.new_dir_placeholder') : $r('app.string.new_file_placeholder'),
+      onAction: (action: number, dialogId: string, content: string) => {
+        if (action == DialogAction.TWO) {
+          console.debug(TAG, `新建 content: ${content}`)
+          cloudNewObject(path + '/' + content, isDir, {
+            onSuccess: (data) => {
+              this.getFileList(true, this.currentPath)
+              showToast(`新建${content}成功`)
+            },
+            onFailure: (msg) => {
+              console.error(TAG, '新建文件/文件夹失败 msg: ' + msg)
+              showToast(`新建${content}失败`)
+            }
+          })
+        }
+      }
+    })
+  }
+
+  itemDelete(index: number, item: ObjectInfo) {
+    let title = `确认删除${item.name} ？`
+    DialogHelper.showAlertDialog({
+      primaryTitle:  title,
+      primaryButton: {value: $r('app.string.dialog_cancel')},
+      secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
+      onAction: (action: number, dialogId: string, content: string) => {
+        if (action == DialogAction.TWO) {
+          console.debug(TAG, `action: ${action}, content: ${content}`)
+          if (item.name != content) {
+            cloudDeleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+              onSuccess: (data) => {
+                this.dataSource.deleteData(index)
+                showToast('删除成功')
+              },
+              onFailure: (msg) => {
+                console.error(TAG, '删除失败 msg: ' + msg)
+                showToast('删除失败')
+              }
+            })
+          }
+        }
+      }
+    })
   }
 }

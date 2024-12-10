@@ -53,6 +53,10 @@
       "value": "#ffc654"
     },
     {
+      "name": "file_folder_right",
+      "value": "#8f8e94"
+    },
+    {
       "name": "default_line_color",
       "value": "#e5e5e5"
     },

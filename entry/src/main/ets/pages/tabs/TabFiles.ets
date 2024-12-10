@@ -16,7 +16,7 @@ import { FileUtil } from "@pura/harmony-utils";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../../model/Params";
 import { ExitLifecycle } from "../../lifecycle/ExitLifecycle";
-import { FileMenuType, MoreMenuType } from "../../model/MenuModel";
+import { FileMenuType, MoreMenuType, ShowType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";
@@ -27,6 +27,7 @@ const TAG = 'TabFiles';
 @Component
 export struct TabFiles {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
+  @StorageProp(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @State policy: Policy|null = null
   @State isRoot: boolean = true
   @State mainTitle: string|Resource = $r('app.string.files_main_title')
@@ -62,7 +63,7 @@ export struct TabFiles {
 
   aboutToAppear() {
     this.dataSource.onDataGet = (index: number, item: ObjectInfo) => {
-      console.debug(TAG, `onDataGet: index:${index}`)
+      //console.debug(TAG, `onDataGet: index:${index}`)
       this.getThumbFile(index, item)
     }
     (HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as ExitLifecycle).onBackPressedCallback = this.onBackPressedCallback.bind(this)
@@ -153,7 +154,7 @@ export struct TabFiles {
         Grid(this.scrollerForList) {
           LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
             GridItem() {
-              FileItem({index, item, onMenuClick : (async (item, type) => {
+              FileItem({index, item, showType: this.showType, onMenuClick : (async (item, type) => {
                   await this.onMenuClick(index, item, type)
                 })
               })
@@ -170,8 +171,9 @@ export struct TabFiles {
         .height('100%') //!!!使用lazyforeach必须设置高度才能有效
         .rowsGap(10)
         .columnsGap(10)
-        .columnsTemplate('1fr 1fr')
+        .columnsTemplate(this.showType == ShowType.SHOW_ICON ? '1fr 1fr' : '1fr')
         .edgeEffect(EdgeEffect.Spring)
+        .animation({duration: 300})
         .scrollBarWidth(2)
         .onScrollIndex((first, last) => {
           console.debug(TAG, `onScrollIndex: first:${first}, last:${last}`)

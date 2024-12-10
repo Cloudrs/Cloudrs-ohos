@@ -2,10 +2,9 @@
 import { DateUtil } from "@pura/harmony-utils";
 import { ObjectInfo } from "../model/net/ApiTypes";
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
-import { FileMenuType } from "../model/MenuModel";
-import { image } from "@kit.ImageKit";
-import LazyDataSource from "../utils/LazyDataSource";
+import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
+import { formatBytes } from "../utils/Common";
 
 const TAG = 'TabItem';
 
@@ -41,6 +40,7 @@ export struct FileItem {
   @Prop item: ObjectInfo
   @Consume thumbImage: Map<string, PixelMap>
   onMenuClick?: (item: ObjectInfo, type: FileMenuType) => void
+  @Prop showType: ShowType
 
   aboutToAppear(): void {
     console.debug(TAG, 'aboutToAppear')
@@ -53,24 +53,38 @@ export struct FileItem {
     return undefined
   }
 
-  build() {
-    if (this.item.type === Constant.OBJECT_DIR_TYPE) {
-      this.directoryItem(this.item)
-    } else if (this.item.type === 'file') {
-      this.fileItem(this.item)
+  getItemIcon(name: string, isDir: boolean) {
+    if (isDir) {
+      return $r("app.media.ic_folder_fill")
+    }
+    else {
+      // // TODO: 后续根据后缀名进行匹配图标
+      return $r('app.media.ic_doc_text_fill')
     }
   }
 
-  @Builder directoryItem(item: ObjectInfo) {
+  build() {
+    if (this.item.type === Constant.OBJECT_DIR_TYPE) {
+      this.dirItem(this.item)
+    } else if (this.item.type === 'file') {
+      if (this.showType == ShowType.SHOW_ICON) {
+        this.fileIconItem(this.item)
+      } else {
+        this.fileListItem(this.item)
+      }
+    }
+  }
+
+  @Builder dirItem(item: ObjectInfo) {
     Column() {
       Row({ space: 10 }) {
-        Image($r('app.media.ic_folder_fill'))
+        Image(this.getItemIcon(item.name, true))
           .width(40)
           .height(40)
-          .fillColor($r('app.color.file_folder'))
           .draggable(false)
 
         Column({ space: 3 }) {
+          //TODO: 加入是否下载为本地的图标
           Text(item.name)
             .itemFileNameStyle()
 
@@ -81,6 +95,14 @@ export struct FileItem {
         .height(40)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
+
+        if (this.showType == ShowType.SHOW_LIST) {
+          Image($r('app.media.ic_chevron_right'))
+            .width(12)
+            .height(12)
+            .fillColor($r('app.color.file_folder_right'))
+            .draggable(false)
+        }
       }
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
@@ -96,7 +118,7 @@ export struct FileItem {
     })
   }
 
-  @Builder fileItem(item: ObjectInfo) {
+  @Builder fileIconItem(item: ObjectInfo) {
     Column({space: 10}) {
       Text() {
         ImageSpan(this.getThumbData(item.id) ?? $r('app.media.ic_doc_text_fill'))
@@ -130,6 +152,41 @@ export struct FileItem {
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     .itemStyle()
+  }
+
+  @Builder fileListItem(item: ObjectInfo) {
+    Column() {
+      Row({ space: 10 }) {
+        Image(this.getItemIcon(item.name, false))
+          .width(40)
+          .height(40)
+          .draggable(false)
+
+        Column({ space: 3 }) {
+          //TODO: 加入是否下载为本地的图标
+          Text(item.name)
+            .itemFileNameStyle()
+
+          Text(DateUtil.getFormatDateStr(new Date(item.date), 'yyyy-MM-dd') + ` · ` + formatBytes(item.size))
+            .itemFileDateStyle()
+        }
+        .layoutWeight(1)
+        .height(40)
+        .alignItems(HorizontalAlign.Start)
+        .justifyContent(FlexAlign.Center)
+      }
+      .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.Start)
+    }
+    .height(60)
+    .padding({left: 10, right: 10})
+    .itemStyle()
+    .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
+      preview: MenuPreviewMode.IMAGE,
+      previewAnimationOptions: {
+        hoverScale: [1.0, 0.95]
+      }
+    })
   }
 
   @Builder fileMenu(item: ObjectInfo) {

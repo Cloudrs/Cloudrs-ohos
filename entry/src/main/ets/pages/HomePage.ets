@@ -12,11 +12,13 @@ import { TabMine } from './tabs/TabMine';
 export struct HomePage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State currentIndex: number = 0;
+  @State overLap:boolean = true
+  private controller: TabsController = new TabsController()
 
   build() {
-    Tabs({barPosition: BarPosition.End}) {
+    Tabs({barPosition: BarPosition.End, controller: this.controller}) {
       TabContent() {
-        TabFiles()
+        TabFiles({ overLap: this.overLap })
       }.tabBar(this.TabBuilder(TabList[TabId.FILES]))
 
       TabContent() {
@@ -32,15 +34,18 @@ export struct HomePage {
       }.tabBar(this.TabBuilder(TabList[TabId.MINE]))
     }
     .width('100%')
-    .height('100%')
-    .barHeight(80)
+    // .height('100%')
+    .barHeight(70)
     .barWidth('100%')
-    .barBackgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .layoutWeight(1)
     .barOverlap(true)
+    .barBackgroundColor(Color.Transparent)
+    .barBackgroundBlurStyle(BlurStyle.Thin)
     .barMode(BarMode.Fixed)
     .divider({ strokeWidth: 1, color: $r("app.color.default_line_color") })
     .onChange((index) => {
       this.currentIndex = index;
+      return true
     })
   }
 

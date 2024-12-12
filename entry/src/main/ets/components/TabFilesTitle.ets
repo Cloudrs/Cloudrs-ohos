@@ -116,19 +116,19 @@ export struct TabFilesTitle {
               this.onMoreClick(MoreMenuType.SORT_BY_NAME, isReverse)
             }
           })
-        MenuItem(this.sortMenuBuilder($r('app.string.more_sort_by_type'), this.sortType === SortType.SORT_BY_TYPE, this.isSortTypeReverse(SortType.SORT_BY_TYPE)))
-          .onClick(() => {
-            let isReverse = this.isSortTypeReverse(SortType.SORT_BY_TYPE)
-            if (this.sortType != SortType.SORT_BY_TYPE) {
-              this.sortType = SortType.SORT_BY_TYPE
-            } else {
-              isReverse = !isReverse
-              this.setSortTypeReverse(SortType.SORT_BY_TYPE, isReverse)
-            }
-            if (this.onMoreClick) {
-              this.onMoreClick(MoreMenuType.SORT_BY_TYPE, isReverse)
-            }
-          })
+        // MenuItem(this.sortMenuBuilder($r('app.string.more_sort_by_type'), this.sortType === SortType.SORT_BY_TYPE, this.isSortTypeReverse(SortType.SORT_BY_TYPE)))
+        //   .onClick(() => {
+        //     let isReverse = this.isSortTypeReverse(SortType.SORT_BY_TYPE)
+        //     if (this.sortType != SortType.SORT_BY_TYPE) {
+        //       this.sortType = SortType.SORT_BY_TYPE
+        //     } else {
+        //       isReverse = !isReverse
+        //       this.setSortTypeReverse(SortType.SORT_BY_TYPE, isReverse)
+        //     }
+        //     if (this.onMoreClick) {
+        //       this.onMoreClick(MoreMenuType.SORT_BY_TYPE, isReverse)
+        //     }
+        //   })
         MenuItem(this.sortMenuBuilder($r('app.string.more_sort_by_time'), this.sortType === SortType.SORT_BY_TIME, this.isSortTypeReverse(SortType.SORT_BY_TIME)))
           .onClick(() => {
             let isReverse = this.isSortTypeReverse(SortType.SORT_BY_TIME)

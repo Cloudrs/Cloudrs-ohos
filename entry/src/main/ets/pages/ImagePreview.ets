@@ -86,7 +86,7 @@ export struct iamgePreview {
       .width('100%')
       .backgroundColor(Color.Black)
       .alignItems(HorizontalAlign.Center)
-      .padding({bottom: this.bottomRectHeight})
+      .padding({top:10, bottom: this.bottomRectHeight})
     }
     .width('100%')
     .height('100%')

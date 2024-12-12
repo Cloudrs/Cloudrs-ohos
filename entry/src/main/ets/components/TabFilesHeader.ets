@@ -1,7 +1,9 @@
+import { Transport } from "../pages/Transport";
 
 @Component
 export struct TabFilesHeader {
   @Prop isRoot: boolean;
+  @State showTransport:boolean = false;
   onBackClick?: () => void;
   onTransportClick?: () => void;
   onPersionClick?: () => void;
@@ -46,9 +48,15 @@ export struct TabFilesHeader {
           .borderRadius(18)
           .backgroundColor($r('app.color.light_light_gray'))
           .onClick(() => {
+            this.showTransport = true
             if (this.onTransportClick) {
               this.onTransportClick()
             }
+          })
+          .bindSheet($$this.showTransport, this.transportBuilder(), {
+            // detents: [SheetSize.FIT_CONTENT],
+            backgroundColor: Color.White,
+            title: {title: $r('app.string.transport_title')}
           })
 
           Button() {
@@ -78,5 +86,9 @@ export struct TabFilesHeader {
     .height(40)
     .align(Alignment.Center)
     .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder transportBuilder() {
+    Transport()
   }
 }

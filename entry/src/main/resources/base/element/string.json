@@ -235,6 +235,30 @@
     {
       "name": "new_file_placeholder",
       "value": "新文件名"
+    },
+    {
+      "name": "delete_confirm",
+      "value": "确认删除"
+    },
+    {
+      "name": "delete_success",
+      "value": "删除成功"
+    },
+    {
+      "name": "delete_failed",
+      "value": "删除失败"
+    },
+    {
+      "name": "task_download",
+      "value": "下载任务"
+    },
+    {
+      "name": "task_upload",
+      "value": "上传任务"
+    },
+    {
+      "name": "transport_title",
+      "value": "任务队列"
     }
   ]
 }

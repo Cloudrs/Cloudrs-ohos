@@ -16,7 +16,7 @@ import { FileUtil } from "@pura/harmony-utils";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../../model/Params";
 import { ExitLifecycle } from "../../lifecycle/ExitLifecycle";
-import { FileMenuType, MoreMenuType, ShowType } from "../../model/MenuModel";
+import { FileMenuType, MoreMenuType, ShowType, SortType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";
@@ -26,8 +26,11 @@ const TAG = 'TabFiles';
 
 @Component
 export struct TabFiles {
+  @Link overLap: boolean
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
+  @StorageProp(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
+  @StorageProp(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
   @State policy: Policy|null = null
   @State isRoot: boolean = true
   @State mainTitle: string|Resource = $r('app.string.files_main_title')
@@ -39,6 +42,8 @@ export struct TabFiles {
   private currentPath: string = '/'
   private scrollerForList: Scroller = new Scroller()
   @State dataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
+  @State isGridLast: boolean = false
+  @State bottomPadding: number = 80;
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -49,6 +54,13 @@ export struct TabFiles {
       return this.thumbImage.get(id)
     }
     return undefined
+  }
+
+  isSortTypeReverse(type: SortType): boolean {
+    if (this.sortTypeReverse.has(type)) {
+      return this.sortTypeReverse.get(type)!
+    }
+    return false
   }
 
   onBackPressedCallback(): boolean {
@@ -102,6 +114,42 @@ export struct TabFiles {
     }
   }
 
+  sortObjectInfo(items: ObjectInfo[]) {
+    let isReserve = this.isSortTypeReverse(this.sortType)
+    switch (this.sortType) {
+      case SortType.SORT_BY_NAME:
+        items.sort((a,b) => {
+          // 保证文件夹排在前面
+          if (a.type !== b.type) {
+            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
+          }
+          return isReserve ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
+        })
+        break
+      case SortType.SORT_BY_TIME:
+        items.sort((a,b) => {
+          // 保证文件夹排在前面
+          if (a.type !== b.type) {
+            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
+          }
+
+          let dateA = new Date(a.date).getTime()
+          let dateB = new Date(b.date).getTime()
+          return isReserve ? dateB - dateA : dateA - dateB
+        })
+        break
+      case SortType.SORT_BY_SIZE:
+        items.sort((a,b) => {
+          // 保证文件夹排在前面
+          if (a.type !== b.type) {
+            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
+          }
+          return isReserve ? b.size - a.size : a.size - b.size
+        })
+        break
+    }
+  }
+
   async getFileList(isRefresh: boolean, path: string) {
     if (path === '/') {
       this.isRoot = true
@@ -122,6 +170,7 @@ export struct TabFiles {
       onSuccess: (data: DirectoryInfo) => {
         this.policy = data.policy
         this.subTitle = this.policy.name
+        this.sortObjectInfo(data.objects)
         this.dataSource.pushArrayData(data.objects)
         this.isRefreshing = false
       },
@@ -154,7 +203,8 @@ export struct TabFiles {
         Grid(this.scrollerForList) {
           LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
             GridItem() {
-              FileItem({index, item, showType: this.showType, onMenuClick : (async (item, type) => {
+              FileItem({ index, item, showType: this.showType,
+                onMenuClick : (async (item, type) => {
                   await this.onMenuClick(index, item, type)
                 })
               })
@@ -164,19 +214,40 @@ export struct TabFiles {
             })
           }, (item: ObjectInfo, index: number) => item.id)
         }
-        .cachedCount(2)
+        .cachedCount(5)
         .maxCount(2)
-        .padding({ left: 10, right: 10, bottom: 10 })
+        .padding({ left: 10, right: 10, bottom: this.bottomPadding })
         .width('100%')
         .height('100%') //!!!使用lazyforeach必须设置高度才能有效
         .rowsGap(10)
         .columnsGap(10)
         .columnsTemplate(this.showType == ShowType.SHOW_ICON ? '1fr 1fr' : '1fr')
-        .edgeEffect(EdgeEffect.Spring)
+        .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
         .animation({duration: 300})
         .scrollBarWidth(2)
         .onScrollIndex((first, last) => {
-          console.debug(TAG, `onScrollIndex: first:${first}, last:${last}`)
+          if (last == -1) {
+            return
+          }
+          if (last == this.dataSource.totalCount()-1) {
+            this.isGridLast = true
+          } else {
+            this.isGridLast = false
+          }
+          // console.debug(TAG, `onScrollIndex: first:${first}, last:${last}, isGridLast:${this.isGridLast}`)
+        })
+        .onScrollFrameBegin((offset, state) => {
+          if (this.isGridLast) {
+            if (this.bottomPadding + offset > 80) {
+              this.bottomPadding = 80
+            } else if (this.bottomPadding + offset < 0) {
+              this.bottomPadding = 0
+            } else {
+              this.bottomPadding += offset
+            }
+          }
+          // console.debug(TAG, `onScrollFrameBegin: offset:${offset.toFixed(2)}, state:${state}, padding:${this.bottomPadding}`)
+          return {offsetRemain: offset}
         })
       }
       .margin({ top: 20 })
@@ -253,12 +324,39 @@ export struct TabFiles {
       case MoreMenuType.SHOW_LIST:
         break
       case MoreMenuType.SORT_BY_NAME:
+        this.dataSource.dataArray.sort((a, b) => {
+          // 保证文件夹排在前面
+          if (a.type !== b.type) {
+            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
+          }
+          return isReserve ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
+        })
+        this.dataSource.notifyDataReload()
         break
       case MoreMenuType.SORT_BY_TYPE:
         break
       case MoreMenuType.SORT_BY_TIME:
+        this.dataSource.dataArray.sort((a, b) => {
+          // 保证文件夹排在前面
+          if (a.type !== b.type) {
+            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
+          }
+
+          let dateA = new Date(a.date).getTime()
+          let dateB = new Date(b.date).getTime()
+          return isReserve ? dateB - dateA : dateA - dateB
+        })
+        this.dataSource.notifyDataReload()
         break
       case MoreMenuType.SORT_BY_SIZE:
+        this.dataSource.dataArray.sort((a, b) => {
+          // 保证文件夹排在前面
+          if (a.type !== b.type) {
+            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
+          }
+          return isReserve ? b.size - a.size : a.size - b.size
+        })
+        this.dataSource.notifyDataReload()
         break
       case MoreMenuType.NEW_DIR:
         this.itemNew(this.currentPath, true)
@@ -336,9 +434,9 @@ export struct TabFiles {
   }
 
   itemDelete(index: number, item: ObjectInfo) {
-    let title = `确认删除${item.name} ？`
     DialogHelper.showAlertDialog({
-      primaryTitle:  title,
+      primaryTitle:  $r('app.string.delete_confirm'),
+      content: item.name,
       primaryButton: {value: $r('app.string.dialog_cancel')},
       secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
       onAction: (action: number, dialogId: string, content: string) => {
@@ -348,11 +446,11 @@ export struct TabFiles {
             cloudDeleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
               onSuccess: (data) => {
                 this.dataSource.deleteData(index)
-                showToast('删除成功')
+                showToast($r('app.string.delete_success'))
               },
               onFailure: (msg) => {
                 console.error(TAG, '删除失败 msg: ' + msg)
-                showToast('删除失败')
+                showToast($r('app.string.delete_failed'))
               }
             })
           }

@@ -1,4 +1,6 @@
 import { image } from "@kit.ImageKit";
+import Constant from "../Constant";
+import { SortType } from "../MenuModel";
 
 export enum SiteURI {
   PREFIX = '/api/v3',
@@ -146,6 +148,63 @@ export interface DirectoryInfo {
   parent: string;
   objects: ObjectInfo[];
   policy: Policy;
+}
+
+@Observed
+export class DirFileInfo implements DirectoryInfo {
+  parent: string = '';
+  objects: ObjectInfo[] = [];
+  policy: Policy = {id: '', name: '', type: '', max_size: 0, file_type: null};
+  dirObjects: ObjectInfo[] = [];
+  fileObjects: ObjectInfo[] = [];
+
+  constructor(parent?: string, objects?: ObjectInfo[], policy?: Policy) {
+    if (parent) {
+      this.parent = parent;
+    }
+    if (objects) {
+      this.objects = objects;
+      this.dirObjects = this.objects.filter(value => value.type == Constant.OBJECT_DIR_TYPE)
+      this.fileObjects = this.objects.filter(value => value.type == Constant.OBJECT_FILE_TYPE)
+    }
+
+    if (policy) {
+      this.policy = policy;
+    }
+  }
+
+  public getDirObjects() {
+    return this.dirObjects
+  }
+
+  public getFileObjects() {
+    return this.fileObjects
+  }
+
+  public sortObjects(sortType: SortType, isReserve: boolean) {
+    switch (sortType) {
+      case SortType.SORT_BY_NAME:
+        this.dirObjects.sort((a,b) => isReserve ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name))
+        this.fileObjects.sort((a,b) => isReserve ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name))
+        break
+      case SortType.SORT_BY_TIME:
+        this.dirObjects.sort((a,b) => {
+          let dateA = new Date(a.date).getTime()
+          let dateB = new Date(b.date).getTime()
+          return isReserve ? dateB - dateA : dateA - dateB
+        })
+        this.fileObjects.sort((a,b) => {
+          let dateA = new Date(a.date).getTime()
+          let dateB = new Date(b.date).getTime()
+          return isReserve ? dateB - dateA : dateA - dateB
+        })
+        break
+      case SortType.SORT_BY_SIZE:
+        this.dirObjects.sort((a,b) => isReserve ? b.size - a.size : a.size - b.size)
+        this.fileObjects.sort((a,b) => isReserve ? b.size - a.size : a.size - b.size)
+        break
+    }
+  }
 }
 
 export class ObjectDetail {

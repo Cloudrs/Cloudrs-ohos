@@ -1,4 +1,4 @@
-import { DirectoryInfo, ObjectDetail, ObjectInfo, Policy } from "../../model/net/ApiTypes";
+import { DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { TabFilesTitle } from "../../components/TabFilesTitle";
@@ -10,7 +10,7 @@ import {
   cloudRenameObject} from "../../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { image } from "@kit.ImageKit";
-import { FileItem } from "../../components/FileItem";
+import { ObjectItem } from "../../components/ObjectItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
 import { FileUtil } from "@pura/harmony-utils";
 import { HMRouterMgr } from "@hadss/hmrouter";
@@ -41,9 +41,11 @@ export struct TabFiles {
   @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
   private currentPath: string = '/'
   private scrollerForList: Scroller = new Scroller()
-  @State dataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
+  @State dirDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
+  @State fileDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
   @State isGridLast: boolean = false
   @State bottomPadding: number = 80;
+  @State objectsInfo: DirFileInfo = new DirFileInfo();
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -74,7 +76,7 @@ export struct TabFiles {
   }
 
   aboutToAppear() {
-    this.dataSource.onDataGet = (index: number, item: ObjectInfo) => {
+    this.fileDataSource.onDataGet = (index: number, item: ObjectInfo) => {
       //console.debug(TAG, `onDataGet: index:${index}`)
       this.getThumbFile(index, item)
     }
@@ -114,42 +116,6 @@ export struct TabFiles {
     }
   }
 
-  sortObjectInfo(items: ObjectInfo[]) {
-    let isReserve = this.isSortTypeReverse(this.sortType)
-    switch (this.sortType) {
-      case SortType.SORT_BY_NAME:
-        items.sort((a,b) => {
-          // 保证文件夹排在前面
-          if (a.type !== b.type) {
-            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
-          }
-          return isReserve ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
-        })
-        break
-      case SortType.SORT_BY_TIME:
-        items.sort((a,b) => {
-          // 保证文件夹排在前面
-          if (a.type !== b.type) {
-            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
-          }
-
-          let dateA = new Date(a.date).getTime()
-          let dateB = new Date(b.date).getTime()
-          return isReserve ? dateB - dateA : dateA - dateB
-        })
-        break
-      case SortType.SORT_BY_SIZE:
-        items.sort((a,b) => {
-          // 保证文件夹排在前面
-          if (a.type !== b.type) {
-            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
-          }
-          return isReserve ? b.size - a.size : a.size - b.size
-        })
-        break
-    }
-  }
-
   async getFileList(isRefresh: boolean, path: string) {
     if (path === '/') {
       this.isRoot = true
@@ -162,16 +128,20 @@ export struct TabFiles {
     cloudGetFilesInfo(path, {
       onStart: () => {
         if (isRefresh) {
-          this.dataSource.clear()
+          this.dirDataSource.clear()
+          this.fileDataSource.clear()
           this.thumbImage.clear()
           this.scrollerForList.scrollEdge(Edge.Start)
         }
       },
       onSuccess: (data: DirectoryInfo) => {
-        this.policy = data.policy
-        this.subTitle = this.policy.name
-        this.sortObjectInfo(data.objects)
-        this.dataSource.pushArrayData(data.objects)
+        this.subTitle = data.policy.name
+        this.objectsInfo = new DirFileInfo(data.parent, data.objects, data.policy)
+        this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
+        this.dirDataSource.dataArray = this.objectsInfo.dirObjects
+        this.dirDataSource.notifyDataReload()
+        this.fileDataSource.dataArray = this.objectsInfo.fileObjects
+        this.fileDataSource.notifyDataReload()
         this.isRefreshing = false
       },
       onFailure: (msg) => {
@@ -200,55 +170,7 @@ export struct TabFiles {
       .justifyContent(FlexAlign.Center)
 
       Refresh({refreshing: $$this.isRefreshing}) {
-        Grid(this.scrollerForList) {
-          LazyForEach(this.dataSource, (item: ObjectInfo, index: number) => {
-            GridItem() {
-              FileItem({ index, item, showType: this.showType,
-                onMenuClick : (async (item, type) => {
-                  await this.onMenuClick(index, item, type)
-                })
-              })
-            }
-            .onClick(async () => {
-              this.onItemClick(item)
-            })
-          }, (item: ObjectInfo, index: number) => item.id)
-        }
-        .cachedCount(5)
-        .maxCount(2)
-        .padding({ left: 10, right: 10, bottom: this.bottomPadding })
-        .width('100%')
-        .height('100%') //!!!使用lazyforeach必须设置高度才能有效
-        .rowsGap(10)
-        .columnsGap(10)
-        .columnsTemplate(this.showType == ShowType.SHOW_ICON ? '1fr 1fr' : '1fr')
-        .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
-        .animation({duration: 300})
-        .scrollBarWidth(2)
-        .onScrollIndex((first, last) => {
-          if (last == -1) {
-            return
-          }
-          if (last == this.dataSource.totalCount()-1) {
-            this.isGridLast = true
-          } else {
-            this.isGridLast = false
-          }
-          // console.debug(TAG, `onScrollIndex: first:${first}, last:${last}, isGridLast:${this.isGridLast}`)
-        })
-        .onScrollFrameBegin((offset, state) => {
-          if (this.isGridLast) {
-            if (this.bottomPadding + offset > 80) {
-              this.bottomPadding = 80
-            } else if (this.bottomPadding + offset < 0) {
-              this.bottomPadding = 0
-            } else {
-              this.bottomPadding += offset
-            }
-          }
-          // console.debug(TAG, `onScrollFrameBegin: offset:${offset.toFixed(2)}, state:${state}, padding:${this.bottomPadding}`)
-          return {offsetRemain: offset}
-        })
+        this.objectGrid()
       }
       .margin({ top: 20 })
       .layoutWeight(1)
@@ -268,6 +190,75 @@ export struct TabFiles {
     })
   }
 
+  @Builder objectGrid() {
+    Grid(this.scrollerForList) {
+      LazyForEach(this.dirDataSource, (item: ObjectInfo, index: number) => {
+        GridItem() {
+          ObjectItem({ index, item, showType: this.showType,
+            onMenuClick : (async (item, type) => {
+              await this.onMenuClick(index, item, type)
+            })
+          })
+        }
+        .onClick(async () => {
+          this.onItemClick(item)
+        })
+      }, (item: ObjectInfo, index: number) => item.id)
+
+      /**/
+      if (this.showType == ShowType.SHOW_ICON && this.dirDataSource.totalCount() % 2) {
+        GridItem()
+      }
+
+      LazyForEach(this.fileDataSource, (item: ObjectInfo, index: number) => {
+        GridItem() {
+          ObjectItem({ index, item, showType: this.showType,
+            onMenuClick : (async (item, type) => {
+              await this.onMenuClick(index, item, type)
+            })
+          })
+        }
+        .onClick(async () => {
+          this.onItemClick(item)
+        })
+      }, (item: ObjectInfo, index: number) => item.id)
+    }
+    .cachedCount(5)
+    .maxCount(2)
+    .padding({ left: 10, right: 10, bottom: this.bottomPadding })
+    .width('100%')
+    .height('100%') //!!!使用lazyforeach必须设置高度才能有效
+    .rowsGap(10)
+    .columnsGap(10)
+    .columnsTemplate(this.showType == ShowType.SHOW_ICON ? '1fr 1fr' : '1fr')
+    .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
+    .animation({duration: 300})
+    .scrollBarWidth(2)
+    .onScrollIndex((first, last) => {
+      console.debug(TAG, `first: ${first}, last: ${last}`)
+      if (last == -1) {
+        return
+      }
+      if (last == this.dirDataSource.totalCount()+this.fileDataSource.totalCount()-1) {
+        this.isGridLast = true
+      } else {
+        this.isGridLast = false
+      }
+    })
+    .onScrollFrameBegin((offset, state) => {
+      if (this.isGridLast && offset != 0) {
+        if (this.bottomPadding + offset > 80) {
+          this.bottomPadding = 80
+        } else if (this.bottomPadding + offset < 0) {
+          this.bottomPadding = 0
+        } else {
+          this.bottomPadding += offset
+        }
+      }
+      return {offsetRemain: offset}
+    })
+  }
+
   @Builder detailSheetBuilder() {
     DetailSheet({detailData: this.detailData})
   }
@@ -279,7 +270,7 @@ export struct TabFiles {
     }
     else {
       let fileType = FileUtil.getFileExtention(item.name).toLowerCase()
-      if (fileType == 'png' || fileType == 'jpg') {
+      if (fileType == 'png' || fileType == 'jpg' || fileType == 'jpeg' || fileType == 'gif' || fileType == 'bmp' || fileType == 'webp') {
         HMRouterMgr.push({pageUrl: Constant.IAMGE_PREVIEW_PAGE, param: new ImagePreview(item.name, item.id, fileType)})
       } else {
         //filePreview.openPreview(getContext(), {title: item.name, uri: '', mimeType: ''})
@@ -324,39 +315,11 @@ export struct TabFiles {
       case MoreMenuType.SHOW_LIST:
         break
       case MoreMenuType.SORT_BY_NAME:
-        this.dataSource.dataArray.sort((a, b) => {
-          // 保证文件夹排在前面
-          if (a.type !== b.type) {
-            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
-          }
-          return isReserve ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
-        })
-        this.dataSource.notifyDataReload()
-        break
       case MoreMenuType.SORT_BY_TYPE:
-        break
       case MoreMenuType.SORT_BY_TIME:
-        this.dataSource.dataArray.sort((a, b) => {
-          // 保证文件夹排在前面
-          if (a.type !== b.type) {
-            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
-          }
-
-          let dateA = new Date(a.date).getTime()
-          let dateB = new Date(b.date).getTime()
-          return isReserve ? dateB - dateA : dateA - dateB
-        })
-        this.dataSource.notifyDataReload()
-        break
       case MoreMenuType.SORT_BY_SIZE:
-        this.dataSource.dataArray.sort((a, b) => {
-          // 保证文件夹排在前面
-          if (a.type !== b.type) {
-            return a.type == Constant.OBJECT_DIR_TYPE ? -1 : 1
-          }
-          return isReserve ? b.size - a.size : a.size - b.size
-        })
-        this.dataSource.notifyDataReload()
+        this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
+        this.dirDataSource.notifyDataReload()
         break
       case MoreMenuType.NEW_DIR:
         this.itemNew(this.currentPath, true)
@@ -395,8 +358,15 @@ export struct TabFiles {
             cloudRenameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
               onSuccess: (data) => {
                 item.name = content
-                this.dataSource.deleteData(index)
-                this.dataSource.addData(index, item)
+                if (item.type == Constant.OBJECT_DIR_TYPE) {
+                  console.info(TAG, 'index dir ' + index)
+                  this.dirDataSource.deleteData(index)
+                  this.dirDataSource.addData(index, item)
+                } else {
+                  console.info(TAG, 'index file ' + index)
+                  this.fileDataSource.deleteData(index)
+                  this.fileDataSource.addData(index, item)
+                }
                 showToast('重命名成功')
               },
               onFailure: (msg) => {
@@ -445,7 +415,11 @@ export struct TabFiles {
           if (item.name != content) {
             cloudDeleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
               onSuccess: (data) => {
-                this.dataSource.deleteData(index)
+                if (item.type == Constant.OBJECT_DIR_TYPE) {
+                  this.dirDataSource.deleteData(index)
+                } else {
+                  this.fileDataSource.deleteData(index)
+                }
                 showToast($r('app.string.delete_success'))
               },
               onFailure: (msg) => {

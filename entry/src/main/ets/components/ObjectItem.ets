@@ -35,7 +35,7 @@ function itemFileDateStyle() {
 }
 
 @Component
-export struct FileItem {
+export struct ObjectItem {
   @Prop index: number
   @Prop item: ObjectInfo
   @Consume thumbImage: Map<string, PixelMap>

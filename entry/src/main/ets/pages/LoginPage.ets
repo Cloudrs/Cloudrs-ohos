@@ -7,7 +7,7 @@ import UserPrivData from '../model/UserPreferences';
 import UserDatabase from '../model/UserDatabase';
 import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { LoginParam } from '../model/net/LoginParam';
-import { cloudGetLogo, cloudLogin, cloudPing, cloudSiteConfig } from '../model/net/CloudApi';
+import { CloudApi } from '../model/net/CloudApi';
 import { image } from '@kit.ImageKit';
 
 @Extend(Row)
@@ -130,9 +130,9 @@ export struct LoginPage {
       return
     }
     baseUrlSet(this.protocol + this.address)
-    cloudPing({
+    CloudApi.cloudPing({
       onSuccess: (data) => {
-        cloudSiteConfig({
+        CloudApi.cloudSiteConfig({
           onSuccess: (data: SiteConfig) => {
             this.loginTitle = data.title
             this.websiteInvalid = true
@@ -142,7 +142,7 @@ export struct LoginPage {
             showToastTips('站点获取配置失败', ToastType.Error)
           }
         })
-        cloudGetLogo(this.protocol + this.address, {
+        CloudApi.cloudGetLogo(this.protocol + this.address, {
           onSuccess: (data) => {
             let imageSource: image.ImageSource = image.createImageSource(data)
             imageSource.createPixelMap().then((pixMap: PixelMap) => {
@@ -166,7 +166,7 @@ export struct LoginPage {
       showToastTips('无效用户名或密码', ToastType.Error)
       return
     }
-    cloudLogin(this.username, this.password, {
+    CloudApi.cloudLogin(this.username, this.password, {
       onSuccess: (data: UserInfo) => {
         let dbUserInfo: DbUserInfo = {
           url: this.protocol + this.address,

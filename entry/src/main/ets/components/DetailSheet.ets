@@ -1,7 +1,7 @@
 import { DateUtil } from "@pura/harmony-utils"
 import Constant from "../model/Constant"
 import { DetailData } from "../model/DetailData"
-import { formatBytes } from "../utils/Common"
+import { CommonUtil } from "../utils/CommonUtil"
 
 @Component
 export struct DetailSheet {
@@ -13,7 +13,7 @@ export struct DetailSheet {
       this.commonRow(this.detailData.isDir ? $r('app.string.detail_dir_name') : $r('app.string.detail_filename'), this.detailData.name)
       this.commonDivider()
 
-      this.commonRow($r('app.string.detail_size'), formatBytes(this.detailData.detailInfo.size))
+      this.commonRow($r('app.string.detail_size'), CommonUtil.formatBytes(this.detailData.detailInfo.size))
       this.commonDivider()
 
       this.commonRow($r('app.string.detail_policy'),

@@ -2,12 +2,7 @@ import { DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy } from "..
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { TabFilesTitle } from "../../components/TabFilesTitle";
-import {
-  cloudDeleteObject,
-  cloudGetFilesInfo, cloudGetObjectDetail,
-  cloudGetThumb,
-  cloudNewObject,
-  cloudRenameObject} from "../../model/net/CloudApi";
+import { CloudApi } from "../../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { image } from "@kit.ImageKit";
 import { ObjectItem } from "../../components/ObjectItem";
@@ -21,6 +16,7 @@ import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";
 import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
+import { CommonUtil, FileType } from "../../utils/CommonUtil";
 
 const TAG = 'TabFiles';
 
@@ -46,6 +42,7 @@ export struct TabFiles {
   @State isGridLast: boolean = false
   @State bottomPadding: number = 80;
   @State objectsInfo: DirFileInfo = new DirFileInfo();
+  @State isGridPadding: boolean = false;
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -71,7 +68,7 @@ export struct TabFiles {
       return false
     }
 
-    this.getFileList(true, this.getDirectoryPath(this.currentPath))
+    this.getFileList(true, CommonUtil.getDirectoryPath((this.currentPath)))
     return true
   }
 
@@ -84,25 +81,9 @@ export struct TabFiles {
     this.getFileList(true, '/')
   }
 
-  getDirectoryPath(filePath: string): string {
-    const lastSlashIndex = filePath.lastIndexOf('/');
-    if (lastSlashIndex === -1) {
-      return '/';
-    }
-    const directoryPath = filePath.substring(0, lastSlashIndex);
-    return directoryPath === '' ? '/' : directoryPath;
-  }
-
-  getLastDirectoryName(filePath: string): string {
-    // 分割路径并去除空字符串
-    const parts = filePath.split('/').filter(part => part !== '');
-    const lastDirectoryName = parts.length >= 1 ? parts[parts.length - 1] : '/';
-    return lastDirectoryName;
-  }
-
   async getThumbFile(index: number, item: ObjectInfo) {
     if (item.thumb && !this.getThumbData(item.id)) {
-      cloudGetThumb(item.id, {
+      CloudApi.cloudGetThumb(item.id, {
         onSuccess: (data: ArrayBuffer) => {
           let imageSource: image.ImageSource = image.createImageSource(data)
           imageSource.createPixelMap().then((pixMap: PixelMap) => {
@@ -124,8 +105,8 @@ export struct TabFiles {
       this.isRoot = false
     }
     this.currentPath = path
-    this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : this.getLastDirectoryName(path)
-    cloudGetFilesInfo(path, {
+    this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : CommonUtil.getLastDirectoryName(path)
+    CloudApi.cloudGetFilesInfo(path, {
       onStart: () => {
         if (isRefresh) {
           this.dirDataSource.clear()
@@ -140,6 +121,7 @@ export struct TabFiles {
         this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
         this.dirDataSource.dataArray = this.objectsInfo.dirObjects
         this.dirDataSource.notifyDataReload()
+        this.isGridPadding = this.dirDataSource.totalCount()%2 ? true : false
         this.fileDataSource.dataArray = this.objectsInfo.fileObjects
         this.fileDataSource.notifyDataReload()
         this.isRefreshing = false
@@ -160,7 +142,7 @@ export struct TabFiles {
         TabFilesHeader({
           isRoot: this.isRoot,
           onBackClick: (async () => {
-            await this.getFileList(true, this.getDirectoryPath(this.currentPath))
+            await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
           })
         })
         TabFilesTitle({ mainTitle: this.mainTitle, subTitle: this.subTitle, onMoreClick: this.onMoreClick.bind(this)})
@@ -183,7 +165,7 @@ export struct TabFiles {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.nav_background'))
-    .bindSheet($$this.showObjectDetail, this.detailSheetBuilder(), {
+    .bindSheet($$this.showObjectDetail, this.detailSheet(), {
       detents: [SheetSize.FIT_CONTENT],
       backgroundColor: Color.White,
       title: {title: $r('app.string.detail_title')}
@@ -205,8 +187,8 @@ export struct TabFiles {
         })
       }, (item: ObjectInfo, index: number) => item.id)
 
-      /**/
-      if (this.showType == ShowType.SHOW_ICON && this.dirDataSource.totalCount() % 2) {
+      /*文件夹奇数时最后一个填充一个空成员*/
+      if (this.showType == ShowType.SHOW_ICON && this.isGridPadding) {
         GridItem()
       }
 
@@ -228,8 +210,8 @@ export struct TabFiles {
     .padding({ left: 10, right: 10, bottom: this.bottomPadding })
     .width('100%')
     .height('100%') //!!!使用lazyforeach必须设置高度才能有效
-    .rowsGap(10)
-    .columnsGap(10)
+    .rowsGap(7)
+    .columnsGap(7)
     .columnsTemplate(this.showType == ShowType.SHOW_ICON ? '1fr 1fr' : '1fr')
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: 300})
@@ -239,7 +221,7 @@ export struct TabFiles {
       if (last == -1) {
         return
       }
-      if (last == this.dirDataSource.totalCount()+this.fileDataSource.totalCount()-1) {
+      if (last == this.dirDataSource.totalCount()+this.fileDataSource.totalCount()-(this.isGridPadding ? 1 : 0)) {
         this.isGridLast = true
       } else {
         this.isGridLast = false
@@ -259,7 +241,7 @@ export struct TabFiles {
     })
   }
 
-  @Builder detailSheetBuilder() {
+  @Builder detailSheet() {
     DetailSheet({detailData: this.detailData})
   }
 
@@ -269,9 +251,10 @@ export struct TabFiles {
         item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`)
     }
     else {
-      let fileType = FileUtil.getFileExtention(item.name).toLowerCase()
-      if (fileType == 'png' || fileType == 'jpg' || fileType == 'jpeg' || fileType == 'gif' || fileType == 'bmp' || fileType == 'webp') {
-        HMRouterMgr.push({pageUrl: Constant.IAMGE_PREVIEW_PAGE, param: new ImagePreview(item.name, item.id, fileType)})
+      let fileType = CommonUtil.getFileType(item.name)
+      let fileExtension = CommonUtil.getFileExtention(item.name)
+      if (fileType == FileType.IMAGE) {
+        HMRouterMgr.push({pageUrl: Constant.IAMGE_PREVIEW_PAGE, param: new ImagePreview(item.name, item.id, fileExtension)})
       } else {
         //filePreview.openPreview(getContext(), {title: item.name, uri: '', mimeType: ''})
         showToast('该类型不支持预览')
@@ -320,6 +303,7 @@ export struct TabFiles {
       case MoreMenuType.SORT_BY_SIZE:
         this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
         this.dirDataSource.notifyDataReload()
+        this.fileDataSource.notifyDataReload()
         break
       case MoreMenuType.NEW_DIR:
         this.itemNew(this.currentPath, true)
@@ -333,7 +317,7 @@ export struct TabFiles {
   }
 
   itemDetail(item: ObjectInfo) {
-    cloudGetObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+    CloudApi.cloudGetObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
         this.detailData.isDir = item.type == Constant.OBJECT_DIR_TYPE
         this.detailData.name = item.name
@@ -355,7 +339,7 @@ export struct TabFiles {
         if (action == DialogAction.TWO) {
           console.debug(TAG, `action: ${action}, content: ${content}`)
           if (item.name != content) {
-            cloudRenameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
+            CloudApi.cloudRenameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
               onSuccess: (data) => {
                 item.name = content
                 if (item.type == Constant.OBJECT_DIR_TYPE) {
@@ -388,7 +372,7 @@ export struct TabFiles {
       onAction: (action: number, dialogId: string, content: string) => {
         if (action == DialogAction.TWO) {
           console.debug(TAG, `新建 content: ${content}`)
-          cloudNewObject(path + '/' + content, isDir, {
+          CloudApi.cloudNewObject(path + '/' + content, isDir, {
             onSuccess: (data) => {
               this.getFileList(true, this.currentPath)
               showToast(`新建${content}成功`)
@@ -413,10 +397,11 @@ export struct TabFiles {
         if (action == DialogAction.TWO) {
           console.debug(TAG, `action: ${action}, content: ${content}`)
           if (item.name != content) {
-            cloudDeleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+            CloudApi.cloudDeleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
               onSuccess: (data) => {
                 if (item.type == Constant.OBJECT_DIR_TYPE) {
                   this.dirDataSource.deleteData(index)
+                  this.isGridPadding = this.dirDataSource.totalCount()%2 ? true : false
                 } else {
                   this.fileDataSource.deleteData(index)
                 }

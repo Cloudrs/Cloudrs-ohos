@@ -77,7 +77,7 @@ export struct TabFilesTitle {
   @Builder moreMenu() {
     Menu() {
       MenuItemGroup() {
-        MenuItem(this.commonMenuBuilder($r('app.string.more_multi_select')))
+        MenuItem(this.commonMenu($r('app.string.more_multi_select')))
           .onClick(() => {
             if (this.onMoreClick) {
               this.onMoreClick(MoreMenuType.MULTI_SELECT)
@@ -86,14 +86,14 @@ export struct TabFilesTitle {
       }
 
       MenuItemGroup() {
-        MenuItem(this.commonMenuBuilder($r('app.string.more_show_icon'), this.showType == ShowType.SHOW_ICON))
+        MenuItem(this.commonMenu($r('app.string.more_show_icon'), this.showType == ShowType.SHOW_ICON))
           .onClick(() => {
             this.showType = ShowType.SHOW_ICON
             if (this.onMoreClick) {
               this.onMoreClick(MoreMenuType.SHOW_ICON)
             }
           })
-        MenuItem(this.commonMenuBuilder($r('app.string.more_show_list'), this.showType == ShowType.SHOW_LIST))
+        MenuItem(this.commonMenu($r('app.string.more_show_list'), this.showType == ShowType.SHOW_LIST))
           .onClick(() => {
             this.showType = ShowType.SHOW_LIST
             if (this.onMoreClick) {
@@ -103,7 +103,7 @@ export struct TabFilesTitle {
       }
 
       MenuItemGroup() {
-        MenuItem(this.sortMenuBuilder($r('app.string.more_sort_by_name'), this.sortType === SortType.SORT_BY_NAME, this.isSortTypeReverse(SortType.SORT_BY_NAME)))
+        MenuItem(this.sortMenu($r('app.string.more_sort_by_name'), this.sortType === SortType.SORT_BY_NAME, this.isSortTypeReverse(SortType.SORT_BY_NAME)))
           .onClick(() => {
             let isReverse = this.isSortTypeReverse(SortType.SORT_BY_NAME)
             if (this.sortType != SortType.SORT_BY_NAME) {
@@ -129,7 +129,7 @@ export struct TabFilesTitle {
         //       this.onMoreClick(MoreMenuType.SORT_BY_TYPE, isReverse)
         //     }
         //   })
-        MenuItem(this.sortMenuBuilder($r('app.string.more_sort_by_time'), this.sortType === SortType.SORT_BY_TIME, this.isSortTypeReverse(SortType.SORT_BY_TIME)))
+        MenuItem(this.sortMenu($r('app.string.more_sort_by_time'), this.sortType === SortType.SORT_BY_TIME, this.isSortTypeReverse(SortType.SORT_BY_TIME)))
           .onClick(() => {
             let isReverse = this.isSortTypeReverse(SortType.SORT_BY_TIME)
             if (this.sortType != SortType.SORT_BY_TIME) {
@@ -142,7 +142,7 @@ export struct TabFilesTitle {
               this.onMoreClick(MoreMenuType.SORT_BY_TIME, isReverse)
             }
           })
-        MenuItem(this.sortMenuBuilder($r('app.string.more_sort_by_size'), this.sortType === SortType.SORT_BY_SIZE, this.isSortTypeReverse(SortType.SORT_BY_SIZE)))
+        MenuItem(this.sortMenu($r('app.string.more_sort_by_size'), this.sortType === SortType.SORT_BY_SIZE, this.isSortTypeReverse(SortType.SORT_BY_SIZE)))
           .onClick(() => {
             let isReverse = this.isSortTypeReverse(SortType.SORT_BY_SIZE)
             if (this.sortType != SortType.SORT_BY_SIZE) {
@@ -158,19 +158,19 @@ export struct TabFilesTitle {
       }
 
       MenuItemGroup() {
-        MenuItem(this.commonMenuBuilder($r('app.string.more_new_dir')))
+        MenuItem(this.commonMenu($r('app.string.more_new_dir')))
           .onClick(() => {
             if (this.onMoreClick) {
               this.onMoreClick(MoreMenuType.NEW_DIR)
             }
           })
-        MenuItem(this.commonMenuBuilder($r('app.string.more_new_file')))
+        MenuItem(this.commonMenu($r('app.string.more_new_file')))
           .onClick(() => {
             if (this.onMoreClick) {
               this.onMoreClick(MoreMenuType.NEW_FILE)
             }
           })
-        MenuItem(this.commonMenuBuilder($r('app.string.more_upload_file')))
+        MenuItem(this.commonMenu($r('app.string.more_upload_file')))
           .onClick(() => {
             if (this.onMoreClick) {
               this.onMoreClick(MoreMenuType.UPLOAD_FILE)
@@ -194,7 +194,7 @@ export struct TabFilesTitle {
     })
   }
 
-  @Builder commonMenuBuilder(content: ResourceStr, isSelected?: boolean) {
+  @Builder commonMenu(content: ResourceStr, isSelected?: boolean) {
     Row() {
       Text(content)
         .fontSize(15)
@@ -213,7 +213,7 @@ export struct TabFilesTitle {
     .justifyContent(FlexAlign.SpaceBetween)
   }
 
-  @Builder sortMenuBuilder(content: ResourceStr, isSelected: boolean, isReverse: boolean) {
+  @Builder sortMenu(content: ResourceStr, isSelected: boolean, isReverse: boolean) {
     Row() {
       Text(content)
         .fontSize(15)

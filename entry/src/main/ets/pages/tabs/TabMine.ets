@@ -3,7 +3,7 @@ import { UserStorage } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import UserDatabase from "../../model/UserDatabase";
 import UserPreferences from "../../model/UserPreferences";
-import { cloudUserStorage } from "../../model/net/CloudApi";
+import { CloudApi } from "../../model/net/CloudApi";
 
 @Component
 export struct TabMine {
@@ -14,7 +14,7 @@ export struct TabMine {
   aboutToAppear() {
     this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string
 
-    cloudUserStorage({
+    CloudApi.cloudUserStorage({
       onSuccess: (data: UserStorage) => {
         this.userStorage = data
         let used:number = this.userStorage.used/(1024*1024*1024)

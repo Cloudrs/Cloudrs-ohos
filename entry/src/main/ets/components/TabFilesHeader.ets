@@ -6,7 +6,7 @@ export struct TabFilesHeader {
   @State showTransport:boolean = false;
   onBackClick?: () => void;
   onTransportClick?: () => void;
-  onPersionClick?: () => void;
+  onPersonClick?: () => void;
 
   build() {
     Column() {
@@ -69,8 +69,8 @@ export struct TabFilesHeader {
           .borderRadius(18)
           .backgroundColor(Color.White)
           .onClick(() => {
-            if (this.onPersionClick) {
-              this.onPersionClick()
+            if (this.onPersonClick) {
+              this.onPersonClick()
             }
           })
         }

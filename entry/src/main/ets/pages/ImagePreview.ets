@@ -1,6 +1,6 @@
 import Constant from "../model/Constant";
 import image from "@ohos.multimedia.image";
-import { cloudGetPreview } from "../model/net/CloudApi";
+import { CloudApi } from "../model/net/CloudApi";
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../model/Params";
 import { FileUtil } from "@pura/harmony-utils";
@@ -29,15 +29,20 @@ export struct iamgePreview {
 
   async getImageFile() {
     if (this.fileParam) {
-      cloudGetPreview(this.fileParam.fileId, {
+      CloudApi.cloudGetPreview(this.fileParam.fileId, {
         onSuccess: (data: ArrayBuffer) => {
           this.imageData = data
           let imageSource: image.ImageSource = image.createImageSource(this.imageData)
-          imageSource.createPixelMap().then((pixMap: PixelMap) => {
-            this.imagePixelMap = pixMap
-            this.imageWidth = '100%'
-            this.isLoading = false
-          })
+          imageSource.createPixelMap()
+            .then((pixMap: PixelMap) => {
+              this.imagePixelMap = pixMap
+              this.imageWidth = '100%'
+              this.isLoading = false
+            })
+            .catch((reason: Error) => {
+              this.isLoading = false
+              showToast('打开失败')
+            })
         },
         onFailure: (msg) => {
           this.imagePixelMap = $r('app.media.ic_picture_damage')

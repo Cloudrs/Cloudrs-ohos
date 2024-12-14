@@ -4,7 +4,7 @@ import { ObjectInfo } from "../model/net/ApiTypes";
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
-import { formatBytes } from "../utils/Common";
+import { CommonUtil } from "../utils/CommonUtil";
 
 const TAG = 'TabItem';
 
@@ -58,8 +58,7 @@ export struct ObjectItem {
       return $r("app.media.ic_folder_fill")
     }
     else {
-      // // TODO: 后续根据后缀名进行匹配图标
-      return $r('app.media.ic_doc_text_fill')
+      return CommonUtil.getFileIconInfo(name).icon
     }
   }
 
@@ -107,7 +106,7 @@ export struct ObjectItem {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
-    .height(60)
+    .height(50)
     .padding({left: 10, right: 10})
     .itemStyle()
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
@@ -121,14 +120,14 @@ export struct ObjectItem {
   @Builder fileIconItem(item: ObjectInfo) {
     Column({space: 10}) {
       Text() {
-        ImageSpan(this.getThumbData(item.id) ?? $r('app.media.ic_doc_text_fill'))
+        ImageSpan(this.getThumbData(item.id) ?? CommonUtil.getFileIconInfo(item.name).icon)
           .objectFit(this.getThumbData(item.id) ? ImageFit.Cover : ImageFit.CENTER)
           .draggable(false)
       }
       .textAlign(TextAlign.Center)
       .width('100%')
       .layoutWeight(1)
-      .backgroundColor($r('app.color.file_icon_background'))
+      .backgroundColor(CommonUtil.getFileIconInfo(item.name).backgroundColor)
 
       Column({ space: 3 }) {
         Text(item.name)
@@ -167,7 +166,7 @@ export struct ObjectItem {
           Text(item.name)
             .itemFileNameStyle()
 
-          Text(DateUtil.getFormatDateStr(new Date(item.date), 'yyyy-MM-dd') + ` · ` + formatBytes(item.size))
+          Text(DateUtil.getFormatDateStr(new Date(item.date), 'yyyy-MM-dd') + ` · ` + CommonUtil.formatBytes(item.size))
             .itemFileDateStyle()
         }
         .layoutWeight(1)
@@ -178,7 +177,7 @@ export struct ObjectItem {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
-    .height(60)
+    .height(50)
     .padding({left: 10, right: 10})
     .itemStyle()
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {

@@ -6,7 +6,7 @@ import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
 import { CommonUtil } from "../utils/CommonUtil";
 
-const TAG = 'TabItem';
+const TAG = 'ObjectItem';
 
 @Extend(Column)
 function itemStyle() {

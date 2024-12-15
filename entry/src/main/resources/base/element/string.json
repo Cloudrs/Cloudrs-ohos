@@ -259,6 +259,50 @@
     {
       "name": "transport_title",
       "value": "任务队列"
+    },
+    {
+      "name": "user_id",
+      "value": "UID"
+    },
+    {
+      "name": "user_group",
+      "value": "用户组"
+    },
+    {
+      "name": "user_days",
+      "value": "加入天数"
+    },
+    {
+      "name": "storage_used",
+      "value": "已使用容量"
+    },
+    {
+      "name": "storage_update_date",
+      "value": "更新于:"
+    },
+    {
+      "name": "logout_confim",
+      "value": "确认退出"
+    },
+    {
+      "name": "dialog_logout",
+      "value": "退出"
+    },
+    {
+      "name": "user_privacy_secure",
+      "value": "隐私与安全"
+    },
+    {
+      "name": "user_theme_setting",
+      "value": "外观偏好"
+    },
+    {
+      "name": "more_setting",
+      "value": "更多设置"
+    },
+    {
+      "name": "feedback",
+      "value": "反馈"
     }
   ]
 }

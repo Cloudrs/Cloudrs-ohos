@@ -8,6 +8,7 @@ export enum SiteURI {
   PING = '/site/ping',
   LOGO = '/static/img/logo512.png',
   LOGIN = '/user/session',
+  USER_SETTING = '/user/setting',
   USER_STORAGE = '/user/storage',
   DIRECTORY = '/directory',
   THUMB = '/file/thumb',
@@ -17,7 +18,8 @@ export enum SiteURI {
   OBJECT_DETAIL = '/object/property',
   OBJECT_RENAME = '/object/rename',
   OBJECT_COPY = '/object/copy',
-  SEARCH = '/file/search/keywords'
+  SEARCH = '/file/search/keywords',
+  AVATAR = '/user/avatar'
 }
 
 export const enum HttpCode {
@@ -71,7 +73,7 @@ export interface GroupInfo {
 export interface UserInfo {
   id: string;
   user_name: string;
-  nick_name: string;
+  nickname: string;
   status: number;
   avatar: string;
   created_at: string;
@@ -110,6 +112,18 @@ export interface UserStorage {
   used: number;
   free: number;
   total: number;
+}
+
+/**
+ * 用户存储信息
+ */
+export interface UserSetting {
+  authn: string[];
+  homepage: boolean;
+  prefer_theme: string;
+  themes: string;
+  two_factor: boolean;
+  uid: number;
 }
 
 /**

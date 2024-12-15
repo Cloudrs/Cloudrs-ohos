@@ -8,6 +8,7 @@ class Constant {
   REQUEST_TIMEOUT: number = 3000
   SYSTEM_TOP_RECT_HEIGHT: string = 'sysTopRectHeight'
   NAV_BOTTOM_RECT_HEIGHT: string = 'navBottomRectHeight'
+  TAB_BAR_HEIGHT: string = 'tabBarHeight'
   CLOUD_COOKIE: string = 'cloudCookie'
   CLOUD_COOKIE_EXPIRES: string = 'cloudCookieExpires'
   HOME_PAGE = 'HomePage'

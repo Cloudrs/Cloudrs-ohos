@@ -104,6 +104,7 @@ export class CommonUtil {
         return FileType.JSON
 
       case 'yaml':
+      case 'yml':
         return FileType.YAML
 
       case 'toml':
@@ -150,6 +151,9 @@ export class CommonUtil {
       case FileType.COMPRESSED:
         fileIconInfo.icon = $r("app.media.ic_file_compressed")
         break;
+      case FileType.XML:
+        fileIconInfo.icon = $r("app.media.ic_file_xml")
+        break;
       case FileType.JSON:
         fileIconInfo.icon = $r("app.media.ic_file_json")
         break;
@@ -168,5 +172,11 @@ export class CommonUtil {
     }
 
     return fileIconInfo
+  }
+
+  static getDaysDifference(date1: Date, date2: Date): number {
+    const diffInMilliseconds = Math.abs(date2.getTime() - date1.getTime());
+    const diffInDays = diffInMilliseconds / (1000 * 60 * 60 * 24);
+    return Math.floor(diffInDays); // 或者使用 Math.round 根据需要
   }
 }

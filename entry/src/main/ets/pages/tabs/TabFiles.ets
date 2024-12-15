@@ -7,7 +7,6 @@ import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { image } from "@kit.ImageKit";
 import { ObjectItem } from "../../components/ObjectItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
-import { FileUtil } from "@pura/harmony-utils";
 import { HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../../model/Params";
 import { ExitLifecycle } from "../../lifecycle/ExitLifecycle";
@@ -24,6 +23,7 @@ const TAG = 'TabFiles';
 export struct TabFiles {
   @Link overLap: boolean
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
+  @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageProp(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
   @StorageProp(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
@@ -39,8 +39,6 @@ export struct TabFiles {
   private scrollerForList: Scroller = new Scroller()
   @State dirDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
   @State fileDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
-  @State isGridLast: boolean = false
-  @State bottomPadding: number = 80;
   @State objectsInfo: DirFileInfo = new DirFileInfo();
   @State isGridPadding: boolean = false;
 
@@ -83,7 +81,7 @@ export struct TabFiles {
 
   async getThumbFile(index: number, item: ObjectInfo) {
     if (item.thumb && !this.getThumbData(item.id)) {
-      CloudApi.cloudGetThumb(item.id, {
+      CloudApi.getThumb(item.id, {
         onSuccess: (data: ArrayBuffer) => {
           let imageSource: image.ImageSource = image.createImageSource(data)
           imageSource.createPixelMap().then((pixMap: PixelMap) => {
@@ -106,7 +104,7 @@ export struct TabFiles {
     }
     this.currentPath = path
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : CommonUtil.getLastDirectoryName(path)
-    CloudApi.cloudGetFilesInfo(path, {
+    CloudApi.getFilesInfo(path, {
       onStart: () => {
         if (isRefresh) {
           this.dirDataSource.clear()
@@ -207,7 +205,7 @@ export struct TabFiles {
     }
     .cachedCount(5)
     .maxCount(2)
-    .padding({ left: 10, right: 10, bottom: this.bottomPadding })
+    .padding({ left: 10, right: 10, bottom: this.tabBarHeight+10 })
     .width('100%')
     .height('100%') //!!!使用lazyforeach必须设置高度才能有效
     .rowsGap(7)
@@ -216,29 +214,6 @@ export struct TabFiles {
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: 300})
     .scrollBarWidth(2)
-    .onScrollIndex((first, last) => {
-      console.debug(TAG, `first: ${first}, last: ${last}`)
-      if (last == -1) {
-        return
-      }
-      if (last == this.dirDataSource.totalCount()+this.fileDataSource.totalCount()-(this.isGridPadding ? 1 : 0)) {
-        this.isGridLast = true
-      } else {
-        this.isGridLast = false
-      }
-    })
-    .onScrollFrameBegin((offset, state) => {
-      if (this.isGridLast && offset != 0) {
-        if (this.bottomPadding + offset > 80) {
-          this.bottomPadding = 80
-        } else if (this.bottomPadding + offset < 0) {
-          this.bottomPadding = 0
-        } else {
-          this.bottomPadding += offset
-        }
-      }
-      return {offsetRemain: offset}
-    })
   }
 
   @Builder detailSheet() {
@@ -317,7 +292,7 @@ export struct TabFiles {
   }
 
   itemDetail(item: ObjectInfo) {
-    CloudApi.cloudGetObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+    CloudApi.getObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
         this.detailData.isDir = item.type == Constant.OBJECT_DIR_TYPE
         this.detailData.name = item.name
@@ -339,7 +314,7 @@ export struct TabFiles {
         if (action == DialogAction.TWO) {
           console.debug(TAG, `action: ${action}, content: ${content}`)
           if (item.name != content) {
-            CloudApi.cloudRenameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
+            CloudApi.renameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
               onSuccess: (data) => {
                 item.name = content
                 if (item.type == Constant.OBJECT_DIR_TYPE) {
@@ -350,6 +325,12 @@ export struct TabFiles {
                   console.info(TAG, 'index file ' + index)
                   this.fileDataSource.deleteData(index)
                   this.fileDataSource.addData(index, item)
+                }
+                // 修改名称需要重新排序
+                if (this.sortType == SortType.SORT_BY_NAME) {
+                  this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
+                  this.dirDataSource.notifyDataReload()
+                  this.fileDataSource.notifyDataReload()
                 }
                 showToast('重命名成功')
               },
@@ -372,7 +353,7 @@ export struct TabFiles {
       onAction: (action: number, dialogId: string, content: string) => {
         if (action == DialogAction.TWO) {
           console.debug(TAG, `新建 content: ${content}`)
-          CloudApi.cloudNewObject(path + '/' + content, isDir, {
+          CloudApi.newObject(path + '/' + content, isDir, {
             onSuccess: (data) => {
               this.getFileList(true, this.currentPath)
               showToast(`新建${content}成功`)
@@ -397,7 +378,7 @@ export struct TabFiles {
         if (action == DialogAction.TWO) {
           console.debug(TAG, `action: ${action}, content: ${content}`)
           if (item.name != content) {
-            CloudApi.cloudDeleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+            CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
               onSuccess: (data) => {
                 if (item.type == Constant.OBJECT_DIR_TYPE) {
                   this.dirDataSource.deleteData(index)

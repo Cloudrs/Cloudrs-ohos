@@ -130,9 +130,9 @@ export struct LoginPage {
       return
     }
     baseUrlSet(this.protocol + this.address)
-    CloudApi.cloudPing({
+    CloudApi.ping({
       onSuccess: (data) => {
-        CloudApi.cloudSiteConfig({
+        CloudApi.getSiteConfig({
           onSuccess: (data: SiteConfig) => {
             this.loginTitle = data.title
             this.websiteInvalid = true
@@ -142,7 +142,7 @@ export struct LoginPage {
             showToastTips('站点获取配置失败', ToastType.Error)
           }
         })
-        CloudApi.cloudGetLogo(this.protocol + this.address, {
+        CloudApi.getLogo(this.protocol + this.address, {
           onSuccess: (data) => {
             let imageSource: image.ImageSource = image.createImageSource(data)
             imageSource.createPixelMap().then((pixMap: PixelMap) => {
@@ -166,7 +166,7 @@ export struct LoginPage {
       showToastTips('无效用户名或密码', ToastType.Error)
       return
     }
-    CloudApi.cloudLogin(this.username, this.password, {
+    CloudApi.login(this.username, this.password, {
       onSuccess: (data: UserInfo) => {
         let dbUserInfo: DbUserInfo = {
           url: this.protocol + this.address,

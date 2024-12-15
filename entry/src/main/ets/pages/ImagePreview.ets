@@ -29,7 +29,7 @@ export struct iamgePreview {
 
   async getImageFile() {
     if (this.fileParam) {
-      CloudApi.cloudGetPreview(this.fileParam.fileId, {
+      CloudApi.getPreview(this.fileParam.fileId, {
         onSuccess: (data: ArrayBuffer) => {
           this.imageData = data
           let imageSource: image.ImageSource = image.createImageSource(this.imageData)

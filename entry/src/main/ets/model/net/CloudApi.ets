@@ -1,5 +1,7 @@
 import { cloudDelete, cloudGet, cloudGetFile, cloudPost, cloudPut } from "../../utils/AxiosRequest";
-import { DirectoryInfo, HttpCallback, LoginData, ObjectDetail,SiteConfig, SiteURI, UserInfo, UserStorage } from "./ApiTypes";
+import { DirectoryInfo, HttpCallback, LoginData, ObjectDetail,SiteConfig, SiteURI, UserInfo,
+  UserSetting,
+  UserStorage } from "./ApiTypes";
 import { ObjectNew, ObjectRename, ObjectSrc } from "./ObjectParam";
 
 export class CloudApi {
@@ -7,7 +9,7 @@ export class CloudApi {
    * 网站测试
    * @param callback  回调
    */
-  static cloudPing(callback?: HttpCallback<string>): void {
+  static ping(callback?: HttpCallback<string>): void {
     return cloudGet(SiteURI.PING, callback)
   }
 
@@ -15,7 +17,7 @@ export class CloudApi {
    * 获取网站配置
    * @param callback  回调
    */
-  static cloudSiteConfig(callback?: HttpCallback<SiteConfig>): void {
+  static getSiteConfig(callback?: HttpCallback<SiteConfig>): void {
     return cloudGet(SiteURI.CONFIG, callback)
   }
 
@@ -23,7 +25,7 @@ export class CloudApi {
    * 获取指定网站图标
    * @param callback  回调
    */
-  static cloudGetLogo(baseUrl?: string, callback?: HttpCallback<ArrayBuffer>): void {
+  static getLogo(baseUrl?: string, callback?: HttpCallback<ArrayBuffer>): void {
     return cloudGetFile(baseUrl ? baseUrl + SiteURI.LOGO : SiteURI.LOGO, callback)
   }
 
@@ -33,7 +35,7 @@ export class CloudApi {
    * @param password  用户密码
    * @param callback  回调
    */
-  static cloudLogin(username: string, password: string, callback?: HttpCallback<UserInfo>): void {
+  static login(username: string, password: string, callback?: HttpCallback<UserInfo>): void {
     let loginData: LoginData = { username, password, captchaCode: '' };
     return cloudPost(SiteURI.LOGIN, loginData, callback)
   }
@@ -42,7 +44,15 @@ export class CloudApi {
    * 获取用户存储信息
    * @param callback  回调
    */
-  static cloudUserStorage(callback?: HttpCallback<UserStorage>): void {
+  static userSetting(callback?: HttpCallback<UserSetting>): void {
+    return cloudGet(SiteURI.USER_SETTING, callback)
+  }
+
+  /**
+   * 获取用户存储信息
+   * @param callback  回调
+   */
+  static userStorage(callback?: HttpCallback<UserStorage>): void {
     return cloudGet(SiteURI.USER_STORAGE, callback)
   }
 
@@ -50,7 +60,7 @@ export class CloudApi {
    * 获取指定路径下的文件信息
    * @param callback  回调
    */
-  static cloudGetFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
+  static getFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
     return cloudGet(SiteURI.DIRECTORY + path, callback)
   }
 
@@ -58,7 +68,7 @@ export class CloudApi {
    * 获取指定id的缩略图
    * @param callback  回调
    */
-  static cloudGetThumb(id: string, callback?: HttpCallback<ArrayBuffer>): void {
+  static getThumb(id: string, callback?: HttpCallback<ArrayBuffer>): void {
     return cloudGetFile(SiteURI.THUMB + '/' + id, callback)
   }
 
@@ -66,15 +76,23 @@ export class CloudApi {
    * 获取指定id的图标
    * @param callback  回调
    */
-  static cloudGetPreview(id: string, callback?: HttpCallback<ArrayBuffer>): void {
+  static getPreview(id: string, callback?: HttpCallback<ArrayBuffer>): void {
     return cloudGetFile(SiteURI.PREVIEW + '/' + id, callback)
+  }
+
+  /**
+   * 获取指定用户id的头像
+   * @param callback  回调
+   */
+  static getUserAvatar(userId: string, callback?: HttpCallback<ArrayBuffer>): void {
+    return cloudGetFile(SiteURI.AVATAR + `/${userId}/l`, callback)
   }
 
   /**
    * 获取指定id的详细信息
    * @param callback  回调
    */
-  static cloudGetObjectDetail(id: string, isFolder: boolean, callback?: HttpCallback<ObjectDetail>): void {
+  static getObjectDetail(id: string, isFolder: boolean, callback?: HttpCallback<ObjectDetail>): void {
     let uri = `/${id}?is_folder=${isFolder}&trace_root=false`
     return cloudGet(SiteURI.OBJECT_DETAIL + uri, callback)
   }
@@ -85,7 +103,7 @@ export class CloudApi {
    * @param isDir 是否为文件夹
    * @param callback  回调
    */
-  static cloudNewObject(path: string, isDir: boolean, callback?: HttpCallback<null>): void {
+  static newObject(path: string, isDir: boolean, callback?: HttpCallback<null>): void {
     if (isDir) {
       return cloudPut(SiteURI.DIRECTORY, new ObjectNew(path), callback)
     } else {
@@ -98,7 +116,7 @@ export class CloudApi {
    * @param src 需要删除的对象
    * @param callback  回调
    */
-  static cloudDeleteObjects(src: ObjectSrc, callback?: HttpCallback<null>): void {
+  static deleteObjects(src: ObjectSrc, callback?: HttpCallback<null>): void {
     return cloudDelete(SiteURI.OBJECT, src, callback)
   }
 
@@ -108,7 +126,7 @@ export class CloudApi {
    * @param isDir 是否为文件夹
    * @param callback  回调
    */
-  static cloudDeleteObject(id: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
+  static deleteObject(id: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
     let src = isDir ? new ObjectSrc(undefined, [id]) : new ObjectSrc([id], undefined)
     return cloudDelete(SiteURI.OBJECT, src, callback)
   }
@@ -120,7 +138,7 @@ export class CloudApi {
    * @param isDir 是否为文件夹
    * @param callback  回调
    */
-  static cloudRenameObject(id: string, newName: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
+  static renameObject(id: string, newName: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
     let src = isDir ? new ObjectSrc(undefined, [id]) : new ObjectSrc([id], undefined)
     let rename = new ObjectRename(src, newName)
     return cloudPost(SiteURI.OBJECT_RENAME, rename, callback)

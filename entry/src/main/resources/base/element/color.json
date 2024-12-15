@@ -87,6 +87,46 @@
     {
       "name": "sheet_default_background",
       "value": "#ffffff"
+    },
+    {
+      "name": "common_font_gray",
+      "value": "#aeaeae"
+    },
+    {
+      "name": "uid_background",
+      "value": "#fff4e6"
+    },
+    {
+      "name": "group_background",
+      "value": "#f6f2ef"
+    },
+    {
+      "name": "days_background",
+      "value": "#e9f9ee"
+    },
+    {
+      "name": "storage_info_background",
+      "value": "#e5f1ff"
+    },
+    {
+      "name": "setting_button_background",
+      "value": "#f3f2f8"
+    },
+    {
+      "name": "setting_icon_privacy_background",
+      "value": "#007bff"
+    },
+    {
+      "name": "setting_icon_theme_background",
+      "value": "#30b2c2"
+    },
+    {
+      "name": "setting_icon_more_background",
+      "value": "#aeadb2"
+    },
+    {
+      "name": "icon_web_jump",
+      "value": "#a38262"
     }
   ]
 }

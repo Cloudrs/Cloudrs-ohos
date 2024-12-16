@@ -6,6 +6,7 @@ import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
 import { HMRouterMgr } from '@hadss/hmrouter';
 import UserPreferences from '../model/UserPreferences';
+import { VERSION_NAME } from 'BuildProfile';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -34,6 +35,7 @@ export default class EntryAbility extends UIAbility {
       .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
       .topRect.height
     AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, px2vp(topRectHeight))
+    AppStorage.setOrCreate(Constant.APP_VERSION, VERSION_NAME)
 
     // Main window is created, set main page for this ability
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');

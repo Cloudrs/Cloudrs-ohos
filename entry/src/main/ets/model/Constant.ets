@@ -7,6 +7,7 @@ class Constant {
   ACTIVE_USER_KEY = 'ActiveUser'
   REQUEST_TIMEOUT: number = 3000
   SYSTEM_TOP_RECT_HEIGHT: string = 'sysTopRectHeight'
+  APP_VERSION: string = 'appVersion'
   NAV_BOTTOM_RECT_HEIGHT: string = 'navBottomRectHeight'
   TAB_BAR_HEIGHT: string = 'tabBarHeight'
   CLOUD_COOKIE: string = 'cloudCookie'
@@ -14,6 +15,7 @@ class Constant {
   HOME_PAGE = 'HomePage'
   LOGIN_PAGE = 'LoginPage'
   IAMGE_PREVIEW_PAGE = 'ImagePreviewPage'
+  ABOUT_PAGE = 'AboutPage'
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
   CURRENT_PATH = 'currentPath'
   CURRENT_SORT_TYPE = 'sortType'

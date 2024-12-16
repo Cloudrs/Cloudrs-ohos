@@ -19,7 +19,10 @@ export enum SiteURI {
   OBJECT_RENAME = '/object/rename',
   OBJECT_COPY = '/object/copy',
   SEARCH = '/file/search/keywords',
-  AVATAR = '/user/avatar'
+  AVATAR = '/user/avatar',
+  ARIA2_DOWNLOADING = '/aria2/downloading',
+  ARIA2_FINISHED = '/aria2/finished',
+  USER_TASKS = '/user/setting/tasks'
 }
 
 export const enum HttpCode {
@@ -230,4 +233,94 @@ export class ObjectDetail {
   child_file_num: number = 0
   path: string = ''
   query_date: string = ''
+}
+
+export interface Aria2Uris {
+  uri: string
+  status: string
+}
+
+export interface Aria2Files {
+  index: string
+  path: string
+  length: string
+  completedLength: string
+  selected: boolean
+  uris: Aria2Uris[]
+}
+
+export interface Aria2Finished {
+  name: string
+  gid: string
+  status: number
+  dst: string
+  error: string
+  total: number
+  files: Aria2Files[]
+  task_status: number
+  task_error: string
+  create: string
+  update: string
+}
+
+interface Aria2BittorrentInfo {
+  name: string;
+}
+
+export interface Aria2Bittorrent {
+  announceList: null
+  comment: string
+  creationDate: number
+  mode: string
+  info: Aria2BittorrentInfo
+}
+
+export interface Aria2DownloadInfo {
+  gid: string
+  status: string
+  totalLength: string
+  completedLength: string
+  uploadLength: string
+  bitfield: string
+  downloadSpeed: string
+  uploadSpeed: string
+  infoHash: string
+  numSeeders: string
+  seeder: string
+  pieceLength: string
+  numPieces: string
+  connections: string
+  errorCode: string
+  errorMessage: string
+  followedBy: null
+  belongsTo: string
+  dir: string
+  files: Aria2Files[]
+  bittorrent: Aria2Bittorrent
+}
+
+export interface Aria2Downloading {
+  update: string
+  interval: number
+  name: string
+  status: number
+  dst: string
+  total: number
+  downloaded: number
+  speed: number
+  info: Aria2DownloadInfo
+  node: string
+}
+
+export interface UserTask {
+  status: number
+  type: number
+  create_date: string
+  progress: number
+  error: string
+}
+
+export interface UserTasks {
+  tasks: UserTask[]
+  total: number
 }

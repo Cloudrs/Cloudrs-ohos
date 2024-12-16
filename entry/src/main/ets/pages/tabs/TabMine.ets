@@ -8,7 +8,6 @@ import { image } from "@kit.ImageKit";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { DateUtil } from "@pura/harmony-utils";
 import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
-import { webview } from "@kit.ArkWeb";
 
 const TAG:string = 'TabMine'
 
@@ -17,6 +16,7 @@ const TAG:string = 'TabMine'
 export struct TabMine {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
+  @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
@@ -28,12 +28,14 @@ export struct TabMine {
   @State webUrl: string = ''
   @State webShow: boolean = false
   private scroller: Scroller = new Scroller;
-  private webController: webview.WebviewController = new webview.WebviewController()
+  @State versionInfo: string = ''
 
   aboutToAppear() {
     this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string
     this.getUserSettings()
-    console.debug(TAG, 'tabBarHeight: ' + this.tabBarHeight)
+
+    let value = getContext().resourceManager.getStringSync($r('app.string.version'))
+    this.versionInfo = `${value} ${this.appVersion}`
   }
 
   getUserSettings() {
@@ -97,6 +99,7 @@ export struct TabMine {
     }
     .width('100%')
     .height('100%')
+    .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
   }
 
@@ -274,11 +277,10 @@ export struct TabMine {
       .height('100%')
     }
     .width('100%')
-    .height(40)
+    .height(50)
     .borderRadius(10)
     .backgroundColor($r('app.color.logout_background'))
     .padding({ left: 10, right: 15 })
-    .margin({top: 10})
     .onClick(() => {
       DialogHelper.showAlertDialog({
         primaryTitle:  $r('app.string.logout_confim'),
@@ -296,7 +298,8 @@ export struct TabMine {
     })
   }
 
-  @Builder rowWithNext(icon: ResourceStr, backgroundColor: ResourceStr, title: ResourceStr) {
+  @Builder rowWithNext(icon: ResourceStr, backgroundColor: ResourceStr,
+    title: ResourceStr, sub_title?: ResourceStr, onClickCallback?: ()=>void) {
     Button({type: ButtonType.Normal}) {
       Row({space: 10}) {
         Image(icon)
@@ -312,10 +315,15 @@ export struct TabMine {
           .fontSize(16)
           .layoutWeight(1)
 
+        if (sub_title) {
+          Text(sub_title)
+            .fontSize(14)
+            .fontColor($r('app.color.common_font_gray'))
+        }
         Image($r('app.media.ic_chevron_right'))
           .width(12)
           .height(12)
-          .fillColor($r('app.color.file_folder_right'))
+          .fillColor($r('app.color.common_right'))
           .draggable(false)
       }
       .width('100%')
@@ -327,6 +335,11 @@ export struct TabMine {
     .height(50)
     .borderRadius(10)
     .backgroundColor($r('app.color.setting_button_background'))
+    .onClick(() => {
+      if (onClickCallback) {
+        onClickCallback()
+      }
+    })
   }
 
   @Builder settingButton() {
@@ -340,6 +353,12 @@ export struct TabMine {
       this.rowWithNext($r('app.media.ic_more_setting'),
         $r('app.color.setting_icon_more_background'),
         $r('app.string.more_setting'))
+      this.rowWithNext($r('app.media.ic_info_circle'),
+        $r('app.color.setting_icon_about'),
+        $r('app.string.about'),
+        this.versionInfo,
+        () => { HMRouterMgr.push({pageUrl: Constant.ABOUT_PAGE}) }
+      )
     }
     .width('100%')
     .margin({top: 10})
@@ -367,7 +386,7 @@ export struct TabMine {
         Image($r('app.media.ic_web_jump'))
           .width(16)
           .height(16)
-          .fillColor($r('app.color.icon_web_jump'))
+          .fillColor($r('app.color.common_right'))
           .draggable(false)
       }
       .width('100%')

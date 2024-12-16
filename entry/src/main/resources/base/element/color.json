@@ -125,8 +125,24 @@
       "value": "#aeadb2"
     },
     {
+      "name": "setting_icon_about",
+      "value": "#FF4A9641"
+    },
+    {
       "name": "icon_web_jump",
       "value": "#a38262"
+    },
+    {
+      "name": "common_right",
+      "value": "#8f8e94"
+    },
+    {
+      "name": "common_icon_background",
+      "value": "#e5e9e8"
+    },
+    {
+      "name": "common_background",
+      "value": "#f0f4f3"
     }
   ]
 }

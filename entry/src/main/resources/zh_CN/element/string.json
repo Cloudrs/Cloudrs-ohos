@@ -35,6 +35,290 @@
     {
       "name": "login_password",
       "value": "登录密码"
+    },
+    {
+      "name": "website_title",
+      "value": "站点绑定"
+    },
+    {
+      "name": "tab_bar_files",
+      "value": "文件"
+    },
+    {
+      "name": "tab_bar_pictures",
+      "value": "相册"
+    },
+    {
+      "name": "tab_bar_remote_down",
+      "value": "下载"
+    },
+    {
+      "name": "tab_bar_mine",
+      "value": "我的"
+    },
+    {
+      "name": "header_search",
+      "value": "搜索"
+    },
+    {
+      "name": "files_main_title",
+      "value": "存储"
+    },
+    {
+      "name": "files_sub_title",
+      "value": "默认存储策略"
+    },
+    {
+      "name": "logout",
+      "value": "退出登录"
+    },
+    {
+      "name": "login_service_prefix",
+      "value": "使用Cloudrs即表示您接受我们的 "
+    },
+    {
+      "name": "hypelink_app_service",
+      "value": "服务条款"
+    },
+    {
+      "name": "hypelink_app_privace",
+      "value": "隐私政策"
+    },
+    {
+      "name": "dir_enter",
+      "value": "进入文件夹"
+    },
+    {
+      "name": "file_details",
+      "value": "详细信息"
+    },
+    {
+      "name": "rename",
+      "value": "重命名"
+    },
+    {
+      "name": "copy",
+      "value": "复制"
+    },
+    {
+      "name": "move",
+      "value": "移动"
+    },
+    {
+      "name": "cloud_share",
+      "value": "创建分享"
+    },
+    {
+      "name": "delete",
+      "value": "删除"
+    },
+    {
+      "name": "share",
+      "value": "分享"
+    },
+    {
+      "name": "save_to_gallery",
+      "value": "保存到相册"
+    },
+    {
+      "name": "image_video_write_permission",
+      "value": "用于保存获取图片或视频到图库。"
+    },
+    {
+      "name": "image_video_read_permission",
+      "value": "用于上传图片或视频到云上。"
+    },
+    {
+      "name": "preview",
+      "value": "预览"
+    },
+    {
+      "name": "file_download",
+      "value": "下载"
+    },
+    {
+      "name": "detail_created_at",
+      "value": "创建时间："
+    },
+    {
+      "name": "detail_updated_at",
+      "value": "修改时间："
+    },
+    {
+      "name": "detail_policy",
+      "value": "存储策略："
+    },
+    {
+      "name": "detail_include",
+      "value": "包括："
+    },
+    {
+      "name": "detail_include_dirs",
+      "value": "文件夹数量："
+    },
+    {
+      "name": "detail_include_files",
+      "value": "文件数量："
+    },
+    {
+      "name": "detail_size",
+      "value": "大小："
+    },
+    {
+      "name": "detail_filename",
+      "value": "文件名称："
+    },
+    {
+      "name": "detail_dir_name",
+      "value": "文件夹名称："
+    },
+    {
+      "name": "detail_policy_default",
+      "value": "跟随父目录"
+    },
+    {
+      "name": "detail_title",
+      "value": "详细信息"
+    },
+    {
+      "name": "more_multi_select",
+      "value": "多选"
+    },
+    {
+      "name": "more_show_icon",
+      "value": "图标"
+    },
+    {
+      "name": "more_show_list",
+      "value": "列表"
+    },
+    {
+      "name": "more_sort_by_time",
+      "value": "时间"
+    },
+    {
+      "name": "more_sort_by_size",
+      "value": "大小"
+    },
+    {
+      "name": "more_sort_by_type",
+      "value": "类型"
+    },
+    {
+      "name": "more_sort_by_name",
+      "value": "名称"
+    },
+    {
+      "name": "more_new_dir",
+      "value": "新建文件夹"
+    },
+    {
+      "name": "more_new_file",
+      "value": "新建文件"
+    },
+    {
+      "name": "more_upload_file",
+      "value": "上传文件"
+    },
+    {
+      "name": "dialog_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "dialog_delete",
+      "value": "删除"
+    },
+    {
+      "name": "new_dir_placeholder",
+      "value": "新文件夹名"
+    },
+    {
+      "name": "new_file_placeholder",
+      "value": "新文件名"
+    },
+    {
+      "name": "delete_confirm",
+      "value": "确认删除"
+    },
+    {
+      "name": "delete_success",
+      "value": "删除成功"
+    },
+    {
+      "name": "delete_failed",
+      "value": "删除失败"
+    },
+    {
+      "name": "task_download",
+      "value": "下载任务"
+    },
+    {
+      "name": "task_upload",
+      "value": "上传任务"
+    },
+    {
+      "name": "transport_title",
+      "value": "任务队列"
+    },
+    {
+      "name": "user_id",
+      "value": "UID"
+    },
+    {
+      "name": "user_group",
+      "value": "用户组"
+    },
+    {
+      "name": "user_days",
+      "value": "加入天数"
+    },
+    {
+      "name": "storage_used",
+      "value": "已使用容量"
+    },
+    {
+      "name": "storage_update_date",
+      "value": "更新于:"
+    },
+    {
+      "name": "logout_confim",
+      "value": "确认退出"
+    },
+    {
+      "name": "dialog_logout",
+      "value": "退出"
+    },
+    {
+      "name": "user_privacy_secure",
+      "value": "隐私与安全"
+    },
+    {
+      "name": "user_theme_setting",
+      "value": "外观偏好"
+    },
+    {
+      "name": "more_setting",
+      "value": "更多设置"
+    },
+    {
+      "name": "feedback",
+      "value": "反馈"
+    },
+    {
+      "name": "about",
+      "value": "关于"
+    },
+    {
+      "name": "version",
+      "value": "版本"
+    },
+    {
+      "name": "icp_id",
+      "value": "浙ICP备12345678号-177A"
+    },
+    {
+      "name": "about_email",
+      "value": "邮箱"
     }
   ]
 }

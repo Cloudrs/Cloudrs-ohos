@@ -303,6 +303,22 @@
     {
       "name": "feedback",
       "value": "反馈"
+    },
+    {
+      "name": "about",
+      "value": "关于"
+    },
+    {
+      "name": "version",
+      "value": "版本"
+    },
+    {
+      "name": "icp_id",
+      "value": "浙ICP备12345678号-177A"
+    },
+    {
+      "name": "about_email",
+      "value": "邮箱"
     }
   ]
 }

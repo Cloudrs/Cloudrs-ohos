@@ -1,7 +1,11 @@
 import { cloudDelete, cloudGet, cloudGetFile, cloudPost, cloudPut } from "../../utils/AxiosRequest";
-import { DirectoryInfo, HttpCallback, LoginData, ObjectDetail,SiteConfig, SiteURI, UserInfo,
+import {
+  Aria2Downloading,
+  Aria2Finished,
+  DirectoryInfo, HttpCallback, LoginData, ObjectDetail,SiteConfig, SiteURI, UserInfo,
   UserSetting,
-  UserStorage } from "./ApiTypes";
+  UserStorage,
+  UserTasks} from "./ApiTypes";
 import { ObjectNew, ObjectRename, ObjectSrc } from "./ObjectParam";
 
 export class CloudApi {
@@ -142,5 +146,31 @@ export class CloudApi {
     let src = isDir ? new ObjectSrc(undefined, [id]) : new ObjectSrc([id], undefined)
     let rename = new ObjectRename(src, newName)
     return cloudPost(SiteURI.OBJECT_RENAME, rename, callback)
+  }
+
+  /**
+   * 获取正在离线下载中数据
+   * @param callback  回调
+   */
+  static aria2Downloading(callback?: HttpCallback<Aria2Downloading[]>): void {
+    return cloudGet(SiteURI.ARIA2_DOWNLOADING, callback)
+  }
+
+  /**
+   * 获取下载完成的数据
+   * @param callback  回调
+   */
+  static aria2Finished(page: number, callback?: HttpCallback<Aria2Finished[]>): void {
+    let uri = SiteURI.ARIA2_FINISHED + `?page=${page}`
+    return cloudGet(uri, callback)
+  }
+
+  /**
+   * 获取任务队列的数据
+   * @param callback  回调
+   */
+  static userTasks(page: number, callback?: HttpCallback<UserTasks>): void {
+    let uri = SiteURI.USER_TASKS + `?page=${page}`
+    return cloudGet(uri, callback)
   }
 }

@@ -1,0 +1,40 @@
+import { HMRouterMgr } from "@hadss/hmrouter";
+import Constant from "../model/Constant";
+
+@Component
+export struct CommonTitle {
+  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
+  @Prop title: ResourceStr
+  onBackClick?: ()=>void
+
+  build() {
+    Row({space: 10}) {
+      Button({type: ButtonType.Circle}) {
+        Image($r('app.media.ic_back'))
+          .padding(5)
+          .fillColor(Color.Black)
+      }
+      .width(40)
+      .height(40)
+      .backgroundColor($r('app.color.common_icon_background'))
+      .onClick(() => {
+        if (this.onBackClick) {
+          this.onBackClick()
+        } else {
+          HMRouterMgr.pop()
+        }
+      })
+
+      Text(this.title)
+        .fontColor(Color.Black)
+        .fontSize(20)
+        .fontWeight(FontWeight.Bold)
+    }
+    .height(50)
+    .width('100%')
+    .margin({top: this.topRectHeight})
+    .backgroundColor($r('app.color.common_background'))
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.Start)
+  }
+}

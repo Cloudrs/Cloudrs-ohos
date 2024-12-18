@@ -333,16 +333,16 @@ export struct LoginPage {
         .fontSize(11)
         .fontColor($r("app.color.light_gray"))
 
-      Hyperlink('https://cloudreve.org/privacy-policy', $r('app.string.hypelink_app_service')) {
-      }
-      .color($r("app.color.select_primary"))
-      .height(13)
+      // Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_service")) {
+      // }
+      // .color($r("app.color.select_primary"))
+      // .height(13)
+      //
+      // Text(" 和 ")
+      //   .fontSize(11)
+      //   .fontColor($r("app.color.light_gray"))
 
-      Text(" 和 ")
-        .fontSize(11)
-        .fontColor($r("app.color.light_gray"))
-
-      Hyperlink('https://cloudreve.org/privacy-policy', $r('app.string.hypelink_app_privace')) {
+      Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_privacy")) {
       }
       .color($r("app.color.select_primary"))
       .height(13)

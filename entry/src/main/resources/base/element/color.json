@@ -126,7 +126,7 @@
     },
     {
       "name": "setting_icon_about",
-      "value": "#FF4A9641"
+      "value": "#FF534196"
     },
     {
       "name": "icon_web_jump",
@@ -143,6 +143,26 @@
     {
       "name": "common_background",
       "value": "#f0f4f3"
+    },
+    {
+      "name": "aria2_no_task_background",
+      "value": "#f2f2f7"
+    },
+    {
+      "name": "aria2_downloading_background",
+      "value": "#f2f2f7"
+    },
+    {
+      "name": "aria2_failed_background",
+      "value": "#ffebea"
+    },
+    {
+      "name": "aria2_finished_background",
+      "value": "#e8faee"
+    },
+    {
+      "name": "aria2_no_task_font",
+      "value": "#85858b"
     }
   ]
 }

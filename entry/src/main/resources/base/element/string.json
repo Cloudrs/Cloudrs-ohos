@@ -77,11 +77,11 @@
       "value": "使用Cloudrs即表示您接受我们的 "
     },
     {
-      "name": "hypelink_app_service",
+      "name": "hyperlink_app_service",
       "value": "服务条款"
     },
     {
-      "name": "hypelink_app_privace",
+      "name": "hyperlink_app_privacy",
       "value": "隐私政策"
     },
     {
@@ -122,7 +122,7 @@
     },
     {
       "name": "image_video_write_permission",
-      "value": "用于保存获取图片或视频到图库。"
+      "value": "用于保存图片或视频到图库。"
     },
     {
       "name": "image_video_read_permission",
@@ -314,11 +314,39 @@
     },
     {
       "name": "icp_id",
-      "value": "浙ICP备12345678号-177A"
+      "value": "浙ICP备2024140779号-3A"
     },
     {
       "name": "about_email",
       "value": "邮箱"
+    },
+    {
+      "name": "auto_sync",
+      "value": "开启相册同步"
+    },
+    {
+      "name": "download_offline",
+      "value": "离线下载"
+    },
+    {
+      "name": "task_queue",
+      "value": "任务队列"
+    },
+    {
+      "name": "download_finished",
+      "value": "下载完成"
+    },
+    {
+      "name": "download_failed",
+      "value": "下载错误"
+    },
+    {
+      "name": "no_download_task",
+      "value": "无下载中任务"
+    },
+    {
+      "name": "no_finished_task",
+      "value": "无已完成任务"
     }
   ]
 }

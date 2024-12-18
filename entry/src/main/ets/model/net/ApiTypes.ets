@@ -235,6 +235,14 @@ export class ObjectDetail {
   query_date: string = ''
 }
 
+export enum Aria2Status {
+  WAITING,
+  DOWNLOADING,
+  FAILED,
+  UNKNOWN,
+  FINISHED,
+}
+
 export interface Aria2Uris {
   uri: string
   status: string

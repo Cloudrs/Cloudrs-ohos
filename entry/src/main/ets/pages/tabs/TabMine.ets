@@ -133,7 +133,7 @@ export struct TabMine {
         .shadow(ShadowStyle.OUTER_DEFAULT_SM)
 
         Column() {
-          Image(this.userAvatar)
+          Image(this.userAvatar ?? $r("app.media.ic_default_avatar"))
             .width(this.avatarSize)
             .height(this.avatarSize)
             .borderWidth(5)

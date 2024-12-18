@@ -2,7 +2,7 @@ import { HMRouter } from "@hadss/hmrouter";
 import { CommonTitle } from "../components/CommonTitle";
 import Constant from "../model/Constant";
 
-const EMAIL: string = 'postmaster@dreamflytech.com'
+const EMAIL: string = 'wangxian@dreamflytech.com'
 
 @HMRouter({pageUrl: Constant.ABOUT_PAGE})
 @Component
@@ -25,7 +25,7 @@ export struct AboutPage {
       Blank().height(this.bottomRectHeight)
     }
     .width('100%').height('100%')
-    .padding({ left: 20, right: 20 })
+    .padding({ left: 15, right: 15 })
     .backgroundColor($r('app.color.common_background'))
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
@@ -54,6 +54,7 @@ export struct AboutPage {
       this.commonInfo($r('app.string.about_email'), EMAIL)
     }
     .width('100%')
+    .padding({left: 10, right: 10})
     .margin({top: 30})
     .backgroundColor(Color.White)
     .borderRadius(10)
@@ -71,7 +72,6 @@ export struct AboutPage {
     }
     .height(50)
     .width('100%')
-    .padding({left: 10, right: 10})
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }

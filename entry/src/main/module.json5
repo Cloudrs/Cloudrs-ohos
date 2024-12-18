@@ -11,11 +11,7 @@
     ],
     "requestPermissions": [{
       "name": "ohos.permission.INTERNET",
-    },{
-      "name": "ohos.permission.GET_NETWORK_INFO"
-    },{
-      "name": "ohos.permission.GET_WIFI_INFO"
-    },{
+    }, {
       "name": "ohos.permission.WRITE_IMAGEVIDEO",
       "reason": "$string:image_video_write_permission",
       "usedScene" : {

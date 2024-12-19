@@ -145,11 +145,7 @@
       "value": "#f0f4f3"
     },
     {
-      "name": "aria2_no_task_background",
-      "value": "#f2f2f7"
-    },
-    {
-      "name": "aria2_downloading_background",
+      "name": "aria2_default_background",
       "value": "#f2f2f7"
     },
     {
@@ -163,6 +159,14 @@
     {
       "name": "aria2_no_task_font",
       "value": "#85858b"
+    },
+    {
+      "name": "aria2_status_error",
+      "value": "#ffd8d5"
+    },
+    {
+      "name": "aria2_status_finished",
+      "value": "#d6f4de"
     }
   ]
 }

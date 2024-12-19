@@ -257,6 +257,11 @@ export interface Aria2Files {
   uris: Aria2Uris[]
 }
 
+export interface TaskError {
+  msg: string
+  error: string
+}
+
 export interface Aria2Finished {
   name: string
   gid: string
@@ -269,6 +274,7 @@ export interface Aria2Finished {
   task_error: string
   create: string
   update: string
+  node: string
 }
 
 interface Aria2BittorrentInfo {
@@ -318,6 +324,11 @@ export interface Aria2Downloading {
   speed: number
   info: Aria2DownloadInfo
   node: string
+}
+
+export enum UserTaskType {
+  FileTransfer = 2,
+  PolicyTransfer = 4
 }
 
 export interface UserTask {

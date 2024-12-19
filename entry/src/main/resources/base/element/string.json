@@ -325,10 +325,6 @@
       "value": "开启相册同步"
     },
     {
-      "name": "download_offline",
-      "value": "离线下载"
-    },
-    {
       "name": "task_queue",
       "value": "任务队列"
     },
@@ -342,11 +338,63 @@
     },
     {
       "name": "no_download_task",
-      "value": "无下载中任务"
+      "value": "无下载任务"
     },
     {
       "name": "no_finished_task",
-      "value": "无已完成任务"
+      "value": "无完成任务"
+    },
+    {
+      "name": "no_task_queue",
+      "value": "无任务队列"
+    },
+    {
+      "name": "task_detail",
+      "value": "任务详情"
+    },
+    {
+      "name": "create_date",
+      "value": "创建日期"
+    },
+    {
+      "name": "download_offline",
+      "value": "离线下载"
+    },
+    {
+      "name": "update_date",
+      "value": "更新日期"
+    },
+    {
+      "name": "dst_path",
+      "value": "保存路径"
+    },
+    {
+      "name": "total_size",
+      "value": "总大小"
+    },
+    {
+      "name": "node",
+      "value": "节点"
+    },
+    {
+      "name": "file_transfer",
+      "value": "文件中转"
+    },
+    {
+      "name": "policy_transfer",
+      "value": "存储策略转移"
+    },
+    {
+      "name": "last_progress",
+      "value": "最后进度:"
+    },
+    {
+      "name": "task_queue_finished",
+      "value": "完成"
+    },
+    {
+      "name": "task_queue_failed",
+      "value": "失败"
     }
   ]
 }

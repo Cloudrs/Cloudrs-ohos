@@ -2,6 +2,7 @@ import { cloudDelete, cloudGet, cloudGetFile, cloudPost, cloudPut } from "../../
 import {
   Aria2Downloading,
   Aria2Finished,
+  Aria2TaskParam,
   DirectoryInfo, HttpCallback, LoginData, ObjectDetail,SiteConfig, SiteURI, UserInfo,
   UserSetting,
   UserStorage,
@@ -173,4 +174,24 @@ export class CloudApi {
     let uri = SiteURI.USER_TASKS + `?page=${page}`
     return cloudGet(uri, callback)
   }
+
+  /**
+   * 创建aria2下载任务
+   * @param dst  目标路径
+   * @param urls 下载地址url数组
+   * @param callback  回调
+   */
+  static aria2TaskCreate(dst: string, urls: string[], callback?: HttpCallback<null>): void {
+    let param: Aria2TaskParam = { dst, url:urls };
+    return cloudPost(SiteURI.ARIA2_CREATE_TASKS, param, callback)
+  }
+  /**
+   * 删除指定id的aria2任务记录
+   * @param id 需要删除的id
+   * @param callback  回调
+   */
+  static deleteAria2Task(gid: string, callback?: HttpCallback<null>): void {
+    return cloudDelete(SiteURI.ARIA2_DELETE_TASK + '/' + gid, null, callback)
+  }
+
 }

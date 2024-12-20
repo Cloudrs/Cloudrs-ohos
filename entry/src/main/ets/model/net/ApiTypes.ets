@@ -22,7 +22,9 @@ export enum SiteURI {
   AVATAR = '/user/avatar',
   ARIA2_DOWNLOADING = '/aria2/downloading',
   ARIA2_FINISHED = '/aria2/finished',
-  USER_TASKS = '/user/setting/tasks'
+  USER_TASKS = '/user/setting/tasks',
+  ARIA2_CREATE_TASKS = '/aria2/url',
+  ARIA2_DELETE_TASK = '/aria2/task'
 }
 
 export const enum HttpCode {
@@ -236,6 +238,7 @@ export class ObjectDetail {
 }
 
 export enum Aria2Status {
+  ERROR = -1,
   WAITING,
   DOWNLOADING,
   FAILED,
@@ -342,4 +345,9 @@ export interface UserTask {
 export interface UserTasks {
   tasks: UserTask[]
   total: number
+}
+
+export interface Aria2TaskParam {
+  dst: string
+  url: string[]
 }

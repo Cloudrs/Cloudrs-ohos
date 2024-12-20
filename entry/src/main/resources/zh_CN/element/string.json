@@ -338,7 +338,7 @@
     },
     {
       "name": "download_failed",
-      "value": "下载错误"
+      "value": "下载失败"
     },
     {
       "name": "no_download_task",
@@ -395,6 +395,30 @@
     {
       "name": "task_queue_failed",
       "value": "失败"
+    },
+    {
+      "name": "files_list",
+      "value": "文件列表"
+    },
+    {
+      "name": "aria2_url_input_placeholder",
+      "value": "请输入下载地址，一行一个，支持磁力链接与HTTP(S)"
+    },
+    {
+      "name": "aria2_path_select",
+      "value": "请选择路径"
+    },
+    {
+      "name": "aria2_create_task",
+      "value": "创建任务"
+    },
+    {
+      "name": "download_error",
+      "value": "下载错误"
+    },
+    {
+      "name": "aria2_unknown_name",
+      "value": "未知"
     }
   ]
 }

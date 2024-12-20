@@ -10,6 +10,8 @@ import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@ki
 import { DateUtil } from "@pura/harmony-utils";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
+import { CommonUtil } from "../../utils/CommonUtil";
+import { Aria2Create } from "../../components/Aria2Create";
 
 const TAG: string = 'TabRemote'
 
@@ -23,11 +25,12 @@ export struct TabRemoteDown {
     multiply: false,
     backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
   })
-  private  aria2Downloading: Aria2Downloading[] = []
+  @State aria2Downloading: Aria2Downloading[] = []
   private aria2FinishedSource: LazyDataSource<Aria2Finished> = new LazyDataSource()
   private tasksQueueSource: LazyDataSource<UserTask> = new LazyDataSource()
   @State totalFinished: number = 0;
   @State totalTasks: number = 0;
+  @State totalDownloading: number = 0;
   @State selectedIndexes: number[] = [0]
   @State downloadRefresh: boolean = false
   @State tasksQueueRefresh: boolean = false
@@ -38,7 +41,9 @@ export struct TabRemoteDown {
   private scroller: Scroller = new Scroller()
   private tasksQueueScroller: Scroller = new Scroller()
   @State currentFinishedDetail: Aria2Finished|undefined = undefined
-  @State showSheet: boolean = false
+  @State showTaskDetailSheet: boolean = false
+  private timerId?: number = 0
+  @State showCreateSheet: boolean = false
 
   aboutToAppear(): void {
     this.getAria2Downloading()
@@ -46,13 +51,41 @@ export struct TabRemoteDown {
     this.getUserTasks(true)
   }
 
+  startDownloadUpdateTask(interval: number) {
+    if (this.timerId === undefined) {
+      this.timerId = setInterval(() => {
+        this.getAria2Downloading()
+        this.getAria2Finished(true)
+      }, interval)
+    }
+  }
+
+  clearDownloadUpdateTask() {
+    if (this.timerId != undefined) {
+      clearInterval(this.timerId)
+      this.timerId = undefined
+    }
+  }
+
   getAria2Downloading() {
     CloudApi.aria2Downloading({
       onSuccess: (data) => {
-        this.aria2Downloading = data
-        console.debug(TAG, 'downloading number: ' + this.aria2Downloading.length)
+        if (data.length > 0) {
+          this.aria2Downloading = data
+          this.totalDownloading = this.aria2Downloading.length
+          this.startDownloadUpdateTask(data[0].interval < 3 ? 3000 : data[0].interval*1000)
+          console.debug(TAG, 'downloading number: ' + this.totalDownloading)
+        } else {
+          console.warn(TAG, 'no downloading task')
+          this.aria2Downloading = []
+          this.totalDownloading = 0
+          this.clearDownloadUpdateTask()
+        }
       },
       onFailure: (msg) => {
+        this.aria2Downloading = []
+        this.totalDownloading = 0
+        this.clearDownloadUpdateTask()
         console.error(TAG, 'Aria2 downloading get failed, msg: ' + msg)
       }
     })
@@ -127,13 +160,21 @@ export struct TabRemoteDown {
     }
     .width('100%')
     .height('100%')
-    .padding({left: 10, right: 10, top: this.topRectHeight+10})
+    .padding({left: 15, right: 15, top: this.topRectHeight+10})
     .justifyContent(FlexAlign.Start)
-    .bindSheet($$this.showSheet, this.detailSheet())
+    .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet())
   }
 
-  @Builder detailSheet() {
+  @Builder taskDetailSheet() {
     Aria2FinishedDetail({detailData: this.currentFinishedDetail})
+  }
+
+  @Builder taskCreateSheet() {
+    Aria2Create({onFinished: () => {
+      this.getAria2Downloading()
+      this.getAria2Finished(true)
+      this.showCreateSheet = false
+    }})
   }
 
   @Builder title() {
@@ -154,7 +195,11 @@ export struct TabRemoteDown {
       .margin({right: 10})
       .backgroundColor(Color.Transparent)
       .onClick(() => {
-        // 创建离线下载任务
+        this.showCreateSheet = true
+      })
+      .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
+        title: {title: $r('app.string.download_offline')},
+        backgroundColor: $r('app.color.sheet_default_background'),
       })
     }
     .width('100%')
@@ -163,10 +208,87 @@ export struct TabRemoteDown {
 
   getDownloadLength(files: Aria2Files[]) {
     let length: number = 0
-    files.forEach((value) => {
+    files?.forEach((value) => {
       length += parseInt(value.completedLength)
     })
     return length
+  }
+
+  @Builder downloadingItem(item: Aria2Downloading) {
+    Row({space: 10}) {
+      Stack({alignContent: Alignment.Center}) {
+        DataPanel({ values: [item.downloaded], max: item.total, type: DataPanelType.Circle })
+          .width(42)
+          .height(42)
+          .strokeWidth(4)
+          .valueColors([Color.Blue])
+
+        Text(item.info.files ? item.info.files.length.toString() : '1')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+      }
+
+      Column({space: 5}) {
+        Text(item.name === '.' || item.name === '' ? $r('app.string.aria2_unknown_name') : item.name)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .maxLines(1)
+          .wordBreak(WordBreak.BREAK_ALL)
+          .textOverflow({overflow: TextOverflow.Ellipsis})
+
+        Row({space: 5}) {
+          Image($r('app.media.ic_arrowshape_down'))
+            .width(12)
+            .height(12)
+            .fillColor(Color.Black)
+          Text(CommonUtil.formatBytes(item.speed, 1)+'/s')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+
+          Divider().vertical(true).strokeWidth('4px').color($r('app.color.default_line_color'))
+
+          Image($r('app.media.ic_calendar'))
+            .width(12)
+            .height(12)
+            .fillColor($r('app.color.aria2_no_task_font'))
+          Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+        }
+        .height(15)
+        .alignItems(VerticalAlign.Center)
+        .justifyContent(FlexAlign.Start)
+      }
+      .height('100%')
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .justifyContent(FlexAlign.Center)
+
+      Image($r('app.media.ic_dot_grid'))
+        .width(20)
+        .height(20)
+    }
+    .width('100%')
+    .height(60)
+    .borderRadius(10)
+    .padding(10)
+    .backgroundColor($r("app.color.aria2_default_background"))
+    .onClick(() => {
+      console.debug(TAG, 'onClick')
+    })
+  }
+
+  getTaskStatus(task_status: number) {
+    switch (task_status) {
+      case Aria2Status.FINISHED:
+       return $r('app.string.download_finished')
+      case Aria2Status.FAILED:
+        return $r('app.string.download_failed')
+      case Aria2Status.ERROR:
+        return $r('app.string.download_error')
+    }
+
+    return ''
   }
 
   @Builder finishedItem(finished: Aria2Finished) {
@@ -176,15 +298,16 @@ export struct TabRemoteDown {
           .width(42)
           .height(42)
           .strokeWidth(4)
+          .closeEffect(true)
           .valueColors([finished.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red])
 
-        Text(finished.files.length.toString())
+        Text(finished.files?.length.toString())
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
       }
 
       Column({space: 5}) {
-        Text(finished.name)
+        Text(finished.name === '.' ? $r('app.string.aria2_unknown_name') : finished.name)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
@@ -197,8 +320,7 @@ export struct TabRemoteDown {
             .width(12)
             .height(12)
             .fillColor(finished.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red)
-          Text(finished.task_status == Aria2Status.FINISHED ?
-          $r('app.string.download_finished') : $r('app.string.download_failed'))
+          Text(this.getTaskStatus(finished.task_status))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
 
@@ -234,7 +356,7 @@ export struct TabRemoteDown {
     .onClick(() => {
       console.debug(TAG, 'onClick')
       this.currentFinishedDetail = finished
-      this.showSheet = true
+      this.showTaskDetailSheet = true
     })
   }
 
@@ -258,26 +380,28 @@ export struct TabRemoteDown {
   @Builder downloading() {
     if (this.aria2Downloading.length == 0) {
       GridItem() {
-        this.noTask($r('app.string.no_finished_task'))
+        this.noTask($r('app.string.no_download_task'))
       }
     } else {
       ForEach(this.aria2Downloading, (item: Aria2Downloading, index) => {
-
-      })
+        GridItem(){
+          this.downloadingItem(item)
+        }
+      }, (item: Aria2Downloading, index:number) => item.name + index)
     }
   }
 
   @Builder finished() {
     if (this.totalFinished == 0) {
       GridItem() {
-        this.noTask($r('app.string.no_download_task'))
+        this.noTask($r('app.string.no_finished_task'))
       }
     } else {
       LazyForEach(this.aria2FinishedSource, (item: Aria2Finished, index) => {
         GridItem() {
           this.finishedItem(item)
         }
-      }, (item: Aria2Finished, index:number) => item.gid + index)
+      }, (item: Aria2Finished, index:number) => item.name + index)
     }
   }
 
@@ -289,6 +413,7 @@ export struct TabRemoteDown {
       }
       .width('100%')
       .height('100%')
+      .backgroundColor(Color.White)
       .padding({bottom: this.tabBarHeight+10})
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
@@ -366,7 +491,7 @@ export struct TabRemoteDown {
             .height(14)
             .fillColor($r('app.color.aria2_no_task_font'))
           Text(DateUtil.getFormatDateStr(new Date(task.create_date), 'yyyy-MM-dd'))
-            .fontSize(14)
+            .fontSize(12)
             .fontColor($r('app.color.aria2_no_task_font'))
         }
 
@@ -383,12 +508,12 @@ export struct TabRemoteDown {
               .fillColor(task.status == Aria2Status.FINISHED ? Color.Green : Color.Red)
 
           Text($r('app.string.last_progress'))
-            .fontSize(14)
+            .fontSize(12)
             .fontColor($r('app.color.aria2_no_task_font'))
 
           Text(task.status == Aria2Status.FINISHED ?
             $r('app.string.task_queue_finished') : $r('app.string.task_queue_failed'))
-            .fontSize(14)
+            .fontSize(12)
             .fontColor($r('app.color.aria2_no_task_font'))
         }
 
@@ -400,7 +525,7 @@ export struct TabRemoteDown {
               .fillColor($r('app.color.aria2_no_task_font'))
 
             Text(this.getErrorInfo(task.error))
-              .fontSize(14)
+              .fontSize(12)
               .fontColor(Color.Red)
               .wordBreak(WordBreak.BREAK_ALL)
               .layoutWeight(1)
@@ -412,8 +537,8 @@ export struct TabRemoteDown {
       .layoutWeight(1)
 
       Image($r('app.media.ic_task_circle'))
-        .width(48)
-        .height(48)
+        .width(40)
+        .height(40)
         .fillColor(task.status == Aria2Status.FINISHED ? Color.Green : Color.Red)
     }
     .width('100%')

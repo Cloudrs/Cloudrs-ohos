@@ -44,7 +44,7 @@ export struct HomePage {
     .layoutWeight(1)
     .barOverlap(true)
     // .barBackgroundColor(Color.Transparent)
-    .barBackgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .barBackgroundBlurStyle(BlurStyle.BACKGROUND_REGULAR)
     .barMode(BarMode.Fixed)
     .onChange((index) => {
       this.currentIndex = index;

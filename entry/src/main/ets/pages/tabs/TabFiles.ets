@@ -166,7 +166,7 @@ export struct TabFiles {
     .bindSheet($$this.showObjectDetail, this.detailSheet(), {
       detents: [SheetSize.FIT_CONTENT],
       backgroundColor: Color.White,
-      title: {title: $r('app.string.detail_title')}
+      title: {title: $r('app.string.detail_title')},
     })
   }
 

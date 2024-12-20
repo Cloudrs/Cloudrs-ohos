@@ -167,6 +167,10 @@
     {
       "name": "aria2_status_finished",
       "value": "#d6f4de"
+    },
+    {
+      "name": "aria2_path_background",
+      "value": "#0065e0"
     }
   ]
 }

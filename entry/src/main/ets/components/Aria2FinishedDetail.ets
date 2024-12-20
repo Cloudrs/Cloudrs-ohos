@@ -10,8 +10,12 @@ export struct Aria2FinishedDetail {
   onDeleteClick?: () => void
 
   getErrorInfo() {
-    let status_error: TaskError = JSON.parse(this.detailData.task_error)
-    return `${status_error.msg}:${status_error.error}`
+    if (this.detailData.task_error != '') {
+      let status_error: TaskError = JSON.parse(this.detailData.task_error)
+      return `${status_error.msg}:${status_error.error}`
+    } else {
+      return this.detailData.error
+    }
   }
 
   build() {
@@ -51,7 +55,7 @@ export struct Aria2FinishedDetail {
 
       this.taskDetail()
 
-      Text('Files')
+      Text($r('app.string.files_list'))
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
 

@@ -419,6 +419,18 @@
     {
       "name": "aria2_unknown_name",
       "value": "未知"
+    },
+    {
+      "name": "delete_task_confirm",
+      "value": "确认删除该任务"
+    },
+    {
+      "name": "delete_task_success",
+      "value": "删除任务成功"
+    },
+    {
+      "name": "delete_task_failed",
+      "value": "删除任务失败"
     }
   ]
 }

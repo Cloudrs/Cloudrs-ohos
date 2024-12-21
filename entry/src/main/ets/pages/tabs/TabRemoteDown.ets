@@ -12,6 +12,8 @@ import LazyDataSource from "../../utils/LazyDataSource";
 import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { Aria2Create } from "../../components/Aria2Create";
+import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
+import { showToast } from "../../utils/ToastUtil";
 
 const TAG: string = 'TabRemote'
 
@@ -41,6 +43,7 @@ export struct TabRemoteDown {
   private scroller: Scroller = new Scroller()
   private tasksQueueScroller: Scroller = new Scroller()
   @State currentFinishedDetail: Aria2Finished|undefined = undefined
+  @State currentFinishedIndex: number = -1
   @State showTaskDetailSheet: boolean = false
   private timerId?: number = 0
   @State showCreateSheet: boolean = false
@@ -162,11 +165,43 @@ export struct TabRemoteDown {
     .height('100%')
     .padding({left: 15, right: 15, top: this.topRectHeight+10})
     .justifyContent(FlexAlign.Start)
-    .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet())
   }
 
-  @Builder taskDetailSheet() {
-    Aria2FinishedDetail({detailData: this.currentFinishedDetail})
+  deleteTaskConfirm(index: number, item: Aria2Finished) {
+    DialogHelper.showAlertDialog({
+      primaryTitle:  $r('app.string.delete_task_confirm'),
+      content: item.name,
+      primaryButton: {value: $r('app.string.dialog_cancel')},
+      secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
+      onAction: (action: number, dialogId: string, content: string) => {
+        if (action == DialogAction.TWO) {
+          this.showTaskDetailSheet = false
+          console.debug(TAG, `action: ${action}, content: ${content}`)
+          if (item.name != content) {
+            CloudApi.deleteAria2Task(item.gid, {
+              onSuccess: (data) => {
+                this.aria2FinishedSource.deleteData(index)
+                showToast($r('app.string.delete_task_success'))
+              },
+              onFailure: (msg) => {
+                console.error(TAG, '删除任务失败 msg: ' + msg)
+                showToast($r('app.string.delete_task_failed'))
+              }
+            })
+          }
+        }
+      }
+    })
+  }
+
+  @Builder taskDetailSheet(index: number, item?: Aria2Finished) {
+    if (item && index < this.aria2FinishedSource.totalCount()) {
+      Aria2FinishedDetail({
+        detailData: item, onDeleteClick: () => {
+          this.deleteTaskConfirm(index, item)
+        }
+      })
+    }
   }
 
   @Builder taskCreateSheet() {
@@ -291,23 +326,23 @@ export struct TabRemoteDown {
     return ''
   }
 
-  @Builder finishedItem(finished: Aria2Finished) {
+  @Builder finishedItem(index: number, item: Aria2Finished) {
     Row({space: 10}) {
       Stack({alignContent: Alignment.Center}) {
-        DataPanel({ values: [this.getDownloadLength(finished.files)], max: finished.total, type: DataPanelType.Circle })
+        DataPanel({ values: [this.getDownloadLength(item.files)], max: item.total, type: DataPanelType.Circle })
           .width(42)
           .height(42)
           .strokeWidth(4)
           .closeEffect(true)
-          .valueColors([finished.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red])
+          .valueColors([item.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red])
 
-        Text(finished.files?.length.toString())
+        Text(item.files?.length.toString())
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
       }
 
       Column({space: 5}) {
-        Text(finished.name === '.' ? $r('app.string.aria2_unknown_name') : finished.name)
+        Text(item.name === '.' ? $r('app.string.aria2_unknown_name') : item.name)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .maxLines(1)
@@ -315,12 +350,12 @@ export struct TabRemoteDown {
           .textOverflow({overflow: TextOverflow.Ellipsis})
 
         Row({space: 5}) {
-          Image(finished.task_status == Aria2Status.FINISHED ?
+          Image(item.task_status == Aria2Status.FINISHED ?
             $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
             .width(12)
             .height(12)
-            .fillColor(finished.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red)
-          Text(this.getTaskStatus(finished.task_status))
+            .fillColor(item.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red)
+          Text(this.getTaskStatus(item.task_status))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
 
@@ -330,7 +365,7 @@ export struct TabRemoteDown {
             .width(12)
             .height(12)
             .fillColor($r('app.color.aria2_no_task_font'))
-          Text(DateUtil.getFormatDateStr(new Date(finished.update), 'yyyy-MM-dd'))
+          Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
         }
@@ -351,11 +386,12 @@ export struct TabRemoteDown {
     .height(60)
     .borderRadius(10)
     .padding(10)
-    .backgroundColor(finished.task_status == Aria2Status.FINISHED ?
+    .backgroundColor(item.task_status == Aria2Status.FINISHED ?
       $r("app.color.aria2_finished_background") : $r("app.color.aria2_failed_background"))
     .onClick(() => {
       console.debug(TAG, 'onClick')
-      this.currentFinishedDetail = finished
+      this.currentFinishedDetail = item
+      this.currentFinishedIndex = index
       this.showTaskDetailSheet = true
     })
   }
@@ -372,7 +408,6 @@ export struct TabRemoteDown {
     .height(80)
     .borderRadius(10)
     .padding(10)
-    .margin({bottom: 10})
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.Center)
   }
@@ -399,7 +434,7 @@ export struct TabRemoteDown {
     } else {
       LazyForEach(this.aria2FinishedSource, (item: Aria2Finished, index) => {
         GridItem() {
-          this.finishedItem(item)
+          this.finishedItem(index, item)
         }
       }, (item: Aria2Finished, index:number) => item.name + index)
     }
@@ -409,6 +444,9 @@ export struct TabRemoteDown {
     Refresh({refreshing: $$this.downloadRefresh}) {
       Grid(this.scroller) {
         this.downloading()
+        GridItem() {
+          Row().height(10)
+        }
         this.finished()
       }
       .width('100%')
@@ -430,6 +468,7 @@ export struct TabRemoteDown {
           console.warn(TAG, 'last finished page！！！')
         }
       })
+      .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail))
     }
     .layoutWeight(1)
     .refreshOffset(77)

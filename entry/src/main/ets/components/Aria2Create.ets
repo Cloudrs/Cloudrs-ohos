@@ -38,7 +38,8 @@ export struct Aria2Create {
         .align(Alignment.TopStart)
         .onChange((value) => {
           this.urls = value.split(/\r\n|\r|\n/)
-          console.debug(TAG, 'urls: ' + this.urls)
+          //console.debug(TAG, 'urls: ' + this.urls)
+          console.debug(TAG, 'path: ' + this.path)
         })
 
       Row({space: 10}) {
@@ -50,13 +51,12 @@ export struct Aria2Create {
           .fontColor(Color.White)
           .fontSize(16)
           .wordBreak(WordBreak.BREAK_ALL)
-          .layoutWeight(1)
       }
       .width('100%')
       .padding(10)
       .borderRadius(5)
       .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.Start)
+      .justifyContent(FlexAlign.Center)
       .backgroundColor($r('app.color.aria2_path_background'))
       .onClick(() => {
         this.isShowPathSelect = true
@@ -78,8 +78,8 @@ export struct Aria2Create {
       }
       .width('100%')
       .padding(10)
-      .borderRadius(10)
-      .enabled(this.path != '' && this.inputUrls != '')
+      .borderRadius(5)
+      .enabled(this.path != undefined && this.inputUrls != '')
       .onClick(() => {
         if (this.path) {
           this.createAria2Task(this.path)

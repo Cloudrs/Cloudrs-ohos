@@ -1,4 +1,4 @@
-import { Transport } from "../pages/Transport";
+import { Transport } from "./Transport";
 
 @Component
 export struct TabFilesHeader {
@@ -56,7 +56,7 @@ export struct TabFilesHeader {
           .bindSheet($$this.showTransport, this.transportBuilder(), {
             // detents: [SheetSize.FIT_CONTENT],
             backgroundColor: Color.White,
-            title: {title: $r('app.string.transport_title')}
+            title: this.transportTitle($r('app.string.transport_title'))
           })
 
           Button() {
@@ -85,6 +85,16 @@ export struct TabFilesHeader {
     .width('100%')
     .height(40)
     .align(Alignment.Center)
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder transportTitle(title: ResourceStr) {
+    Row() {
+      Text(title)
+        .fontSize(18)
+        .fontWeight(FontWeight.Bold)
+    }
+    .width('100%')
     .justifyContent(FlexAlign.Center)
   }
 

@@ -1,4 +1,8 @@
-import { cloudDelete, cloudGet, cloudGetFile, cloudPatch,
+import {
+  baseUrlGet,
+  cloudDelete, cloudGet, cloudGetFile,
+  cloudGetLargeFile,
+  cloudPatch,
   cloudPatchWithRcp,
   cloudPost, cloudPut } from "../../utils/AxiosRequest";
 import { FileType } from "../../utils/CommonUtil";
@@ -7,11 +11,14 @@ import {
   Aria2Finished,
   Aria2TaskParam,
   DirectoryInfo, HttpCallback, LoginData, ObjectDetail,
-  ObjectInfo,SiteConfig, SiteURI, UserInfo,
+  ObjectInfo,
+  ProgressCallback,SiteConfig, SiteURI, UserInfo,
   UserSetting,
   UserStorage,
   UserTasks} from "./ApiTypes";
 import { ObjectCopy, ObjectMove, ObjectNew, ObjectRename, ObjectSrc } from "./ObjectParam";
+import call from "@ohos.telephony.call";
+import { uri } from "@kit.ArkTS";
 
 export class CloudApi {
   /**
@@ -24,6 +31,12 @@ export class CloudApi {
     } else {
       return item.path
     }
+  }
+
+  static getBaseURL() {
+    let url = new uri.URI(baseUrlGet());
+    // 构造基础 URL：协议 + 主机名（包括端口，如果有的话）
+    return `${url.scheme}://${url.host}${url.port != '-1' ? ':' + url.port : ''}`;
   }
 
   /**
@@ -227,6 +240,26 @@ export class CloudApi {
    */
   static deleteAria2Task(gid: string, callback?: HttpCallback<null>): void {
     return cloudDelete(SiteURI.ARIA2_DELETE_TASK + '/' + gid, null, callback)
+  }
+
+  /**
+   * 获取指定id的下载uri
+   * @param id        文件或者文件夹的id
+   * @param callback  回调
+   */
+  static getDownloadUri(id: string, callback?: HttpCallback<string>): void {
+    return cloudPut(SiteURI.DOWNLOAD_REQUEST + '/' + id, null, callback)
+  }
+
+  /**
+   * 下载指定uri的文件
+   * @param uri       获取到的文件uri
+   * @param filePath  文件下载路径
+   * @param callback  回调
+   * @param progress  下载进度回调
+   */
+  static downloadFile(uri: string, filePath: string, callback?: HttpCallback<string>, progress?: ProgressCallback) {
+    cloudGetLargeFile(CloudApi.getBaseURL() + uri, filePath, callback, progress)
   }
 
 }

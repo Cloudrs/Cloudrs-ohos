@@ -18,6 +18,7 @@ import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
 import { CommonUtil, FileType } from "../../utils/CommonUtil";
 import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
+import { common } from "@kit.AbilityKit";
 
 const TAG = 'TabFiles';
 
@@ -375,6 +376,7 @@ export struct TabFiles {
         this.showPathSelect = true
         break
       case FileMenuType.DOWNLOAD:
+        this.itemDownload(index, item)
         break
       case FileMenuType.DELETE:
         this.itemDelete(index, item)
@@ -515,6 +517,26 @@ export struct TabFiles {
             })
           }
         }
+      }
+    })
+  }
+
+  itemDownload(index: number, item: ObjectInfo) {
+    let context = getContext(this) as common.UIAbilityContext;
+    let filePath = context.filesDir + '/' + item.name
+
+    CloudApi.getDownloadUri(item.id, {
+      onSuccess: (data) => {
+        console.debug(TAG, 'name: ' + item.name, 'download uri: ' + data)
+        CloudApi.downloadFile(data, filePath, {
+          onSuccess: (data) => {
+
+          },
+          onFailure: (msg) => {}
+        })
+      },
+      onFailure: (msg) => {
+        console.error(TAG, 'get download uri failed, msg: ' + msg)
       }
     })
   }

@@ -1,4 +1,4 @@
-import { image } from "@kit.ImageKit";
+import { AxiosProgressEvent } from "@ohos/axios";
 import Constant from "../Constant";
 import { SortType } from "../MenuModel";
 
@@ -24,7 +24,8 @@ export enum SiteURI {
   ARIA2_FINISHED = '/aria2/finished',
   USER_TASKS = '/user/setting/tasks',
   ARIA2_CREATE_TASKS = '/aria2/url',
-  ARIA2_DELETE_TASK = '/aria2/task'
+  ARIA2_DELETE_TASK = '/aria2/task',
+  DOWNLOAD_REQUEST = '/file/download'
 }
 
 export const enum HttpCode {
@@ -35,6 +36,11 @@ export interface HttpCallback<T> {
   onStart?: () => void
   onSuccess: (data: T) => void
   onFailure: (msg: string) => void
+}
+
+export interface ProgressCallback {
+  onDownloadProgress?: (progress: AxiosProgressEvent) => void
+  onUploadProgress?: () => void
 }
 
 /**

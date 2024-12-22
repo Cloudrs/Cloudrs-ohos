@@ -10,6 +10,8 @@ import { systemShare } from "@kit.ShareKit";
 import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
 
+const TAG: string = 'ImagePreview'
+
 @HMRouter({pageUrl: Constant.IAMGE_PREVIEW_PAGE})
 @Component
 export struct iamgePreview {
@@ -165,7 +167,7 @@ export struct iamgePreview {
         await phAccessHelper.applyChanges(assetChangeRequest);
         showToast('已保存至相册')
       } catch(err) {
-        console.error('ImagePreview', `addResourceByArrayBufferDemo failed with error: ${err.code}, ${err.message}`);
+        console.error(TAG, `addResourceByArrayBufferDemo failed with error: ${err.code}, ${err.message}`);
         showToast('保存至相册失败')
       }
     }
@@ -177,7 +179,7 @@ export struct iamgePreview {
         let context = getContext(this) as common.UIAbilityContext;
         let path = context.tempDir + '/' + this.fileParam.fileName
         let uri = FileUtil.getUriFromPath(path)
-        console.debug('ImagePreview', 'uri: ' + uri)
+        console.debug(TAG, 'uri: ' + uri)
         await FileUtil.writeEasy(uri, this.imageData, false)
         // 保存到应用沙箱先，后续支持直接将arraybuffer发送就最好了
         let data: systemShare.SharedData = new systemShare.SharedData({
@@ -191,11 +193,11 @@ export struct iamgePreview {
           selectionMode: systemShare.SelectionMode.SINGLE
         })
         controller.on('dismiss', () => {
-          console.debug('ImagePreview', 'share dismiss, unlink image file!')
+          console.debug(TAG, 'share dismiss, unlink image file!')
           FileUtil.unlink(path)
         })
       } catch(err) {
-        console.error('ImagePreview', `share image failed with error: ${err.code}, ${err.message}`);
+        console.error(TAG, `share image failed with error: ${err.code}, ${err.message}`);
         showToast('分享失败')
       }
     }

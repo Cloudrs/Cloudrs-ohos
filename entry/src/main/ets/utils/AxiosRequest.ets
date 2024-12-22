@@ -1,9 +1,12 @@
-import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from "@ohos/axios";
-import {BaseResponse, HttpCallback, HttpCode, SiteURI } from "../model/net/ApiTypes";
+import axios, { AxiosError, AxiosProgressEvent, AxiosResponse, InternalAxiosRequestConfig } from "@ohos/axios";
+import {BaseResponse, HttpCallback, HttpCode, ProgressCallback, SiteURI } from "../model/net/ApiTypes";
 import Constant from "../model/Constant";
 import { JSON } from "@kit.ArkTS";
 import { rcp } from '@kit.RemoteCommunicationKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { FileUtil } from "@pura/harmony-utils";
+
+const TAG: string = 'AxiosRequest'
 
 const axiosInstance = axios.create({
   baseURL: 'https://cloudrs.cn/api/v3',
@@ -20,13 +23,13 @@ axiosInstance.interceptors.request.use(
     return config;
   },
   (error: AxiosError) => {
-    console.error('AxiosRequest Error:', error);
+    console.error(TAG, 'Error:', error);
     return Promise.reject(error);
   }
 );
 
 export function baseUrlSet(url: string) {
-  console.debug('AxiosRequest', `baseUrl: ${url}`)
+  console.debug(TAG, `baseUrl: ${url}`)
   axiosInstance.defaults.baseURL = url + SiteURI.PREFIX
 }
 
@@ -35,7 +38,7 @@ export function baseUrlGet(): string {
 }
 
 export function cookieSet(cookie: string) {
-  console.debug('AxiosRequest', "Set-Cookie :", cookie);
+  console.debug(TAG, "Set-Cookie :", cookie);
   axiosInstance.defaults.headers.common['Cookie'] = cookie
 }
 
@@ -57,18 +60,18 @@ export function cloudGet<T>(path: string, callback?:HttpCallback<T>) {
   axiosInstance.get<BaseResponse<T>>(encodeURI(path))
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "GET success :", JSON.stringify(resp))
+        console.debug(TAG, "GET success :", JSON.stringify(resp))
         if (callback?.onSuccess) {
           callback.onSuccess(resp.data.data)
         }
       } else {
-        console.error('AxiosRequest', `GET failed : ${resp.status}`, JSON.stringify(resp))
+        console.error(TAG, `GET failed : ${resp.status}`, JSON.stringify(resp))
         if (callback?.onFailure) {
           callback.onFailure(resp.data.msg)
         }
       }
     }).catch((error: AxiosError) => {
-    console.error('AxiosRequest', `GET error : ${error.message}`)
+    console.error(TAG, `GET error : ${error.message}`)
     if (callback?.onFailure) {
       callback.onFailure(error.message)
     }
@@ -90,18 +93,18 @@ export function cloudDelete<T, V>(path: string, body: V, callback?:HttpCallback<
   axiosInstance.delete<BaseResponse<T>>(encodeURI(path), {data: body})
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "DELETE success :", JSON.stringify(resp))
+        console.debug(TAG, "DELETE success :", JSON.stringify(resp))
         if (callback?.onSuccess) {
           callback.onSuccess(resp.data.data)
         }
       } else {
-        console.error('AxiosRequest', `DELETE failed : ${resp.status}`, JSON.stringify(resp))
+        console.error(TAG, `DELETE failed : ${resp.status}`, JSON.stringify(resp))
         if (callback?.onFailure) {
           callback.onFailure(resp.data.msg)
         }
       }
     }).catch((error: AxiosError) => {
-    console.error('AxiosRequest', `DELETE error : ${error.message}`)
+    console.error(TAG, `DELETE error : ${error.message}`)
     if (callback?.onFailure) {
       callback.onFailure(error.message)
     }
@@ -123,18 +126,18 @@ export function cloudPut<T, V>(path: string, body: V, callback?:HttpCallback<T>)
   axiosInstance.put<BaseResponse<T>>(encodeURI(path), body)
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "PUT success :", JSON.stringify(resp))
+        console.debug(TAG, "PUT success :", JSON.stringify(resp))
         if (callback?.onSuccess) {
           callback.onSuccess(resp.data.data)
         }
       } else {
-        console.error('AxiosRequest', `PUT failed : ${resp.status}`, JSON.stringify(resp))
+        console.error(TAG, `PUT failed : ${resp.status}`, JSON.stringify(resp))
         if (callback?.onFailure) {
           callback.onFailure(resp.data.msg)
         }
       }
     }).catch((error: AxiosError) => {
-    console.error('AxiosRequest', `PUT error : ${error.message}`)
+    console.error(TAG, `PUT error : ${error.message}`)
     if (callback?.onFailure) {
       callback.onFailure(error.message)
     }
@@ -156,7 +159,7 @@ export function cloudPost<T, V>(path: string, body: V, callback?:HttpCallback<T>
   axiosInstance.post<BaseResponse<T>>(encodeURI(path), body)
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "POST success :", JSON.stringify(resp))
+        console.debug(TAG, "POST success :", JSON.stringify(resp))
 
         /* 返回cookies进行保存 */
         let cookies: string | undefined = resp.headers["set-cookie"]?.toString()
@@ -179,13 +182,13 @@ export function cloudPost<T, V>(path: string, body: V, callback?:HttpCallback<T>
           callback.onSuccess(resp.data.data)
         }
       } else {
-        console.error('AxiosRequest', `POST failed : ${resp.status}`, JSON.stringify(resp))
+        console.error(TAG, `POST failed : ${resp.status}`, JSON.stringify(resp))
         if (callback?.onFailure) {
           callback.onFailure(resp.data.msg)
         }
       }
     }).catch((error: AxiosError) => {
-      console.error('AxiosRequest', `POST error : ${error.message}`)
+      console.error(TAG, `POST error : ${error.message}`)
       if (callback?.onFailure) {
         callback.onFailure(error.message)
       }
@@ -208,7 +211,7 @@ export function cloudGetFile(path: string, callback?:HttpCallback<ArrayBuffer>) 
       // 这里认为返回的数据小于500为异常，可能返回的是json状态错误码
       if ( resp.status === 200 && resp.data.byteLength > 500) {
         if (callback?.onSuccess) {
-          console.debug('AxiosRequest', `GET file: ${path} success`)
+          console.debug(TAG, `GET file: ${path} success`)
           callback.onSuccess(resp.data)
         }
       } else {
@@ -216,19 +219,67 @@ export function cloudGetFile(path: string, callback?:HttpCallback<ArrayBuffer>) 
         let data = JSON.parse(json)
           if (data) {
             let baseResp = data as BaseResponse<string>
-            console.error('AxiosRequest', `GET file failed : ${resp.status}, code : ${baseResp.code}, msg: ${baseResp.msg}`, JSON.stringify(resp))
+            console.error(TAG, `GET file failed : ${resp.status}, code : ${baseResp.code}, msg: ${baseResp.msg}`, JSON.stringify(resp))
             if (callback?.onFailure) {
               callback.onFailure(baseResp.msg)
             }
           }
       }
     }).catch((error: AxiosError) => {
-    console.error('AxiosRequest', `GET file error : ${error.message}`)
+    console.error(TAG, `GET file error : ${error.message}`)
     if (callback?.onFailure) {
       callback.onFailure(error.message)
     }
   })
 }
+
+/**
+ * 网站通用文件GET请求,返回实际ArrayBuffer数据
+ * @param path  请求uri路径
+ * @param callback 回调函数
+ * @returns
+ */
+export function cloudGetLargeFile(url: string, filePath: string, callback?: HttpCallback<string>, progress?: ProgressCallback) {
+  // 下载。如果文件已存在，则先删除文件。
+  try {
+    FileUtil.accessSync(filePath);
+    FileUtil.unlinkSync(filePath);
+  } catch(err) {}
+
+  axios({
+    url: url,
+    method: 'get',
+    // context: getContext(this),
+    filePath: filePath ,
+    onDownloadProgress: (progressEvent: AxiosProgressEvent): void => {
+      // console.info(TAG, "progress: " + progressEvent.progress)
+      // console.debug(TAG, "progress: " + (progressEvent && progressEvent.loaded && progressEvent.total ?
+      // Math.ceil(progressEvent.loaded / progressEvent.total * 100) : 0))
+      if (progress && progress.onDownloadProgress) {
+        progress.onDownloadProgress(progressEvent)
+      }
+    }
+  }).then((resp: AxiosResponse)=>{
+    console.debug(TAG, "result: " + JSON.stringify(resp.data));
+    if ( resp.status === 200) {
+      if (callback?.onSuccess) {
+        console.debug(TAG, `GET file: ${url} success`)
+        callback.onSuccess(resp.data.data)
+      }
+    } else {
+      console.error(TAG, "get file failed");
+      if (callback?.onFailure) {
+        callback.onFailure('get file failed')
+      }
+    }
+  }).catch((error: AxiosError)=>{
+    console.error(TAG, "error:" + JSON.stringify(error));
+    if (callback?.onFailure) {
+      callback.onFailure(error.message)
+    }
+  })
+}
+
 
 /**
  * 网站通用patch请求,T为返回json结构中data数据
@@ -245,18 +296,18 @@ export function cloudPatch<T, V>(path: string, body: V, callback?:HttpCallback<T
   axiosInstance.patchForm<BaseResponse<T>>(encodeURI(path), body)
     .then((resp: AxiosResponse<BaseResponse<T>>) => {
       if ( resp.status === 200 && resp.data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "PATCH success :", JSON.stringify(resp))
+        console.debug(TAG, "PATCH success :", JSON.stringify(resp))
         if (callback?.onSuccess) {
           callback.onSuccess(resp.data.data)
         }
       } else {
-        console.error('AxiosRequest', `PATCH failed : ${resp.status}`, JSON.stringify(resp))
+        console.error(TAG, `PATCH failed : ${resp.status}`, JSON.stringify(resp))
         if (callback?.onFailure) {
           callback.onFailure(resp.data.msg)
         }
       }
     }).catch((error: AxiosError) => {
-    console.error('AxiosRequest', `PATCH error : ${error.message}`)
+    console.error(TAG, `PATCH error : ${error.message}`)
     if (callback?.onFailure) {
       callback.onFailure(error.message)
     }
@@ -294,18 +345,18 @@ export function cloudPatchWithRcp<T>(path: string, body: object, callback?:HttpC
     .then((resp: rcp.Response) => {
       let data = resp.toJSON() as BaseResponse<T>
       if ( resp.statusCode === 200 && data.code === HttpCode.SUCCESS) {
-        console.debug('AxiosRequest', "PATCH success :", JSON.stringify(data))
+        console.debug(TAG, "PATCH success :", JSON.stringify(data))
         if (callback?.onSuccess) {
           callback.onSuccess(data.data)
         }
       } else {
-        console.error('AxiosRequest', `PATCH failed : ${resp.statusCode}`, JSON.stringify(data))
+        console.error(TAG, `PATCH failed : ${resp.statusCode}`, JSON.stringify(data))
         if (callback?.onFailure) {
           callback.onFailure(data.msg)
         }
       }
     }).catch((error: BusinessError) => {
-      console.error('AxiosRequest', `PATCH error : ${error.message}`)
+      console.error(TAG, `PATCH error : ${error.message}`)
       if (callback?.onFailure) {
         callback.onFailure(error.message)
       }

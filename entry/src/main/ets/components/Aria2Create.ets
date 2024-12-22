@@ -1,5 +1,6 @@
 import Constant from "../model/Constant"
 import { CloudApi } from "../model/net/CloudApi";
+import { PathSelectSheet } from "./PathSelectSheet";
 
 const TAG: string = 'Aria2Create'
 
@@ -7,12 +8,13 @@ const TAG: string = 'Aria2Create'
 export struct Aria2Create {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State inputUrls: string = ''
-  @State path: string = ''
+  @State path: string|undefined = undefined
+  @State isShowPathSelect: boolean = false
   private urls: string[] = []
   onFinished?: () => void
 
-  createAria2Task() {
-    CloudApi.aria2TaskCreate(this.path, this.urls, {
+  createAria2Task(path: string) {
+    CloudApi.aria2TaskCreate(path, this.urls, {
       onSuccess: (data) => {
         if (this.onFinished) {
           this.onFinished()
@@ -44,7 +46,7 @@ export struct Aria2Create {
           .width(30)
           .height(30)
 
-        Text(this.path === '' ? $r('app.string.aria2_path_select') : this.path)
+        Text(this.path == undefined ? $r('app.string.aria2_path_select') : this.path)
           .fontColor(Color.White)
           .fontSize(16)
           .wordBreak(WordBreak.BREAK_ALL)
@@ -57,13 +59,12 @@ export struct Aria2Create {
       .justifyContent(FlexAlign.Start)
       .backgroundColor($r('app.color.aria2_path_background'))
       .onClick(() => {
-        //TODO: 进入选择路径
-        this.path = '/demo01'
+        this.isShowPathSelect = true
       })
 
       Button({type: ButtonType.Normal}) {
         Row({space: 10}) {
-          Image($r('app.media.ic_aria2_create'))
+          Image($r('app.media.ic_tabbar_remote_down'))
             .width(30)
             .height(30)
 
@@ -80,7 +81,9 @@ export struct Aria2Create {
       .borderRadius(10)
       .enabled(this.path != '' && this.inputUrls != '')
       .onClick(() => {
-        this.createAria2Task()
+        if (this.path) {
+          this.createAria2Task(this.path)
+        }
       })
     }
     .width('100%')
@@ -89,5 +92,18 @@ export struct Aria2Create {
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
     .backgroundColor($r('app.color.sheet_default_background'))
+    .bindSheet($$this.isShowPathSelect, this.selectPathSheet(), {
+      showClose: false
+    })
+  }
+
+  @Builder selectPathSheet() {
+    PathSelectSheet({title: $r('app.string.aria2_download_to'), onClose: (isFinished: boolean, path?: string) => {
+      this.isShowPathSelect = false
+      if (isFinished && path !== '') {
+        console.debug(TAG, 'select path: ' + path)
+        this.path = path
+      }
+    }})
   }
 }

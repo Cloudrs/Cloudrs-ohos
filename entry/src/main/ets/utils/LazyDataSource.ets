@@ -96,6 +96,13 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
     this.notifyDataDelete(index);
   }
 
+  public deleteDataByItem(data: T): void {
+    let index = this.dataArray.indexOf(data)
+    if (index != -1) {
+      this.notifyDataDelete(index);
+    }
+  }
+
   public getDataList(): ObservedArray<T> {
     return this.dataArray;
   }

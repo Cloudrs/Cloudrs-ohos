@@ -5,7 +5,7 @@
 class Constant {
   USER_PREFERENCES = 'UserPreference'
   ACTIVE_USER_KEY = 'ActiveUser'
-  REQUEST_TIMEOUT: number = 3000
+  REQUEST_TIMEOUT: number = 5000
   SYSTEM_TOP_RECT_HEIGHT: string = 'sysTopRectHeight'
   APP_VERSION: string = 'appVersion'
   NAV_BOTTOM_RECT_HEIGHT: string = 'navBottomRectHeight'

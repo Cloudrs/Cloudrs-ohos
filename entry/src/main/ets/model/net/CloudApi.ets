@@ -1,15 +1,31 @@
-import { cloudDelete, cloudGet, cloudGetFile, cloudPost, cloudPut } from "../../utils/AxiosRequest";
+import { cloudDelete, cloudGet, cloudGetFile, cloudPatch,
+  cloudPatchWithRcp,
+  cloudPost, cloudPut } from "../../utils/AxiosRequest";
+import { FileType } from "../../utils/CommonUtil";
 import {
   Aria2Downloading,
   Aria2Finished,
   Aria2TaskParam,
-  DirectoryInfo, HttpCallback, LoginData, ObjectDetail,SiteConfig, SiteURI, UserInfo,
+  DirectoryInfo, HttpCallback, LoginData, ObjectDetail,
+  ObjectInfo,SiteConfig, SiteURI, UserInfo,
   UserSetting,
   UserStorage,
   UserTasks} from "./ApiTypes";
-import { ObjectNew, ObjectRename, ObjectSrc } from "./ObjectParam";
+import { ObjectCopy, ObjectMove, ObjectNew, ObjectRename, ObjectSrc } from "./ObjectParam";
 
 export class CloudApi {
+  /**
+   * 获取完整路径
+   * @param callback  回调
+   */
+  static getTotalPath(item: ObjectInfo) {
+    if (item.type == 'dir') {
+      return item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`
+    } else {
+      return item.path
+    }
+  }
+
   /**
    * 网站测试
    * @param callback  回调
@@ -123,6 +139,25 @@ export class CloudApi {
    */
   static deleteObjects(src: ObjectSrc, callback?: HttpCallback<null>): void {
     return cloudDelete(SiteURI.OBJECT, src, callback)
+  }
+
+  /**
+   * 复制指定路径下对象，可一次复制多个文件及文件夹
+   * @param copy 需要复制的对象，可以包括文件夹和文件
+   * @param callback  回调
+   */
+  static copyObjects(copy: ObjectCopy,  callback?: HttpCallback<null>): void {
+    return cloudPost(SiteURI.OBJECT_COPY, copy, callback)
+  }
+
+  /**
+   * 移动指定路径下对象，可一次移动多个文件及文件夹
+   * @param move 需要移动的对象，可以包括文件夹和文件
+   * @param callback  回调
+   */
+  static moveObjects(move: ObjectMove,  callback?: HttpCallback<null>): void {
+    // return cloudPatch(SiteURI.OBJECT, move, callback)
+    return cloudPatchWithRcp(SiteURI.OBJECT, move, callback)
   }
 
   /**

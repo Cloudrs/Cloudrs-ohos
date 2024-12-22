@@ -389,11 +389,11 @@
       "value": "最后进度:"
     },
     {
-      "name": "task_queue_finished",
+      "name": "finished",
       "value": "完成"
     },
     {
-      "name": "task_queue_failed",
+      "name": "failed",
       "value": "失败"
     },
     {
@@ -431,6 +431,46 @@
     {
       "name": "delete_task_failed",
       "value": "删除任务失败"
+    },
+    {
+      "name": "select_path",
+      "value": "路径选择"
+    },
+    {
+      "name": "copy_to",
+      "value": "复制到:"
+    },
+    {
+      "name": "move_to",
+      "value": "移动到:"
+    },
+    {
+      "name": "aria2_download_to",
+      "value": "离线下载到:"
+    },
+    {
+      "name": "get_failed",
+      "value": "获取失败或超时"
+    },
+    {
+      "name": "backup_to",
+      "value": "备份相册到:"
+    },
+    {
+      "name": "copy_success",
+      "value": "复制成功"
+    },
+    {
+      "name": "copy_failed",
+      "value": "复制失败"
+    },
+    {
+      "name": "move_success",
+      "value": "移动成功"
+    },
+    {
+      "name": "move_failed",
+      "value": "移动失败"
     }
   ]
 }

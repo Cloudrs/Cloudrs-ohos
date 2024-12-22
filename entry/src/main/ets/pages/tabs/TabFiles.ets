@@ -16,8 +16,36 @@ import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";
 import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
 import { CommonUtil, FileType } from "../../utils/CommonUtil";
+import { PathSelectSheet } from "../../components/PathSelectSheet";
+import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 
 const TAG = 'TabFiles';
+
+class ObjectSelect {
+  index: number = -1
+  type: FileMenuType = FileMenuType.COPY
+  selectPathTitle: ResourceStr = ''
+  selectPathId: string = ''
+  copyMoveObjects: ObjectInfo[] = []
+
+  constructor(type?: FileMenuType, selectPathTitle?: ResourceStr, selectPathId?: string, copyMoveObjects?: ObjectInfo[]) {
+    if (type) {
+      this.type = type;
+    }
+
+    if (selectPathTitle) {
+      this.selectPathTitle = selectPathTitle;
+    }
+
+    if (selectPathId) {
+      this.selectPathId = selectPathId;
+    }
+
+    if (copyMoveObjects) {
+      this.copyMoveObjects = copyMoveObjects;
+    }
+  }
+}
 
 @Component
 export struct TabFiles {
@@ -41,6 +69,8 @@ export struct TabFiles {
   @State fileDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
   @State objectsInfo: DirFileInfo = new DirFileInfo();
   @State isGridPadding: boolean = false;
+  @State showPathSelect: boolean = false
+  private objectSelect: ObjectSelect = new ObjectSelect()
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -125,11 +155,70 @@ export struct TabFiles {
         this.isRefreshing = false
       },
       onFailure: (msg) => {
-        showToastTips('获取文件失败', ToastType.Error)
+        showToastTips($r('app.string.get_failed'), ToastType.Error)
         //决定是否重新登录
         this.isRefreshing = false
       }
     })
+  }
+
+  dataSourceDelete() {
+    let objects = this.objectSelect.copyMoveObjects
+    if (objects.length > 1) {
+      objects.forEach((item) => {
+        if (item.type == Constant.OBJECT_DIR_TYPE) {
+          this.dirDataSource.deleteDataByItem(item)
+          this.isGridPadding = this.dirDataSource.totalCount() % 2 ? true : false
+        } else {
+          this.fileDataSource.deleteDataByItem(item)
+        }
+      })
+    } else if (this.objectSelect.index !== -1) {
+      if (objects[0].type == Constant.OBJECT_DIR_TYPE) {
+        this.dirDataSource.deleteData(this.objectSelect.index)
+        this.isGridPadding = this.dirDataSource.totalCount() % 2 ? true : false
+      } else {
+        this.fileDataSource.deleteData(this.objectSelect.index)
+      }
+    }
+  }
+
+  copyMoveObjects(dst: string) {
+    if (this.objectSelect.copyMoveObjects?.length > 0) {
+      let src: ObjectSrc = new ObjectSrc()
+      this.objectSelect.copyMoveObjects.forEach((item, index) => {
+        if (item.type == Constant.OBJECT_DIR_TYPE) {
+          src.dirs.push(item.id)
+        } else {
+          src.items.push(item.id)
+        }
+      })
+
+      if (this.objectSelect.type == FileMenuType.COPY) {
+        let param: ObjectCopy = new ObjectCopy(this.currentPath, src, dst)
+        CloudApi.copyObjects(param, {
+          onSuccess: (data) => {
+            showToast($r('app.string.copy_success'))
+          },
+          onFailure: (msg) => {
+            console.error(TAG, 'copy failed, msg: ' + msg)
+            showToast($r('app.string.copy_failed'))
+          }
+        })
+      } else if (this.objectSelect.type == FileMenuType.MOVE) {
+        let param: ObjectMove = new ObjectMove(this.currentPath, src, dst)
+        CloudApi.moveObjects(param, {
+          onSuccess: (data) => {
+            this.dataSourceDelete()
+            showToast($r('app.string.move_success'))
+          },
+          onFailure: (msg) => {
+            console.error(TAG, 'move failed, msg: ' + msg)
+            showToast($r('app.string.move_failed'))
+          }
+        })
+      }
+    }
   }
 
   build() {
@@ -214,6 +303,23 @@ export struct TabFiles {
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: 300})
     .scrollBarWidth(2)
+    .bindSheet($$this.showPathSelect, this.selectPathSheet(), {
+      showClose: false
+    })
+  }
+
+  @Builder selectPathSheet() {
+    PathSelectSheet({
+      title: this.objectSelect.selectPathTitle,
+      filterDirId: this.objectSelect.selectPathId,
+      onClose: (isFinished: boolean, path?: string) => {
+        this.showPathSelect = false
+        if (isFinished && path && path != '') {
+          console.debug(TAG, 'select path: ' + path)
+          this.copyMoveObjects(path)
+        }
+    }
+    })
   }
 
   @Builder detailSheet() {
@@ -222,8 +328,7 @@ export struct TabFiles {
 
   async onItemClick(item: ObjectInfo) {
     if (item.type == Constant.OBJECT_DIR_TYPE) {
-      await this.getFileList(true,
-        item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`)
+      await this.getFileList(true, CloudApi.getTotalPath(item))
     }
     else {
       let fileType = CommonUtil.getFileType(item.name)
@@ -251,8 +356,23 @@ export struct TabFiles {
         this.itemRename(index, item)
         break
       case FileMenuType.COPY:
-        break
       case FileMenuType.MOVE:
+        this.objectSelect.index = index
+        if (type == FileMenuType.COPY) {
+          this.objectSelect.selectPathTitle = $r('app.string.copy_to')
+        } else if (type == FileMenuType.MOVE) {
+          this.objectSelect.selectPathTitle = $r('app.string.move_to')
+        }
+        this.objectSelect.type = type
+        this.objectSelect.copyMoveObjects.splice(0, this.copyMoveObjects.length)
+        this.objectSelect.copyMoveObjects.push(item)
+        if (item.type == Constant.OBJECT_DIR_TYPE) {
+          this.objectSelect.selectPathId = item.id
+        }
+        else {
+          this.objectSelect.selectPathId = ''
+        }
+        this.showPathSelect = true
         break
       case FileMenuType.DOWNLOAD:
         break

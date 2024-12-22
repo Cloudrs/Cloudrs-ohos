@@ -6,7 +6,7 @@ import { Aria2Downloading,
   UserTask, UserTasks,
   UserTaskType } from "../../model/net/ApiTypes";
 import { CloudApi } from "../../model/net/CloudApi";
-import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { ContentItem, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
 import { DateUtil } from "@pura/harmony-utils";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
@@ -233,6 +233,7 @@ export struct TabRemoteDown {
         this.showCreateSheet = true
       })
       .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
+        detents: [SheetSize.FIT_CONTENT],
         title: {title: $r('app.string.download_offline')},
         backgroundColor: $r('app.color.sheet_default_background'),
       })
@@ -468,7 +469,9 @@ export struct TabRemoteDown {
           console.warn(TAG, 'last finished page！！！')
         }
       })
-      .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail))
+      .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
+        detents: [SheetSize.FIT_CONTENT]
+      })
     }
     .layoutWeight(1)
     .refreshOffset(77)
@@ -504,7 +507,7 @@ export struct TabRemoteDown {
       .cachedCount(3)
       .columnsGap(10)
       .rowsGap(10)
-      .animation({duration: 300})
+      // .animation({duration: 300})
       .onReachEnd(() => {
         if (!this.isLastTasksQueuePage) {
           this.getUserTasks(false)
@@ -551,7 +554,7 @@ export struct TabRemoteDown {
             .fontColor($r('app.color.aria2_no_task_font'))
 
           Text(task.status == Aria2Status.FINISHED ?
-            $r('app.string.task_queue_finished') : $r('app.string.task_queue_failed'))
+            $r("app.string.finished") : $r("app.string.failed"))
             .fontSize(12)
             .fontColor($r('app.color.aria2_no_task_font'))
         }

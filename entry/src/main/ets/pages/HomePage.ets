@@ -3,7 +3,7 @@ import { HMRouter } from '@hadss/hmrouter';
 import { TabId, TabItem, TabList } from '../model/TabData';
 import { TabFiles } from './tabs/TabFiles';
 import { TabPictures } from './tabs/TabPictures';
-import { TabRemoteDown } from './tabs/TabRemoteDown';
+import { TabRemoteDown } from './tabs/TabAria2';
 import { TabMine } from './tabs/TabMine';
 
 @HMRouter({pageUrl: Constant.HOME_PAGE, interceptors: [Constant.ACCESS_INTERCEPTOR], lifecycle: 'ExitLifecycle'})
@@ -44,7 +44,7 @@ export struct HomePage {
     .layoutWeight(1)
     .barOverlap(true)
     // .barBackgroundColor(Color.Transparent)
-    .barBackgroundBlurStyle(BlurStyle.BACKGROUND_REGULAR)
+    .barBackgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
     .barMode(BarMode.Fixed)
     .onChange((index) => {
       this.currentIndex = index;

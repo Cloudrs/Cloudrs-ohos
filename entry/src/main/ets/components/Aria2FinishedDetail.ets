@@ -50,13 +50,13 @@ export struct Aria2FinishedDetail {
         $r("app.color.aria2_status_finished") : $r("app.color.aria2_status_error"))
 
       Text($r('app.string.task_detail'))
-        .fontSize(20)
+        .fontSize(18)
         .fontWeight(FontWeight.Bold)
 
       this.taskDetail()
 
       Text($r('app.string.files_list'))
-        .fontSize(20)
+        .fontSize(18)
         .fontWeight(FontWeight.Bold)
 
       List({space: 5}) {
@@ -71,7 +71,6 @@ export struct Aria2FinishedDetail {
       this.detailTool()
     }
     .width('100%')
-    .height('100%')
     .padding({ left: 15, right: 15, top: 25, bottom: this.bottomRectHeight })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
@@ -126,7 +125,7 @@ export struct Aria2FinishedDetail {
           .wordBreak(WordBreak.BREAK_ALL)
           .maxLines(1)
           .textOverflow({overflow: TextOverflow.Ellipsis})
-          .fontSize(18)
+          .fontSize(16)
           .fontWeight(FontWeight.Bolder)
           .fontColor(Color.Black)
       }
@@ -149,7 +148,7 @@ export struct Aria2FinishedDetail {
   @Builder fileItem(fileName: string) {
     Row() {
       Text(fileName)
-        .fontSize(18)
+        .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .maxLines(2)
         .wordBreak(WordBreak.BREAK_ALL)

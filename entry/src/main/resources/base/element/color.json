@@ -171,6 +171,10 @@
     {
       "name": "aria2_path_background",
       "value": "#0065e0"
+    },
+    {
+      "name": "select_background",
+      "value": "#d1d1d6"
     }
   ]
 }

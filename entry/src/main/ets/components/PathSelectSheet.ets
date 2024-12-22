@@ -149,12 +149,12 @@ export struct PathSelectSheet {
               }
             })
         }
+        .margin({left: 20})
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.SpaceBetween)
-        .outline({width: {bottom: '2px'}})
-        .outlineColor($r('app.color.default_line_color'))
       }
+      .padding({left: 15, right: 15})
       .layoutWeight(1)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.SpaceBetween)
@@ -162,7 +162,8 @@ export struct PathSelectSheet {
     .justifyContent(FlexAlign.SpaceBetween)
     .height(70)
     .width('100%')
-    .padding({left: 15, right: 15})
+    .outline({width: {bottom: '2px'}})
+    .outlineColor($r('app.color.default_line_color'))
   }
 
   @Builder dirItem(item: ObjectInfo) {

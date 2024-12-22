@@ -149,7 +149,6 @@ export struct PathSelectSheet {
               }
             })
         }
-        .margin({left: 20})
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.SpaceBetween)

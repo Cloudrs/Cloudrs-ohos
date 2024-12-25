@@ -1,22 +1,24 @@
-import { defaultAppManager } from "@kit.AbilityKit";
-import File from "@system.file";
 
 export enum FileType {
-  IMAGE,
-  VIDEO,
-  WORD,
-  JSON,
-  XML,
-  YAML,
-  TOML,
-  TXT,
-  CONF,
-  PDF,
-  COMPRESSED,
-  DB,
-  CODE,
-  MARKDOWN,
-  UNKNOWN
+  IMAGE = 'image',
+  VIDEO = 'video',
+  MUSIC = 'music',
+  WORD = 'word',
+  EXCEL = 'excel',
+  PPT = 'ppt',
+  JSON = 'json',
+  XML = 'xml',
+  YAML = 'yaml',
+  TOML = 'toml',
+  TXT = 'txt',
+  CONF = 'conf',
+  PDF = 'pdf',
+  COMPRESSED = 'compressed',
+  DB = 'database',
+  CODE = 'code',
+  MARKDOWN = 'markdown',
+  DOCUMENT = 'document',
+  UNKNOWN = 'unknown'
 }
 
 export interface FileIconInfo {
@@ -28,11 +30,11 @@ export interface FileIconInfo {
 export class CommonUtil {
 
   static formatBytes(bytes: number, decimals = 2): string {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return '0 B';
 
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 
     const i = Math.floor(Math.log(bytes) / Math.log(k));
 

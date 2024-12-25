@@ -103,6 +103,13 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
     }
   }
 
+  public notifyDataChangeByItem(data: T): void {
+    let index = this.dataArray.indexOf(data)
+    if (index != -1) {
+      this.notifyDataReload();
+    }
+  }
+
   public getDataList(): ObservedArray<T> {
     return this.dataArray;
   }

@@ -249,12 +249,14 @@ export function cloudGetLargeFile(url: string, filePath: string, callback?: Http
   axios({
     url: url,
     method: 'get',
-    // context: getContext(this),
+    context: getContext(),
     filePath: filePath ,
     onDownloadProgress: (progressEvent: AxiosProgressEvent): void => {
-      // console.info(TAG, "progress: " + progressEvent.progress)
-      // console.debug(TAG, "progress: " + (progressEvent && progressEvent.loaded && progressEvent.total ?
-      // Math.ceil(progressEvent.loaded / progressEvent.total * 100) : 0))
+      let pg = (progressEvent && progressEvent.loaded && progressEvent.total ?
+                        Math.ceil(progressEvent.loaded / progressEvent.total * 100) : 0)
+
+      progressEvent.progress = pg
+      console.debug(TAG, "progress: " + progress)
       if (progress && progress.onDownloadProgress) {
         progress.onDownloadProgress(progressEvent)
       }

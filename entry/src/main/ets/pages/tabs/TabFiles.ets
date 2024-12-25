@@ -19,6 +19,15 @@ import { CommonUtil, FileType } from "../../utils/CommonUtil";
 import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 import { common } from "@kit.AbilityKit";
+import { BusinessError } from "@kit.BasicServicesKit";
+import { Environment, fileUri, picker } from '@kit.CoreFileKit';
+import { FileUtil } from "@pura/harmony-utils";
+import { TransportObject } from "../../model/TransportObject";
+import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { Downloads } from "../../components/Downloads";
+import { Uploads } from "../../components/Uploads";
+import { requestDownload } from "../../utils/RequestDownload";
+import { DownloadFileModel } from "../../model/DownloadFileModel";
 
 const TAG = 'TabFiles';
 
@@ -72,6 +81,9 @@ export struct TabFiles {
   @State isGridPadding: boolean = false;
   @State showPathSelect: boolean = false
   private objectSelect: ObjectSelect = new ObjectSelect()
+
+  @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
+  @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -229,6 +241,7 @@ export struct TabFiles {
       Column({ space: 10 }) {
         TabFilesHeader({
           isRoot: this.isRoot,
+          downloadObjects: this.downloadObjects,
           onBackClick: (async () => {
             await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
           })
@@ -522,22 +535,36 @@ export struct TabFiles {
   }
 
   itemDownload(index: number, item: ObjectInfo) {
-    let context = getContext(this) as common.UIAbilityContext;
-    let filePath = context.filesDir + '/' + item.name
-
-    CloudApi.getDownloadUri(item.id, {
-      onSuccess: (data) => {
-        console.debug(TAG, 'name: ' + item.name, 'download uri: ' + data)
-        CloudApi.downloadFile(data, filePath, {
+    try {
+      let lastProgress:number = 0
+      let context = getContext(this) as common.UIAbilityContext;
+      const documentSaveOptions = new picker.DocumentSaveOptions();
+      documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
+      let documentPicker = new picker.DocumentViewPicker(context);
+      documentPicker.save(documentSaveOptions).then((documentSaveResult: Array<string>) => {
+        let filePath = FileUtil.getFilePath(documentSaveResult[0] + '/' + item.name );
+        console.debug(TAG, 'documentViewPicker.save to file succeed and uris are:' + filePath);
+        CloudApi.getDownloadUri(item.id, {
           onSuccess: (data) => {
+            let url = CloudApi.getBaseURL() + data
+            let object: TransportObject = new TransportObject(item, filePath, url)
+            this.downloadObjects.pushData(object)
 
+            let fileModel: DownloadFileModel = new DownloadFileModel(item.id, filePath, url, undefined, (trans, state) => {
+              object.update(trans, state)
+            })
+            requestDownload.downloadFileBackground(fileModel)
           },
-          onFailure: (msg) => {}
+          onFailure: (msg) => {
+            console.error(TAG, 'get download uri failed, msg: ' + msg)
+          }
         })
-      },
-      onFailure: (msg) => {
-        console.error(TAG, 'get download uri failed, msg: ' + msg)
-      }
-    })
+      }).catch((err: BusinessError) => {
+        console.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`);
+      })
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      console.error(TAG, `Error code: ${err.code}, message: ${err.message}`);
+    }
   }
 }

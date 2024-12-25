@@ -1,12 +1,24 @@
-import { Transport } from "./Transport";
+import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { TransportObject } from "../model/TransportObject";
+import LazyDataSource from "../utils/LazyDataSource";
+import { Downloads } from "./Downloads";
+import { Uploads } from "./Uploads";
 
 @Component
 export struct TabFilesHeader {
   @Prop isRoot: boolean;
   @State showTransport:boolean = false;
+  @ObjectLink downloadObjects: LazyDataSource<TransportObject>
   onBackClick?: () => void;
   onTransportClick?: () => void;
   onPersonClick?: () => void;
+
+  @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
+    buttons: [{ text: $r('app.string.task_download') }, { text: $r('app.string.task_upload') }] as SegmentButtonItemTuple,
+    multiply: false,
+    backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
+  })
+  @State selectedIndexes: number[] = [0]
 
   build() {
     Column() {
@@ -99,6 +111,27 @@ export struct TabFilesHeader {
   }
 
   @Builder transportBuilder() {
-    Transport()
+    Column() {
+      SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
+      Column() {
+        if (this.selectedIndexes[0] == 0) {
+          Downloads({downloadObjects: this.downloadObjects})
+        }
+        else {
+          Uploads()
+        }
+      }
+      .width('100%')
+      .margin({top: 5})
+      .borderRadius(20)
+      .backgroundColor($r('app.color.nav_background'))
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Center)
+    }
+    .padding({left: 10, right: 10, top: 10, bottom: 20})
+    .height('100%')
+    .width('100%')
+    .backgroundColor($r('app.color.sheet_default_background'))
   }
 }

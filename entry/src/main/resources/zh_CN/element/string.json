@@ -250,11 +250,11 @@
     },
     {
       "name": "task_download",
-      "value": "下载任务"
+      "value": "下载列表"
     },
     {
       "name": "task_upload",
-      "value": "上传任务"
+      "value": "文件上传"
     },
     {
       "name": "transport_title",
@@ -471,6 +471,22 @@
     {
       "name": "move_failed",
       "value": "移动失败"
+    },
+    {
+      "name": "download_permission_reason",
+      "value": "用于下载文件。"
+    },
+    {
+      "name": "photo_backup",
+      "value": "相册备份"
+    },
+    {
+      "name": "have_download_task_tips",
+      "value": "当前存在前台下载任务，请稍后下载"
+    },
+    {
+      "name": "no_upload_task",
+      "value": "无上传任务"
     }
   ]
 }

@@ -9,6 +9,7 @@ export struct TabFilesHeader {
   @Prop isRoot: boolean;
   @State showTransport:boolean = false;
   @ObjectLink downloadObjects: LazyDataSource<TransportObject>
+  @Prop downloadingCount: number = 0;
   onBackClick?: () => void;
   onTransportClick?: () => void;
   onPersonClick?: () => void;
@@ -19,6 +20,7 @@ export struct TabFilesHeader {
     backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
   })
   @State selectedIndexes: number[] = [0]
+
 
   build() {
     Column() {
@@ -51,9 +53,11 @@ export struct TabFilesHeader {
 
         Row({ space: 10 }) {
           Button() {
-            Image($r('app.media.ic_transport'))
-              .padding(10)
-              .fillColor(Color.Black)
+            Badge({count: this.downloadingCount, style: {badgeSize:12}, position: BadgePosition.RightTop}) {
+              Image($r('app.media.ic_transport'))
+                .padding(10)
+                .fillColor(Color.Black)
+            }
           }
           .width(36)
           .height(36)
@@ -122,7 +126,7 @@ export struct TabFilesHeader {
         }
       }
       .width('100%')
-      .margin({top: 5})
+      .margin({top: 10})
       .borderRadius(20)
       .backgroundColor($r('app.color.nav_background'))
       .layoutWeight(1)

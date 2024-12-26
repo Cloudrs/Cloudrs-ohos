@@ -1,3 +1,4 @@
+import { DownloadState } from "../model/DownloadFileModel"
 import { ObjectInfo } from "../model/net/ApiTypes"
 import { TransportObject } from "../model/TransportObject"
 import { CommonUtil } from "../utils/CommonUtil"
@@ -19,6 +20,7 @@ export struct Downloads {
             this.downloadItem(item)
           }, (item: TransportObject, index) => item.item.id + index)
         }
+        .scrollBar(BarState.Off)
         .width('100%')
         .height('100%')
       }
@@ -44,11 +46,22 @@ export struct Downloads {
     .justifyContent(FlexAlign.Center)
   }
 
+  getDownloadIcon(state: DownloadState) {
+    switch (state){
+      case DownloadState.COMPLETED:
+        return $r('app.media.ic_checkmark_circle')
+      case DownloadState.FAILED:
+        return $r('app.media.ic_xmark_circle_fill')
+      default :
+        return $r('app.media.ic_arrowshape_down')
+    }
+  }
+
   @Builder downloadItem(object: TransportObject) {
     Row({space: 10}) {
       Image(CommonUtil.getFileIconInfo(object.item.name).icon).width(40).height(40)
 
-      Column({space: 10}) {
+      Column({space: 8}) {
         Text(object.item.name)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
@@ -57,14 +70,19 @@ export struct Downloads {
           .textOverflow({overflow: TextOverflow.Ellipsis})
           .ellipsisMode(EllipsisMode.CENTER)
 
-        Row({space: 10}) {
-          Image($r('app.media.ic_arrowshape_down'))
+        Row({space: 5}) {
+          Image(this.getDownloadIcon(object.state))
             .width(12)
             .height(12)
             .fillColor(Color.Black)
-          Text(CommonUtil.formatBytes(object.speed, 1)+'/s')
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
+
+          if (object.state == DownloadState.RUNNING) {
+            Text(CommonUtil.formatBytes(object.speed, 1)+'/s')
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .margin({right: 10})
+          }
+
           Text(`${CommonUtil.formatBytes(object.trans, 1)}/${CommonUtil.formatBytes(object.total, 1)}`)
             .fontSize(12)
         }
@@ -72,7 +90,7 @@ export struct Downloads {
         .justifyContent(FlexAlign.Start)
       }
       .alignItems(HorizontalAlign.Start)
-      .justifyContent(FlexAlign.SpaceBetween)
+      .justifyContent(FlexAlign.Center)
       .layoutWeight(1)
 
       Progress({value: object.progress, total: 100, type: ProgressType.Capsule})

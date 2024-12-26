@@ -8,17 +8,17 @@ export enum TransportType {
   SYNC
 }
 
-@Observed
+@ObservedV2
 export class TransportObject {
   type: TransportType = TransportType.DOWNLOAD;
   item: ObjectInfo;
   path: string = '';
   url: string = '';
-  trans: number = 0;
+  @Trace trans: number = 0;
   total: number = 0;
-  progress: number = 0;
-  speed: number = 0;
-  state: DownloadState = DownloadState.INITIALIZED;
+  @Trace progress: number = 0;
+  @Trace speed: number = 0;
+  @Trace state: DownloadState = DownloadState.INITIALIZED;
   private lastTime: number = new Date().getTime();
 
   constructor(item: ObjectInfo, path: string, url: string) {
@@ -33,9 +33,11 @@ export class TransportObject {
     let biosTime = new Date().getTime() - this.lastTime;
     let biosBytes = trans - this.trans;
     this.speed = biosBytes/biosTime*1000;
-    this.trans = trans;
+    let newTrans = trans
+    this.trans = newTrans;
     this.progress = Math.floor(trans / this.total * 100);
-    this.state = state;
+    let newState = state;
+    this.state = newState;
     this.lastTime = this.lastTime+biosTime;
   }
 }

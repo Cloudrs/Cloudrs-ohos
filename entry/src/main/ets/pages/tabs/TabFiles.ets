@@ -20,14 +20,11 @@ import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 import { common } from "@kit.AbilityKit";
 import { BusinessError } from "@kit.BasicServicesKit";
-import { Environment, fileUri, picker } from '@kit.CoreFileKit';
+import { picker } from '@kit.CoreFileKit';
 import { FileUtil } from "@pura/harmony-utils";
 import { TransportObject } from "../../model/TransportObject";
-import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
-import { Downloads } from "../../components/Downloads";
-import { Uploads } from "../../components/Uploads";
 import { requestDownload } from "../../utils/RequestDownload";
-import { DownloadFileModel } from "../../model/DownloadFileModel";
+import { DownloadFileModel, DownloadState } from "../../model/DownloadFileModel";
 
 const TAG = 'TabFiles';
 
@@ -82,8 +79,9 @@ export struct TabFiles {
   @State showPathSelect: boolean = false
   private objectSelect: ObjectSelect = new ObjectSelect()
 
+  @State downloadingCount: number = 0;
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
-  @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
+  @Provide uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -242,6 +240,7 @@ export struct TabFiles {
         TabFilesHeader({
           isRoot: this.isRoot,
           downloadObjects: this.downloadObjects,
+          downloadingCount: this.downloadingCount,
           onBackClick: (async () => {
             await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
           })
@@ -536,7 +535,6 @@ export struct TabFiles {
 
   itemDownload(index: number, item: ObjectInfo) {
     try {
-      let lastProgress:number = 0
       let context = getContext(this) as common.UIAbilityContext;
       const documentSaveOptions = new picker.DocumentSaveOptions();
       documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
@@ -549,10 +547,22 @@ export struct TabFiles {
             let url = CloudApi.getBaseURL() + data
             let object: TransportObject = new TransportObject(item, filePath, url)
             this.downloadObjects.pushData(object)
+            this.downloadingCount++
 
             let fileModel: DownloadFileModel = new DownloadFileModel(item.id, filePath, url, undefined, (trans, state) => {
               object.update(trans, state)
+              if (state == DownloadState.COMPLETED) {
+                console.debug(TAG, `${context.cacheDir}/${object.item.name} -> ` + filePath)
+                FileUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
+                  console.debug(TAG, 'move to ' + filePath)
+                }).catch((err: BusinessError) => {0
+                  console.error(TAG, `err: ${err}`)
+                })
+                this.downloadingCount--
+              }
             })
+
+            // 创建下载任务
             requestDownload.downloadFileBackground(fileModel)
           },
           onFailure: (msg) => {

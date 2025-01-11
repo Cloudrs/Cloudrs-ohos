@@ -1,4 +1,4 @@
-import { DownloadState } from "./DownloadFileModel";
+import { FileModelState } from "./FileModel";
 import { ObjectInfo } from "./net/ApiTypes";
 
 export enum TransportType {
@@ -18,7 +18,7 @@ export class TransportObject {
   total: number = 0;
   @Trace progress: number = 0;
   @Trace speed: number = 0;
-  @Trace state: DownloadState = DownloadState.INITIALIZED;
+  @Trace state: FileModelState = FileModelState.INITIALIZED;
   private lastTime: number = new Date().getTime();
 
   constructor(item: ObjectInfo, path: string, url: string) {
@@ -28,7 +28,7 @@ export class TransportObject {
     this.total = item.size
   }
 
-  update(trans: number, state: DownloadState)
+  update(trans: number, state: FileModelState)
   {
     let biosTime = new Date().getTime() - this.lastTime;
     let biosBytes = trans - this.trans;

@@ -56,3 +56,20 @@ export class ObjectNew {
     this.path = path
   }
 }
+
+export class ObjectUpload {
+  path: string = ''
+  size: number = 0
+  name: string = ''
+  policy_id: string = ''
+  last_modified: number = 0
+  mime_type: string = ''
+
+  constructor(path: string, size: number, name: string, policy_id: string, last_modified: number) {
+    this.path = path
+    this.size = size
+    this.name = name
+    this.policy_id = policy_id
+    this.last_modified = last_modified
+  }
+}

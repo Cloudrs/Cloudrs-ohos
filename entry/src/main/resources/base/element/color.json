@@ -175,6 +175,10 @@
     {
       "name": "select_background",
       "value": "#d1d1d6"
+    },
+    {
+      "name": "icon_fill_gray",
+      "value": "#8f8e94"
     }
   ]
 }

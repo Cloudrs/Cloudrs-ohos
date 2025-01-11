@@ -9,7 +9,9 @@ export struct TabFilesHeader {
   @Prop isRoot: boolean;
   @State showTransport:boolean = false;
   @ObjectLink downloadObjects: LazyDataSource<TransportObject>
+  @ObjectLink uploadObjects: LazyDataSource<TransportObject>
   @Prop downloadingCount: number = 0;
+  @Prop uploadingCount: number = 0;
   onBackClick?: () => void;
   onTransportClick?: () => void;
   onPersonClick?: () => void;
@@ -53,7 +55,11 @@ export struct TabFilesHeader {
 
         Row({ space: 10 }) {
           Button() {
-            Badge({count: this.downloadingCount, style: {badgeSize:12}, position: BadgePosition.RightTop}) {
+            Badge({
+              count: this.downloadingCount+this.uploadingCount,
+              style: {badgeSize:12},
+              position: BadgePosition.RightTop
+            }) {
               Image($r('app.media.ic_transport'))
                 .padding(10)
                 .fillColor(Color.Black)
@@ -122,7 +128,7 @@ export struct TabFilesHeader {
           Downloads({downloadObjects: this.downloadObjects})
         }
         else {
-          Uploads()
+          Uploads({uploadObjects: this.uploadObjects})
         }
       }
       .width('100%')

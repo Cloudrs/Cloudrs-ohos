@@ -1,5 +1,4 @@
-import { DownloadState } from "../model/DownloadFileModel"
-import { ObjectInfo } from "../model/net/ApiTypes"
+import { FileModelState } from "../model/FileModel"
 import { TransportObject } from "../model/TransportObject"
 import { CommonUtil } from "../utils/CommonUtil"
 import LazyDataSource from "../utils/LazyDataSource"
@@ -46,11 +45,11 @@ export struct Downloads {
     .justifyContent(FlexAlign.Center)
   }
 
-  getDownloadIcon(state: DownloadState) {
+  getDownloadIcon(state: FileModelState) {
     switch (state){
-      case DownloadState.COMPLETED:
+      case FileModelState.COMPLETED:
         return $r('app.media.ic_checkmark_circle')
-      case DownloadState.FAILED:
+      case FileModelState.FAILED:
         return $r('app.media.ic_xmark_circle_fill')
       default :
         return $r('app.media.ic_arrowshape_down')
@@ -76,8 +75,8 @@ export struct Downloads {
             .height(12)
             .fillColor(Color.Black)
 
-          if (object.state == DownloadState.RUNNING) {
-            Text(CommonUtil.formatBytes(object.speed, 1)+'/s')
+          if (object.state == FileModelState.RUNNING) {
+            Text(CommonUtil.formatBytes(object.speed, 1) + '/s')
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .margin({right: 10})

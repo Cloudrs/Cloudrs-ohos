@@ -11,7 +11,6 @@ export struct PathSelectSheet {
   @Prop filterDirId: string
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State currentPath: string = ''
-  @State objectsInfo: DirFileInfo = new DirFileInfo();
   onClose?: (isFinished: boolean, path?: string) => void
 
   private normalIcon: Resource = $r('app.media.ic_folder_fill');

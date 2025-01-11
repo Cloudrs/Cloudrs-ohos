@@ -487,6 +487,38 @@
     {
       "name": "no_upload_task",
       "value": "无上传任务"
+    },
+    {
+      "name": "upload",
+      "value": "上传"
+    },
+    {
+      "name": "local_files",
+      "value": "本地文件"
+    },
+    {
+      "name": "local_photos",
+      "value": "本地图片"
+    },
+    {
+      "name": "local_videos",
+      "value": "本地视频"
+    },
+    {
+      "name": "rename_success",
+      "value": "重命名成功"
+    },
+    {
+      "name": "rename_failed",
+      "value": "重命名失败"
+    },
+    {
+      "name": "get_detail_failed",
+      "value": "详细信息获取失败"
+    },
+    {
+      "name": "select_file_title",
+      "value": "添加到文件"
     }
   ]
 }

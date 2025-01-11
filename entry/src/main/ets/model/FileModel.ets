@@ -1,5 +1,4 @@
-
-export enum DownloadState {
+export enum FileModelState {
   INITIALIZED,
   WAITING,
   RUNNING,
@@ -11,9 +10,9 @@ export enum DownloadState {
   REMOVED
 }
 
-type progressCallback = (trans: number, state: DownloadState) => void
+type progressCallback = (trans: number, state: FileModelState) => void
 
-export class DownloadFileModel {
+export class FileModel {
   id: string;
   path: string;
   url: string;

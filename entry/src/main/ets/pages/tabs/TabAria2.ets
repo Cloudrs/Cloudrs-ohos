@@ -379,9 +379,9 @@ export struct TabRemoteDown {
       .alignItems(HorizontalAlign.Start)
       .justifyContent(FlexAlign.Center)
 
-      Image($r('app.media.ic_dot_grid'))
-        .width(20)
-        .height(20)
+      Image($r('app.media.ic_dot_grid_1x2'))
+        .width(24)
+        .height(24)
     }
     .width('100%')
     .height(60)

@@ -1,6 +1,7 @@
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import Constant from "../model/Constant";
 import { MoreMenuType, ShowType, SortType } from "../model/MenuModel";
+import { SelectFileSheet } from "./SelectFileSheet";
 
 PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
 PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_NAME)
@@ -22,6 +23,8 @@ export struct TabFilesTitle {
   @Prop mainTitle: string | Resource;
   @Prop subTitle: string | Resource;
   onMoreClick?: (menuType: MoreMenuType, isReverse?: boolean) => void;
+  @State showSelectFile: boolean = false;
+  @State showMenu: boolean = false;
 
   isSortTypeReverse(type: SortType): boolean {
     if (this.sortTypeReverse.has(type)) {
@@ -56,13 +59,14 @@ export struct TabFilesTitle {
 
         Image($r('app.media.ic_square_more'))
           .padding(5)
-          .fillColor(Color.Black)
+          .fillColor(this.showMenu ? $r('app.color.icon_fill_gray') : Color.Black)
           .width(30)
           .height(30)
-          .onClick(() => {
-            //console.debug(TAG, 'sortResevese:' + JSON.stringify(this.sortTypeReverse))
-          })
-          .bindMenu(this.moreMenu())
+          .bindMenu(this.moreMenu(), {onAppear: () => {
+            this.showMenu = true
+          }, onDisappear: () => {
+            this.showMenu = false
+          }})
       }
       .padding({ left: 20, right: 25 })
       .width('100%')
@@ -72,6 +76,11 @@ export struct TabFilesTitle {
     .height(40)
     .align(Alignment.Center)
     .justifyContent(FlexAlign.Center)
+    .bindSheet($$this.showSelectFile, this.selectFileSheet(), {
+      detents: [SheetSize.FIT_CONTENT],
+      backgroundColor: Color.White,
+      title: {title: $r('app.string.select_file_title')},
+    })
   }
 
   @Builder moreMenu() {
@@ -170,8 +179,12 @@ export struct TabFilesTitle {
               this.onMoreClick(MoreMenuType.NEW_FILE)
             }
           })
+      }
+
+      MenuItemGroup() {
         MenuItem(this.commonMenu($r('app.string.more_upload_file')))
           .onClick(() => {
+            this.showSelectFile = true
             if (this.onMoreClick) {
               this.onMoreClick(MoreMenuType.UPLOAD_FILE)
             }
@@ -237,5 +250,14 @@ export struct TabFilesTitle {
     .height(45)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
+  }
+
+  @Builder selectFileSheet() {
+    SelectFileSheet({onSelectFinished: (uris: string[]) => {
+      this.showSelectFile = false
+      uris.forEach((value, index) => {
+        console.debug(TAG, `index: ${index+1}, uri: ${value}`)
+      })
+    }})
   }
 }

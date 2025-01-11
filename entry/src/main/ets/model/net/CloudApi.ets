@@ -12,11 +12,13 @@ import {
   Aria2TaskParam,
   DirectoryInfo, HttpCallback, LoginData, ObjectDetail,
   ObjectInfo,
-  ProgressCallback,SiteConfig, SiteURI, UserInfo,
+  ProgressCallback,SiteConfig, SiteURI,
+  UploadRequestResponse,
+  UserInfo,
   UserSetting,
   UserStorage,
   UserTasks} from "./ApiTypes";
-import { ObjectCopy, ObjectMove, ObjectNew, ObjectRename, ObjectSrc } from "./ObjectParam";
+import { ObjectCopy, ObjectMove, ObjectNew, ObjectRename, ObjectSrc, ObjectUpload } from "./ObjectParam";
 import call from "@ohos.telephony.call";
 import { uri } from "@kit.ArkTS";
 
@@ -249,6 +251,15 @@ export class CloudApi {
    */
   static getDownloadUri(id: string, callback?: HttpCallback<string>): void {
     return cloudPut(SiteURI.DOWNLOAD_REQUEST + '/' + id, null, callback)
+  }
+
+  /**
+   * 获取指定id的上传uri
+   * @param id        文件或者文件夹的id
+   * @param callback  回调
+   */
+  static getUploadUri(object: ObjectUpload, callback?: HttpCallback<UploadRequestResponse>): void {
+    return cloudPut(SiteURI.UPLOAD_REQUEST, object, callback)
   }
 
   /**

@@ -24,7 +24,7 @@ import { picker } from '@kit.CoreFileKit';
 import { FileUtil } from "@pura/harmony-utils";
 import { TransportObject } from "../../model/TransportObject";
 import { requestDownload } from "../../utils/RequestDownload";
-import { DownloadFileModel, DownloadState } from "../../model/DownloadFileModel";
+import { FileModel, FileModelState } from "../../model/FileModel";
 
 const TAG = 'TabFiles';
 
@@ -74,14 +74,15 @@ export struct TabFiles {
   private scrollerForList: Scroller = new Scroller()
   @State dirDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
   @State fileDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
-  @State objectsInfo: DirFileInfo = new DirFileInfo();
+  private objectsInfo: DirFileInfo = new DirFileInfo();
   @State isGridPadding: boolean = false;
   @State showPathSelect: boolean = false
   private objectSelect: ObjectSelect = new ObjectSelect()
 
   @State downloadingCount: number = 0;
+  @State uploadingCount: number = 0;
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
-  @Provide uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
+  @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
 
   setThumbData(id: string, pixMap: PixelMap) {
     this.thumbImage.set(id, pixMap)
@@ -241,6 +242,8 @@ export struct TabFiles {
           isRoot: this.isRoot,
           downloadObjects: this.downloadObjects,
           downloadingCount: this.downloadingCount,
+          uploadObjects: this.uploadObjects,
+          uploadingCount: this.uploadingCount,
           onBackClick: (async () => {
             await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
           })
@@ -435,7 +438,7 @@ export struct TabFiles {
       },
       onFailure: (msg) => {
         console.error(TAG, '获取详细信息失败 msg: ' + msg)
-        showToast('获取详细信息失败')
+        showToast($r('app.string.get_detail_failed'))
       }
     })
   }
@@ -466,11 +469,11 @@ export struct TabFiles {
                   this.dirDataSource.notifyDataReload()
                   this.fileDataSource.notifyDataReload()
                 }
-                showToast('重命名成功')
+                showToast($r('app.string.rename_success'))
               },
               onFailure: (msg) => {
                 console.error(TAG, '重命名失败 msg: ' + msg)
-                showToast('重命名失败')
+                showToast($r('app.string.rename_failed'))
               }
             })
           }
@@ -549,9 +552,9 @@ export struct TabFiles {
             this.downloadObjects.pushData(object)
             this.downloadingCount++
 
-            let fileModel: DownloadFileModel = new DownloadFileModel(item.id, filePath, url, undefined, (trans, state) => {
+            let fileModel: FileModel = new FileModel(item.id, filePath, url, undefined, (trans, state) => {
               object.update(trans, state)
-              if (state == DownloadState.COMPLETED) {
+              if (state == FileModelState.COMPLETED) {
                 console.debug(TAG, `${context.cacheDir}/${object.item.name} -> ` + filePath)
                 FileUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
                   console.debug(TAG, 'move to ' + filePath)

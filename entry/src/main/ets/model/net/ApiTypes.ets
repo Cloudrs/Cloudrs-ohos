@@ -25,7 +25,8 @@ export enum SiteURI {
   USER_TASKS = '/user/setting/tasks',
   ARIA2_CREATE_TASKS = '/aria2/url',
   ARIA2_DELETE_TASK = '/aria2/task',
-  DOWNLOAD_REQUEST = '/file/download'
+  DOWNLOAD_REQUEST = '/file/download',
+  UPLOAD_REQUEST = '/file/upload'
 }
 
 export const enum HttpCode {
@@ -175,13 +176,13 @@ export interface DirectoryInfo {
   policy: Policy;
 }
 
-@Observed
+@ObservedV2
 export class DirFileInfo implements DirectoryInfo {
   parent: string = '';
   objects: ObjectInfo[] = [];
   policy: Policy = {id: '', name: '', type: '', max_size: 0, file_type: null};
-  dirObjects: ObjectInfo[] = [];
-  fileObjects: ObjectInfo[] = [];
+  @Trace dirObjects: ObjectInfo[] = [];
+  @Trace fileObjects: ObjectInfo[] = [];
 
   constructor(parent?: string, objects?: ObjectInfo[], policy?: Policy) {
     if (parent) {
@@ -356,4 +357,10 @@ export interface UserTasks {
 export interface Aria2TaskParam {
   dst: string
   url: string[]
+}
+
+export interface UploadRequestResponse {
+  sessionId: string
+  chunkSize: number
+  expires: number
 }

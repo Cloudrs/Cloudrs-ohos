@@ -6,13 +6,13 @@ import { FileModel, FileModelState } from '../model/FileModel';
 import Logger from './Logger';
 import { FileUtil } from '@pura/harmony-utils';
 
-const TAG: string = 'RequestDownload';
+const TAG: string = 'RequestUpload';
 let isNetPause = false;
 
-class RequestDownload {
+class RequestUpload {
   private context: common.UIAbilityContext | undefined = undefined;
   private waitList: FileModel[] = [];
-  private downloadTasks: Map<string, request.agent.Task> = new Map();
+  private uploadTasks: Map<string, request.agent.Task> = new Map();
 
   constructor() {
     setInterval(() => {
@@ -20,26 +20,26 @@ class RequestDownload {
     }, 2000);
   }
 
-  setDownloadTask(id: string, task: request.agent.Task) {
-    this.downloadTasks.set(id, task)
+  setUploadTask(id: string, task: request.agent.Task) {
+    this.uploadTasks.set(id, task)
   }
 
-  getDownloadTask(id: string) {
-    if (this.downloadTasks.has(id)) {
-      return this.downloadTasks.get(id)
+  getUploadTask(id: string) {
+    if (this.uploadTasks.has(id)) {
+      return this.uploadTasks.get(id)
     }
     return undefined
   }
 
-  deleteDownloadTask(id: string) {
-    if (this.downloadTasks.has(id)) {
-      this.downloadTasks.delete(id)
+  deleteUploadTask(id: string) {
+    if (this.uploadTasks.has(id)) {
+      this.uploadTasks.delete(id)
     }
   }
 
-  downloadFileBackground(file: FileModel) {
+  uploadFileBackground(file: FileModel) {
     if (file) {
-      Logger.info(TAG, 'downloadFile to -> ' + file.path);
+      Logger.info(TAG, 'upload ' + file.path);
       this.context = getContext(this) as common.UIAbilityContext;
       this.waitList.push(file)
     }
@@ -51,39 +51,37 @@ class RequestDownload {
     });
 
     if (tasks.length < Constant.TASK_MAX && this.waitList.length > 0) {
-      let downloadList: FileModel[] = [];
+      let uploadList: FileModel[] = [];
       if (this.waitList.length <= Constant.TASK_MAX - tasks.length) {
-        downloadList = this.waitList;
+        uploadList = this.waitList;
         this.waitList = [];
       } else {
-        downloadList = this.waitList.slice(0, Constant.TASK_MAX - tasks.length);
+        uploadList = this.waitList.slice(0, Constant.TASK_MAX - tasks.length);
         this.waitList = this.waitList.slice(Constant.TASK_MAX - tasks.length, this.waitList.length);
       }
       Logger.info(TAG, `this.waitList = ${JSON.stringify(this.waitList)}`);
-      this.createBackgroundTask(downloadList);
+      this.createBackgroundTask(uploadList);
     }
   }
 
-  private async createBackgroundTask(downloadList: FileModel[]) {
+  private async createBackgroundTask(uploadList: FileModel[]) {
     if (this.context === undefined) {
       return;
     }
 
-    downloadList.forEach(async (fileModel, index) => {
-      let downloadConfig: request.agent.Config = {
-        action: request.agent.Action.DOWNLOAD,
+    uploadList.forEach(async (fileModel, index) => {
+      let uploadConfig: request.agent.Config = {
+        action: request.agent.Action.UPLOAD,
         url: fileModel.url,
-        method: 'GET',
-        title: 'download',
+        method: 'POST',
+        title: 'upload',
         mode: request.agent.Mode.BACKGROUND,
         network: request.agent.Network.ANY,
-        saveas: './' + FileUtil.getFileName(fileModel.path),
-        overwrite: true,
         gauge: true
       }
 
       try {
-        request.agent.create(this.context, downloadConfig).then((task: request.agent.Task) => {
+        request.agent.create(this.context, uploadConfig).then((task: request.agent.Task) => {
           task.on('progress', async (progress: request.agent.Progress) => {
             Logger.info(TAG, `progress,  progress = ${progress.processed} ${progress.state}`);
 
@@ -134,7 +132,7 @@ class RequestDownload {
 
           task.on('failed', async (progress: request.agent.Progress) => {
             let taskInfo = await request.agent.show(task.tid);
-            Logger.info(TAG, `fail,  resean = ${taskInfo.reason}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo.faults)}`);
+            Logger.info(TAG, `failed,  resean = ${taskInfo.reason}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo.faults)}`);
             if (fileModel.callback) {
               fileModel.callback(progress.processed, FileModelState.FAILED);
             }
@@ -142,7 +140,7 @@ class RequestDownload {
           })
 
           task.start().then(() => {
-            this.setDownloadTask(fileModel.id, task);
+            this.setUploadTask(fileModel.id, task);
           }).catch((err: Error) => {
             Logger.error(TAG, 'task start error: ', JSON.stringify(err));
           });
@@ -155,7 +153,7 @@ class RequestDownload {
   }
 
   async pause(id: string) {
-    let task = this.getDownloadTask(id)
+    let task = this.getUploadTask(id)
     if (task) {
       let taskInfo = await request.agent.show(task.tid);
       Logger.info(TAG, `task pause, taskInfo  = ${JSON.stringify(taskInfo)}`);
@@ -164,7 +162,7 @@ class RequestDownload {
   }
 
   async resume(id: string) {
-    let task = this.getDownloadTask(id)
+    let task = this.getUploadTask(id)
     if (task) {
       let taskInfo = await request.agent.show(task.tid);
       Logger.info(TAG, `task resume, taskInfo  = ${JSON.stringify(taskInfo)}`);
@@ -173,7 +171,7 @@ class RequestDownload {
   }
 
   async deleteTask(id: string) {
-    let task = this.getDownloadTask(id)
+    let task = this.getUploadTask(id)
     if (task) {
       try {
         task.off('progress');
@@ -182,7 +180,7 @@ class RequestDownload {
         task.off('pause');
         task.off('resume');
         await request.agent.remove(task.tid);
-        this.deleteDownloadTask(id);
+        this.deleteUploadTask(id);
       } catch (err) {
         Logger.info(TAG, `deleteTask fail, err= ${JSON.stringify(err)}`);
       }
@@ -190,4 +188,4 @@ class RequestDownload {
   }
 }
 
-export const requestDownload = new RequestDownload();
+export const requestUpload = new RequestUpload();

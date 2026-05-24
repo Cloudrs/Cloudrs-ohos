@@ -107,7 +107,6 @@ export function showToastTips(message: string|Resource, toastType: ToastType = T
     fontSize: 15,
     imageRes: image,
     imageSize: {width: 24, height: 24},
-    imageFillColor: fillColor,
     borderRadius: 20,
     alignment: DialogAlignment.Top,
     backgroundColor: $r('app.color.toast_custom_background'),

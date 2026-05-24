@@ -511,26 +511,23 @@ export struct TabFiles {
       content: item.name,
       primaryButton: {value: $r('app.string.dialog_cancel')},
       secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
-      onAction: (action: number, dialogId: string, content: string) => {
+      onAction: (action: number, dialogId: string) => {
         if (action == DialogAction.TWO) {
-          console.debug(TAG, `action: ${action}, content: ${content}`)
-          if (item.name != content) {
-            CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
-              onSuccess: (data) => {
-                if (item.type == Constant.OBJECT_DIR_TYPE) {
-                  this.dirDataSource.deleteData(index)
-                  this.isGridPadding = this.dirDataSource.totalCount()%2 ? true : false
-                } else {
-                  this.fileDataSource.deleteData(index)
-                }
-                showToast($r('app.string.delete_success'))
-              },
-              onFailure: (msg) => {
-                console.error(TAG, '删除失败 msg: ' + msg)
-                showToast($r('app.string.delete_failed'))
+          CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+            onSuccess: (data) => {
+              if (item.type == Constant.OBJECT_DIR_TYPE) {
+                this.dirDataSource.deleteData(index)
+                this.isGridPadding = this.dirDataSource.totalCount()%2 ? true : false
+              } else {
+                this.fileDataSource.deleteData(index)
               }
-            })
-          }
+              showToast($r('app.string.delete_success'))
+            },
+            onFailure: (msg) => {
+              console.error(TAG, '删除失败 msg: ' + msg)
+              showToast($r('app.string.delete_failed'))
+            }
+          })
         }
       }
     })

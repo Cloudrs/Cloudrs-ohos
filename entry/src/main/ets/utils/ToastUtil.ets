@@ -101,7 +101,7 @@ export function showToastTips(message: string|Resource, toastType: ToastType = T
     image = $r('app.media.ic_info_circle')
   }
 
-  DialogHelper.showToastTipCustom({
+  DialogHelper.showToastTip({
     message,
     fontColor,
     fontSize: 15,

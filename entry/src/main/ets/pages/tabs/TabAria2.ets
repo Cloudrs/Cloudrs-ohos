@@ -173,12 +173,10 @@ export struct TabRemoteDown {
       content: item.name,
       primaryButton: {value: $r('app.string.dialog_cancel')},
       secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
-      onAction: (action: number, dialogId: string, content: string) => {
+      onAction: (action: number, dialogId: string) => {
         if (action == DialogAction.TWO) {
           this.showTaskDetailSheet = false
-          console.debug(TAG, `action: ${action}, content: ${content}`)
-          if (item.name != content) {
-            CloudApi.deleteAria2Task(item.gid, {
+          CloudApi.deleteAria2Task(item.gid, {
               onSuccess: (data) => {
                 this.aria2FinishedSource.deleteData(index)
                 showToast($r('app.string.delete_task_success'))
@@ -188,7 +186,6 @@ export struct TabRemoteDown {
                 showToast($r('app.string.delete_task_failed'))
               }
             })
-          }
         }
       }
     })

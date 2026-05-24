@@ -287,7 +287,7 @@ export struct TabMine {
         content: '',
         primaryButton: {value: $r('app.string.dialog_cancel')},
         secondaryButton: {value: $r('app.string.dialog_logout'), role: ButtonRole.ERROR},
-        onAction: (action: number, dialogId: string, content: string) => {
+        onAction: (action: number, dialogId: string) => {
           if (action == DialogAction.TWO) {
             UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
             UserDatabase.deleteUserInfo(this.currentUser)

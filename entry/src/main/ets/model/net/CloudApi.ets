@@ -19,7 +19,6 @@ import {
   UserStorage,
   UserTasks} from "./ApiTypes";
 import { ObjectCopy, ObjectMove, ObjectNew, ObjectRename, ObjectSrc, ObjectUpload } from "./ObjectParam";
-import call from "@ohos.telephony.call";
 import { uri } from "@kit.ArkTS";
 
 export class CloudApi {

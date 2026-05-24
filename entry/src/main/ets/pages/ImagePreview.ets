@@ -1,5 +1,5 @@
 import Constant from "../model/Constant";
-import image from "@ohos.multimedia.image";
+import { image } from "@kit.ImageKit";
 import { CloudApi } from "../model/net/CloudApi";
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../model/Params";

@@ -1,0 +1,12 @@
+[target.aarch64-unknown-linux-ohos]
+linker = "scripts/ohos-clang-aarch64.cmd"
+ar = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native\llvm\bin\llvm-ar.exe'
+
+[target.x86_64-unknown-linux-ohos]
+linker = "scripts/ohos-clang-x86_64.cmd"
+ar = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native\llvm\bin\llvm-ar.exe'
+
+# CC env vars for ring and other C-building crates (cc-rs uses these for cross-compilation)
+[env]
+CC_aarch64_unknown_linux_ohos = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native\llvm\bin\clang.exe'
+CC_x86_64_unknown_linux_ohos = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native\llvm\bin\clang.exe'

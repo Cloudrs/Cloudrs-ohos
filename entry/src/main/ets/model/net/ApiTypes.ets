@@ -1,4 +1,3 @@
-import { AxiosProgressEvent } from "@ohos/axios";
 import Constant from "../Constant";
 import { SortType } from "../MenuModel";
 
@@ -39,8 +38,14 @@ export interface HttpCallback<T> {
   onFailure: (msg: string) => void
 }
 
+export interface DownloadProgressEvent {
+  loaded: number;
+  total: number;
+  progress: number;
+}
+
 export interface ProgressCallback {
-  onDownloadProgress?: (progress: AxiosProgressEvent) => void
+  onDownloadProgress?: (progress: DownloadProgressEvent) => void
   onUploadProgress?: () => void
 }
 

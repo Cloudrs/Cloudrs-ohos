@@ -2,10 +2,10 @@
   "modelVersion": "5.0.0",
   "description": "Please describe the basic information.",
   "dependencies": {
-    "@ohos/axios": "^2.2.10",
     "@pura/harmony-dialog": "^1.1.8",
     "@pura/harmony-utils": "^1.4.0",
-    "@hadss/hmrouter": "^1.2.3"
+    "@hadss/hmrouter": "^1.2.3",
+    "libcloudreve.so": "file:./entry/src/main/cpp/types/libcloudreve"
   },
   "devDependencies": {
     "@ohos/hypium": "1.0.28",

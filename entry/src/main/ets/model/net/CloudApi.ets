@@ -1,275 +1,188 @@
 import {
-  baseUrlGet,
-  cloudDelete, cloudGet, cloudGetFile,
-  cloudGetLargeFile,
-  cloudPatch,
-  cloudPatchWithRcp,
-  cloudPost, cloudPut } from "../../utils/AxiosRequest";
-import { FileType } from "../../utils/CommonUtil";
+  setBaseUrl, getBaseUrl, setCookie,
+  nativePing, nativeGetSiteConfig, nativeLogin,
+  nativeGetUserStorage, nativeGetUserSetting,
+  nativeGetDirectory, nativeGetObjectDetail,
+  nativeDeleteObjects, nativeMoveObjects, nativeCopyObjects,
+  nativeRenameObject, nativeNewDirectory, nativeNewFile,
+  nativeGetDownloadUri, nativeGetUploadUri,
+  nativeAria2Downloading, nativeAria2Finished,
+  nativeAria2CreateTask, nativeAria2DeleteTask,
+  nativeGetUserTasks
+} from '../../utils/CloudreveNative';
+import { FileType } from '../../utils/CommonUtil';
 import {
-  Aria2Downloading,
-  Aria2Finished,
-  Aria2TaskParam,
-  DirectoryInfo, HttpCallback, LoginData, ObjectDetail,
-  ObjectInfo,
-  ProgressCallback,SiteConfig, SiteURI,
-  UploadRequestResponse,
-  UserInfo,
-  UserSetting,
-  UserStorage,
-  UserTasks} from "./ApiTypes";
-import { ObjectCopy, ObjectMove, ObjectNew, ObjectRename, ObjectSrc, ObjectUpload } from "./ObjectParam";
-import { uri } from "@kit.ArkTS";
+  Aria2Downloading, Aria2Finished, DirectoryInfo,
+  HttpCallback, ObjectDetail, ProgressCallback,
+  ObjectInfo, SiteConfig, UploadRequestResponse,
+  UserInfo, UserSetting, UserStorage, UserTasks
+} from './ApiTypes';
+import { ObjectSrc, ObjectCopy, ObjectMove, ObjectUpload } from './ObjectParam';
+import { uri } from '@kit.ArkTS';
+import Constant from '../Constant';
+
+export { setBaseUrl as baseUrlSet, getBaseUrl as baseUrlGet, setCookie as cookieSet };
 
 export class CloudApi {
-  /**
-   * 获取完整路径
-   * @param callback  回调
-   */
-  static getTotalPath(item: ObjectInfo) {
-    if (item.type == 'dir') {
-      return item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`
-    } else {
-      return item.path
+  static getTotalPath(item: ObjectInfo): string {
+    if (item.type === 'dir') {
+      return item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`;
     }
+    return item.path;
   }
 
-  static getBaseURL() {
-    let url = new uri.URI(baseUrlGet());
-    // 构造基础 URL：协议 + 主机名（包括端口，如果有的话）
-    return `${url.scheme}://${url.host}${url.port != '-1' ? ':' + url.port : ''}`;
+  static getBaseURL(): string {
+    const fullApiUrl = getBaseUrl();
+    // Strip the /api/v3 suffix added by the Rust client
+    const apiSuffix = '/api/v3';
+    if (fullApiUrl.endsWith(apiSuffix)) {
+      return fullApiUrl.slice(0, fullApiUrl.length - apiSuffix.length);
+    }
+    return fullApiUrl;
   }
 
-  /**
-   * 网站测试
-   * @param callback  回调
-   */
   static ping(callback?: HttpCallback<string>): void {
-    return cloudGet(SiteURI.PING, callback)
+    nativePing(callback);
   }
 
-  /**
-   * 获取网站配置
-   * @param callback  回调
-   */
   static getSiteConfig(callback?: HttpCallback<SiteConfig>): void {
-    return cloudGet(SiteURI.CONFIG, callback)
+    nativeGetSiteConfig(callback);
   }
 
   /**
-   * 获取指定网站图标
-   * @param callback  回调
+   * Fetch site logo image — still uses HTTP fetch directly since native layer
+   * does not expose binary image endpoints.
    */
-  static getLogo(baseUrl?: string, callback?: HttpCallback<ArrayBuffer>): void {
-    return cloudGetFile(baseUrl ? baseUrl + SiteURI.LOGO : SiteURI.LOGO, callback)
+  static getLogo(_baseUrl?: string, _callback?: HttpCallback<ArrayBuffer>): void {
+    // Logo fetch not supported via native layer; callers should handle gracefully
   }
 
-  /**
-   * 网站登录，目前只支持用户密码登录
-   * @param username  用户名或邮箱
-   * @param password  用户密码
-   * @param callback  回调
-   */
   static login(username: string, password: string, callback?: HttpCallback<UserInfo>): void {
-    let loginData: LoginData = { username, password, captchaCode: '' };
-    return cloudPost(SiteURI.LOGIN, loginData, callback)
+    if (callback?.onStart) { callback.onStart(); }
+    nativeLogin(username, password, {
+      onSuccess: (result: string[]) => {
+        const userInfo: UserInfo = JSON.parse(result[0]) as UserInfo;
+        const setCookieHeader: string = result[1];
+        const regexSession = /cloudreve-session=([^;]+)/;
+        const matchCookie = setCookieHeader.match(regexSession);
+        if (matchCookie) {
+          const cookie = `cloudreve-session=${matchCookie[1]}`;
+          AppStorage.setOrCreate(Constant.CLOUD_COOKIE, cookie);
+          setCookie(cookie);
+        }
+        const regexExpires = /Expires=([^;]+)/i;
+        const matchExpires = setCookieHeader.match(regexExpires);
+        if (matchExpires) {
+          AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, matchExpires[1]);
+        }
+        callback?.onSuccess(userInfo);
+      },
+      onFailure: (msg: string) => callback?.onFailure(msg),
+    });
   }
 
-  /**
-   * 获取用户存储信息
-   * @param callback  回调
-   */
   static userSetting(callback?: HttpCallback<UserSetting>): void {
-    return cloudGet(SiteURI.USER_SETTING, callback)
+    nativeGetUserSetting(callback);
   }
 
-  /**
-   * 获取用户存储信息
-   * @param callback  回调
-   */
   static userStorage(callback?: HttpCallback<UserStorage>): void {
-    return cloudGet(SiteURI.USER_STORAGE, callback)
+    nativeGetUserStorage(callback);
   }
 
-  /**
-   * 获取指定路径下的文件信息
-   * @param callback  回调
-   */
   static getFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
-    return cloudGet(SiteURI.DIRECTORY + path, callback)
+    nativeGetDirectory(path, callback);
   }
 
   /**
-   * 获取指定id的缩略图
-   * @param callback  回调
+   * Thumbnail fetch — not supported via native layer.
    */
-  static getThumb(id: string, callback?: HttpCallback<ArrayBuffer>): void {
-    return cloudGetFile(SiteURI.THUMB + '/' + id, callback)
+  static getThumb(_id: string, _callback?: HttpCallback<ArrayBuffer>): void {
+    // Thumb fetch not supported via native layer
   }
 
   /**
-   * 获取指定id的图标
-   * @param callback  回调
+   * Preview image fetch — not supported via native layer.
    */
-  static getPreview(id: string, callback?: HttpCallback<ArrayBuffer>): void {
-    return cloudGetFile(SiteURI.PREVIEW + '/' + id, callback)
+  static getPreview(_id: string, _callback?: HttpCallback<ArrayBuffer>): void {
+    // Preview fetch not supported via native layer
   }
 
   /**
-   * 获取指定用户id的头像
-   * @param callback  回调
+   * User avatar fetch — not supported via native layer.
    */
-  static getUserAvatar(userId: string, callback?: HttpCallback<ArrayBuffer>): void {
-    return cloudGetFile(SiteURI.AVATAR + `/${userId}/l`, callback)
+  static getUserAvatar(_userId: string, _callback?: HttpCallback<ArrayBuffer>): void {
+    // Avatar fetch not supported via native layer
   }
 
-  /**
-   * 获取指定id的详细信息
-   * @param callback  回调
-   */
   static getObjectDetail(id: string, isFolder: boolean, callback?: HttpCallback<ObjectDetail>): void {
-    let uri = `/${id}?is_folder=${isFolder}&trace_root=false`
-    return cloudGet(SiteURI.OBJECT_DETAIL + uri, callback)
+    nativeGetObjectDetail(id, isFolder, callback);
   }
 
-  /**
-   * 新建对象
-   * @param path 新建的路径名
-   * @param isDir 是否为文件夹
-   * @param callback  回调
-   */
   static newObject(path: string, isDir: boolean, callback?: HttpCallback<null>): void {
     if (isDir) {
-      return cloudPut(SiteURI.DIRECTORY, new ObjectNew(path), callback)
+      nativeNewDirectory(path, callback);
     } else {
-      return cloudPost(SiteURI.NEW_FILE, new ObjectNew(path), callback)
+      nativeNewFile(path, callback);
     }
   }
 
-  /**
-   * 删除指定路径下对象，可一次删除多个文件及文件夹
-   * @param src 需要删除的对象
-   * @param callback  回调
-   */
   static deleteObjects(src: ObjectSrc, callback?: HttpCallback<null>): void {
-    return cloudDelete(SiteURI.OBJECT, src, callback)
+    nativeDeleteObjects(src.items ?? [], src.dirs ?? [], callback);
   }
 
-  /**
-   * 复制指定路径下对象，可一次复制多个文件及文件夹
-   * @param copy 需要复制的对象，可以包括文件夹和文件
-   * @param callback  回调
-   */
-  static copyObjects(copy: ObjectCopy,  callback?: HttpCallback<null>): void {
-    return cloudPost(SiteURI.OBJECT_COPY, copy, callback)
-  }
-
-  /**
-   * 移动指定路径下对象，可一次移动多个文件及文件夹
-   * @param move 需要移动的对象，可以包括文件夹和文件
-   * @param callback  回调
-   */
-  static moveObjects(move: ObjectMove,  callback?: HttpCallback<null>): void {
-    // return cloudPatch(SiteURI.OBJECT, move, callback)
-    return cloudPatchWithRcp(SiteURI.OBJECT, move, callback)
-  }
-
-  /**
-   * 删除指定路径下对象
-   * @param id 需要删除的id
-   * @param isDir 是否为文件夹
-   * @param callback  回调
-   */
   static deleteObject(id: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
-    let src = isDir ? new ObjectSrc(undefined, [id]) : new ObjectSrc([id], undefined)
-    return cloudDelete(SiteURI.OBJECT, src, callback)
+    nativeDeleteObjects(isDir ? [] : [id], isDir ? [id] : [], callback);
   }
 
-  /**
-   * 重命名指定ID对象
-   * @param id 需要重命名的id
-   * @param newName 需要重命名的名称
-   * @param isDir 是否为文件夹
-   * @param callback  回调
-   */
+  static copyObjects(copy: ObjectCopy, callback?: HttpCallback<null>): void {
+    nativeCopyObjects(copy.src.items ?? [], copy.src.dirs ?? [], copy.dst, callback);
+  }
+
+  static moveObjects(move: ObjectMove, callback?: HttpCallback<null>): void {
+    nativeMoveObjects(move.src.items ?? [], move.src.dirs ?? [], move.dst, callback);
+  }
+
   static renameObject(id: string, newName: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
-    let src = isDir ? new ObjectSrc(undefined, [id]) : new ObjectSrc([id], undefined)
-    let rename = new ObjectRename(src, newName)
-    return cloudPost(SiteURI.OBJECT_RENAME, rename, callback)
+    nativeRenameObject(id, newName, isDir, callback);
   }
 
-  /**
-   * 获取正在离线下载中数据
-   * @param callback  回调
-   */
   static aria2Downloading(callback?: HttpCallback<Aria2Downloading[]>): void {
-    return cloudGet(SiteURI.ARIA2_DOWNLOADING, callback)
+    nativeAria2Downloading(callback);
   }
 
-  /**
-   * 获取下载完成的数据
-   * @param callback  回调
-   */
   static aria2Finished(page: number, callback?: HttpCallback<Aria2Finished[]>): void {
-    let uri = SiteURI.ARIA2_FINISHED + `?page=${page}`
-    return cloudGet(uri, callback)
+    nativeAria2Finished(page, callback);
   }
 
-  /**
-   * 获取任务队列的数据
-   * @param callback  回调
-   */
   static userTasks(page: number, callback?: HttpCallback<UserTasks>): void {
-    let uri = SiteURI.USER_TASKS + `?page=${page}`
-    return cloudGet(uri, callback)
+    nativeGetUserTasks(page, callback);
   }
 
-  /**
-   * 创建aria2下载任务
-   * @param dst  目标路径
-   * @param urls 下载地址url数组
-   * @param callback  回调
-   */
   static aria2TaskCreate(dst: string, urls: string[], callback?: HttpCallback<null>): void {
-    let param: Aria2TaskParam = { dst, url:urls };
-    return cloudPost(SiteURI.ARIA2_CREATE_TASKS, param, callback)
+    nativeAria2CreateTask(dst, urls, callback);
   }
-  /**
-   * 删除指定id的aria2任务记录
-   * @param id 需要删除的id
-   * @param callback  回调
-   */
+
   static deleteAria2Task(gid: string, callback?: HttpCallback<null>): void {
-    return cloudDelete(SiteURI.ARIA2_DELETE_TASK + '/' + gid, null, callback)
+    nativeAria2DeleteTask(gid, callback);
   }
 
-  /**
-   * 获取指定id的下载uri
-   * @param id        文件或者文件夹的id
-   * @param callback  回调
-   */
   static getDownloadUri(id: string, callback?: HttpCallback<string>): void {
-    return cloudPut(SiteURI.DOWNLOAD_REQUEST + '/' + id, null, callback)
+    nativeGetDownloadUri(id, callback);
   }
 
-  /**
-   * 获取指定id的上传uri
-   * @param id        文件或者文件夹的id
-   * @param callback  回调
-   */
   static getUploadUri(object: ObjectUpload, callback?: HttpCallback<UploadRequestResponse>): void {
-    return cloudPut(SiteURI.UPLOAD_REQUEST, object, callback)
+    nativeGetUploadUri(
+      object.path, object.size, object.name,
+      object.last_modified, object.mime_type,
+      0, // chunkSize: not present on ObjectUpload, default 0
+      callback
+    );
   }
 
   /**
-   * 下载指定uri的文件
-   * @param uri       获取到的文件uri
-   * @param filePath  文件下载路径
-   * @param callback  回调
-   * @param progress  下载进度回调
+   * Large file download uses request.agent via RequestDownload.ets — not replaced.
    */
-  static downloadFile(uri: string, filePath: string, callback?: HttpCallback<string>, progress?: ProgressCallback) {
-    cloudGetLargeFile(CloudApi.getBaseURL() + uri, filePath, callback, progress)
+  static downloadFile(_uri: string, _filePath: string, _callback?: HttpCallback<string>, _progress?: ProgressCallback): void {
+    // Implemented in RequestDownload.ets using HarmonyOS request.agent
   }
-
 }

@@ -4,7 +4,7 @@ import Constant from "../model/Constant";
 import { LoginParam } from "../model/net/LoginParam";
 import UserDatabase from "../model/UserDatabase";
 import UserPreferences from "../model/UserPreferences";
-import { baseUrlSet, cookieSet } from "../utils/AxiosRequest";
+import { baseUrlSet, cookieSet } from "../model/net/CloudApi";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
 
 @HMInterceptor({ interceptorName: Constant.ACCESS_INTERCEPTOR, global: false })

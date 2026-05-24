@@ -1,5 +1,5 @@
 import { LengthMetrics, window } from '@kit.ArkUI'
-import { baseUrlSet } from '../utils/AxiosRequest';
+import { baseUrlSet } from '../model/net/CloudApi';
 import { DbUserInfo, SiteConfig, UserInfo } from '../model/net/ApiTypes';
 import { showToastTips, ToastType } from '../utils/ToastUtil';
 import Constant from '../model/Constant';

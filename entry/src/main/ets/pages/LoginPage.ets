@@ -1,6 +1,5 @@
 import { LengthMetrics, window } from '@kit.ArkUI'
-import { baseUrlSet } from '../model/net/CloudApi';
-import { DbUserInfo, SiteConfig, UserInfo } from '../model/net/ApiTypes';
+import { DbUserInfo, SiteConfig, UserInfo, TwoFactorCallback } from '../model/net/ApiTypes';
 import { showToastTips, ToastType } from '../utils/ToastUtil';
 import Constant from '../model/Constant';
 import UserPrivData from '../model/UserPreferences';
@@ -31,12 +30,14 @@ export struct LoginPage {
   @State keyHeight: number = 0;
   @State websiteInvalid: boolean = false;
   @State loginInvalid: boolean = false;
+  @State needs2FA: boolean = false;
   @State loginTitle: string|Resource = $r('app.string.website_title');
   @State websiteLogo: Resource|PixelMap = $r('app.media.cloudrs')
 
   private address: string = ''
   private username: string = ''
   private password: string = ''
+  private otpCode: string = ''
   scroller: Scroller = new Scroller();
   private nextPage: string|null = Constant.HOME_PAGE
 
@@ -77,8 +78,12 @@ export struct LoginPage {
           .backgroundColor($r("app.color.main_window_background"))
           .borderRadius(15)
           .onClick(() => {
-            this.loginTitle = $r('app.string.website_title')
-            this.websiteInvalid = false
+            if (this.needs2FA) {
+              this.needs2FA = false
+            } else {
+              this.loginTitle = $r('app.string.website_title')
+              this.websiteInvalid = false
+            }
           })
         }
         .height(30)
@@ -94,6 +99,8 @@ export struct LoginPage {
           // 根据状态显示不同输入框
           if (!this.websiteInvalid) {
             this.showWebsiteInput()
+          } else if (this.needs2FA) {
+            this.showOtpInput()
           } else {
             this.showLoginInput()
           }
@@ -129,9 +136,8 @@ export struct LoginPage {
       showToastTips('无效网站地址', ToastType.Error)
       return
     }
-    baseUrlSet(this.protocol + this.address)
-    CloudApi.ping({
-      onSuccess: (data) => {
+    CloudApi.init(this.protocol + this.address, {
+      onSuccess: (_version) => {
         CloudApi.getSiteConfig({
           onSuccess: (data: SiteConfig) => {
             this.loginTitle = data.title
@@ -142,17 +148,6 @@ export struct LoginPage {
             showToastTips('站点获取配置失败', ToastType.Error)
           }
         })
-        CloudApi.getLogo(this.protocol + this.address, {
-          onSuccess: (data) => {
-            let imageSource: image.ImageSource = image.createImageSource(data)
-            imageSource.createPixelMap().then((pixMap: PixelMap) => {
-              this.websiteLogo = pixMap
-            })
-          },
-          onFailure: (msg) => {
-
-          }
-        })
       },
       onFailure: (msg) => {
         console.debug('LoginPage', '站点请求失败 错误信息:', msg)
@@ -161,31 +156,61 @@ export struct LoginPage {
     })
   }
 
+  private saveUserAndNavigate(data: UserInfo): void {
+    // Read directly from AppStorage — @StorageProp updates asynchronously (next render frame),
+    // so this.cookie/cookieExpires would still hold stale values here.
+    const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? ''
+    const cookieExpires = AppStorage.get<string>(Constant.CLOUD_COOKIE_EXPIRES) ?? ''
+    const refreshToken = AppStorage.get<string>(Constant.CLOUD_REFRESH_TOKEN) ?? ''
+    let dbUserInfo: DbUserInfo = {
+      url: this.protocol + this.address,
+      username: this.username,
+      password: this.password,
+      cookie: cookie,
+      expires: cookieExpires,
+      refresh_token: refreshToken,
+      userinfo: data
+    }
+    UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
+    UserDatabase.insertUserInfo(dbUserInfo)
+    HMRouterMgr.push({pageUrl: this.nextPage})
+  }
+
   private login() {
     if (this.username.length == 0 || this.password.length == 0) {
       showToastTips('无效用户名或密码', ToastType.Error)
       return
     }
+    const twoFactorCb: TwoFactorCallback = {
+      onTwoFactorRequired: () => {
+        this.needs2FA = true
+        this.otpCode = ''
+      }
+    }
     CloudApi.login(this.username, this.password, {
       onSuccess: (data: UserInfo) => {
-        let dbUserInfo: DbUserInfo = {
-          url: this.protocol + this.address,
-          username: this.username,
-          password: this.password,
-          cookie: this.cookie,
-          expires: this.cookieExpires,
-          userinfo: data
-        }
-        // 保存当前用户
-        UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
-        // 插入到数据库
-        UserDatabase.insertUserInfo(dbUserInfo)
-        // 登录成功，跳转到上一页
-        HMRouterMgr.push({pageUrl: this.nextPage})
+        this.saveUserAndNavigate(data)
       },
       onFailure: (msg: string) => {
         console.debug('LoginPage', '登录失败 错误信息:', msg)
         showToastTips('登录失败，请检查用户邮箱及密码', ToastType.Error);
+      }
+    }, twoFactorCb)
+  }
+
+  private submitOtp() {
+    if (this.otpCode.length != 6) {
+      showToastTips('请输入6位验证码', ToastType.Error)
+      return
+    }
+    CloudApi.login2fa(this.otpCode, {
+      onSuccess: (data: UserInfo) => {
+        this.needs2FA = false
+        this.saveUserAndNavigate(data)
+      },
+      onFailure: (msg: string) => {
+        console.debug('LoginPage', '2FA验证失败 错误信息:', msg)
+        showToastTips('验证码错误，请重试', ToastType.Error);
       }
     })
   }
@@ -207,7 +232,9 @@ export struct LoginPage {
       .width("100%")
       .onClick(() => {
         if (!this.websiteInvalid) {
-         this.websiteTest()
+          this.websiteTest()
+        } else if (this.needs2FA) {
+          this.submitOtp()
         } else {
           this.login()
         }
@@ -260,6 +287,32 @@ export struct LoginPage {
         })
     }
     .rowCommonStyle()
+  }
+
+  @Builder showOtpInput() {
+    Column({ space: 10 }) {
+      Text('请输入身份验证器中的6位验证码')
+        .fontSize(13)
+        .fontColor($r("app.color.light_gray"))
+        .width('100%')
+        .textAlign(TextAlign.Center)
+
+      Row() {
+        Image($r("app.media.ic_key_horizontal"))
+          .width(20)
+          .margin({ left: 10, right: 10 })
+          .draggable(false)
+
+        TextInput({ placeholder: '6位验证码', text: this.otpCode })
+          .loginTextInputStyle()
+          .type(InputType.Number)
+          .maxLength(6)
+          .onChange((value) => {
+            this.otpCode = value
+          })
+      }
+      .rowCommonStyle()
+    }
   }
 
   @Builder showLoginInput() {

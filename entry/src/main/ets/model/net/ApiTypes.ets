@@ -38,6 +38,10 @@ export interface HttpCallback<T> {
   onFailure: (msg: string) => void
 }
 
+export interface TwoFactorCallback {
+  onTwoFactorRequired: () => void
+}
+
 export interface DownloadProgressEvent {
   loaded: number;
   total: number;
@@ -152,6 +156,7 @@ export interface DbUserInfo {
   password: string;
   cookie: string;
   expires: string;
+  refresh_token: string;
   userinfo: UserInfo;
 }
 

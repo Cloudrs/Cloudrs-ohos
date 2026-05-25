@@ -17,9 +17,13 @@ class Constant {
 
   TAB_BAR_HEIGHT: string = 'tabBarHeight'
 
+  CLOUD_BASE_URL: string = 'cloudBaseUrl'
+
   CLOUD_COOKIE: string = 'cloudCookie'
 
   CLOUD_COOKIE_EXPIRES: string = 'cloudCookieExpires'
+
+  CLOUD_REFRESH_TOKEN: string = 'cloudRefreshToken'
 
   HOME_PAGE = 'HomePage'
 

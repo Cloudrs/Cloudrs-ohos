@@ -4,6 +4,7 @@ import { CloudApi } from "../model/net/CloudApi";
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../model/Params";
 import { FileUtil } from "@pura/harmony-utils";
+import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from "@kit.MediaLibraryKit";
 import { showToast } from "../utils/ToastUtil";
 import { systemShare } from "@kit.ShareKit";
@@ -30,29 +31,45 @@ export struct iamgePreview {
   } // 设置安全控件按钮属性
 
   async getImageFile() {
-    if (this.fileParam) {
-      CloudApi.getPreview(this.fileParam.fileId, {
-        onSuccess: (data: ArrayBuffer) => {
-          this.imageData = data
-          let imageSource: image.ImageSource = image.createImageSource(this.imageData)
-          imageSource.createPixelMap()
-            .then((pixMap: PixelMap) => {
-              this.imagePixelMap = pixMap
-              this.imageWidth = '100%'
-              this.isLoading = false
-            })
-            .catch((reason: Error) => {
-              this.isLoading = false
-              showToast('打开失败')
-            })
-        },
-        onFailure: (msg) => {
-          this.imagePixelMap = $r('app.media.ic_picture_damage')
-          this.imageWidth = 128
-          this.isLoading = false
-        }
-      })
+    if (!this.fileParam) {
+      return;
     }
+    CloudApi.getDownloadUri(this.fileParam.fileId, {
+      onSuccess: async (url: string) => {
+        const req = http.createHttp();
+        try {
+          const resp = await req.request(url, {
+            method: http.RequestMethod.GET,
+            expectDataType: http.HttpDataType.ARRAY_BUFFER,
+            maxLimit: 100 * 1024 * 1024,
+          });
+          if (resp.responseCode === 200) {
+            this.imageData = resp.result as ArrayBuffer;
+            const imageSource = image.createImageSource(this.imageData);
+            const pixMap = await imageSource.createPixelMap();
+            imageSource.release();
+            this.imagePixelMap = pixMap;
+            this.imageWidth = '100%';
+          } else {
+            this.imagePixelMap = $r('app.media.ic_picture_damage');
+            this.imageWidth = 128;
+          }
+        } catch (err) {
+          console.error(TAG, `Load preview failed: ${(err as Error)?.message ?? err}`);
+          this.imagePixelMap = $r('app.media.ic_picture_damage');
+          this.imageWidth = 128;
+        } finally {
+          req.destroy();
+          this.isLoading = false;
+        }
+      },
+      onFailure: (msg) => {
+        console.error(TAG, `Get download URI failed: ${msg}`);
+        this.imagePixelMap = $r('app.media.ic_picture_damage');
+        this.imageWidth = 128;
+        this.isLoading = false;
+      }
+    });
   }
 
   aboutToAppear(): void {

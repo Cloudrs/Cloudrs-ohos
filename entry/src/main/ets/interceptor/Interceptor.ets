@@ -4,7 +4,7 @@ import Constant from "../model/Constant";
 import { LoginParam } from "../model/net/LoginParam";
 import UserDatabase from "../model/UserDatabase";
 import UserPreferences from "../model/UserPreferences";
-import { baseUrlSet, cookieSet } from "../model/net/CloudApi";
+import { CloudApi } from "../model/net/CloudApi";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
 
 @HMInterceptor({ interceptorName: Constant.ACCESS_INTERCEPTOR, global: false })
@@ -15,20 +15,20 @@ export class LoginInterceptor implements IHMInterceptor {
 
     console.log('Interceptor', `${info.srcName} ${connectionInfo} ${info.targetName}`)
 
-    // 目标为非登录页面时需先判断是否已登录
     if (info.targetName !== Constant.LOGIN_PAGE) {
       let currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string ?? ''
       if (currentUser !== '') {
         dbUserInfo = UserDatabase.getUserInfo(currentUser)
         if (dbUserInfo) {
-          console.debug('Interceptor', `获取用户信息成功，url:${dbUserInfo.url}, cookie:${dbUserInfo.cookie}, expires:${dbUserInfo.expires}`)
+          console.debug('Interceptor', `获取用户信息成功，url:${dbUserInfo.url}, expires:${dbUserInfo.expires}`)
           let expiresDate = new Date(dbUserInfo.expires)
           let now = new Date()
-          console.debug('Interceptor', `expiresDate:${expiresDate.toString()}, now: ${now.toString()}`)
-          //判断cookie是否过期，过期怎重新登录
           if (now < expiresDate) {
-            baseUrlSet(dbUserInfo.url)
-            cookieSet(dbUserInfo.cookie)
+            const cookie = dbUserInfo.cookie;
+            const isV3 = !cookie.startsWith('v4:');
+            const token = isV3 ? cookie : cookie.slice(3);
+            const refreshToken = dbUserInfo.refresh_token ?? '';
+            CloudApi.restoreSession(dbUserInfo.url, token, refreshToken, isV3);
             return HMInterceptorAction.DO_NEXT;
           }
           else {

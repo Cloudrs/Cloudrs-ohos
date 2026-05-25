@@ -1,6 +1,6 @@
 import {
-  setBaseUrl, getBaseUrl, setCookie,
-  ping, getSiteConfig, login,
+  init, restoreSession,
+  getSiteConfig, login, login2fa,
   getUserStorage, getUserSetting,
   getDirectory, getObjectDetail,
   deleteObjects, moveObjects, copyObjects,
@@ -8,11 +8,12 @@ import {
   getDownloadUri, getUploadUri,
   aria2Downloading, aria2Finished,
   aria2CreateTask, aria2DeleteTask,
-  getUserTasks
+  getUserTasks,
+  getThumb,
+  createShareLink, listShareLinks, deleteShareLink,
+  createArchive, extractArchive
 } from 'libcloudreve.so';
 import { HttpCallback } from '../model/net/ApiTypes';
-
-export { setBaseUrl, getBaseUrl, setCookie };
 
 function wrap<T>(promise: Promise<T>, callback?: HttpCallback<T>): void {
   if (callback?.onStart) { callback.onStart(); }
@@ -28,8 +29,12 @@ function wrapJson<T>(promise: Promise<string>, callback?: HttpCallback<T>): void
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
-export function nativePing(callback?: HttpCallback<string>): void {
-  wrap(ping(), callback);
+export function nativeInit(url: string, callback?: HttpCallback<string>): void {
+  wrap(init(url), callback);
+}
+
+export function nativeRestoreSession(url: string, accessToken: string, refreshToken: string, isV3: boolean): void {
+  restoreSession(url, accessToken, refreshToken, isV3);
 }
 
 export function nativeGetSiteConfig<T>(callback?: HttpCallback<T>): void {
@@ -42,6 +47,13 @@ export function nativeLogin(
   callback?: HttpCallback<string[]>
 ): void {
   wrap(login(username, password), callback);
+}
+
+export function nativeLogin2fa(
+  code: string,
+  callback?: HttpCallback<string[]>
+): void {
+  wrap(login2fa(code), callback);
 }
 
 export function nativeGetUserStorage<T>(callback?: HttpCallback<T>): void {
@@ -67,16 +79,16 @@ export function nativeDeleteObjects(items: string[], dirs: string[], callback?: 
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
-export function nativeMoveObjects(items: string[], dirs: string[], dst: string, callback?: HttpCallback<null>): void {
+export function nativeMoveObjects(items: string[], dirs: string[], srcDir: string, dst: string, callback?: HttpCallback<null>): void {
   if (callback?.onStart) { callback.onStart(); }
-  moveObjects(items, dirs, dst)
+  moveObjects(items, dirs, srcDir, dst)
     .then(() => callback?.onSuccess(null))
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
-export function nativeCopyObjects(items: string[], dirs: string[], dst: string, callback?: HttpCallback<null>): void {
+export function nativeCopyObjects(items: string[], dirs: string[], srcDir: string, dst: string, callback?: HttpCallback<null>): void {
   if (callback?.onStart) { callback.onStart(); }
-  copyObjects(items, dirs, dst)
+  copyObjects(items, dirs, srcDir, dst)
     .then(() => callback?.onSuccess(null))
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
@@ -138,4 +150,34 @@ export function nativeAria2DeleteTask(gid: string, callback?: HttpCallback<null>
 
 export function nativeGetUserTasks<T>(page: number, callback?: HttpCallback<T>): void {
   wrapJson(getUserTasks(page), callback);
+}
+
+export function nativeGetThumb(id: string, callback?: HttpCallback<string>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  getThumb(id)
+    .then((url: string) => callback?.onSuccess(url))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+export function nativeCreateShareLink(path: string, expireDays: number, password: string, callback?: HttpCallback<string>): void {
+  wrap(createShareLink(path, expireDays, password), callback);
+}
+
+export function nativeListShareLinks<T>(callback?: HttpCallback<T>): void {
+  wrapJson(listShareLinks(), callback);
+}
+
+export function nativeDeleteShareLink(shareId: string, callback?: HttpCallback<null>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  deleteShareLink(shareId)
+    .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+export function nativeCreateArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
+  wrap(createArchive(srcPaths, dstPath), callback);
+}
+
+export function nativeExtractArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
+  wrap(extractArchive(srcPaths, dstPath), callback);
 }

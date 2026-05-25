@@ -1,6 +1,6 @@
 import {
-  setBaseUrl, getBaseUrl, setCookie,
-  nativePing, nativeGetSiteConfig, nativeLogin,
+  nativeInit, nativeRestoreSession,
+  nativeGetSiteConfig, nativeLogin, nativeLogin2fa,
   nativeGetUserStorage, nativeGetUserSetting,
   nativeGetDirectory, nativeGetObjectDetail,
   nativeDeleteObjects, nativeMoveObjects, nativeCopyObjects,
@@ -8,20 +8,21 @@ import {
   nativeGetDownloadUri, nativeGetUploadUri,
   nativeAria2Downloading, nativeAria2Finished,
   nativeAria2CreateTask, nativeAria2DeleteTask,
-  nativeGetUserTasks
+  nativeGetUserTasks,
+  nativeGetThumb,
+  nativeCreateShareLink, nativeListShareLinks, nativeDeleteShareLink,
+  nativeCreateArchive, nativeExtractArchive
 } from '../../utils/CloudreveNative';
 import { FileType } from '../../utils/CommonUtil';
 import {
   Aria2Downloading, Aria2Finished, DirectoryInfo,
   HttpCallback, ObjectDetail, ProgressCallback,
   ObjectInfo, SiteConfig, UploadRequestResponse,
-  UserInfo, UserSetting, UserStorage, UserTasks
+  UserInfo, UserSetting, UserStorage, UserTasks,
+  TwoFactorCallback
 } from './ApiTypes';
 import { ObjectSrc, ObjectCopy, ObjectMove, ObjectUpload } from './ObjectParam';
-import { uri } from '@kit.ArkTS';
 import Constant from '../Constant';
-
-export { setBaseUrl as baseUrlSet, getBaseUrl as baseUrlGet, setCookie as cookieSet };
 
 export class CloudApi {
   static getTotalPath(item: ObjectInfo): string {
@@ -32,53 +33,63 @@ export class CloudApi {
   }
 
   static getBaseURL(): string {
-    const fullApiUrl = getBaseUrl();
-    // Strip the /api/v3 suffix added by the Rust client
-    const apiSuffix = '/api/v3';
-    if (fullApiUrl.endsWith(apiSuffix)) {
-      return fullApiUrl.slice(0, fullApiUrl.length - apiSuffix.length);
-    }
-    return fullApiUrl;
+    return AppStorage.get<string>(Constant.CLOUD_BASE_URL) ?? '';
   }
 
-  static ping(callback?: HttpCallback<string>): void {
-    nativePing(callback);
+  static init(url: string, callback?: HttpCallback<string>): void {
+    AppStorage.setOrCreate(Constant.CLOUD_BASE_URL, url);
+    nativeInit(url, callback);
+  }
+
+  static restoreSession(url: string, token: string, refreshToken: string, isV3: boolean): void {
+    AppStorage.setOrCreate(Constant.CLOUD_BASE_URL, url);
+    nativeRestoreSession(url, token, refreshToken, isV3);
   }
 
   static getSiteConfig(callback?: HttpCallback<SiteConfig>): void {
     nativeGetSiteConfig(callback);
   }
 
-  /**
-   * Fetch site logo image — still uses HTTP fetch directly since native layer
-   * does not expose binary image endpoints.
-   */
   static getLogo(_baseUrl?: string, _callback?: HttpCallback<ArrayBuffer>): void {
-    // Logo fetch not supported via native layer; callers should handle gracefully
+    // Logo fetch not supported via native layer
   }
 
-  static login(username: string, password: string, callback?: HttpCallback<UserInfo>): void {
+  static login(username: string, password: string, callback?: HttpCallback<UserInfo>, twoFactorCallback?: TwoFactorCallback): void {
     if (callback?.onStart) { callback.onStart(); }
     nativeLogin(username, password, {
       onSuccess: (result: string[]) => {
-        const userInfo: UserInfo = JSON.parse(result[0]) as UserInfo;
-        const setCookieHeader: string = result[1];
-        const regexSession = /cloudreve-session=([^;]+)/;
-        const matchCookie = setCookieHeader.match(regexSession);
-        if (matchCookie) {
-          const cookie = `cloudreve-session=${matchCookie[1]}`;
-          AppStorage.setOrCreate(Constant.CLOUD_COOKIE, cookie);
-          setCookie(cookie);
+        if (result[0] === '2fa_required') {
+          twoFactorCallback?.onTwoFactorRequired();
+          return;
         }
-        const regexExpires = /Expires=([^;]+)/i;
-        const matchExpires = setCookieHeader.match(regexExpires);
-        if (matchExpires) {
-          AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, matchExpires[1]);
-        }
-        callback?.onSuccess(userInfo);
+        CloudApi.storeLoginResult(result);
+        callback?.onSuccess(JSON.parse(result[0]) as UserInfo);
       },
       onFailure: (msg: string) => callback?.onFailure(msg),
     });
+  }
+
+  static login2fa(code: string, callback?: HttpCallback<UserInfo>): void {
+    if (callback?.onStart) { callback.onStart(); }
+    nativeLogin2fa(code, {
+      onSuccess: (result: string[]) => {
+        CloudApi.storeLoginResult(result);
+        callback?.onSuccess(JSON.parse(result[0]) as UserInfo);
+      },
+      onFailure: (msg: string) => callback?.onFailure(msg),
+    });
+  }
+
+  private static storeLoginResult(result: string[]): void {
+    const token: string = result[1];
+    const refreshToken: string = result[2];
+    const version: string = result[3];
+    const cookieToStore = version === 'v3' ? `cloudreve-session=${token}` : `v4:${token}`;
+    const expiresDate = new Date();
+    expiresDate.setDate(expiresDate.getDate() + 30);
+    AppStorage.setOrCreate(Constant.CLOUD_COOKIE, cookieToStore);
+    AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, expiresDate.toUTCString());
+    AppStorage.setOrCreate(Constant.CLOUD_REFRESH_TOKEN, refreshToken);
   }
 
   static userSetting(callback?: HttpCallback<UserSetting>): void {
@@ -93,23 +104,14 @@ export class CloudApi {
     nativeGetDirectory(path, callback);
   }
 
-  /**
-   * Thumbnail fetch — not supported via native layer.
-   */
-  static getThumb(_id: string, _callback?: HttpCallback<ArrayBuffer>): void {
-    // Thumb fetch not supported via native layer
+  static getThumb(id: string, callback?: HttpCallback<string>): void {
+    nativeGetThumb(id, callback);
   }
 
-  /**
-   * Preview image fetch — not supported via native layer.
-   */
   static getPreview(_id: string, _callback?: HttpCallback<ArrayBuffer>): void {
     // Preview fetch not supported via native layer
   }
 
-  /**
-   * User avatar fetch — not supported via native layer.
-   */
   static getUserAvatar(_userId: string, _callback?: HttpCallback<ArrayBuffer>): void {
     // Avatar fetch not supported via native layer
   }
@@ -135,11 +137,11 @@ export class CloudApi {
   }
 
   static copyObjects(copy: ObjectCopy, callback?: HttpCallback<null>): void {
-    nativeCopyObjects(copy.src.items ?? [], copy.src.dirs ?? [], copy.dst, callback);
+    nativeCopyObjects(copy.src.items ?? [], copy.src.dirs ?? [], copy.src_dir, copy.dst, callback);
   }
 
   static moveObjects(move: ObjectMove, callback?: HttpCallback<null>): void {
-    nativeMoveObjects(move.src.items ?? [], move.src.dirs ?? [], move.dst, callback);
+    nativeMoveObjects(move.src.items ?? [], move.src.dirs ?? [], move.src_dir, move.dst, callback);
   }
 
   static renameObject(id: string, newName: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
@@ -174,15 +176,32 @@ export class CloudApi {
     nativeGetUploadUri(
       object.path, object.size, object.name,
       object.last_modified, object.mime_type,
-      0, // chunkSize: not present on ObjectUpload, default 0
+      0,
       callback
     );
   }
 
-  /**
-   * Large file download uses request.agent via RequestDownload.ets — not replaced.
-   */
   static downloadFile(_uri: string, _filePath: string, _callback?: HttpCallback<string>, _progress?: ProgressCallback): void {
     // Implemented in RequestDownload.ets using HarmonyOS request.agent
+  }
+
+  static createShareLink(path: string, expireDays: number, password: string, callback?: HttpCallback<string>): void {
+    nativeCreateShareLink(path, expireDays, password, callback);
+  }
+
+  static listShareLinks<T>(callback?: HttpCallback<T>): void {
+    nativeListShareLinks(callback);
+  }
+
+  static deleteShareLink(shareId: string, callback?: HttpCallback<null>): void {
+    nativeDeleteShareLink(shareId, callback);
+  }
+
+  static createArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
+    nativeCreateArchive(srcPaths, dstPath, callback);
+  }
+
+  static extractArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
+    nativeExtractArchive(srcPaths, dstPath, callback);
   }
 }

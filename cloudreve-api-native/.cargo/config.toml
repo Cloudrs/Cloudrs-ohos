@@ -10,3 +10,5 @@ ar = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native\llvm\bin\llvm-ar.ex
 [env]
 CC_aarch64_unknown_linux_ohos = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native\llvm\bin\clang.exe'
 CC_x86_64_unknown_linux_ohos = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native\llvm\bin\clang.exe'
+# OHOS SDK native path — aws-lc-sys uses this to find ohos.toolchain.cmake for cross-compilation
+OHOS_SDK_NATIVE = 'D:\Huawei\DevEco Studio\sdk\default\openharmony\native'

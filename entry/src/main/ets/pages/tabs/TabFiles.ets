@@ -5,6 +5,7 @@ import { TabFilesTitle } from "../../components/TabFilesTitle";
 import { CloudApi } from "../../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { image } from "@kit.ImageKit";
+import { http } from '@kit.NetworkKit';
 import { ObjectItem } from "../../components/ObjectItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
 import { HMRouterMgr } from "@hadss/hmrouter";
@@ -85,7 +86,9 @@ export struct TabFiles {
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
 
   setThumbData(id: string, pixMap: PixelMap) {
-    this.thumbImage.set(id, pixMap)
+    const updated: Map<string, PixelMap> = new Map(this.thumbImage);
+    updated.set(id, pixMap);
+    this.thumbImage = updated;
   }
 
   getThumbData(id: string): PixelMap|undefined {
@@ -124,14 +127,27 @@ export struct TabFiles {
   async getThumbFile(index: number, item: ObjectInfo) {
     if (item.thumb && !this.getThumbData(item.id)) {
       CloudApi.getThumb(item.id, {
-        onSuccess: (data: ArrayBuffer) => {
-          let imageSource: image.ImageSource = image.createImageSource(data)
-          imageSource.createPixelMap().then((pixMap: PixelMap) => {
-            this.setThumbData(item.id, pixMap)
-          })
+        onSuccess: async (url: string) => {
+          const req = http.createHttp();
+          try {
+            const resp = await req.request(url, {
+              method: http.RequestMethod.GET,
+              expectDataType: http.HttpDataType.ARRAY_BUFFER,
+            });
+            if (resp.responseCode === 200) {
+              const imageSource = image.createImageSource(resp.result as ArrayBuffer);
+              const pixMap = await imageSource.createPixelMap();
+              imageSource.release();
+              this.setThumbData(item.id, pixMap);
+            }
+          } catch (err) {
+            console.error(TAG, `Get thumb failed: ${(err as Error)?.message ?? err}`)
+          } finally {
+            req.destroy();
+          }
         },
         onFailure: (msg) => {
-          console.error(TAG, `Get thumb failed, msg:${msg}`)
+          console.error(TAG, `Get thumb failed: ${msg}`)
         }
       })
     }
@@ -544,7 +560,7 @@ export struct TabFiles {
         console.debug(TAG, 'documentViewPicker.save to file succeed and uris are:' + filePath);
         CloudApi.getDownloadUri(item.id, {
           onSuccess: (data) => {
-            let url = CloudApi.getBaseURL() + data
+            let url = (data.startsWith('http://') || data.startsWith('https://')) ? data : CloudApi.getBaseURL() + data
             let object: TransportObject = new TransportObject(item, filePath, url)
             this.downloadObjects.pushData(object)
             this.downloadingCount++

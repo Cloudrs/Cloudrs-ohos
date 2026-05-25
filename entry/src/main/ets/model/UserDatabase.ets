@@ -25,9 +25,14 @@ class UserDatabase {
                     password TEXT NOT NULL,
                     cookie TEXT NOT NULL,
                     expires TEXT,
+                    refresh_token TEXT DEFAULT '',
                     userinfo TEXT,
-                    UNIQUE (url, username) ON CONFLICT FAIL);`
+                    UNIQUE (url, username) ON CONFLICT REPLACE);`
       this.rdbStore.executeSync(sql)
+      // 迁移：为旧表添加 refresh_token 列（已存在则忽略）
+      try {
+        this.rdbStore.executeSync(`ALTER TABLE ${this.usersTable} ADD COLUMN refresh_token TEXT DEFAULT ''`)
+      } catch (_) {}
     } catch (e) {
       console.error('UserDatabase', `数据库${this.dbName}初始化失败, 错误：${e}`)
     }
@@ -45,6 +50,7 @@ class UserDatabase {
       password: dbUserInfo.password,
       cookie: dbUserInfo.cookie,
       expires: dbUserInfo.expires,
+      refresh_token: dbUserInfo.refresh_token ?? '',
       userinfo: JSON.stringify(dbUserInfo.userinfo)
     })
 
@@ -85,7 +91,7 @@ class UserDatabase {
     let predicates = new relationalStore.RdbPredicates(this.usersTable)
     predicates.equalTo('username', username)
 
-    let result = this.rdbStore.querySync(predicates, ['url', 'password', 'cookie', 'expires', 'userinfo'])
+    let result = this.rdbStore.querySync(predicates, ['url', 'password', 'cookie', 'expires', 'refresh_token', 'userinfo'])
     if (result.goToFirstRow()) {
       console.info('UserDatabase', `数据库查询用户${username}成功，个数:${result.rowCount}`)
 
@@ -93,8 +99,9 @@ class UserDatabase {
       let password = result.getString(result.getColumnIndex('password'))
       let cookie = result.getString(result.getColumnIndex('cookie'))
       let expires = result.getString(result.getColumnIndex('expires'))
+      let refresh_token = result.getString(result.getColumnIndex('refresh_token'))
       let userinfo = result.getString(result.getColumnIndex('userinfo'))
-      let dbUserInfo: DbUserInfo = { url, username, password, cookie, expires, userinfo: JSON.parse(userinfo)}
+      let dbUserInfo: DbUserInfo = { url, username, password, cookie, expires, refresh_token, userinfo: JSON.parse(userinfo)}
       return dbUserInfo
     }
     else {

@@ -26,7 +26,6 @@ import { FileUtil } from "@pura/harmony-utils";
 import { TransportObject } from "../../model/TransportObject";
 import { requestDownload } from "../../utils/RequestDownload";
 import { FileModel, FileModelState } from "../../model/FileModel";
-import { fileUri } from '@kit.CoreFileKit';
 import { SelectFileSheet } from '../../components/SelectFileSheet';
 import { uploadManager } from '../../utils/UploadManager';
 
@@ -617,7 +616,7 @@ export struct TabFiles {
 
     const context = getContext(this) as common.UIAbilityContext;
     const onDirChanged = () => { this.getFileList(true, this.currentPath); };
-    const onTaskEnd = () => { this.uploadingCount--; };
+    const onTaskEnd = () => { if (this.uploadingCount > 0) this.uploadingCount--; };
 
     const existingNames = new Set<string>(this.objectsInfo.fileObjects.map(f => f.name));
     const conflictNames = uris

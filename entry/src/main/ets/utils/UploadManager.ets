@@ -106,6 +106,13 @@ class UploadManager {
         return;
       }
 
+      try {
+        const stat = fs.statSync(cachePath);
+        transportObject.item.size = stat.size;
+        transportObject.total = stat.size;
+      } catch {
+        // size stays 0, not critical
+      }
       transportObject.state = FileModelState.RUNNING;
 
       CloudApi.uploadLocalFile(cachePath, remotePath, overwrite, {

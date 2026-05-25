@@ -37,7 +37,7 @@ export struct LoginPage {
   private address: string = ''
   private username: string = ''
   private password: string = ''
-  private otpCode: string = ''
+  @State private otpCode: string = ''
   scroller: Scroller = new Scroller();
   private nextPage: string|null = Constant.HOME_PAGE
 
@@ -211,6 +211,7 @@ export struct LoginPage {
       onFailure: (msg: string) => {
         console.debug('LoginPage', '2FA验证失败 错误信息:', msg)
         showToastTips('验证码错误，请重试', ToastType.Error);
+        this.otpCode = ''
       }
     })
   }
@@ -290,28 +291,55 @@ export struct LoginPage {
   }
 
   @Builder showOtpInput() {
-    Column({ space: 10 }) {
+    Column({ space: 16 }) {
       Text('请输入身份验证器中的6位验证码')
         .fontSize(13)
         .fontColor($r("app.color.light_gray"))
         .width('100%')
         .textAlign(TextAlign.Center)
 
-      Row() {
-        Image($r("app.media.ic_key_horizontal"))
-          .width(20)
-          .margin({ left: 10, right: 10 })
-          .draggable(false)
+      Stack() {
+        Row({ space: 8 }) {
+          ForEach([0, 1, 2, 3, 4, 5], (item: number) => {
+            Column() {
+              Text(item < this.otpCode.length ? this.otpCode[item] : '')
+                .fontSize(22)
+                .fontWeight(FontWeight.Bold)
+            }
+            .width(44)
+            .height(52)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .borderRadius(10)
+            .backgroundColor($r("app.color.textinput_background"))
+            .border({
+              width: 2,
+              color: this.otpCode.length === item
+                ? $r("app.color.select_primary")
+                : Color.Transparent
+            })
+            .shadow(ShadowStyle.OUTER_DEFAULT_XS)
+          }, (item: number) => item.toString())
+        }
+        .justifyContent(FlexAlign.Center)
+        .width('100%')
 
-        TextInput({ placeholder: '6位验证码', text: this.otpCode })
-          .loginTextInputStyle()
+        TextInput()
           .type(InputType.Number)
           .maxLength(6)
+          .width('100%')
+          .height(52)
+          .opacity(0.01)
+          .defaultFocus(true)
           .onChange((value) => {
             this.otpCode = value
+            if (value.length === 6) {
+              this.submitOtp()
+            }
           })
       }
-      .rowCommonStyle()
+      .width('100%')
+      .height(52)
     }
   }
 
@@ -350,7 +378,7 @@ export struct LoginPage {
       .transition(TransitionEffect.OPACITY.animation({duration: 500})
         .combine(TransitionEffect.translate({y: -30}).animation({duration: 500})))
     }
-    .transition(TransitionEffect.asymmetric(undefined, TransitionEffect.OPACITY.animation({delay: 500, duration: 500})))
+    .transition(TransitionEffect.asymmetric(undefined, TransitionEffect.OPACITY.animation({duration: 150})))
   }
 
   @Styles scanAndUsersCommon() {

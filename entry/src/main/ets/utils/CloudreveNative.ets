@@ -5,7 +5,7 @@ import {
   getDirectory, getObjectDetail,
   deleteObjects, moveObjects, copyObjects,
   renameObject, newDirectory, newFile,
-  getDownloadUri, getUploadUri,
+  getDownloadUri, getUploadUri, uploadLocalFile,
   aria2Downloading, aria2Finished,
   aria2CreateTask, aria2DeleteTask,
   getUserTasks,
@@ -124,6 +124,18 @@ export function nativeGetUploadUri<T>(
   callback?: HttpCallback<T>
 ): void {
   wrapJson(getUploadUri(path, size, name, lastModified, mimeType, chunkSize), callback);
+}
+
+export function nativeUploadLocalFile(
+  localPath: string,
+  remotePath: string,
+  overwrite: boolean,
+  callback?: HttpCallback<null>
+): void {
+  if (callback?.onStart) { callback.onStart(); }
+  uploadLocalFile(localPath, remotePath, overwrite)
+    .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
 export function nativeAria2Downloading<T>(callback?: HttpCallback<T>): void {

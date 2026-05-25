@@ -15,6 +15,7 @@ export const newDirectory: (path: string) => Promise<void>;
 export const newFile: (path: string) => Promise<void>;
 export const getDownloadUri: (id: string) => Promise<string>;
 export const getUploadUri: (path: string, size: number, name: string, lastModified: number, mimeType: string, chunkSize: number) => Promise<string>;
+export const uploadLocalFile: (localPath: string, remotePath: string, overwrite: boolean) => Promise<void>;
 export const aria2Downloading: () => Promise<string>;
 export const aria2Finished: (page: number) => Promise<string>;
 export const aria2CreateTask: (dst: string, urls: string[]) => Promise<void>;

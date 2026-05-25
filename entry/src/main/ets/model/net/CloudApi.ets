@@ -5,7 +5,7 @@ import {
   nativeGetDirectory, nativeGetObjectDetail,
   nativeDeleteObjects, nativeMoveObjects, nativeCopyObjects,
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
-  nativeGetDownloadUri, nativeGetUploadUri,
+  nativeGetDownloadUri, nativeGetUploadUri, nativeUploadLocalFile,
   nativeAria2Downloading, nativeAria2Finished,
   nativeAria2CreateTask, nativeAria2DeleteTask,
   nativeGetUserTasks,
@@ -179,6 +179,10 @@ export class CloudApi {
       0,
       callback
     );
+  }
+
+  static uploadLocalFile(localPath: string, remotePath: string, overwrite: boolean = false, callback?: HttpCallback<null>): void {
+    nativeUploadLocalFile(localPath, remotePath, overwrite, callback);
   }
 
   static downloadFile(_uri: string, _filePath: string, _callback?: HttpCallback<string>, _progress?: ProgressCallback): void {

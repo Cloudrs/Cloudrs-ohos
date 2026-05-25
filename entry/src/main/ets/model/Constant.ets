@@ -43,6 +43,12 @@ class Constant {
 
   CURRENT_SHOW_TYPE = 'showType'
 
+  PHOTO_BACKUP_SETTINGS = 'photoBackupSettings'
+
+  PHOTO_BACKUP_DONE_IDS = 'photoBackupDoneIds'
+
+  PHOTO_BACKUP_ITEMS = 'photoBackupItems'
+
   OBJECT_DIR_TYPE = 'dir'
 
   OBJECT_FILE_TYPE = 'file'

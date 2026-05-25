@@ -1,5 +1,5 @@
 use napi_derive::napi;
-use std::sync::{Mutex, OnceLock};
+use std::{fs, sync::{Mutex, OnceLock}};
 use cloudreve_api::{
     ApiVersion, CloudreveAPI, DeleteTarget, Error as ApiError, LoginResponse,
     api::v3::models::{
@@ -130,6 +130,39 @@ fn unix_parent(full_path: &str) -> String {
     match full_path.rfind('/') {
         None | Some(0) => "/".to_string(),
         Some(idx) => full_path[..idx].to_string(),
+    }
+}
+
+fn remote_parent(full_path: &str) -> String {
+    match full_path.rfind('/') {
+        None | Some(0) => "/".to_string(),
+        Some(idx) => full_path[..idx].to_string(),
+    }
+}
+
+async fn ensure_remote_directory(api: &CloudreveAPI, dir: &str) -> Result<(), ApiError> {
+    if dir.is_empty() || dir == "/" {
+        return Ok(());
+    }
+
+    let mut current = String::new();
+    for part in dir.split('/').filter(|p| !p.is_empty()) {
+        current.push('/');
+        current.push_str(part);
+        if api.list_files(&current, None, None).await.is_ok() {
+            continue;
+        }
+
+        api.create_directory(&current).await?;
+    }
+
+    Ok(())
+}
+
+async fn resolve_upload_policy_id(api: &CloudreveAPI, dir: &str) -> Option<String> {
+    match api.list_files(dir, None, None).await {
+        Ok(FileList::V4(v4)) => v4.storage_policy.map(|policy| policy.id),
+        _ => None,
     }
 }
 
@@ -788,6 +821,28 @@ pub async fn get_upload_uri(
         });
         Ok(j.to_string())
     }
+}
+
+#[napi]
+pub async fn upload_local_file(
+    local_path: String,
+    remote_path: String,
+    overwrite: bool,
+) -> napi::Result<()> {
+    let content = fs::read(&local_path)
+        .map_err(|e| napi::Error::from_reason(format!("read local file failed: {}", e)))?;
+    let api = get_client()?;
+    let parent = remote_parent(&remote_path);
+    ensure_remote_directory(&api, &parent)
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let policy_id = resolve_upload_policy_id(&api, &parent).await;
+    if let Some(policy_id) = &policy_id {
+        set_v4_policy_id(Some(policy_id.clone()));
+    }
+    api.upload_file(&remote_path, content, policy_id.as_deref(), overwrite)
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))
 }
 
 // ---- Aria2 ----

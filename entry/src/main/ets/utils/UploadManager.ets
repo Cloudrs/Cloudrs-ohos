@@ -5,7 +5,7 @@ import { FileUtil } from '@pura/harmony-utils';
 import { CloudApi } from '../model/net/CloudApi';
 import { FileModelState } from '../model/FileModel';
 import { ObjectInfo } from '../model/net/ApiTypes';
-import { TransportObject } from '../model/TransportObject';
+import { TransportObject, TransportType } from '../model/TransportObject';
 import LazyDataSource from './LazyDataSource';
 import UserPreferences from '../model/UserPreferences';
 import Constant from '../model/Constant';
@@ -25,6 +25,7 @@ interface UploadTask {
 class UploadManager {
   private pendingQueue: UploadTask[] = [];
   private _activeCount: number = 0;
+  private _taskCounter: number = 0;
 
   extractFileName(uri: string): string {
     try {
@@ -53,6 +54,7 @@ class UploadManager {
         date: '', create_date: '', source_enabled: false
       };
       const to = new TransportObject(fakeItem, uri, remotePath);
+      to.type = TransportType.UPLOAD;
       to.state = FileModelState.WAITING;
       uploadObjects.pushData(to);
       this.pendingQueue.push({
@@ -78,49 +80,56 @@ class UploadManager {
 
   private async _runTask(task: UploadTask): Promise<void> {
     this._activeCount++;
-    const { uri, remotePath, overwrite, context, transportObject, onDirChanged, onTaskEnd } = task;
-    const fileName = this.extractFileName(uri);
-    const cachePath = `${context.cacheDir}/upload_${new Date().getTime()}_${fileName}`;
-
     try {
-      const source = await FileUtil.open(uri, fs.OpenMode.READ_ONLY);
+      const { uri, remotePath, overwrite, context, transportObject, onDirChanged, onTaskEnd } = task;
+      const fileName = this.extractFileName(uri);
+      const cachePath = `${context.cacheDir}/upload_${new Date().getTime()}_${++this._taskCounter}_${fileName}`;
+
       try {
-        await FileUtil.copyFile(source.fd, cachePath);
-      } finally {
-        await FileUtil.close(source.fd);
-      }
-    } catch (err) {
-      console.error(TAG, `copy to cache failed: ${(err as Error)?.message ?? err}`);
-      transportObject.state = FileModelState.FAILED;
-      this._finish(onTaskEnd);
-      return;
-    }
-
-    transportObject.state = FileModelState.RUNNING;
-
-    CloudApi.uploadLocalFile(cachePath, remotePath, overwrite, {
-      onSuccess: () => {
-        transportObject.state = FileModelState.COMPLETED;
-        transportObject.progress = 100;
+        const source = await FileUtil.open(uri, fs.OpenMode.READ_ONLY);
+        try {
+          await FileUtil.copyFile(source.fd, cachePath);
+        } finally {
+          await FileUtil.close(source.fd);
+        }
+      } catch (err) {
+        console.error(TAG, `copy to cache failed: ${(err as Error)?.message ?? err}`);
         fs.unlink(cachePath).catch(() => {});
-        onDirChanged();
-        this._finish(onTaskEnd);
-      },
-      onFailure: (msg: string) => {
-        console.error(TAG, `upload failed: ${msg}`);
         transportObject.state = FileModelState.FAILED;
-        fs.unlink(cachePath).catch(() => {});
         this._finish(onTaskEnd);
+        return;
       }
-    });
+
+      transportObject.state = FileModelState.RUNNING;
+
+      CloudApi.uploadLocalFile(cachePath, remotePath, overwrite, {
+        onSuccess: () => {
+          transportObject.state = FileModelState.COMPLETED;
+          transportObject.progress = 100;
+          fs.unlink(cachePath).catch(() => {});
+          onDirChanged();
+          this._finish(onTaskEnd);
+        },
+        onFailure: (msg: string) => {
+          console.error(TAG, `upload failed: ${msg}`);
+          transportObject.state = FileModelState.FAILED;
+          fs.unlink(cachePath).catch(() => {});
+          this._finish(onTaskEnd);
+        }
+      });
+    } catch (unexpected) {
+      console.error(TAG, `unexpected error in _runTask: ${(unexpected as Error)?.message ?? unexpected}`);
+      task.transportObject.state = FileModelState.FAILED;
+      this._finish(task.onTaskEnd);
+    }
   }
 
   private _finish(onTaskEnd?: () => void): void {
     this._activeCount--;
+    this._tryFlush();
     if (onTaskEnd) {
       onTaskEnd();
     }
-    this._tryFlush();
   }
 }
 

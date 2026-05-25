@@ -26,6 +26,9 @@ import { FileUtil } from "@pura/harmony-utils";
 import { TransportObject } from "../../model/TransportObject";
 import { requestDownload } from "../../utils/RequestDownload";
 import { FileModel, FileModelState } from "../../model/FileModel";
+import { fileUri } from '@kit.CoreFileKit';
+import { SelectFileSheet } from '../../components/SelectFileSheet';
+import { uploadManager } from '../../utils/UploadManager';
 
 const TAG = 'TabFiles';
 
@@ -84,6 +87,7 @@ export struct TabFiles {
   @State uploadingCount: number = 0;
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
+  @State showSelectFile: boolean = false
 
   setThumbData(id: string, pixMap: PixelMap) {
     const updated: Map<string, PixelMap> = new Map(this.thumbImage);
@@ -289,6 +293,10 @@ export struct TabFiles {
       backgroundColor: Color.White,
       title: {title: $r('app.string.detail_title')},
     })
+    .bindSheet($$this.showSelectFile, this.selectFileSheetBuilder(), {
+      detents: [SheetSize.FIT_CONTENT],
+      showClose: true,
+    })
   }
 
   @Builder objectGrid() {
@@ -356,6 +364,15 @@ export struct TabFiles {
 
   @Builder detailSheet() {
     DetailSheet({detailData: this.detailData})
+  }
+
+  @Builder selectFileSheetBuilder() {
+    SelectFileSheet({
+      onSelectFinished: (uris: string[]) => {
+        this.showSelectFile = false;
+        this.startUpload(uris);
+      }
+    })
   }
 
   async onItemClick(item: ObjectInfo) {
@@ -440,6 +457,7 @@ export struct TabFiles {
         this.itemNew(this.currentPath, false)
         break
       case MoreMenuType.UPLOAD_FILE:
+        this.showSelectFile = true
         break
     }
   }
@@ -592,5 +610,46 @@ export struct TabFiles {
       const err: BusinessError = error as BusinessError;
       console.error(TAG, `Error code: ${err.code}, message: ${err.message}`);
     }
+  }
+
+  startUpload(uris: string[]): void {
+    if (uris.length === 0) return;
+
+    const context = getContext(this) as common.UIAbilityContext;
+    const onDirChanged = () => { this.getFileList(true, this.currentPath); };
+    const onTaskEnd = () => { this.uploadingCount--; };
+
+    const existingNames = new Set<string>(this.objectsInfo.fileObjects.map(f => f.name));
+    const conflictNames = uris
+      .map(uri => { try { return uploadManager.extractFileName(uri); } catch { return ''; } })
+      .filter(name => name.length > 0 && existingNames.has(name));
+
+    if (conflictNames.length === 0) {
+      this.uploadingCount += uris.length;
+      uploadManager.enqueue(uris, this.currentPath, false, context, this.uploadObjects, onDirChanged, onTaskEnd);
+      return;
+    }
+
+    DialogHelper.showAlertDialog({
+      primaryTitle: $r('app.string.upload_conflict_title'),
+      content: conflictNames.join('\n'),
+      primaryButton: { value: $r('app.string.upload_skip_existing') },
+      secondaryButton: { value: $r('app.string.upload_overwrite_all') },
+      onAction: (action: number, _dialogId: string) => {
+        if (action == DialogAction.TWO) {
+          this.uploadingCount += uris.length;
+          uploadManager.enqueue(uris, this.currentPath, true, context, this.uploadObjects, onDirChanged, onTaskEnd);
+        } else {
+          const conflictSet = new Set<string>(conflictNames);
+          const filteredUris = uris.filter(uri => {
+            try { return !conflictSet.has(uploadManager.extractFileName(uri)); } catch { return true; }
+          });
+          if (filteredUris.length > 0) {
+            this.uploadingCount += filteredUris.length;
+            uploadManager.enqueue(filteredUris, this.currentPath, false, context, this.uploadObjects, onDirChanged, onTaskEnd);
+          }
+        }
+      }
+    });
   }
 }

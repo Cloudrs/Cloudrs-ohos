@@ -66,6 +66,7 @@ class Constant {
   TASK_NET_PAUSE_MSG: number = -3;
 
   TASK_NET_RESUME_MSG: number = -4;
+  UPLOAD_MAX_CONCURRENT: string = 'upload_max_concurrent';
 }
 
 const constant = new Constant();

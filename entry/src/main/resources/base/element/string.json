@@ -519,6 +519,22 @@
     {
       "name": "select_file_title",
       "value": "添加到文件"
+    },
+    {
+      "name": "upload_conflict_title",
+      "value": "文件已存在"
+    },
+    {
+      "name": "upload_skip_existing",
+      "value": "跳过已有"
+    },
+    {
+      "name": "upload_overwrite_all",
+      "value": "全部覆盖"
+    },
+    {
+      "name": "upload_max_concurrent",
+      "value": "最大上传并发数"
     }
   ]
 }

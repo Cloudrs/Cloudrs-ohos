@@ -31,6 +31,22 @@
     {
       "name": "login_password",
       "value": "Passsword"
+    },
+    {
+      "name": "upload_conflict_title",
+      "value": "File Already Exists"
+    },
+    {
+      "name": "upload_skip_existing",
+      "value": "Skip Existing"
+    },
+    {
+      "name": "upload_overwrite_all",
+      "value": "Overwrite All"
+    },
+    {
+      "name": "upload_max_concurrent",
+      "value": "Max Upload Concurrency"
     }
   ]
 }

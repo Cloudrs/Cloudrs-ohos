@@ -632,7 +632,8 @@ export struct TabFiles {
     if (uris.length === 0) return;
 
     const context = getContext(this) as common.UIAbilityContext;
-    const onDirChanged = () => { this.getFileList(true, this.currentPath); };
+    const uploadPath = this.currentPath;
+    const onDirChanged = () => { this.getFileList(true, uploadPath); };
     const onTaskEnd = () => { if (this.uploadingCount > 0) this.uploadingCount--; };
 
     const existingNames = new Set<string>(this.objectsInfo.fileObjects.map(f => f.name));

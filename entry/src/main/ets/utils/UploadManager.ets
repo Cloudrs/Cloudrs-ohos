@@ -71,7 +71,7 @@ class UploadManager {
       Constant.UPLOAD_MAX_CONCURRENT,
       3
     );
-    const maxConcurrent = (typeof (raw as number) === 'number' ? (raw as number) : 3) || 3;
+    const maxConcurrent = Math.max(1, Math.min(10, typeof (raw as number) === 'number' ? (raw as number) : 3));
     while (this._activeCount < maxConcurrent && this.pendingQueue.length > 0) {
       const task = this.pendingQueue.shift()!;
       this._runTask(task);

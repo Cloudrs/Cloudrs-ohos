@@ -29,6 +29,7 @@ export struct TabMine {
   @State webShow: boolean = false
   private scroller: Scroller = new Scroller;
   @State versionInfo: string = ''
+  @State uploadMaxConcurrent: number = 3
 
   aboutToAppear() {
     this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string
@@ -36,6 +37,13 @@ export struct TabMine {
 
     let value = getContext().resourceManager.getStringSync($r('app.string.version'))
     this.versionInfo = `${value} ${this.appVersion}`
+
+    const raw = UserPreferences.getSync(
+      Constant.USER_PREFERENCES,
+      Constant.UPLOAD_MAX_CONCURRENT,
+      3
+    );
+    this.uploadMaxConcurrent = (typeof raw === 'number' && raw > 0) ? raw : 3;
   }
 
   getUserSettings() {
@@ -342,6 +350,33 @@ export struct TabMine {
     })
   }
 
+  @Builder rowWithSelect(icon: ResourceStr, bgColor: ResourceStr,
+    title: ResourceStr, currentValue: number,
+    options: SelectOption[], onChange: (val: number) => void) {
+    Row({ space: 10 }) {
+      Image(icon)
+        .width(28).height(28).borderRadius(14).padding(5)
+        .fillColor(Color.White).backgroundColor(bgColor)
+        .draggable(false)
+
+      Text(title)
+        .fontSize(16)
+        .layoutWeight(1)
+
+      Select(options)
+        .value(currentValue.toString())
+        .selected(currentValue - 1)
+        .onSelect((index: number) => { onChange(index + 1); })
+        .width(70)
+    }
+    .width('100%')
+    .height(50)
+    .padding({ left: 10, right: 10 })
+    .borderRadius(10)
+    .backgroundColor($r('app.color.setting_button_background'))
+    .alignItems(VerticalAlign.Center)
+  }
+
   @Builder settingButton() {
     Column({space: 10}) {
       this.rowWithNext($r('app.media.ic_privacy_secure'),
@@ -358,6 +393,21 @@ export struct TabMine {
         $r('app.string.about'),
         this.versionInfo,
         () => { HMRouterMgr.push({pageUrl: Constant.ABOUT_PAGE}) }
+      )
+      this.rowWithSelect(
+        $r('app.media.ic_more_setting'),
+        $r('app.color.setting_icon_more_background'),
+        $r('app.string.upload_max_concurrent'),
+        this.uploadMaxConcurrent,
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => ({ value: n.toString() } as SelectOption)),
+        (val: number) => {
+          this.uploadMaxConcurrent = val;
+          UserPreferences.putSync(
+            Constant.USER_PREFERENCES,
+            Constant.UPLOAD_MAX_CONCURRENT,
+            val
+          );
+        }
       )
     }
     .width('100%')

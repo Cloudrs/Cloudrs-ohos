@@ -81,7 +81,13 @@ class UploadManager {
   private async _runTask(task: UploadTask): Promise<void> {
     this._activeCount++;
     try {
-      const { uri, remotePath, overwrite, context, transportObject, onDirChanged, onTaskEnd } = task;
+      const uri = task.uri;
+      const remotePath = task.remotePath;
+      const overwrite = task.overwrite;
+      const context = task.context;
+      const transportObject = task.transportObject;
+      const onDirChanged = task.onDirChanged;
+      const onTaskEnd = task.onTaskEnd;
       const fileName = this.extractFileName(uri);
       const cachePath = `${context.cacheDir}/upload_${new Date().getTime()}_${++this._taskCounter}_${fileName}`;
 

@@ -117,6 +117,7 @@ class UploadManager {
 
       CloudApi.uploadLocalFile(cachePath, remotePath, overwrite, {
         onSuccess: () => {
+          transportObject.trans = transportObject.total;
           transportObject.state = FileModelState.COMPLETED;
           transportObject.progress = 100;
           fs.unlink(cachePath).catch(() => {});

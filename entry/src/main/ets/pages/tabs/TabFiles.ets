@@ -273,16 +273,33 @@ export struct TabFiles {
       .margin({top: 20})
       .justifyContent(FlexAlign.Center)
 
-      Refresh({refreshing: $$this.isRefreshing}) {
-        this.objectGrid()
+      Stack({alignContent: Alignment.BottomEnd}) {
+        Refresh({refreshing: $$this.isRefreshing}) {
+          this.objectGrid()
+        }
+        .width('100%')
+        .height('100%')
+        .refreshOffset(77)
+        .pullToRefresh(true)
+        .onRefreshing(async () => {
+          await this.getFileList(true, this.currentPath);
+        })
+
+        Button() {
+          Image($r('app.media.ic_arrowshape_up'))
+            .width(24)
+            .height(24)
+            .fillColor(Color.White)
+        }
+        .width(52)
+        .height(52)
+        .borderRadius(26)
+        .backgroundColor('#007AFF')
+        .margin({ right: 16, bottom: this.tabBarHeight + 16 })
+        .onClick(() => { this.showSelectFile = true })
       }
       .margin({ top: 20 })
       .layoutWeight(1)
-      .refreshOffset(77)
-      .pullToRefresh(true)
-      .onRefreshing(async () => {
-        await this.getFileList(true, this.currentPath);
-      })
     }
     .width('100%')
     .height('100%')

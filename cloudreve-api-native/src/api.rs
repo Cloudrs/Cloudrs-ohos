@@ -171,17 +171,168 @@ fn extract_size(props: Option<&serde_json::Value>) -> i64 {
     let Some(p) = props else { return 0 };
     for key in &["size", "total", "total_size", "file_size", "length"] {
         if let Some(v) = p.get(key) {
-            if let Some(n) = v.as_i64() { return n; }
-            if let Some(n) = v.as_f64() { return n as i64; }
+            if let Some(n) = json_value_as_i64(v) { return n; }
         }
     }
     0
 }
 
+fn json_value_as_i64(value: &serde_json::Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().map(|n| n as i64))
+        .or_else(|| value.as_f64().map(|n| n as i64))
+        .or_else(|| {
+            value
+                .as_str()
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .map(|n| n as i64)
+        })
+}
+
+fn json_number_for_keys(value: &serde_json::Value, keys: &[&str]) -> Option<i64> {
+    if let Some(number) = json_value_as_i64(value) {
+        return Some(number);
+    }
+
+    if let serde_json::Value::Object(map) = value {
+        for key in keys {
+            if let Some(value) = map.get(*key) {
+                if let Some(found) = json_value_as_i64(value) {
+                    return Some(found);
+                }
+            }
+        }
+
+        for value in map.values() {
+            if let Some(found) = json_number_for_keys(value, keys) {
+                return Some(found);
+            }
+        }
+    } else if let serde_json::Value::Array(values) = value {
+        for value in values {
+            if let Some(found) = json_number_for_keys(value, keys) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn json_value_first_string(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() || trimmed == "." {
+                None
+            } else if (trimmed.starts_with('[') && trimmed.ends_with(']')) ||
+                (trimmed.starts_with('{') && trimmed.ends_with('}')) {
+                serde_json::from_str::<serde_json::Value>(trimmed)
+                    .ok()
+                    .and_then(|parsed| json_value_first_string(&parsed))
+                    .or_else(|| Some(trimmed.to_string()))
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                if let Some(found) = json_value_first_string(value) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        serde_json::Value::Object(map) => {
+            for key in &["name", "src", "url", "src_str", "url_str", "source", "source_url", "uri", "urls"] {
+                if let Some(value) = map.get(*key) {
+                    if let Some(found) = json_value_first_string(value) {
+                        return Some(found);
+                    }
+                }
+            }
+            for value in map.values() {
+                if let Some(found) = json_value_first_string(value) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+fn json_value_string_for_keys(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    if let serde_json::Value::Object(map) = value {
+        for key in keys {
+            if let Some(value) = map.get(*key) {
+                if let Some(found) = json_value_first_string(value) {
+                    return Some(found);
+                }
+            }
+        }
+
+        for value in map.values() {
+            if let Some(found) = json_value_string_for_keys(value, keys) {
+                return Some(found);
+            }
+        }
+    } else if let serde_json::Value::Array(values) = value {
+        for value in values {
+            if let Some(found) = json_value_string_for_keys(value, keys) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
 /// Extract filename from a URL (strip query string and take last path segment).
-fn filename_from_url_or_str(s: &str) -> &str {
-    let without_query = s.split('?').next().unwrap_or(s);
-    without_query.rsplit('/').next().filter(|f| !f.is_empty()).unwrap_or(s)
+fn filename_from_url_or_str(s: &str) -> String {
+    let without_query = s.split('?').next().unwrap_or(s).trim();
+    let file_name = without_query
+        .rsplit('/')
+        .next()
+        .filter(|f| !f.is_empty() && *f != ".")
+        .unwrap_or(without_query);
+    file_name.trim().trim_matches('"').to_string()
+}
+
+fn task_name_from_props(props: Option<&serde_json::Value>, dl: Option<&serde_json::Value>, task_id: &str) -> String {
+    let name_keys = [
+        "name",
+        "file_name",
+        "filename",
+        "src",
+        "src_str",
+        "url",
+        "url_str",
+        "urls",
+        "source",
+        "source_url",
+        "uri",
+    ];
+    let raw_name = dl
+        .and_then(|d| json_value_string_for_keys(d, &name_keys))
+        .or_else(|| props.and_then(|p| json_value_string_for_keys(p, &name_keys)))
+        .unwrap_or_else(|| task_id.to_string());
+    let name = filename_from_url_or_str(&raw_name);
+    if name.is_empty() || name == "." {
+        task_id.to_string()
+    } else {
+        name
+    }
+}
+
+fn task_error_from_props(props: Option<&serde_json::Value>, fallback: Option<&str>) -> String {
+    for key in &["error", "error_message", "message", "msg", "task_error"] {
+        if let Some(value) = props.and_then(|p| p.get(*key)) {
+            if let Some(found) = json_value_first_string(value) {
+                return found;
+            }
+        }
+    }
+    fallback.unwrap_or("").to_string()
 }
 
 fn decode_v4_prop_path(val: &str) -> String {
@@ -907,22 +1058,31 @@ async fn v4_aria2_downloading(api: &CloudreveAPI) -> napi::Result<String> {
         .map(|t| {
             let props = t.summary.as_ref().map(|s| &s.props);
             let dl = props.and_then(|p| p.get("download"));
-            let raw_name = dl
-                .and_then(|d| d.get("name").and_then(|v| v.as_str()))
-                .or_else(|| props.and_then(|p| p.get("src_str").and_then(|v| v.as_str())))
-                .or_else(|| props.and_then(|p| p.get("url_str").and_then(|v| v.as_str())))
-                .or_else(|| props.and_then(|p| p.get("src").and_then(|v| v.as_str())))
-                .or_else(|| props.and_then(|p| p.get("url").and_then(|v| v.as_str())))
-                .unwrap_or(&t.id);
-            let name = filename_from_url_or_str(raw_name).to_string();
-            let total = dl
-                .and_then(|d| d.get("total").and_then(|v| v.as_i64()))
-                .unwrap_or_else(|| extract_size(props));
-            let downloaded = dl
-                .and_then(|d| d.get("downloaded").and_then(|v| v.as_i64()))
+            let name = task_name_from_props(props, dl, &t.id);
+            let error = task_error_from_props(props, t.error.as_deref());
+            let progress = dl
+                .and_then(|d| json_number_for_keys(d, &["progress", "percent", "percentage"]))
+                .or_else(|| props.and_then(|p| json_number_for_keys(p, &["progress", "percent", "percentage"])))
                 .unwrap_or(0);
+            let mut total = dl
+                .and_then(|d| json_number_for_keys(d, &["total", "total_length", "totalLength", "length", "size"]))
+                .or_else(|| props.and_then(|p| json_number_for_keys(p, &["total", "total_length", "totalLength", "length", "size"])))
+                .unwrap_or_else(|| extract_size(props));
+            let mut downloaded = dl
+                .and_then(|d| json_number_for_keys(d, &["downloaded", "completed", "completed_length", "completedLength", "current"]))
+                .or_else(|| props.and_then(|p| json_number_for_keys(p, &["downloaded", "completed", "completed_length", "completedLength", "current"])))
+                .unwrap_or(0);
+            if downloaded <= 0 && progress > 0 {
+                if total > 0 {
+                    downloaded = total * progress.min(100) / 100;
+                } else {
+                    total = 100;
+                    downloaded = progress.min(100);
+                }
+            }
             let speed = dl
-                .and_then(|d| d.get("download_speed").and_then(|v| v.as_i64()))
+                .and_then(|d| json_number_for_keys(d, &["download_speed", "downloadSpeed", "speed"]))
+                .or_else(|| props.and_then(|p| json_number_for_keys(p, &["download_speed", "downloadSpeed", "speed"])))
                 .unwrap_or(0);
             let dst = props
                 .and_then(|p| p.get("dst").and_then(|v| v.as_str())
@@ -946,7 +1106,7 @@ async fn v4_aria2_downloading(api: &CloudreveAPI) -> napi::Result<String> {
                     "totalLength": total.to_string(),
                     "completedLength": downloaded.to_string(),
                     "downloadSpeed": speed.to_string(),
-                    "errorMessage": t.error.as_deref().unwrap_or(""),
+                    "errorMessage": error,
                     "files": []
                 }
             })
@@ -992,14 +1152,8 @@ async fn v4_aria2_finished(api: &CloudreveAPI) -> napi::Result<String> {
             .map(|t| {
                 let props = t.summary.as_ref().map(|s| &s.props);
                 let dl = props.and_then(|p| p.get("download"));
-                let raw_name = dl
-                    .and_then(|d| d.get("name").and_then(|v| v.as_str()))
-                    .or_else(|| props.and_then(|p| p.get("src_str").and_then(|v| v.as_str())))
-                    .or_else(|| props.and_then(|p| p.get("url_str").and_then(|v| v.as_str())))
-                    .or_else(|| props.and_then(|p| p.get("src").and_then(|v| v.as_str())))
-                    .or_else(|| props.and_then(|p| p.get("url").and_then(|v| v.as_str())))
-                    .unwrap_or(&t.id);
-                let name = filename_from_url_or_str(raw_name).to_string();
+                let name = task_name_from_props(props, dl, &t.id);
+                let error = task_error_from_props(props, t.error.as_deref());
                 let total = dl
                     .and_then(|d| d.get("total").and_then(|v| v.as_i64()))
                     .unwrap_or_else(|| extract_size(props));
@@ -1050,7 +1204,7 @@ async fn v4_aria2_finished(api: &CloudreveAPI) -> napi::Result<String> {
                     "status": status_num,
                     "total": total,
                     "task_status": status_num,
-                    "task_error": t.error.as_deref().unwrap_or(""),
+                    "task_error": error,
                     "files": files,
                     "create": t.created_at,
                     "update": t.updated_at,
@@ -1102,9 +1256,18 @@ pub async fn aria2_create_task(dst: String, urls: Vec<String>) -> napi::Result<(
     } else {
         let v4 = api.inner().as_v4()
             .ok_or_else(|| napi::Error::from_reason("not a v4 client"))?;
+        let normalized_dst = if dst.starts_with("cloudreve://") {
+            dst
+        } else if dst == "/" {
+            "cloudreve://my".to_string()
+        } else if dst.starts_with('/') {
+            format!("cloudreve://my{}", dst)
+        } else {
+            format!("cloudreve://my/{}", dst)
+        };
         let url_refs: Vec<&str> = urls.iter().map(String::as_str).collect();
         let req = CreateDownloadRequest {
-            dst: &dst,
+            dst: &normalized_dst,
             src: url_refs,
             preferred_node_id: None,
         };
@@ -1125,9 +1288,26 @@ pub async fn aria2_delete_task(gid: String) -> napi::Result<()> {
     } else {
         let v4 = api.inner().as_v4()
             .ok_or_else(|| napi::Error::from_reason("not a v4 client"))?;
-        v4.cancel_download_task(&gid)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))
+        match v4.cancel_download_task(&gid).await {
+            Ok(()) => Ok(()),
+            Err(first_error) => {
+                #[derive(Debug, serde::Deserialize)]
+                struct EmptyResponse;
+
+                let response: V4ApiResponse<EmptyResponse> = v4
+                    .delete(&format!("/workflow/{}", gid))
+                    .await
+                    .map_err(|_| napi::Error::from_reason(first_error.to_string()))?;
+                if response.code == 0 {
+                    Ok(())
+                } else {
+                    Err(napi::Error::from_reason(format!(
+                        "{}; fallback delete failed: API error {} ({})",
+                        first_error, response.msg, response.code
+                    )))
+                }
+            }
+        }
     }
 }
 
@@ -1152,13 +1332,17 @@ pub async fn get_user_tasks(page: i32) -> napi::Result<String> {
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let response = resp.data.ok_or_else(|| napi::Error::from_reason(resp.msg.clone()))?;
         let tasks: Vec<serde_json::Value> = response.tasks.iter().map(|t| {
+            let props = t.summary.as_ref().map(|s| &s.props);
             let type_num = v4_task_type_to_i32(&t.r#type);
             let status_num = v4_task_status_to_i32(&t.status);
-            let progress: i64 = t.summary.as_ref()
-                .and_then(|s| s.props.get("progress"))
+            let progress: i64 = props
+                .and_then(|p| p.get("progress"))
                 .and_then(|v| v.as_i64())
                 .unwrap_or(if status_num == 4 { 100 } else { 0 });
+            let name = task_name_from_props(props, props.and_then(|p| p.get("download")), &t.id);
             json!({
+                "id": t.id,
+                "name": name,
                 "status": status_num,
                 "type": type_num,
                 "create_date": t.created_at,

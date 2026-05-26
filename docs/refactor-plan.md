@@ -33,6 +33,8 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Migrated Mine page background, card radius, core text colors, storage card, and list rows to the shared tokens.
   - Migrated File page to `CloudScaffold` while preserving its lazy grid layout.
   - Migrated File page header/title surfaces to the shared tokens.
+  - Promoted File page upload, new-folder, view-toggle, and more actions into the visible top toolbar.
+  - Removed the duplicate upload picker sheet from `TabFilesTitle`; uploads now route through the parent File page flow.
   - Migrated ObjectItem file/folder cards, thumbnail area, menu background, and text colors to shared tokens.
   - Added unified EmptyState for empty File directories.
   - Added File page loading and fetch-failure states with retry action.
@@ -94,23 +96,24 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Loading and fetch-failure states are now represented in-page.
   - Back callback and more-menu callback no longer rely on `Function.bind`.
 - Modernize top toolbar:
-  - Current path.
-  - Storage policy.
-  - Search.
-  - Upload.
-  - New folder.
-  - Transfer status.
+  - Current path / storage policy: title/subtitle retained; redundant policy chip removed.
+  - Search: current-directory client-side filtering completed, including empty result state.
+  - Upload: handled by the existing bottom-right global upload action.
+  - New folder: promoted to visible icon action.
+  - View toggle: promoted to visible icon action.
+  - Transfer status: existing top transport badge retained.
+  - More menu: retained for secondary actions and sorting.
 - Rework object presentation:
   - Folder card: first tokenized pass completed.
   - Image thumbnail card: first tokenized pass completed.
   - Generic file card: first tokenized pass completed.
-  - Compact list item.
+  - Compact list item: first pass completed with stable row height and tighter metadata.
 - Improve states:
   - Loading: first pass completed.
   - Empty directory: first pass completed.
   - Fetch failure: first pass completed.
-  - Refreshing.
-  - Long filename handling.
+  - Refreshing: first pass completed with soft same-directory refresh that keeps existing content visible.
+  - Long filename handling: first pass completed with middle truncation that preserves file extensions.
 
 ## Photo Backup Todo
 
@@ -139,8 +142,8 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Segmented control, top create action, task cards, empty states, create sheet, and finished-detail sheet use shared theme tokens.
   - Existing create, polling, pagination, queue, detail, and delete behavior is unchanged.
 - Remaining UI work:
-  - Show speed, file count, and save path more clearly in a denser task card layout.
-  - Move create task to a top action or floating action button.
+  - Show speed, file count, and save path more clearly in a denser task card layout: first pass completed.
+  - Move create task to a top action or floating action button: completed with the existing top action.
 
 ## Mine Page Todo
 

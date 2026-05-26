@@ -10,18 +10,38 @@ export struct Aria2FinishedDetail {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   onDeleteClick?: () => void
 
-  getErrorInfo() {
-    if (this.detailData.task_error != '') {
-      let status_error: TaskError = JSON.parse(this.detailData.task_error)
-      return `${status_error.msg}:${status_error.error}`
-    } else {
-      return this.detailData.error
+  getTaskName(): string {
+    if (!this.detailData.name || this.detailData.name.trim().length === 0 || this.detailData.name === '.') {
+      return this.detailData.gid
     }
+    return this.detailData.name
+  }
+
+  getErrorInfo() {
+    if (this.detailData.task_error && this.detailData.task_error.trim().length > 0) {
+      try {
+        let statusError: TaskError = JSON.parse(this.detailData.task_error)
+        return `${statusError.msg}:${statusError.error}`
+      } catch (e) {
+        return this.detailData.task_error
+      }
+    }
+
+    if (this.detailData.error && this.detailData.error.trim().length > 0) {
+      try {
+        let error: TaskError = JSON.parse(this.detailData.error)
+        return `${error.msg}:${error.error}`
+      } catch (e) {
+        return this.detailData.error
+      }
+    }
+
+    return '任务执行失败'
   }
 
   build() {
     Column({space: 15}){
-      Text(this.detailData.name)
+      Text(this.getTaskName())
         .fontSize(24)
         .wordBreak(WordBreak.BREAK_ALL)
         .fontWeight(FontWeight.Bolder)

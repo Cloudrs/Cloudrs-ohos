@@ -8,6 +8,7 @@ import { CloudThemeToken } from "../model/CloudTheme";
 @Component
 export struct TabFilesHeader {
   @Prop isRoot: boolean;
+  @Link searchKeyword: string;
   @State showTransport:boolean = false;
   @ObjectLink downloadObjects: LazyDataSource<TransportObject>
   @ObjectLink uploadObjects: LazyDataSource<TransportObject>
@@ -16,6 +17,7 @@ export struct TabFilesHeader {
   onBackClick?: () => void;
   onTransportClick?: () => void;
   onPersonClick?: () => void;
+  onSearchChange?: () => void;
 
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.task_download') }, { text: $r('app.string.task_upload') }] as SegmentButtonItemTuple,
@@ -48,9 +50,15 @@ export struct TabFilesHeader {
               .combine(TransitionEffect.scale({x: 0, y: 0}).animation({duration: 200})))
           }
 
-          Search({ placeholder: $r("app.string.header_search") })
+          Search({ value: $$this.searchKeyword, placeholder: $r("app.string.header_search") })
             .searchIcon({ color: CloudThemeToken.textPrimary })
             .backgroundColor(CloudThemeToken.surface)
+            .onChange((value: string) => {
+              this.searchKeyword = value
+              if (this.onSearchChange) {
+                this.onSearchChange()
+              }
+            })
         }
         .width('50%')
 

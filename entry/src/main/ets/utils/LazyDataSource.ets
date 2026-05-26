@@ -91,6 +91,11 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
     this.notifyDataReload();
   }
 
+  public replaceAll(newData: T[]): void {
+    this.dataArray.splice(0, this.dataArray.length, ...newData);
+    this.notifyDataReload();
+  }
+
   public deleteData(index: number): void {
     this.dataArray.splice(index, 1);
     this.notifyDataDelete(index);

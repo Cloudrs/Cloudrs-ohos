@@ -1,7 +1,6 @@
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import Constant from "../model/Constant";
 import { MoreMenuType, ShowType, SortType } from "../model/MenuModel";
-import { SelectFileSheet } from "./SelectFileSheet";
 import { CloudThemeToken } from "../model/CloudTheme";
 
 PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
@@ -24,7 +23,6 @@ export struct TabFilesTitle {
   @Prop mainTitle: string | Resource;
   @Prop subTitle: string | Resource;
   onMoreClick?: (menuType: MoreMenuType, isReverse?: boolean) => void;
-  @State showSelectFile: boolean = false;
   @State showMenu: boolean = false;
 
   isSortTypeReverse(type: SortType): boolean {
@@ -38,12 +36,26 @@ export struct TabFilesTitle {
     this.sortTypeReverse.set(type, isReverse)
   }
 
+  toggleShowType() {
+    if (this.showType === ShowType.SHOW_ICON) {
+      this.showType = ShowType.SHOW_LIST
+      if (this.onMoreClick) {
+        this.onMoreClick(MoreMenuType.SHOW_LIST)
+      }
+    } else {
+      this.showType = ShowType.SHOW_ICON
+      if (this.onMoreClick) {
+        this.onMoreClick(MoreMenuType.SHOW_ICON)
+      }
+    }
+  }
+
   build() {
-    Column({ space: 10 }) {
+    Column() {
       Row() {
         Column() {
           Text(this.mainTitle)
-            .fontSize(16)
+            .fontSize(22)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
             .wordBreak(WordBreak.BREAK_ALL)
@@ -51,38 +63,72 @@ export struct TabFilesTitle {
             .textOverflow({ overflow: TextOverflow.MARQUEE })
 
           Text(this.subTitle)
-            .fontSize(11)
+            .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-        .height(30)
+        .height(44)
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.SpaceBetween)
 
-        Image($r('app.media.ic_square_more'))
-          .padding(5)
-          .fillColor(this.showMenu ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
-          .width(30)
-          .height(30)
+        Row({ space: 8 }) {
+          Button({ type: ButtonType.Normal }) {
+            Image($r('app.media.ic_folder_badge_plus'))
+              .width(18)
+              .height(18)
+              .fillColor(CloudThemeToken.textPrimary)
+          }
+          .width(38)
+          .height(38)
+          .borderRadius(19)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .onClick(() => {
+            if (this.onMoreClick) {
+              this.onMoreClick(MoreMenuType.NEW_DIR)
+            }
+          })
+
+          Button({ type: ButtonType.Normal }) {
+            Image(this.showType === ShowType.SHOW_ICON ? $r('app.media.ic_list_bullet_circle') : $r('app.media.ic_grid'))
+              .width(18)
+              .height(18)
+              .fillColor(CloudThemeToken.textPrimary)
+          }
+          .width(38)
+          .height(38)
+          .borderRadius(19)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .onClick(() => {
+            this.toggleShowType()
+          })
+
+          Button({ type: ButtonType.Normal }) {
+            Image($r('app.media.ic_square_more'))
+              .width(18)
+              .height(18)
+              .fillColor(this.showMenu ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
+          }
+          .width(38)
+          .height(38)
+          .borderRadius(19)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
           .bindMenu(this.moreMenu(), {onAppear: () => {
             this.showMenu = true
           }, onDisappear: () => {
             this.showMenu = false
           }})
+        }
       }
-      .padding({ left: 20, right: 25 })
+      .padding({ left: 20, right: 20 })
       .width('100%')
       .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
-    .height(40)
+    .height(56)
     .align(Alignment.Center)
     .justifyContent(FlexAlign.Center)
-    .bindSheet($$this.showSelectFile, this.selectFileSheet(), {
-      detents: [SheetSize.FIT_CONTENT],
-      backgroundColor: CloudThemeToken.surface,
-      title: {title: $r('app.string.select_file_title')},
-    })
   }
 
   @Builder moreMenu() {
@@ -186,7 +232,6 @@ export struct TabFilesTitle {
       MenuItemGroup() {
         MenuItem(this.commonMenu($r('app.string.more_upload_file')))
           .onClick(() => {
-            this.showSelectFile = true
             if (this.onMoreClick) {
               this.onMoreClick(MoreMenuType.UPLOAD_FILE)
             }
@@ -256,12 +301,4 @@ export struct TabFilesTitle {
     .justifyContent(FlexAlign.SpaceBetween)
   }
 
-  @Builder selectFileSheet() {
-    SelectFileSheet({onSelectFinished: (uris: string[]) => {
-      this.showSelectFile = false
-      uris.forEach((value, index) => {
-        console.debug(TAG, `index: ${index+1}, uri: ${value}`)
-      })
-    }})
-  }
 }

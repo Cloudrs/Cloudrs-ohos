@@ -24,7 +24,6 @@ function itemFileNameStyle() {
   .fontSize(16)
   .fontWeight(FontWeight.Medium)
   .fontColor(CloudThemeToken.textPrimary)
-  .wordBreak(WordBreak.BREAK_ALL)
   .maxLines(1)
   .textOverflow({overflow: TextOverflow.Ellipsis})
   .width('100%')
@@ -34,6 +33,9 @@ function itemFileNameStyle() {
 function itemFileDateStyle() {
   .fontSize(12)
   .fontColor(CloudThemeToken.textSecondary)
+  .maxLines(1)
+  .textOverflow({overflow: TextOverflow.Ellipsis})
+  .width('100%')
 }
 
 @Component
@@ -64,6 +66,26 @@ export struct ObjectItem {
     }
   }
 
+  getDisplayName(name: string, maxLength: number = 28): string {
+    if (name.length <= maxLength) {
+      return name
+    }
+    const dotIndex = name.lastIndexOf('.')
+    const extension = dotIndex > 0 ? name.substring(dotIndex) : ''
+    const baseName = dotIndex > 0 ? name.substring(0, dotIndex) : name
+    const suffixLength = Math.min(8, baseName.length)
+    const prefixLength = Math.max(8, maxLength - suffixLength - extension.length - 1)
+    return `${baseName.substring(0, prefixLength)}…${baseName.substring(baseName.length - suffixLength)}${extension}`
+  }
+
+  getDateText(date: string): string {
+    return DateUtil.getFormatDateStr(new Date(date), 'yyyy-MM-dd')
+  }
+
+  getFileMetaText(item: ObjectInfo): string {
+    return `${this.getDateText(item.date)} · ${CommonUtil.formatBytes(item.size)}`
+  }
+
   build() {
     if (this.item.type === Constant.OBJECT_DIR_TYPE) {
       this.dirItem(this.item)
@@ -78,22 +100,22 @@ export struct ObjectItem {
 
   @Builder dirItem(item: ObjectInfo) {
     Column() {
-      Row({ space: 10 }) {
+      Row({ space: 12 }) {
         Image(this.getItemIcon(item.name, true))
-          .width(40)
-          .height(40)
+          .width(this.showType == ShowType.SHOW_LIST ? 36 : 40)
+          .height(this.showType == ShowType.SHOW_LIST ? 36 : 40)
           .draggable(false)
 
         Column({ space: 3 }) {
           //TODO: 加入是否下载为本地的图标
-          Text(item.name)
+          Text(this.getDisplayName(item.name, this.showType == ShowType.SHOW_LIST ? 42 : 26))
             .itemFileNameStyle()
 
-          Text(DateUtil.getFormatDateStr(new Date(item.date), 'yyyy-MM-dd'))
+          Text(this.getDateText(item.date))
             .itemFileDateStyle()
         }
         .layoutWeight(1)
-        .height(40)
+        .height(42)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
 
@@ -108,8 +130,8 @@ export struct ObjectItem {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
-    .height(50)
-    .padding({left: 10, right: 10})
+    .height(this.showType == ShowType.SHOW_LIST ? 58 : 54)
+    .padding({left: 12, right: 12})
     .itemStyle()
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
@@ -142,10 +164,10 @@ export struct ObjectItem {
         CommonUtil.getFileIconInfo(item.name).backgroundColor)
 
       Column({ space: 3 }) {
-        Text(item.name)
+        Text(this.getDisplayName(item.name, 28))
           .itemFileNameStyle()
 
-        Text(DateUtil.getFormatDateStr(new Date(item.date), 'yyyy-MM-dd'))
+        Text(this.getDateText(item.date))
           .itemFileDateStyle()
       }
       .height(40)
@@ -167,30 +189,30 @@ export struct ObjectItem {
 
   @Builder fileListItem(item: ObjectInfo) {
     Column() {
-      Row({ space: 10 }) {
+      Row({ space: 12 }) {
         Image(this.getItemIcon(item.name, false))
-          .width(40)
-          .height(40)
+          .width(36)
+          .height(36)
           .draggable(false)
 
         Column({ space: 3 }) {
           //TODO: 加入是否下载为本地的图标
-          Text(item.name)
+          Text(this.getDisplayName(item.name, 42))
             .itemFileNameStyle()
 
-          Text(DateUtil.getFormatDateStr(new Date(item.date), 'yyyy-MM-dd') + ` · ` + CommonUtil.formatBytes(item.size))
+          Text(this.getFileMetaText(item))
             .itemFileDateStyle()
         }
         .layoutWeight(1)
-        .height(40)
+        .height(42)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
       }
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
-    .height(50)
-    .padding({left: 10, right: 10})
+    .height(58)
+    .padding({left: 12, right: 12})
     .itemStyle()
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,

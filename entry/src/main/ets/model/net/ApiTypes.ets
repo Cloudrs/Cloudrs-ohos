@@ -352,6 +352,8 @@ export enum UserTaskType {
 }
 
 export interface UserTask {
+  id?: string
+  name?: string
   status: number
   type: number
   create_date: string

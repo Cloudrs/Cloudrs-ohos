@@ -3,8 +3,7 @@ import { Aria2Downloading,
   Aria2Files,
   Aria2Finished, Aria2Status,
   TaskError,
-  UserTask, UserTasks,
-  UserTaskType } from "../../model/net/ApiTypes";
+  UserTask, UserTasks } from "../../model/net/ApiTypes";
 import { CloudApi } from "../../model/net/CloudApi";
 import { ContentItem, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
 import { DateUtil } from "@pura/harmony-utils";
@@ -13,7 +12,7 @@ import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { Aria2Create } from "../../components/Aria2Create";
 import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
-import { showToast } from "../../utils/ToastUtil";
+import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
@@ -60,7 +59,7 @@ export struct TabRemoteDown {
     if (this.timerId === undefined) {
       this.timerId = setInterval(() => {
         this.getAria2Downloading()
-        this.getAria2Finished(true)
+        this.getAria2Finished(true, true)
       }, interval)
     }
   }
@@ -96,16 +95,21 @@ export struct TabRemoteDown {
     })
   }
 
-  getAria2Finished(isFresh: boolean) {
-    if (isFresh) {
+  getAria2Finished(isFresh: boolean, softRefresh: boolean = false) {
+    if (isFresh && !softRefresh) {
       this.aria2FinishedSource.clear()
       this.finishedPage = 1
       this.isLastFinishedPage = false
     }
 
-    CloudApi.aria2Finished(this.finishedPage, {
+    const targetPage = isFresh ? 1 : this.finishedPage
+    CloudApi.aria2Finished(targetPage, {
       onSuccess: (data) => {
-        if (data.length > 0) {
+        if (isFresh && softRefresh) {
+          this.aria2FinishedSource.replaceAll(data)
+          this.finishedPage = data.length > 0 ? 2 : 1
+          this.isLastFinishedPage = data.length === 0
+        } else if (data.length > 0) {
           this.aria2FinishedSource.pushArrayData(data)
           this.finishedPage++
           console.debug(TAG, 'finished number: ' + this.totalFinished)
@@ -172,22 +176,29 @@ export struct TabRemoteDown {
   }
 
   deleteTaskConfirm(index: number, item: Aria2Finished) {
+    const taskName = item.name && item.name.trim().length > 0 && item.name !== '.' ? item.name : item.gid
     DialogHelper.showAlertDialog({
       primaryTitle:  $r('app.string.delete_task_confirm'),
-      content: item.name,
+      content: taskName,
       primaryButton: {value: $r('app.string.dialog_cancel')},
       secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
       onAction: (action: number, dialogId: string) => {
         if (action == DialogAction.TWO) {
           this.showTaskDetailSheet = false
+          this.currentFinishedDetail = undefined
+          this.currentFinishedIndex = -1
           CloudApi.deleteAria2Task(item.gid, {
               onSuccess: (data) => {
                 this.aria2FinishedSource.deleteData(index)
+                this.totalFinished = this.aria2FinishedSource.totalCount()
+                this.getAria2Downloading()
+                this.getAria2Finished(true)
+                this.getUserTasks(true)
                 showToast($r('app.string.delete_task_success'))
               },
               onFailure: (msg) => {
                 console.error(TAG, '删除任务失败 msg: ' + msg)
-                showToast($r('app.string.delete_task_failed'))
+                showToastTips(`删除任务失败：${msg}`, ToastType.Error)
               }
             })
         }
@@ -246,68 +257,107 @@ export struct TabRemoteDown {
     return length
   }
 
+  getTaskName(name?: string): string {
+    if (!name || name === '.' || name.trim().length === 0) {
+      return '未命名任务'
+    }
+    return name
+  }
+
+  getProgressText(completed: number, total: number): string {
+    if (total <= 0) {
+      return '0%'
+    }
+    return `${Math.floor(completed * 100 / total)}%`
+  }
+
+  getFileCountText(count: number): string {
+    return `${count} 个文件`
+  }
+
+  getPathText(path: string): string {
+    if (path.length === 0) {
+      return '未设置保存路径'
+    }
+    return path
+  }
+
   @Builder downloadingItem(item: Aria2Downloading) {
-    Row({space: 10}) {
+    Row({space: 12}) {
       Stack({alignContent: Alignment.Center}) {
         DataPanel({ values: [item.downloaded], max: item.total, type: DataPanelType.Circle })
-          .width(42)
-          .height(42)
+          .width(48)
+          .height(48)
           .strokeWidth(4)
           .valueColors([CloudThemeToken.primary])
 
-        Text(item.info.files ? item.info.files.length.toString() : '1')
-          .fontSize(16)
+        Text(this.getProgressText(item.downloaded, item.total))
+          .fontSize(10)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
       }
 
-      Column({space: 5}) {
-        Text(item.name === '.' || item.name === '' ? $r('app.string.aria2_unknown_name') : item.name)
+      Column({space: 8}) {
+        Text(this.getTaskName(item.name))
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
-          .wordBreak(WordBreak.BREAK_ALL)
           .textOverflow({overflow: TextOverflow.Ellipsis})
 
-        Row({space: 5}) {
+        Progress({value: item.downloaded, total: item.total, type: ProgressType.Capsule})
+          .width('100%')
+          .height(6)
+          .color(CloudThemeToken.primary)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+
+        Row({space: 8}) {
           Image($r('app.media.ic_arrowshape_down'))
             .width(12)
             .height(12)
             .fillColor(CloudThemeToken.textPrimary)
           Text(CommonUtil.formatBytes(item.speed, 1)+'/s')
-            .fontSize(14)
+            .fontSize(12)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
 
-          Divider().vertical(true).strokeWidth('4px').color(CloudThemeToken.line)
+          Text(this.getFileCountText(item.info.files ? item.info.files.length : 1))
+            .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
 
           Image($r('app.media.ic_calendar'))
             .width(12)
             .height(12)
             .fillColor(CloudThemeToken.textSecondary)
           Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
+            .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
         }
-        .height(15)
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
+
+        Row({space: 6}) {
+          Image($r('app.media.ic_folder'))
+            .width(12)
+            .height(12)
+            .fillColor(CloudThemeToken.textSecondary)
+          Text(this.getPathText(item.dst))
+            .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({overflow: TextOverflow.Ellipsis})
+            .layoutWeight(1)
+        }
+        .alignItems(VerticalAlign.Center)
       }
-      .height('100%')
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
       .justifyContent(FlexAlign.Center)
-
-      Image($r('app.media.ic_dot_grid'))
-        .width(20)
-        .height(20)
     }
     .width('100%')
-    .height(60)
+    .height(104)
     .borderRadius(CloudThemeToken.cardRadius)
-    .padding(10)
+    .padding(12)
     .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       console.debug(TAG, 'onClick')
@@ -328,57 +378,69 @@ export struct TabRemoteDown {
   }
 
   @Builder finishedItem(index: number, item: Aria2Finished) {
-    Row({space: 10}) {
+    Row({space: 12}) {
       Stack({alignContent: Alignment.Center}) {
         DataPanel({ values: [this.getDownloadLength(item.files)], max: item.total, type: DataPanelType.Circle })
-          .width(42)
-          .height(42)
+          .width(48)
+          .height(48)
           .strokeWidth(4)
           .closeEffect(true)
           .valueColors([item.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger])
 
-        Text(item.files?.length.toString())
-          .fontSize(16)
+        Text(item.files?.length ? item.files.length.toString() : '0')
+          .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
       }
 
-      Column({space: 5}) {
-        Text(item.name === '.' ? $r('app.string.aria2_unknown_name') : item.name)
+      Column({space: 7}) {
+        Text(this.getTaskName(item.name))
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
-          .wordBreak(WordBreak.BREAK_ALL)
           .textOverflow({overflow: TextOverflow.Ellipsis})
 
-        Row({space: 5}) {
+        Row({space: 8}) {
           Image(item.task_status == Aria2Status.FINISHED ?
             $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
             .width(12)
             .height(12)
             .fillColor(item.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
           Text(this.getTaskStatus(item.task_status))
-            .fontSize(14)
+            .fontSize(12)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
 
-          Divider().vertical(true).strokeWidth('4px').color(CloudThemeToken.line)
+          Text(this.getFileCountText(item.files ? item.files.length : 0))
+            .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
 
           Image($r('app.media.ic_calendar'))
             .width(12)
             .height(12)
             .fillColor(CloudThemeToken.textSecondary)
           Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
+            .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
         }
-        .height(15)
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
+
+        Row({space: 6}) {
+          Image($r('app.media.ic_folder'))
+            .width(12)
+            .height(12)
+            .fillColor(CloudThemeToken.textSecondary)
+          Text(this.getPathText(item.dst))
+            .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({overflow: TextOverflow.Ellipsis})
+            .layoutWeight(1)
+        }
+        .alignItems(VerticalAlign.Center)
       }
-      .height('100%')
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
       .justifyContent(FlexAlign.Center)
@@ -388,9 +450,9 @@ export struct TabRemoteDown {
         .height(24)
     }
     .width('100%')
-    .height(60)
+    .height(92)
     .borderRadius(CloudThemeToken.cardRadius)
-    .padding(10)
+    .padding(12)
     .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       console.debug(TAG, 'onClick')
@@ -488,7 +550,7 @@ export struct TabRemoteDown {
             GridItem() {
               this.taskQueueItem(item)
             }
-          }, (item: UserTask, index:number) => item.create_date + index)
+          }, (item: UserTask, index:number) => (item.id ?? item.create_date) + index)
         }
       }
       .width('100%')
@@ -519,25 +581,32 @@ export struct TabRemoteDown {
   }
 
   @Builder taskQueueItem(task: UserTask) {
-    Row() {
-      Column({space: 5}) {
-        Row({space: 5}) {
+    Row({space: 12}) {
+      Column({space: 8}) {
+        Row({space: 8}) {
           Image($r('app.media.ic_calendar'))
-            .width(14)
-            .height(14)
+            .width(12)
+            .height(12)
             .fillColor(CloudThemeToken.textSecondary)
           Text(DateUtil.getFormatDateStr(new Date(task.create_date), 'yyyy-MM-dd'))
             .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
         }
 
-        Text(task.type == UserTaskType.FileTransfer ?
-          $r('app.string.file_transfer') : $r('app.string.policy_transfer'))
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
+        Text(this.getTaskName(task.name))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+          .textOverflow({overflow: TextOverflow.Ellipsis})
 
-        Row({space: 5}) {
+        Progress({value: task.progress, total: 100, type: ProgressType.Capsule})
+          .width('100%')
+          .height(6)
+          .color(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+
+        Row({space: 8}) {
           Image(task.status == Aria2Status.FINISHED ?
             $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
               .width(12)
@@ -545,6 +614,10 @@ export struct TabRemoteDown {
               .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
 
           Text($r('app.string.last_progress'))
+            .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
+
+          Text(`${task.progress}%`)
             .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
 
@@ -564,7 +637,8 @@ export struct TabRemoteDown {
             Text(this.getErrorInfo(task.error))
               .fontSize(12)
               .fontColor(CloudThemeToken.danger)
-              .wordBreak(WordBreak.BREAK_ALL)
+              .maxLines(2)
+              .textOverflow({overflow: TextOverflow.Ellipsis})
               .layoutWeight(1)
           }
         }
@@ -579,17 +653,24 @@ export struct TabRemoteDown {
         .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
     }
     .width('100%')
-    // .height(80)
-    .padding({left: 15, right: 15})
+    .constraintSize({ minHeight: 104 })
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     .borderRadius(CloudThemeToken.cardRadius)
-    .padding(10)
+    .padding(12)
     .backgroundColor(CloudThemeToken.surface)
   }
 
   getErrorInfo(errorJson: string) {
-    let error: TaskError = JSON.parse(errorJson)
-    return `${error.msg}:${error.error}`
+    if (!errorJson || errorJson.trim().length === 0) {
+      return '任务执行失败'
+    }
+
+    try {
+      let error: TaskError = JSON.parse(errorJson)
+      return `${error.msg}:${error.error}`
+    } catch (e) {
+      return errorJson
+    }
   }
 }

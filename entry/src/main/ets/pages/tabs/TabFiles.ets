@@ -96,6 +96,7 @@ export struct TabFiles {
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State showSelectFile: boolean = false
   @State filePageState: FilePageState = FilePageState.IDLE
+  @State searchKeyword: string = ''
 
   setThumbData(id: string, pixMap: PixelMap) {
     const updated: Map<string, PixelMap> = new Map(this.thumbImage);
@@ -118,7 +119,14 @@ export struct TabFiles {
   }
 
   isCurrentDirectoryEmpty(): boolean {
-    return this.filePageState === FilePageState.IDLE && !this.isRefreshing &&
+    return this.searchKeyword.trim().length === 0 &&
+      this.filePageState === FilePageState.IDLE && !this.isRefreshing &&
+      this.dirDataSource.totalCount() === 0 && this.fileDataSource.totalCount() === 0
+  }
+
+  isSearchResultEmpty(): boolean {
+    return this.searchKeyword.trim().length > 0 &&
+      this.filePageState === FilePageState.IDLE && !this.isRefreshing &&
       this.dirDataSource.totalCount() === 0 && this.fileDataSource.totalCount() === 0
   }
 
@@ -128,6 +136,24 @@ export struct TabFiles {
 
   isFilePageFailed(): boolean {
     return this.filePageState === FilePageState.FAILED
+  }
+
+  applyVisibleObjects() {
+    const keyword = this.searchKeyword.trim().toLowerCase()
+    if (keyword.length === 0) {
+      this.dirDataSource.dataArray = this.objectsInfo.dirObjects
+      this.fileDataSource.dataArray = this.objectsInfo.fileObjects
+    } else {
+      this.dirDataSource.dataArray = this.objectsInfo.dirObjects.filter((item: ObjectInfo) => {
+        return item.name.toLowerCase().includes(keyword)
+      })
+      this.fileDataSource.dataArray = this.objectsInfo.fileObjects.filter((item: ObjectInfo) => {
+        return item.name.toLowerCase().includes(keyword)
+      })
+    }
+    this.isGridPadding = this.dirDataSource.totalCount() % 2 ? true : false
+    this.dirDataSource.notifyDataReload()
+    this.fileDataSource.notifyDataReload()
   }
 
   onBackPressedCallback(): boolean {
@@ -181,6 +207,9 @@ export struct TabFiles {
   }
 
   async getFileList(isRefresh: boolean, path: string) {
+    const isSamePath = path === this.currentPath
+    const hasVisibleData = this.dirDataSource.totalCount() > 0 || this.fileDataSource.totalCount() > 0
+    const shouldKeepContent = isRefresh && isSamePath && hasVisibleData
     if (path === '/') {
       this.isRoot = true
     }
@@ -191,8 +220,8 @@ export struct TabFiles {
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : CommonUtil.getLastDirectoryName(path)
     CloudApi.getFilesInfo(path, {
       onStart: () => {
-        this.filePageState = FilePageState.LOADING
-        if (isRefresh) {
+        this.filePageState = shouldKeepContent ? FilePageState.IDLE : FilePageState.LOADING
+        if (isRefresh && !shouldKeepContent) {
           this.dirDataSource.clear()
           this.fileDataSource.clear()
           this.thumbImage.clear()
@@ -200,14 +229,13 @@ export struct TabFiles {
         }
       },
       onSuccess: (data: DirectoryInfo) => {
+        if (!shouldKeepContent) {
+          this.searchKeyword = ''
+        }
         this.subTitle = data.policy.name
         this.objectsInfo = new DirFileInfo(data.parent, data.objects, data.policy)
         this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
-        this.dirDataSource.dataArray = this.objectsInfo.dirObjects
-        this.dirDataSource.notifyDataReload()
-        this.isGridPadding = this.dirDataSource.totalCount()%2 ? true : false
-        this.fileDataSource.dataArray = this.objectsInfo.fileObjects
-        this.fileDataSource.notifyDataReload()
+        this.applyVisibleObjects()
         this.isRefreshing = false
         this.filePageState = FilePageState.IDLE
       },
@@ -215,7 +243,7 @@ export struct TabFiles {
         showToastTips($r('app.string.get_failed'), ToastType.Error)
         //决定是否重新登录
         this.isRefreshing = false
-        this.filePageState = FilePageState.FAILED
+        this.filePageState = shouldKeepContent ? FilePageState.IDLE : FilePageState.FAILED
       }
     })
   }
@@ -291,13 +319,17 @@ export struct TabFiles {
         Column({ space: 10 }) {
           TabFilesHeader({
             isRoot: this.isRoot,
+            searchKeyword: this.searchKeyword,
             downloadObjects: this.downloadObjects,
             downloadingCount: this.downloadingCount,
             uploadObjects: this.uploadObjects,
             uploadingCount: this.uploadingCount,
             onBackClick: (async () => {
               await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
-            })
+            }),
+            onSearchChange: () => {
+              this.applyVisibleObjects()
+            }
           })
           TabFilesTitle({
             mainTitle: this.mainTitle,
@@ -307,7 +339,7 @@ export struct TabFiles {
             }
           })
         }
-        .height(80)
+        .height(96)
         .justifyContent(FlexAlign.Center)
 
         Stack({alignContent: Alignment.BottomEnd}) {
@@ -326,12 +358,20 @@ export struct TabFiles {
             this.loadingState()
           }
 
+          if (this.isRefreshing && !this.isFilePageLoading()) {
+            this.refreshingHint()
+          }
+
           if (this.isFilePageFailed()) {
             this.failedState()
           }
 
           if (this.isCurrentDirectoryEmpty()) {
             this.emptyDirectoryState()
+          }
+
+          if (this.isSearchResultEmpty()) {
+            this.searchEmptyState()
           }
 
           Button() {
@@ -381,6 +421,30 @@ export struct TabFiles {
     .backgroundColor(CloudThemeToken.background)
   }
 
+  @Builder refreshingHint() {
+    Column() {
+      Row({ space: 8 }) {
+        LoadingProgress()
+          .width(18)
+          .height(18)
+          .color(CloudThemeToken.primary)
+        Text('正在刷新')
+          .fontSize(13)
+          .fontColor(CloudThemeToken.textPrimary)
+      }
+      .height(36)
+      .padding({ left: 14, right: 16 })
+      .borderRadius(18)
+      .backgroundColor(CloudThemeToken.surface)
+      .shadow({ radius: 12, color: 'rgba(24, 36, 56, 0.12)', offsetY: 4 })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: 8 })
+    .alignItems(HorizontalAlign.Center)
+    .justifyContent(FlexAlign.Start)
+  }
+
   @Builder failedState() {
     Column() {
       EmptyState({
@@ -408,6 +472,25 @@ export struct TabFiles {
         actionText: '上传文件',
         onAction: () => {
           this.showSelectFile = true
+        }
+      })
+    }
+    .padding({ left: 20, right: 20, bottom: this.tabBarHeight + 32 })
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder searchEmptyState() {
+    Column() {
+      EmptyState({
+        icon: $r('app.media.ic_line_viewfinder'),
+        title: '未找到匹配文件',
+        description: '换个关键词试试。',
+        actionText: '清空搜索',
+        onAction: () => {
+          this.searchKeyword = ''
+          this.applyVisibleObjects()
         }
       })
     }
@@ -611,8 +694,7 @@ export struct TabFiles {
       case MoreMenuType.SORT_BY_TIME:
       case MoreMenuType.SORT_BY_SIZE:
         this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
-        this.dirDataSource.notifyDataReload()
-        this.fileDataSource.notifyDataReload()
+        this.applyVisibleObjects()
         break
       case MoreMenuType.NEW_DIR:
         this.itemNew(this.currentPath, true)

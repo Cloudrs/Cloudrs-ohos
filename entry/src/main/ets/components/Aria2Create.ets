@@ -2,6 +2,7 @@ import Constant from "../model/Constant"
 import { CloudApi } from "../model/net/CloudApi";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { PathSelectSheet } from "./PathSelectSheet";
+import { showToastTips, ToastType } from "../utils/ToastUtil";
 
 const TAG: string = 'Aria2Create'
 
@@ -15,6 +16,14 @@ export struct Aria2Create {
   onFinished?: () => void
 
   createAria2Task(path: string) {
+    this.urls = this.inputUrls.split(/\r\n|\r|\n/)
+      .map((url: string) => url.trim())
+      .filter((url: string) => url.length > 0)
+    if (this.urls.length === 0) {
+      showToastTips('请输入下载链接', ToastType.Warn)
+      return
+    }
+
     CloudApi.aria2TaskCreate(path, this.urls, {
       onSuccess: (data) => {
         if (this.onFinished) {
@@ -23,6 +32,7 @@ export struct Aria2Create {
       },
       onFailure: (msg) => {
         console.error(TAG, 'create aria2 task failed, msg: ' + msg)
+        showToastTips(`创建任务失败：${msg}`, ToastType.Error)
       }
     })
   }
@@ -42,6 +52,8 @@ export struct Aria2Create {
         .backgroundColor(CloudThemeToken.surfaceSubtle)
         .onChange((value) => {
           this.urls = value.split(/\r\n|\r|\n/)
+            .map((url: string) => url.trim())
+            .filter((url: string) => url.length > 0)
           //console.debug(TAG, 'urls: ' + this.urls)
           console.debug(TAG, 'path: ' + this.path)
         })
@@ -89,7 +101,7 @@ export struct Aria2Create {
       .height(48)
       .borderRadius(CloudThemeToken.controlRadius)
       .backgroundColor(CloudThemeToken.primary)
-      .enabled(this.path != undefined && this.inputUrls != '')
+      .enabled(this.path != undefined && this.inputUrls.trim() != '')
       .onClick(() => {
         if (this.path) {
           this.createAria2Task(this.path)

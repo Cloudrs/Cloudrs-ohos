@@ -2,6 +2,7 @@ import { photoAccessHelper } from "@kit.MediaLibraryKit"
 import { BusinessError } from "@kit.BasicServicesKit"
 import { common } from "@kit.AbilityKit"
 import { picker } from "@kit.CoreFileKit"
+import { CloudThemeToken } from "../model/CloudTheme"
 
 const TAG: string = 'SelectFileSheet'
 
@@ -21,11 +22,17 @@ export struct SelectFileSheet {
           Image($r('app.media.ic_select_files'))
             .width(40)
             .height(40)
+            .fillColor(CloudThemeToken.primary)
 
           Text($r('app.string.local_files'))
             .fontSize(14)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
+        .width(88)
+        .height(88)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .backgroundColor(CloudThemeToken.surface)
+        .justifyContent(FlexAlign.Center)
         .onClick(async () => {
           this.selectFiles()
         })
@@ -34,11 +41,17 @@ export struct SelectFileSheet {
           Image($r('app.media.ic_select_photos'))
             .width(40)
             .height(40)
+            .fillColor(CloudThemeToken.primary)
 
           Text($r('app.string.local_photos'))
             .fontSize(14)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
+        .width(88)
+        .height(88)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .backgroundColor(CloudThemeToken.surface)
+        .justifyContent(FlexAlign.Center)
         .onClick(async () => {
           this.selectPhotos(false)
         })
@@ -47,18 +60,23 @@ export struct SelectFileSheet {
           Image($r('app.media.ic_select_videos'))
             .width(40)
             .height(40)
+            .fillColor(CloudThemeToken.primary)
 
           Text($r('app.string.local_videos'))
             .fontSize(14)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
+        .width(88)
+        .height(88)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .backgroundColor(CloudThemeToken.surface)
+        .justifyContent(FlexAlign.Center)
         .onClick(() => {
           this.selectPhotos(true)
         })
       }
       .width('100%')
-      .height(100)
-      .padding({left: 30, right: 30})
+      .height(112)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.SpaceBetween)
     }
@@ -66,6 +84,7 @@ export struct SelectFileSheet {
     .padding(20)
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   async selectPhotos(isVideo: boolean) {

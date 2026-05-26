@@ -5,23 +5,25 @@ import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
 import { CommonUtil } from "../utils/CommonUtil";
+import { CloudThemeToken } from "../model/CloudTheme";
 
 const TAG = 'ObjectItem';
 
 @Extend(Column)
 function itemStyle() {
   .width('100%')
-  .borderRadius(10)
+  .borderRadius(CloudThemeToken.cardRadius)
   .clip(true)
   .alignItems(HorizontalAlign.Start)
   .justifyContent(FlexAlign.Center)
-  .backgroundColor(Color.White)
+  .backgroundColor(CloudThemeToken.surface)
 }
 
 @Extend(Text)
 function itemFileNameStyle() {
   .fontSize(16)
   .fontWeight(FontWeight.Medium)
+  .fontColor(CloudThemeToken.textPrimary)
   .wordBreak(WordBreak.BREAK_ALL)
   .maxLines(1)
   .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -31,7 +33,7 @@ function itemFileNameStyle() {
 @Extend(Text)
 function itemFileDateStyle() {
   .fontSize(12)
-  .fontColor($r('app.color.light_gray'))
+  .fontColor(CloudThemeToken.textSecondary)
 }
 
 @Component
@@ -99,7 +101,7 @@ export struct ObjectItem {
           Image($r('app.media.ic_chevron_right'))
             .width(12)
             .height(12)
-            .fillColor($r('app.color.file_folder_right'))
+            .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
       }
@@ -119,15 +121,25 @@ export struct ObjectItem {
 
   @Builder fileIconItem(item: ObjectInfo) {
     Column({space: 10}) {
-      Text() {
-        ImageSpan(this.getThumbData(item.id) ?? CommonUtil.getFileIconInfo(item.name).icon)
-          .objectFit(this.getThumbData(item.id) ? ImageFit.Cover : ImageFit.CENTER)
-          .draggable(false)
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.getThumbData(item.id)) {
+          Image(this.getThumbData(item.id))
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Cover)
+            .draggable(false)
+        } else {
+          Image(CommonUtil.getFileIconInfo(item.name).icon)
+            .width(56)
+            .height(56)
+            .draggable(false)
+        }
       }
-      .textAlign(TextAlign.Center)
       .width('100%')
       .layoutWeight(1)
-      .backgroundColor(CommonUtil.getFileIconInfo(item.name).backgroundColor)
+      .borderRadius({ topLeft: CloudThemeToken.cardRadius, topRight: CloudThemeToken.cardRadius })
+      .backgroundColor(this.getThumbData(item.id) ? CloudThemeToken.surfaceSubtle :
+        CommonUtil.getFileIconInfo(item.name).backgroundColor)
 
       Column({ space: 3 }) {
         Text(item.name)
@@ -222,7 +234,7 @@ export struct ObjectItem {
     .width(220)
     .padding(0)
     .margin(0)
-    .backgroundColor($r('app.color.file_menu_background'))
+    .backgroundColor(CloudThemeToken.surface)
     .menuItemDivider({
       color: $r("app.color.menu_divider_line"),
       strokeWidth: {value: 2, unit: LengthUnit.PX}
@@ -249,6 +261,7 @@ export struct ObjectItem {
       Text(content)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
         .height(50)
         .layoutWeight(1)
 

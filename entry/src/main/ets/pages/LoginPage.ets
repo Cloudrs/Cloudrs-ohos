@@ -8,15 +8,15 @@ import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { LoginParam } from '../model/net/LoginParam';
 import { CloudApi } from '../model/net/CloudApi';
 import { image } from '@kit.ImageKit';
+import { CloudThemeToken } from '../model/CloudTheme';
 
 @Extend(Row)
 function rowCommonStyle() {
-  .borderRadius(10)
-  .backgroundColor($r("app.color.textinput_background"))
+  .borderRadius(CloudThemeToken.cardRadius)
+  .backgroundColor(CloudThemeToken.surface)
   .width('100%')
-  .height(40)
+  .height(48)
   .alignItems(VerticalAlign.Center)
-  .shadow(ShadowStyle.OUTER_DEFAULT_SM)
 }
 
 @HMRouter({pageUrl: Constant.LOGIN_PAGE, singleton: true})
@@ -73,10 +73,12 @@ export struct LoginPage {
         Row() {
           Button() {
             Image($r('app.media.ic_arrow_left_circle'))
+              .fillColor(CloudThemeToken.textSecondary)
           }
-          .width(30)
-          .backgroundColor($r("app.color.main_window_background"))
-          .borderRadius(15)
+          .width(34)
+          .height(34)
+          .backgroundColor(CloudThemeToken.surface)
+          .borderRadius(CloudThemeToken.controlRadius)
           .onClick(() => {
             if (this.needs2FA) {
               this.needs2FA = false
@@ -110,7 +112,7 @@ export struct LoginPage {
           if (!this.websiteInvalid) {
             Text($r("app.string.login_tips"))
               .fontSize(11)
-              .fontColor($r("app.color.light_gray"))
+              .fontColor(CloudThemeToken.textSecondary)
               .margin({ left: 10, right: 10 })
           }
         }
@@ -126,8 +128,8 @@ export struct LoginPage {
       }
     }
     .height("100%")
-    .padding({top: 20, left: 20, right: 20, bottom: this.keyHeight ? 0 : 20})
-    .backgroundColor($r("app.color.main_window_background"))
+    .padding({top: 20, left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding, bottom: this.keyHeight ? 0 : 20})
+    .backgroundColor(CloudThemeToken.background)
     .justifyContent(FlexAlign.SpaceBetween)
   }
 
@@ -173,7 +175,7 @@ export struct LoginPage {
     }
     UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
     UserDatabase.insertUserInfo(dbUserInfo)
-    HMRouterMgr.push({pageUrl: this.nextPage})
+    HMRouterMgr.push({pageUrl: this.nextPage ?? Constant.HOME_PAGE})
   }
 
   private login() {
@@ -224,13 +226,20 @@ export struct LoginPage {
     Text(this.loginTitle)
       .fontSize(20)
       .fontWeight(FontWeight.Bold)
+      .fontColor(CloudThemeToken.textPrimary)
+      .maxLines(2)
+      .textAlign(TextAlign.Center)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
   }
 
   @Builder buttonContinue() {
     Button($r("app.string.login_continue"))
       .margin({top: 10})
-      .shadow(ShadowStyle.OUTER_FLOATING_SM)
+      .height(48)
       .width("100%")
+      .borderRadius(CloudThemeToken.controlRadius)
+      .backgroundColor(CloudThemeToken.primary)
+      .fontColor(Color.White)
       .onClick(() => {
         if (!this.websiteInvalid) {
           this.websiteTest()
@@ -260,14 +269,14 @@ export struct LoginPage {
         })
     }
     .width(200)
-    .menuItemDivider({strokeWidth: LengthMetrics.px(1), color: $r("app.color.menu_divider_line")})
+    .menuItemDivider({strokeWidth: LengthMetrics.px(1), color: CloudThemeToken.line})
   }
 
   @Styles loginTextInputStyle() {
     .borderRadius(0)
     .layoutWeight(1)
     .padding(0)
-    .backgroundColor($r("app.color.textinput_background"))
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder showWebsiteInput() {
@@ -275,14 +284,17 @@ export struct LoginPage {
       Image($r("app.media.ic_worldclock_fill"))
         .width(20)
         .margin({ left: 5, right: 5 })
+        .fillColor(CloudThemeToken.primary)
 
       Text(this.protocol)
-        .fontColor($r('app.color.light_gray'))
+        .fontColor(CloudThemeToken.textSecondary)
         .textAlign(TextAlign.Center)
         .bindMenu(this.protocolMenu)
 
       TextInput({ placeholder: $r("app.string.login_address"), text: this.address })
         .loginTextInputStyle()
+        .fontColor(CloudThemeToken.textPrimary)
+        .placeholderColor(CloudThemeToken.textSecondary)
         .onChange((value) => {
           this.address = value
         })
@@ -294,7 +306,7 @@ export struct LoginPage {
     Column({ space: 16 }) {
       Text('请输入身份验证器中的6位验证码')
         .fontSize(13)
-        .fontColor($r("app.color.light_gray"))
+        .fontColor(CloudThemeToken.textSecondary)
         .width('100%')
         .textAlign(TextAlign.Center)
 
@@ -311,14 +323,13 @@ export struct LoginPage {
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
             .borderRadius(10)
-            .backgroundColor($r("app.color.textinput_background"))
+            .backgroundColor(CloudThemeToken.surface)
             .border({
               width: 2,
               color: this.otpCode.length === item
-                ? $r("app.color.select_primary")
+                ? CloudThemeToken.primary
                 : Color.Transparent
             })
-            .shadow(ShadowStyle.OUTER_DEFAULT_XS)
           }, (item: number) => item.toString())
         }
         .justifyContent(FlexAlign.Center)
@@ -350,10 +361,13 @@ export struct LoginPage {
         Image($r("app.media.ic_envelope"))
           .width(20)
           .margin({ left: 10, right: 10 })
+          .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
         TextInput({ placeholder: $r("app.string.login_user"), text: this.username })
           .loginTextInputStyle()
+          .fontColor(CloudThemeToken.textPrimary)
+          .placeholderColor(CloudThemeToken.textSecondary)
           .onChange((value) => {
             this.username = value
           })
@@ -365,11 +379,14 @@ export struct LoginPage {
         Image($r("app.media.ic_key_horizontal"))
           .width(20)
           .margin({ left: 10, right: 10 })
+          .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
         TextInput({ placeholder: $r("app.string.login_password"), text: this.password })
           .type(InputType.Password)
           .loginTextInputStyle()
+          .fontColor(CloudThemeToken.textPrimary)
+          .placeholderColor(CloudThemeToken.textSecondary)
           .onChange((value) => {
             this.password = value
           })
@@ -382,12 +399,10 @@ export struct LoginPage {
   }
 
   @Styles scanAndUsersCommon() {
-    .height(30)
-    .width(30)
-    .borderColor($r("app.color.light_light_gray"))
-    .borderWidth(1)
-    .borderRadius(15)
-    .backgroundColor($r("app.color.main_window_background"))
+    .height(36)
+    .width(36)
+    .borderRadius(CloudThemeToken.controlRadius)
+    .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder buttonScanAndUsers() {
@@ -395,14 +410,14 @@ export struct LoginPage {
       Button() {
         Image($r("app.media.ic_line_viewfinder"))
           .padding(5)
-          .fillColor('#ffb110b1')
+          .fillColor(CloudThemeToken.primary)
       }
       .scanAndUsersCommon()
 
       Button() {
         Image($r("app.media.ic_person_2"))
           .padding(5)
-          .fillColor('#ff9d765d')
+          .fillColor(CloudThemeToken.textSecondary)
       }
       .scanAndUsersCommon()
     }
@@ -412,7 +427,7 @@ export struct LoginPage {
     Flex({wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center}) {
       Text($r('app.string.login_service_prefix'))
         .fontSize(11)
-        .fontColor($r("app.color.light_gray"))
+        .fontColor(CloudThemeToken.textSecondary)
 
       // Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_service")) {
       // }
@@ -425,7 +440,7 @@ export struct LoginPage {
 
       Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_privacy")) {
       }
-      .color($r("app.color.select_primary"))
+      .color(CloudThemeToken.primary)
       .height(13)
     }
     .width("100%")

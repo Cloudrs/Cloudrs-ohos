@@ -14,13 +14,15 @@ import { CommonUtil } from "../../utils/CommonUtil";
 import { Aria2Create } from "../../components/Aria2Create";
 import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
 import { showToast } from "../../utils/ToastUtil";
+import { CloudScaffold } from "../../components/CloudScaffold";
+import { CloudThemeToken } from "../../model/CloudTheme";
+import { EmptyState } from "../../components/EmptyState";
+import { CloudActionButton } from "../../components/CloudActionButton";
 
 const TAG: string = 'TabRemote'
 
 @Component
 export struct TabRemoteDown {
-  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
-  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.download_offline') }, { text: $r('app.string.task_queue') }] as SegmentButtonItemTuple,
@@ -152,7 +154,13 @@ export struct TabRemoteDown {
   }
 
   build() {
-    Column({space: 10}) {
+    CloudScaffold({
+      scrollable: false,
+      avoidTabBar: false,
+      topPadding: 20,
+      bottomPadding: 0,
+      horizontalPadding: CloudThemeToken.pagePadding
+    }) {
       this.title()
       if (this.selectedIndexes[0] == 0) {
         this.offlineDownload()
@@ -161,10 +169,6 @@ export struct TabRemoteDown {
         this.tasksQueue()
       }
     }
-    .width('100%')
-    .height('100%')
-    .padding({left: 15, right: 15, top: this.topRectHeight+10})
-    .justifyContent(FlexAlign.Start)
   }
 
   deleteTaskConfirm(index: number, item: Aria2Finished) {
@@ -218,25 +222,20 @@ export struct TabRemoteDown {
       .width('100%')
       .justifyContent(FlexAlign.Center)
 
-      Button({type: ButtonType.Circle}) {
-        Image($r('app.media.ic_plus'))
-          .fillColor(Color.Black)
-      }
-      .width(20)
-      .height(20)
-      .margin({right: 10})
-      .backgroundColor(Color.Transparent)
-      .onClick(() => {
-        this.showCreateSheet = true
+      CloudActionButton({
+        icon: $r('app.media.ic_plus'),
+        onAction: () => {
+          this.showCreateSheet = true
+        }
       })
       .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
         detents: [SheetSize.FIT_CONTENT],
         title: {title: $r('app.string.download_offline')},
-        backgroundColor: $r('app.color.sheet_default_background'),
+        backgroundColor: CloudThemeToken.background,
       })
     }
     .width('100%')
-    .height(30)
+    .height(40)
   }
 
   getDownloadLength(files: Aria2Files[]) {
@@ -254,17 +253,19 @@ export struct TabRemoteDown {
           .width(42)
           .height(42)
           .strokeWidth(4)
-          .valueColors([Color.Blue])
+          .valueColors([CloudThemeToken.primary])
 
         Text(item.info.files ? item.info.files.length.toString() : '1')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
       }
 
       Column({space: 5}) {
         Text(item.name === '.' || item.name === '' ? $r('app.string.aria2_unknown_name') : item.name)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .wordBreak(WordBreak.BREAK_ALL)
           .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -273,20 +274,22 @@ export struct TabRemoteDown {
           Image($r('app.media.ic_arrowshape_down'))
             .width(12)
             .height(12)
-            .fillColor(Color.Black)
+            .fillColor(CloudThemeToken.textPrimary)
           Text(CommonUtil.formatBytes(item.speed, 1)+'/s')
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
 
-          Divider().vertical(true).strokeWidth('4px').color($r('app.color.default_line_color'))
+          Divider().vertical(true).strokeWidth('4px').color(CloudThemeToken.line)
 
           Image($r('app.media.ic_calendar'))
             .width(12)
             .height(12)
-            .fillColor($r('app.color.aria2_no_task_font'))
+            .fillColor(CloudThemeToken.textSecondary)
           Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textSecondary)
         }
         .height(15)
         .alignItems(VerticalAlign.Center)
@@ -303,9 +306,9 @@ export struct TabRemoteDown {
     }
     .width('100%')
     .height(60)
-    .borderRadius(10)
+    .borderRadius(CloudThemeToken.cardRadius)
     .padding(10)
-    .backgroundColor($r("app.color.aria2_default_background"))
+    .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       console.debug(TAG, 'onClick')
     })
@@ -332,17 +335,19 @@ export struct TabRemoteDown {
           .height(42)
           .strokeWidth(4)
           .closeEffect(true)
-          .valueColors([item.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red])
+          .valueColors([item.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger])
 
         Text(item.files?.length.toString())
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
       }
 
       Column({space: 5}) {
         Text(item.name === '.' ? $r('app.string.aria2_unknown_name') : item.name)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .wordBreak(WordBreak.BREAK_ALL)
           .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -352,20 +357,22 @@ export struct TabRemoteDown {
             $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
             .width(12)
             .height(12)
-            .fillColor(item.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red)
+            .fillColor(item.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
           Text(this.getTaskStatus(item.task_status))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
 
-          Divider().vertical(true).strokeWidth('4px').color($r('app.color.default_line_color'))
+          Divider().vertical(true).strokeWidth('4px').color(CloudThemeToken.line)
 
           Image($r('app.media.ic_calendar'))
             .width(12)
             .height(12)
-            .fillColor($r('app.color.aria2_no_task_font'))
+            .fillColor(CloudThemeToken.textSecondary)
           Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textSecondary)
         }
         .height(15)
         .alignItems(VerticalAlign.Center)
@@ -382,10 +389,9 @@ export struct TabRemoteDown {
     }
     .width('100%')
     .height(60)
-    .borderRadius(10)
+    .borderRadius(CloudThemeToken.cardRadius)
     .padding(10)
-    .backgroundColor(item.task_status == Aria2Status.FINISHED ?
-      $r("app.color.aria2_finished_background") : $r("app.color.aria2_failed_background"))
+    .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       console.debug(TAG, 'onClick')
       this.currentFinishedDetail = item
@@ -395,19 +401,11 @@ export struct TabRemoteDown {
   }
 
   @Builder noTask(title: ResourceStr) {
-    Column() {
-      Text(title)
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.aria2_no_task_font'))
-    }
-    .backgroundColor($r("app.color.aria2_default_background"))
-    .width('100%')
-    .height(80)
-    .borderRadius(10)
-    .padding(10)
-    .alignItems(HorizontalAlign.Center)
-    .justifyContent(FlexAlign.Center)
+    EmptyState({
+      icon: $r('app.media.ic_icloud_slash_fill'),
+      title: title,
+      description: '任务状态会在这里自动刷新。'
+    })
   }
 
   @Builder downloading() {
@@ -449,7 +447,6 @@ export struct TabRemoteDown {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(Color.White)
       .padding({bottom: this.tabBarHeight+10})
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
@@ -528,32 +525,33 @@ export struct TabRemoteDown {
           Image($r('app.media.ic_calendar'))
             .width(14)
             .height(14)
-            .fillColor($r('app.color.aria2_no_task_font'))
+            .fillColor(CloudThemeToken.textSecondary)
           Text(DateUtil.getFormatDateStr(new Date(task.create_date), 'yyyy-MM-dd'))
             .fontSize(12)
-            .fontColor($r('app.color.aria2_no_task_font'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
 
         Text(task.type == UserTaskType.FileTransfer ?
           $r('app.string.file_transfer') : $r('app.string.policy_transfer'))
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
 
         Row({space: 5}) {
           Image(task.status == Aria2Status.FINISHED ?
             $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
               .width(12)
               .height(12)
-              .fillColor(task.status == Aria2Status.FINISHED ? Color.Green : Color.Red)
+              .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
 
           Text($r('app.string.last_progress'))
             .fontSize(12)
-            .fontColor($r('app.color.aria2_no_task_font'))
+            .fontColor(CloudThemeToken.textSecondary)
 
           Text(task.status == Aria2Status.FINISHED ?
             $r("app.string.finished") : $r("app.string.failed"))
             .fontSize(12)
-            .fontColor($r('app.color.aria2_no_task_font'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
 
         if (task.status != Aria2Status.FINISHED) {
@@ -561,11 +559,11 @@ export struct TabRemoteDown {
             Image($r('app.media.ic_info_circle'))
               .width(12)
               .height(12)
-              .fillColor($r('app.color.aria2_no_task_font'))
+              .fillColor(CloudThemeToken.textSecondary)
 
             Text(this.getErrorInfo(task.error))
               .fontSize(12)
-              .fontColor(Color.Red)
+              .fontColor(CloudThemeToken.danger)
               .wordBreak(WordBreak.BREAK_ALL)
               .layoutWeight(1)
           }
@@ -578,16 +576,16 @@ export struct TabRemoteDown {
       Image($r('app.media.ic_task_circle'))
         .width(40)
         .height(40)
-        .fillColor(task.status == Aria2Status.FINISHED ? Color.Green : Color.Red)
+        .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
     }
     .width('100%')
     // .height(80)
     .padding({left: 15, right: 15})
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
-    .borderRadius(10)
+    .borderRadius(CloudThemeToken.cardRadius)
     .padding(10)
-    .backgroundColor($r('app.color.aria2_default_background'))
+    .backgroundColor(CloudThemeToken.surface)
   }
 
   getErrorInfo(errorJson: string) {

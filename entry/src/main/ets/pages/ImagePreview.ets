@@ -10,6 +10,7 @@ import { showToast } from "../utils/ToastUtil";
 import { systemShare } from "@kit.ShareKit";
 import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
+import { CloudThemeToken } from "../model/CloudTheme";
 
 const TAG: string = 'ImagePreview'
 
@@ -114,7 +115,7 @@ export struct iamgePreview {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.nav_background'))
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder previewHeader() {
@@ -122,14 +123,14 @@ export struct iamgePreview {
       Row() {
         Button() {
           Image($r('app.media.ic_xmark_circle_fill'))
-            .fillColor($r('app.color.light_gray'))
+            .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
             .padding(5)
         }
         .width(36)
         .height(36)
-        .borderRadius(18)
-        .backgroundColor($r('app.color.nav_background'))
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surface)
         .onClick(() => {
           HMRouterMgr.pop()
         })
@@ -137,6 +138,7 @@ export struct iamgePreview {
         Text(this.fileParam ? this.fileParam.fileName : '')
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
           .textAlign(TextAlign.Center)
           .wordBreak(WordBreak.BREAK_ALL)
           .maxLines(1)
@@ -146,14 +148,14 @@ export struct iamgePreview {
         Button() {
           Image($r('app.media.ic_share'))
             .draggable(false)
-            .fillColor(Color.Black)
+            .fillColor(CloudThemeToken.textPrimary)
             .padding(5)
         }
         .margin({top: 4})
         .width(36)
         .height(36)
-        .borderRadius(18)
-        .backgroundColor($r('app.color.nav_background'))
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surface)
         .onClick(() => {
           this.shareImage()
         })
@@ -164,7 +166,7 @@ export struct iamgePreview {
       .justifyContent(FlexAlign.Center)
       .layoutWeight(1)
       .padding(10)
-      Divider().strokeWidth(1).color($r('app.color.default_line_color'))
+      Divider().strokeWidth(1).color(CloudThemeToken.line)
     }
     .justifyContent(FlexAlign.Center)
     .height(50)
@@ -172,7 +174,7 @@ export struct iamgePreview {
   }
 
   async saveImage() {
-    if (this.fileParam) {
+    if (this.fileParam && this.imageData) {
       try {
         let context = getContext();
         let photoType: photoAccessHelper.PhotoType = photoAccessHelper.PhotoType.IMAGE;
@@ -191,7 +193,7 @@ export struct iamgePreview {
   }
 
   async shareImage() {
-    if (this.fileParam) {
+    if (this.fileParam && this.imageData) {
       try {
         let context = getContext(this) as common.UIAbilityContext;
         let path = context.tempDir + '/' + this.fileParam.fileName

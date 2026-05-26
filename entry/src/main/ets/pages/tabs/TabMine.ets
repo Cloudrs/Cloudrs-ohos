@@ -8,14 +8,14 @@ import { image } from "@kit.ImageKit";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { DateUtil } from "@pura/harmony-utils";
 import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
+import { CloudThemeToken } from "../../model/CloudTheme";
+import { CloudScaffold } from "../../components/CloudScaffold";
 
 const TAG:string = 'TabMine'
 
 @Preview
 @Component
 export struct TabMine {
-  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
-  @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
@@ -93,22 +93,17 @@ export struct TabMine {
   }
 
   build() {
-    Scroll(this.scroller) {
-      Column({ space: 10 }) {
+    CloudScaffold({
+      scroller: this.scroller,
+      topPadding: 20,
+      bottomPadding: 20
+    }) {
         this.userInfo()
         this.storageInfo()
         this.settingButton()
         this.webButton()
         this.logoutButton()
-      }
-      .padding({left: 20, right: 20, top: 20, bottom: this.tabBarHeight+20})
-      .width('100%')
-      .justifyContent(FlexAlign.Start)
     }
-    .width('100%')
-    .height('100%')
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
   }
 
   @Builder userInfo() {
@@ -118,10 +113,11 @@ export struct TabMine {
           Text(this.siteConfig ? this.siteConfig.user.nickname.toUpperCase() : '')
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
 
           Text(this.siteConfig ? this.siteConfig.user.user_name : '')
             .fontSize(16)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
         .width('100%')
         .height(140)
@@ -137,7 +133,7 @@ export struct TabMine {
           ],
           repeating: false//设置不重复渐变
         })
-        .borderRadius(10)
+        .borderRadius(CloudThemeToken.cardRadius)
         .shadow(ShadowStyle.OUTER_DEFAULT_SM)
 
         Column() {
@@ -158,17 +154,18 @@ export struct TabMine {
         Column() {
           Text($r('app.string.user_id'))
             .fontSize(16)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
           Text(this.userSetting?.uid.toString())
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
         }
         .width('30%')
         .height('100%')
         .padding(10)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.SpaceEvenly)
-        .borderRadius(10)
+        .borderRadius(CloudThemeToken.cardRadius)
         .backgroundColor($r('app.color.uid_background'))
         .shadow(ShadowStyle.OUTER_DEFAULT_SM)
 
@@ -176,17 +173,18 @@ export struct TabMine {
         Column() {
           Text($r('app.string.user_group'))
             .fontSize(16)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
           Text(this.siteConfig?.user.group.name)
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
         }
         .width('30%')
         .height('100%')
         .padding(10)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.SpaceEvenly)
-        .borderRadius(10)
+        .borderRadius(CloudThemeToken.cardRadius)
         .backgroundColor($r('app.color.group_background'))
         .shadow(ShadowStyle.OUTER_DEFAULT_SM)
 
@@ -194,17 +192,18 @@ export struct TabMine {
         Column() {
           Text($r('app.string.user_days'))
             .fontSize(16)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
           Text(this.diffDays.toString())
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
         }
         .width('30%')
         .height('100%')
         .padding(10)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.SpaceEvenly)
-        .borderRadius(10)
+        .borderRadius(CloudThemeToken.cardRadius)
         .backgroundColor($r('app.color.days_background'))
         .shadow(ShadowStyle.OUTER_DEFAULT_SM)
       }
@@ -212,7 +211,6 @@ export struct TabMine {
       .height(70)
       .justifyContent(FlexAlign.SpaceBetween)
     }
-    .padding({ top: this.topRectHeight })
   }
 
   @Builder storageInfo() {
@@ -220,11 +218,12 @@ export struct TabMine {
       Column({space: 10}) {
         Text($r('app.string.storage_used'))
           .fontSize(15)
-          .fontColor($r('app.color.common_font_gray'))
+          .fontColor(CloudThemeToken.textSecondary)
 
         Text(this.userStorage ? `${CommonUtil.formatBytes(this.userStorage.used)} / ${CommonUtil.formatBytes(this.userStorage.total)}` : '')
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
 
         Image($r('app.media.ic_externaldrive_fill'))
           .width(20)
@@ -234,10 +233,10 @@ export struct TabMine {
         Row({space: 5}) {
           Text($r('app.string.storage_update_date'))
             .fontSize(12)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
           Text(this.updateDate ? `${DateUtil.getFormatDateStr(this.updateDate, 'yyyy/MM/dd')}` : '')
             .fontSize(12)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
         .justifyContent(FlexAlign.Start)
       }
@@ -252,13 +251,14 @@ export struct TabMine {
         Text(this.userStorage ? `${(this.userStorage.used*100/this.userStorage.total).toFixed(1)} %` : '')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
       }
     }
     .padding(10)
     .width('100%')
     .height(140)
-    .borderRadius(10)
-    .backgroundColor($r('app.color.storage_info_background'))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     .shadow(ShadowStyle.OUTER_DEFAULT_SM)
@@ -286,7 +286,7 @@ export struct TabMine {
     }
     .width('100%')
     .height(50)
-    .borderRadius(10)
+    .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor($r('app.color.logout_background'))
     .padding({ left: 10, right: 15 })
     .onClick(() => {
@@ -321,12 +321,13 @@ export struct TabMine {
 
         Text(title)
           .fontSize(16)
+          .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
 
         if (sub_title) {
           Text(sub_title)
             .fontSize(14)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
         Image($r('app.media.ic_chevron_right'))
           .width(12)
@@ -341,8 +342,8 @@ export struct TabMine {
     }
     .width('100%')
     .height(50)
-    .borderRadius(10)
-    .backgroundColor($r('app.color.setting_button_background'))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       if (onClickCallback) {
         onClickCallback()
@@ -361,6 +362,7 @@ export struct TabMine {
 
       Text(title)
         .fontSize(16)
+        .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
 
       Select(options)
@@ -372,8 +374,8 @@ export struct TabMine {
     .width('100%')
     .height(50)
     .padding({ left: 10, right: 10 })
-    .borderRadius(10)
-    .backgroundColor($r('app.color.setting_button_background'))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)
   }
 
@@ -411,7 +413,7 @@ export struct TabMine {
       )
     }
     .width('100%')
-    .margin({top: 10})
+    .margin({top: 8})
     .justifyContent(FlexAlign.Center)
   }
 
@@ -446,8 +448,8 @@ export struct TabMine {
     }
     .width('100%')
     .height(50)
-    .borderRadius(10)
-    .backgroundColor($r('app.color.setting_button_background'))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       this.webUrl = url
       this.webShow = true

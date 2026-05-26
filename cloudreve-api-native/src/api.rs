@@ -1,5 +1,5 @@
 use napi_derive::napi;
-use std::{fs, sync::{Mutex, OnceLock}};
+use std::{fs, future::Future, sync::{Mutex, OnceLock}};
 use cloudreve_api::{
     ApiVersion, CloudreveAPI, DeleteTarget, Error as ApiError, LoginResponse,
     api::v3::models::{
@@ -289,6 +289,30 @@ async fn do_v4_refresh() -> napi::Result<()> {
     Ok(())
 }
 
+fn to_napi_error(error: ApiError) -> napi::Error {
+    napi::Error::from_reason(error.to_string())
+}
+
+async fn run_api_with_v4_refresh<T, F, Fut>(operation: F) -> napi::Result<T>
+where
+    F: Fn(CloudreveAPI) -> Fut,
+    Fut: Future<Output = Result<T, ApiError>>,
+{
+    match operation(get_client()?).await {
+        Ok(value) => Ok(value),
+        Err(ApiError::Unauthorized(error)) => {
+            if !get_client()?.inner().is_v4() {
+                return Err(napi::Error::from_reason(
+                    ApiError::Unauthorized(error).to_string(),
+                ));
+            }
+            do_v4_refresh().await?;
+            operation(get_client()?).await.map_err(to_napi_error)
+        }
+        Err(error) => Err(to_napi_error(error)),
+    }
+}
+
 // ---- Init / session ----
 
 /// Connect to a Cloudreve server, auto-detect v3/v4. Returns "v3" or "v4".
@@ -319,7 +343,11 @@ pub fn restore_session(base_url: String, access_token: String, refresh_token: St
             v3.set_session_cookie(val);
         }
     } else {
-        api.set_token(&access_token)
+        let token = access_token
+            .strip_prefix("v4:")
+            .unwrap_or(&access_token)
+            .to_string();
+        api.set_token(&token)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         if !refresh_token.is_empty() {
             if let Some(v4) = api.inner_mut().as_v4_mut() {
@@ -459,16 +487,10 @@ pub async fn get_user_setting() -> napi::Result<String> {
 
 #[napi]
 pub async fn get_directory(path: String) -> napi::Result<String> {
-    let api = get_client()?;
-    let result = api.list_files(&path, None, None).await;
-    let files = match result {
-        Err(ApiError::Unauthorized(_)) => {
-            do_v4_refresh().await?;
-            get_client()?.list_files(&path, None, None).await
-                .map_err(|e| napi::Error::from_reason(e.to_string()))?
-        }
-        other => other.map_err(|e| napi::Error::from_reason(e.to_string()))?,
-    };
+    let files = run_api_with_v4_refresh(|api| {
+        let path = path.clone();
+        async move { api.list_files(&path, None, None).await }
+    }).await?;
     match files {
         FileList::V3(dir) => serde_json::to_string(&dir),
         FileList::V4(v4) => {
@@ -528,13 +550,17 @@ pub async fn get_object_detail(id: String, is_folder: bool) -> napi::Result<Stri
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         serde_json::to_string(&prop).map_err(|e| napi::Error::from_reason(e.to_string()))
     } else {
-        let v4 = api.inner().as_v4()
-            .ok_or_else(|| napi::Error::from_reason("not a v4 client"))?;
         // id is the unix path (e.g., /videos/movie.mp4)
-        let file = v4
-            .get_file_info(&id)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let file = run_api_with_v4_refresh(|api| {
+            let id = id.clone();
+            async move {
+                api.inner()
+                    .as_v4()
+                    .expect("v4 client")
+                    .get_file_info(&id)
+                    .await
+            }
+        }).await?;
         let detail = ApiObjectDetail {
             created_at: file.created_at.clone(),
             updated_at: file.updated_at.clone(),
@@ -551,6 +577,27 @@ pub async fn get_object_detail(id: String, is_folder: bool) -> napi::Result<Stri
 
 // ---- Object operations ----
 
+async fn v4_do_delete(api: &CloudreveAPI, items: &[String], dirs: &[String]) -> Result<(), ApiError> {
+    for path in items.iter().chain(dirs.iter()) {
+        api.delete(DeleteTarget::Path(path.clone())).await?;
+    }
+    Ok(())
+}
+
+async fn v4_do_move(api: &CloudreveAPI, items: &[String], dirs: &[String], dst: &str) -> Result<(), ApiError> {
+    for path in items.iter().chain(dirs.iter()) {
+        api.move_file(path, dst).await?;
+    }
+    Ok(())
+}
+
+async fn v4_do_copy(api: &CloudreveAPI, items: &[String], dirs: &[String], dst: &str) -> Result<(), ApiError> {
+    for path in items.iter().chain(dirs.iter()) {
+        api.copy_file(path, dst).await?;
+    }
+    Ok(())
+}
+
 #[napi]
 pub async fn delete_objects(items: Vec<String>, dirs: Vec<String>) -> napi::Result<()> {
     let api = get_client()?;
@@ -565,12 +612,11 @@ pub async fn delete_objects(items: Vec<String>, dirs: Vec<String>) -> napi::Resu
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     } else {
-        for path in items.iter().chain(dirs.iter()) {
-            api.delete(DeleteTarget::Path(path.clone()))
-                .await
-                .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        }
-        Ok(())
+        run_api_with_v4_refresh(|api| {
+            let items = items.clone();
+            let dirs = dirs.clone();
+            async move { v4_do_delete(&api, &items, &dirs).await }
+        }).await
     }
 }
 
@@ -597,12 +643,12 @@ pub async fn move_objects(
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     } else {
-        for path in items.iter().chain(dirs.iter()) {
-            api.move_file(path, &dst)
-                .await
-                .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        }
-        Ok(())
+        run_api_with_v4_refresh(|api| {
+            let items = items.clone();
+            let dirs = dirs.clone();
+            let dst = dst.clone();
+            async move { v4_do_move(&api, &items, &dirs, &dst).await }
+        }).await
     }
 }
 
@@ -628,12 +674,12 @@ pub async fn copy_objects(
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     } else {
-        for path in items.iter().chain(dirs.iter()) {
-            api.copy_file(path, &dst)
-                .await
-                .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        }
-        Ok(())
+        run_api_with_v4_refresh(|api| {
+            let items = items.clone();
+            let dirs = dirs.clone();
+            let dst = dst.clone();
+            async move { v4_do_copy(&api, &items, &dirs, &dst).await }
+        }).await
     }
 }
 
@@ -655,9 +701,11 @@ pub async fn rename_object(id: String, new_name: String, is_dir: bool) -> napi::
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     } else {
-        api.rename(&id, &new_name)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))
+        run_api_with_v4_refresh(|api| {
+            let id = id.clone();
+            let new_name = new_name.clone();
+            async move { api.rename(&id, &new_name).await }
+        }).await
     }
 }
 

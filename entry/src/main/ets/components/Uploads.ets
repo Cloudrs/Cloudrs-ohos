@@ -1,4 +1,6 @@
+import { EmptyState } from "./EmptyState"
 import { FileModelState } from "../model/FileModel"
+import { CloudThemeToken } from "../model/CloudTheme"
 import { ObjectInfo } from "../model/net/ApiTypes"
 import { TransportObject } from "../model/TransportObject"
 import { CommonUtil } from "../utils/CommonUtil"
@@ -26,23 +28,15 @@ export struct Uploads {
     }
     .height('100%')
     .width('100%')
-    .backgroundColor($r('app.color.sheet_default_background'))
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder noItem() {
-    Row() {
-      Text($r('app.string.no_upload_task'))
-        .fontSize(20)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.aria2_no_task_font'))
-    }
-    .height(80)
-    .width('100%')
-    .borderRadius(10)
-    .padding(10)
-    .backgroundColor($r("app.color.aria2_default_background"))
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.Center)
+    EmptyState({
+      icon: $r('app.media.ic_arrowshape_up'),
+      title: $r('app.string.no_upload_task'),
+      description: '上传任务会显示在这里。'
+    })
   }
 
   getUploadIcon(state: FileModelState) {
@@ -56,6 +50,17 @@ export struct Uploads {
     }
   }
 
+  getStateColor(state: FileModelState): ResourceColor {
+    switch (state) {
+      case FileModelState.COMPLETED:
+        return CloudThemeToken.success
+      case FileModelState.FAILED:
+        return CloudThemeToken.danger
+      default:
+        return CloudThemeToken.primary
+    }
+  }
+
   @Builder uploadItem(object: TransportObject) {
     Row({space: 10}) {
       Image(CommonUtil.getFileIconInfo(object.item.name).icon).width(40).height(40)
@@ -64,6 +69,7 @@ export struct Uploads {
         Text(object.item.name)
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
           .wordBreak(WordBreak.BREAK_ALL)
           .maxLines(1)
           .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -73,17 +79,19 @@ export struct Uploads {
           Image(this.getUploadIcon(object.state))
             .width(12)
             .height(12)
-            .fillColor(Color.Black)
+            .fillColor(this.getStateColor(object.state))
 
           if (object.state == FileModelState.RUNNING) {
             Text(CommonUtil.formatBytes(object.speed, 1) + '/s')
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
+              .fontColor(CloudThemeToken.textSecondary)
               .margin({right: 10})
           }
 
           Text(`${CommonUtil.formatBytes(object.trans, 1)}/${CommonUtil.formatBytes(object.total, 1)}`)
             .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
         }
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
@@ -101,8 +109,8 @@ export struct Uploads {
     }
     .width('100%')
     .padding(10)
-    .borderRadius(10)
-    .backgroundColor($r("app.color.aria2_default_background"))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
   }

@@ -3,6 +3,7 @@ import { TransportObject } from "../model/TransportObject";
 import LazyDataSource from "../utils/LazyDataSource";
 import { Downloads } from "./Downloads";
 import { Uploads } from "./Uploads";
+import { CloudThemeToken } from "../model/CloudTheme";
 
 @Component
 export struct TabFilesHeader {
@@ -32,12 +33,12 @@ export struct TabFilesHeader {
             Button() {
               Image($r('app.media.ic_back'))
                 .padding(5)
-                .fillColor(Color.Black)
+                .fillColor(CloudThemeToken.textPrimary)
             }
             .width(36)
             .height(36)
             .borderRadius(18)
-            .backgroundColor(Color.White)
+            .backgroundColor(CloudThemeToken.surface)
             .onClick(() => {
               if (this.onBackClick) {
                 this.onBackClick()
@@ -48,8 +49,8 @@ export struct TabFilesHeader {
           }
 
           Search({ placeholder: $r("app.string.header_search") })
-            .searchIcon({ color: Color.Black })
-            .backgroundColor(Color.White)
+            .searchIcon({ color: CloudThemeToken.textPrimary })
+            .backgroundColor(CloudThemeToken.surface)
         }
         .width('50%')
 
@@ -62,13 +63,13 @@ export struct TabFilesHeader {
             }) {
               Image($r('app.media.ic_transport'))
                 .padding(10)
-                .fillColor(Color.Black)
+                .fillColor(CloudThemeToken.textPrimary)
             }
           }
           .width(36)
           .height(36)
           .borderRadius(18)
-          .backgroundColor($r('app.color.light_light_gray'))
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
           .onClick(() => {
             this.showTransport = true
             if (this.onTransportClick) {
@@ -77,19 +78,19 @@ export struct TabFilesHeader {
           })
           .bindSheet($$this.showTransport, this.transportBuilder(), {
             // detents: [SheetSize.FIT_CONTENT],
-            backgroundColor: Color.White,
+            backgroundColor: CloudThemeToken.surface,
             title: this.transportTitle($r('app.string.transport_title'))
           })
 
           Button() {
             Image($r('app.media.ic_person'))
               .padding(10)
-              .fillColor(Color.Black)
+              .fillColor(CloudThemeToken.textPrimary)
           }
           .width(36)
           .height(36)
           .borderRadius(18)
-          .backgroundColor(Color.White)
+          .backgroundColor(CloudThemeToken.surface)
           .onClick(() => {
             if (this.onPersonClick) {
               this.onPersonClick()
@@ -115,6 +116,7 @@ export struct TabFilesHeader {
       Text(title)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
     }
     .width('100%')
     .justifyContent(FlexAlign.Center)
@@ -133,8 +135,8 @@ export struct TabFilesHeader {
       }
       .width('100%')
       .margin({top: 10})
-      .borderRadius(20)
-      .backgroundColor($r('app.color.nav_background'))
+      .borderRadius(CloudThemeToken.cardRadius)
+      .backgroundColor(CloudThemeToken.background)
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Center)
       .justifyContent(FlexAlign.Center)
@@ -142,6 +144,6 @@ export struct TabFilesHeader {
     .padding({left: 10, right: 10, top: 10, bottom: 20})
     .height('100%')
     .width('100%')
-    .backgroundColor($r('app.color.sheet_default_background'))
+    .backgroundColor(CloudThemeToken.background)
   }
 }

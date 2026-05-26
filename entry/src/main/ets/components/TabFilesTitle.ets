@@ -2,6 +2,7 @@ import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import Constant from "../model/Constant";
 import { MoreMenuType, ShowType, SortType } from "../model/MenuModel";
 import { SelectFileSheet } from "./SelectFileSheet";
+import { CloudThemeToken } from "../model/CloudTheme";
 
 PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
 PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_NAME)
@@ -44,13 +45,14 @@ export struct TabFilesTitle {
           Text(this.mainTitle)
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
             .wordBreak(WordBreak.BREAK_ALL)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.MARQUEE })
 
           Text(this.subTitle)
             .fontSize(11)
-            .fontColor($r('app.color.light_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
         }
         .height(30)
         .layoutWeight(1)
@@ -59,7 +61,7 @@ export struct TabFilesTitle {
 
         Image($r('app.media.ic_square_more'))
           .padding(5)
-          .fillColor(this.showMenu ? $r('app.color.icon_fill_gray') : Color.Black)
+          .fillColor(this.showMenu ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .width(30)
           .height(30)
           .bindMenu(this.moreMenu(), {onAppear: () => {
@@ -78,7 +80,7 @@ export struct TabFilesTitle {
     .justifyContent(FlexAlign.Center)
     .bindSheet($$this.showSelectFile, this.selectFileSheet(), {
       detents: [SheetSize.FIT_CONTENT],
-      backgroundColor: Color.White,
+      backgroundColor: CloudThemeToken.surface,
       title: {title: $r('app.string.select_file_title')},
     })
   }
@@ -194,7 +196,7 @@ export struct TabFilesTitle {
     .width(220)
     .padding(0)
     .margin(0)
-    .backgroundColor($r('app.color.file_menu_background'))
+    .backgroundColor(CloudThemeToken.surface)
     .menuItemDivider({
       color: $r("app.color.menu_divider_line"),
       strokeWidth: { value: 2, unit: LengthUnit.PX }
@@ -212,6 +214,7 @@ export struct TabFilesTitle {
       Text(content)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
         .height(50)
 
@@ -231,6 +234,7 @@ export struct TabFilesTitle {
       Text(content)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
         .height(50)
 

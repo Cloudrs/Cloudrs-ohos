@@ -16,13 +16,16 @@ import { CloudApi } from '../../model/net/CloudApi';
 import UserPreferences from '../../model/UserPreferences';
 import { PathSelectSheet } from '../../components/PathSelectSheet';
 import { showToast } from '../../utils/ToastUtil';
+import { CloudThemeToken } from '../../model/CloudTheme';
+import { SectionHeader } from '../../components/SectionHeader';
+import { EmptyState } from '../../components/EmptyState';
+import { CloudTopBar } from '../../components/CloudTopBar';
+import { CloudScaffold } from '../../components/CloudScaffold';
 
 const TAG: string = 'TabPictures';
 
 @Component
 export struct TabPictures {
-  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
-  @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @State settings: PhotoBackupSettings = new PhotoBackupSettings();
   @State backupState: PhotoBackupState = PhotoBackupState.IDLE;
   @State photos: PhotoBackupItem[] = [];
@@ -30,6 +33,9 @@ export struct TabPictures {
   @State showSettings: boolean = false;
   @State showPathSelect: boolean = false;
   @State isScanning: boolean = false;
+  @State backupQueueDone: number = 0;
+  @State backupQueueTotal: number = 0;
+  @State shouldPauseBackup: boolean = false;
   private doneIds: Set<string> = new Set<string>();
 
   aboutToAppear(): void {
@@ -118,10 +124,13 @@ export struct TabPictures {
       return '正在扫描本地相册';
     }
     if (this.backupState === PhotoBackupState.BACKING_UP) {
-      return `正在备份 ${this.getUploadingItems().length} 张`;
+      return `正在备份 ${this.backupQueueDone}/${this.backupQueueTotal} 张`;
     }
     if (this.backupState === PhotoBackupState.WAITING_NETWORK) {
       return '等待 Wi-Fi';
+    }
+    if (this.backupState === PhotoBackupState.PAUSED) {
+      return `已暂停 ${this.backupQueueDone}/${this.backupQueueTotal} 张`;
     }
     return `${this.settings.wifiOnly ? '仅 Wi-Fi' : '任意网络'} · ${this.settings.remotePath}`;
   }
@@ -132,6 +141,9 @@ export struct TabPictures {
     }
     if (this.backupState === PhotoBackupState.BACKING_UP) {
       return '备份中';
+    }
+    if (this.backupState === PhotoBackupState.PAUSED) {
+      return '继续备份';
     }
     if (this.getFailedItems().length > 0) {
       return '重试失败';
@@ -397,8 +409,19 @@ export struct TabPictures {
       showToast('当前不是 Wi-Fi，已暂停相册备份');
       return;
     }
+    this.backupQueueDone = 0;
+    this.backupQueueTotal = targets.length;
+    this.shouldPauseBackup = false;
     this.backupState = PhotoBackupState.BACKING_UP;
-    this.runBackup(targets.slice(0, 5));
+    this.runBackup(targets);
+  }
+
+  pauseBackup(): void {
+    if (this.backupState !== PhotoBackupState.BACKING_UP) {
+      return;
+    }
+    this.shouldPauseBackup = true;
+    showToast('当前图片完成后暂停备份');
   }
 
   canBackupNow(): boolean {
@@ -415,7 +438,16 @@ export struct TabPictures {
 
   async runBackup(targets: PhotoBackupItem[]): Promise<void> {
     for (let index = 0; index < targets.length; index++) {
+      if (this.shouldPauseBackup) {
+        this.backupState = PhotoBackupState.PAUSED;
+        return;
+      }
       await this.backupItem(targets[index], index);
+      this.backupQueueDone = index + 1;
+      if (this.shouldPauseBackup) {
+        this.backupState = PhotoBackupState.PAUSED;
+        return;
+      }
     }
     if (this.getUploadingItems().length === 0) {
       this.backupState = this.getWaitingItems().length > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
@@ -509,8 +541,7 @@ export struct TabPictures {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      Scroll() {
-        Column({ space: 16 }) {
+      CloudScaffold() {
           this.header();
           if (this.showSettings) {
             this.settingsPanel();
@@ -520,54 +551,24 @@ export struct TabPictures {
           this.sectionWaiting();
           this.sectionFailed();
           this.sectionCompleted();
-        }
-        .padding({ left: 16, right: 16, top: this.topRectHeight + 12, bottom: this.tabBarHeight + 24 })
-        .width('100%')
       }
-      .width('100%')
-      .height('100%')
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.nav_background'))
     .bindSheet($$this.showPathSelect, this.pathSelectSheet(), {
       showClose: false
     })
   }
 
   @Builder header() {
-    Row() {
-      Column({ space: 4 }) {
-        Text('相册备份')
-          .fontSize(28)
-          .fontWeight(FontWeight.Bold)
-        Text(this.getStatusText())
-          .fontSize(13)
-          .fontColor($r('app.color.common_font_gray'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Button() {
-        Image($r('app.media.ic_gearshape'))
-          .width(22)
-          .height(22)
-          .fillColor(Color.Black)
-      }
-      .width(40)
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor(Color.White)
-      .onClick(() => {
+    CloudTopBar({
+      title: '相册备份',
+      subtitle: this.getStatusText(),
+      actionIcon: $r('app.media.ic_gearshape'),
+      onAction: () => {
         this.showSettings = !this.showSettings;
-      })
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
+      }
+    })
   }
 
   @Builder summaryCard() {
@@ -577,22 +578,36 @@ export struct TabPictures {
           Text(this.settings.enabled ? '备份已开启' : '备份未开启')
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
           Text(this.settings.enabled ? `目标路径 ${this.settings.remotePath}` : '开启后会扫描本地图片并备份到云端')
             .fontSize(12)
-            .fontColor($r('app.color.common_font_gray'))
+            .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        Button(this.getPrimaryActionText())
-          .fontSize(14)
-          .height(34)
-          .enabled(this.backupState !== PhotoBackupState.BACKING_UP)
-          .onClick(() => {
-            this.startBackup();
-          })
+        Row({ space: 8 }) {
+          Button(this.getPrimaryActionText())
+            .fontSize(14)
+            .height(34)
+            .enabled(this.backupState !== PhotoBackupState.BACKING_UP)
+            .onClick(() => {
+              this.startBackup();
+            })
+
+          if (this.backupState === PhotoBackupState.BACKING_UP) {
+            Button('暂停')
+              .fontSize(14)
+              .height(34)
+              .backgroundColor(CloudThemeToken.surfaceSubtle)
+              .fontColor(CloudThemeToken.textPrimary)
+              .onClick(() => {
+                this.pauseBackup();
+              })
+          }
+        }
       }
 
       Row() {
@@ -607,7 +622,19 @@ export struct TabPictures {
       if (this.settings.enabled && this.settings.wifiOnly) {
         Text('默认仅在 Wi-Fi 下自动备份，可在设置中改为任意网络或手动备份。')
           .fontSize(12)
-          .fontColor($r('app.color.common_font_gray'))
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+
+      if (this.backupState === PhotoBackupState.BACKING_UP) {
+        Text(`本轮将连续备份 ${this.backupQueueTotal} 张，已完成 ${this.backupQueueDone} 张。`)
+          .fontSize(12)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+
+      if (this.backupState === PhotoBackupState.PAUSED) {
+        Text('备份已暂停，点击继续备份会处理剩余待备份图片。')
+          .fontSize(12)
+          .fontColor(CloudThemeToken.textSecondary)
       }
 
       if (this.backupState === PhotoBackupState.WAITING_NETWORK && this.settings.wifiOnly) {
@@ -627,8 +654,8 @@ export struct TabPictures {
     }
     .width('100%')
     .padding(16)
-    .borderRadius(18)
-    .backgroundColor(Color.White)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder metricItem(label: string, value: string) {
@@ -636,20 +663,21 @@ export struct TabPictures {
       Text(value)
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
       Text(label)
         .fontSize(12)
-        .fontColor($r('app.color.common_font_gray'))
+        .fontColor(CloudThemeToken.textSecondary)
     }
     .width('23%')
     .height(58)
     .justifyContent(FlexAlign.Center)
-    .backgroundColor($r('app.color.common_background'))
-    .borderRadius(12)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
+    .borderRadius(CloudThemeToken.cardRadius)
   }
 
   @Builder sectionUploading() {
     if (this.getUploadingItems().length > 0) {
-      this.sectionTitle('正在备份', this.getUploadingItems().length);
+      SectionHeader({ title: '正在备份', count: this.getUploadingItems().length });
       Column({ space: 10 }) {
         ForEach(this.getUploadingItems(), (item: PhotoBackupItem) => {
           this.uploadingItem(item);
@@ -670,6 +698,7 @@ export struct TabPictures {
         Text(item.name)
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Progress({ value: item.progress, total: 100, type: ProgressType.Linear })
@@ -680,17 +709,17 @@ export struct TabPictures {
 
       Text(`${item.progress}%`)
         .fontSize(12)
-        .fontColor($r('app.color.common_font_gray'))
+        .fontColor(CloudThemeToken.textSecondary)
     }
     .width('100%')
     .padding(12)
-    .borderRadius(14)
-    .backgroundColor(Color.White)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder sectionWaiting() {
     if (this.getWaitingItems().length > 0) {
-      this.sectionTitle('待备份', this.getWaitingItems().length);
+      SectionHeader({ title: '待备份', count: this.getWaitingItems().length });
       this.photoGrid(this.getWaitingItems().slice(0, 24), PhotoBackupStatus.WAITING);
     } else if (this.getPhotos().length === 0) {
       this.emptyState();
@@ -699,30 +728,16 @@ export struct TabPictures {
 
   @Builder sectionFailed() {
     if (this.getFailedItems().length > 0) {
-      this.sectionTitle('失败', this.getFailedItems().length);
+      SectionHeader({ title: '失败', count: this.getFailedItems().length });
       this.photoGrid(this.getFailedItems().slice(0, 12), PhotoBackupStatus.FAILED);
     }
   }
 
   @Builder sectionCompleted() {
     if (this.getCompletedItems().length > 0) {
-      this.sectionTitle('最近完成', this.getCompletedItems().length);
+      SectionHeader({ title: '最近完成', count: this.getCompletedItems().length });
       this.photoGrid(this.getCompletedItems().slice(0, 18), PhotoBackupStatus.COMPLETED);
     }
-  }
-
-  @Builder sectionTitle(title: string, count: number) {
-    Row() {
-      Text(title)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-      Text(count.toString())
-        .fontSize(13)
-        .fontColor($r('app.color.common_font_gray'))
-    }
-    .width('100%')
-    .justifyContent(FlexAlign.SpaceBetween)
-    .margin({ top: 4 })
   }
 
   @Builder photoGrid(items: PhotoBackupItem[], status: PhotoBackupStatus) {
@@ -769,48 +784,32 @@ export struct TabPictures {
   getBadgeColor(status: PhotoBackupStatus): ResourceColor {
     switch (status) {
       case PhotoBackupStatus.COMPLETED:
-        return '#2EAD5B';
+        return CloudThemeToken.success;
       case PhotoBackupStatus.FAILED:
-        return '#E5484D';
+        return CloudThemeToken.danger;
       default:
-        return '#0A59F7';
+        return CloudThemeToken.primary;
     }
   }
 
   @Builder emptyState() {
-    Column({ space: 12 }) {
-      Image($r('app.media.ic_select_photos'))
-        .width(56)
-        .height(56)
-      Text(this.settings.enabled ? '还没有扫描到本地图片' : '开启相册备份后开始扫描')
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-      Text('Cloudrs 只会上传备份，不会删除你的本地照片。')
-        .fontSize(13)
-        .fontColor($r('app.color.common_font_gray'))
-        .textAlign(TextAlign.Center)
-      Button(this.settings.enabled ? '重新扫描' : '开启备份')
-        .onClick(() => {
-          if (this.settings.enabled) {
-            this.scanLocalPhotos();
-          } else {
-            this.showSettings = true;
-          }
-        })
-      if (this.settings.enabled) {
-        Button('选择图片加入备份')
-          .buttonStyle(ButtonStyleMode.TEXTUAL)
-          .fontSize(14)
-          .onClick(() => {
-            this.pickPhotosForBackup();
-          })
+    EmptyState({
+      icon: $r('app.media.ic_select_photos'),
+      title: this.settings.enabled ? '还没有扫描到本地图片' : '开启相册备份后开始扫描',
+      description: 'Cloudrs 只会上传备份，不会删除你的本地照片。',
+      actionText: this.settings.enabled ? '重新扫描' : '开启备份',
+      secondaryActionText: this.settings.enabled ? '选择图片加入备份' : undefined,
+      onAction: () => {
+        if (this.settings.enabled) {
+          this.scanLocalPhotos();
+        } else {
+          this.showSettings = true;
+        }
+      },
+      onSecondaryAction: () => {
+        this.pickPhotosForBackup();
       }
-    }
-    .width('100%')
-    .padding(24)
-    .borderRadius(18)
-    .backgroundColor(Color.White)
-    .alignItems(HorizontalAlign.Center)
+    })
   }
 
   @Builder settingsPanel() {
@@ -819,6 +818,7 @@ export struct TabPictures {
         Text('相册备份设置')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
         Button('收起')
           .fontSize(13)
@@ -888,13 +888,13 @@ export struct TabPictures {
 
       Text('备份只会上传本地图片到远程路径，不会删除本地照片，也不会自动删除云端文件。')
         .fontSize(12)
-        .fontColor($r('app.color.common_font_gray'))
+        .fontColor(CloudThemeToken.textSecondary)
         .width('100%')
     }
     .padding(16)
     .width('100%')
-    .borderRadius(18)
-    .backgroundColor(Color.White)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder switchRow(title: string, isOn: boolean, onChange: (value: boolean) => void) {
@@ -902,6 +902,7 @@ export struct TabPictures {
       Text(title)
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: isOn })
         .onChange((value: boolean) => {
@@ -911,8 +912,8 @@ export struct TabPictures {
     .width('100%')
     .height(48)
     .padding({ left: 14, right: 14 })
-    .borderRadius(14)
-    .backgroundColor($r('app.color.nav_background'))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 
   @Builder pathRow() {
@@ -921,9 +922,10 @@ export struct TabPictures {
         Text('备份路径')
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
         Text(this.settings.remotePath)
           .fontSize(12)
-          .fontColor($r('app.color.common_font_gray'))
+          .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
@@ -938,8 +940,8 @@ export struct TabPictures {
     .width('100%')
     .height(58)
     .padding({ left: 14, right: 14 })
-    .borderRadius(14)
-    .backgroundColor($r('app.color.nav_background'))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
     .onClick(() => {
       this.showPathSelect = true;
     })
@@ -948,10 +950,10 @@ export struct TabPictures {
   @Builder optionButton(title: string, selected: boolean, onClick: () => void) {
     Button(title)
       .fontSize(14)
-      .fontColor(selected ? Color.White : Color.Black)
+      .fontColor(selected ? Color.White : CloudThemeToken.textPrimary)
       .layoutWeight(1)
       .height(38)
-      .backgroundColor(selected ? $r('app.color.select_primary') : $r('app.color.nav_background'))
+      .backgroundColor(selected ? CloudThemeToken.primary : CloudThemeToken.surfaceSubtle)
       .onClick(onClick)
   }
 

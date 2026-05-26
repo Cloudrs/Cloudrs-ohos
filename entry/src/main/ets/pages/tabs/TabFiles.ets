@@ -28,8 +28,17 @@ import { requestDownload } from "../../utils/RequestDownload";
 import { FileModel, FileModelState } from "../../model/FileModel";
 import { SelectFileSheet } from '../../components/SelectFileSheet';
 import { uploadManager } from '../../utils/UploadManager';
+import { CloudScaffold } from "../../components/CloudScaffold";
+import { CloudThemeToken } from "../../model/CloudTheme";
+import { EmptyState } from "../../components/EmptyState";
 
 const TAG = 'TabFiles';
+
+enum FilePageState {
+  IDLE = 'idle',
+  LOADING = 'loading',
+  FAILED = 'failed'
+}
 
 class ObjectSelect {
   index: number = -1
@@ -60,7 +69,6 @@ class ObjectSelect {
 @Component
 export struct TabFiles {
   @Link overLap: boolean
-  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageProp(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
@@ -87,6 +95,7 @@ export struct TabFiles {
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State showSelectFile: boolean = false
+  @State filePageState: FilePageState = FilePageState.IDLE
 
   setThumbData(id: string, pixMap: PixelMap) {
     const updated: Map<string, PixelMap> = new Map(this.thumbImage);
@@ -108,6 +117,19 @@ export struct TabFiles {
     return false
   }
 
+  isCurrentDirectoryEmpty(): boolean {
+    return this.filePageState === FilePageState.IDLE && !this.isRefreshing &&
+      this.dirDataSource.totalCount() === 0 && this.fileDataSource.totalCount() === 0
+  }
+
+  isFilePageLoading(): boolean {
+    return this.filePageState === FilePageState.LOADING
+  }
+
+  isFilePageFailed(): boolean {
+    return this.filePageState === FilePageState.FAILED
+  }
+
   onBackPressedCallback(): boolean {
     console.debug(TAG, 'onBackPressedCallback ....')
     if (this.currentPath === '/') {
@@ -123,7 +145,9 @@ export struct TabFiles {
       //console.debug(TAG, `onDataGet: index:${index}`)
       this.getThumbFile(index, item)
     }
-    (HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as ExitLifecycle).onBackPressedCallback = this.onBackPressedCallback.bind(this)
+    (HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as ExitLifecycle).onBackPressedCallback = () => {
+      return this.onBackPressedCallback()
+    }
     this.getFileList(true, '/')
   }
 
@@ -167,6 +191,7 @@ export struct TabFiles {
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : CommonUtil.getLastDirectoryName(path)
     CloudApi.getFilesInfo(path, {
       onStart: () => {
+        this.filePageState = FilePageState.LOADING
         if (isRefresh) {
           this.dirDataSource.clear()
           this.fileDataSource.clear()
@@ -184,11 +209,13 @@ export struct TabFiles {
         this.fileDataSource.dataArray = this.objectsInfo.fileObjects
         this.fileDataSource.notifyDataReload()
         this.isRefreshing = false
+        this.filePageState = FilePageState.IDLE
       },
       onFailure: (msg) => {
         showToastTips($r('app.string.get_failed'), ToastType.Error)
         //决定是否重新登录
         this.isRefreshing = false
+        this.filePageState = FilePageState.FAILED
       }
     })
   }
@@ -253,66 +280,141 @@ export struct TabFiles {
   }
 
   build() {
-    Column() {
-      Blank().height(this.sysTopRectHeight)
-
-      Column({ space: 10 }) {
-        TabFilesHeader({
-          isRoot: this.isRoot,
-          downloadObjects: this.downloadObjects,
-          downloadingCount: this.downloadingCount,
-          uploadObjects: this.uploadObjects,
-          uploadingCount: this.uploadingCount,
-          onBackClick: (async () => {
-            await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+    Stack({ alignContent: Alignment.Bottom }) {
+      CloudScaffold({
+        scrollable: false,
+        avoidTabBar: false,
+        topPadding: 20,
+        bottomPadding: 0,
+        horizontalPadding: 0
+      }) {
+        Column({ space: 10 }) {
+          TabFilesHeader({
+            isRoot: this.isRoot,
+            downloadObjects: this.downloadObjects,
+            downloadingCount: this.downloadingCount,
+            uploadObjects: this.uploadObjects,
+            uploadingCount: this.uploadingCount,
+            onBackClick: (async () => {
+              await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+            })
           })
-        })
-        TabFilesTitle({ mainTitle: this.mainTitle, subTitle: this.subTitle, onMoreClick: this.onMoreClick.bind(this)})
-      }
-      .height(80)
-      .margin({top: 20})
-      .justifyContent(FlexAlign.Center)
-
-      Stack({alignContent: Alignment.BottomEnd}) {
-        Refresh({refreshing: $$this.isRefreshing}) {
-          this.objectGrid()
+          TabFilesTitle({
+            mainTitle: this.mainTitle,
+            subTitle: this.subTitle,
+            onMoreClick: (type: MoreMenuType, isReverse?: boolean) => {
+              this.onMoreClick(type, isReverse)
+            }
+          })
         }
-        .width('100%')
-        .height('100%')
-        .refreshOffset(77)
-        .pullToRefresh(true)
-        .onRefreshing(async () => {
-          await this.getFileList(true, this.currentPath);
-        })
+        .height(80)
+        .justifyContent(FlexAlign.Center)
 
-        Button() {
-          Image($r('app.media.ic_arrowshape_up'))
-            .width(24)
-            .height(24)
-            .fillColor(Color.White)
+        Stack({alignContent: Alignment.BottomEnd}) {
+          Refresh({refreshing: $$this.isRefreshing}) {
+            this.objectGrid()
+          }
+          .width('100%')
+          .height('100%')
+          .refreshOffset(77)
+          .pullToRefresh(true)
+          .onRefreshing(async () => {
+            await this.getFileList(true, this.currentPath);
+          })
+
+          if (this.isFilePageLoading()) {
+            this.loadingState()
+          }
+
+          if (this.isFilePageFailed()) {
+            this.failedState()
+          }
+
+          if (this.isCurrentDirectoryEmpty()) {
+            this.emptyDirectoryState()
+          }
+
+          Button() {
+            Image($r('app.media.ic_arrowshape_up'))
+              .width(24)
+              .height(24)
+              .fillColor(Color.White)
+          }
+          .width(52)
+          .height(52)
+          .borderRadius(26)
+          .backgroundColor(CloudThemeToken.primary)
+          .margin({ right: 16, bottom: this.tabBarHeight + 16 })
+          .onClick(() => { this.showSelectFile = true })
         }
-        .width(52)
-        .height(52)
-        .borderRadius(26)
-        .backgroundColor('#007AFF')
-        .margin({ right: 16, bottom: this.tabBarHeight + 16 })
-        .onClick(() => { this.showSelectFile = true })
+        .margin({ top: 20 })
+        .layoutWeight(1)
       }
-      .margin({ top: 20 })
-      .layoutWeight(1)
+
+      if (this.showObjectDetail) {
+        this.detailOverlay()
+      }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.nav_background'))
-    .bindSheet($$this.showObjectDetail, this.detailSheet(), {
-      detents: [SheetSize.FIT_CONTENT],
-      backgroundColor: Color.White,
-      title: {title: $r('app.string.detail_title')},
-    })
     .bindSheet($$this.showSelectFile, this.selectFileSheetBuilder(), {
       detents: [SheetSize.FIT_CONTENT],
       showClose: true,
     })
+  }
+
+  @Builder loadingState() {
+    Column({ space: 12 }) {
+      LoadingProgress()
+        .width(36)
+        .height(36)
+        .color(CloudThemeToken.primary)
+      Text('正在加载文件')
+        .fontSize(14)
+        .fontColor(CloudThemeToken.textSecondary)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ bottom: this.tabBarHeight + 32 })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor(CloudThemeToken.background)
+  }
+
+  @Builder failedState() {
+    Column() {
+      EmptyState({
+        icon: $r('app.media.ic_icloud_slash_fill'),
+        title: '文件加载失败',
+        description: '请检查网络或稍后重试。',
+        actionText: '重新加载',
+        onAction: () => {
+          this.getFileList(true, this.currentPath)
+        }
+      })
+    }
+    .padding({ left: 20, right: 20, bottom: this.tabBarHeight + 32 })
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder emptyDirectoryState() {
+    Column() {
+      EmptyState({
+        icon: $r('app.media.ic_empty_folder'),
+        title: '这里还没有文件',
+        description: '上传文件或新建文件夹后，会显示在当前目录。',
+        actionText: '上传文件',
+        onAction: () => {
+          this.showSelectFile = true
+        }
+      })
+    }
+    .padding({ left: 20, right: 20, bottom: this.tabBarHeight + 32 })
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder objectGrid() {
@@ -380,6 +482,52 @@ export struct TabFiles {
 
   @Builder detailSheet() {
     DetailSheet({detailData: this.detailData})
+  }
+
+  @Builder detailOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0, 0, 0, 0.28)')
+        .onClick(() => {
+          this.showObjectDetail = false
+          this.overLap = true
+        })
+
+      Column() {
+        Row() {
+          Blank()
+            .layoutWeight(1)
+          Button() {
+            Image($r('app.media.ic_xmark'))
+              .width(18)
+              .height(18)
+              .fillColor(CloudThemeToken.textSecondary)
+          }
+            .width(38)
+            .height(38)
+            .borderRadius(19)
+            .backgroundColor(CloudThemeToken.surfaceSubtle)
+            .onClick(() => {
+              this.showObjectDetail = false
+              this.overLap = true
+            })
+        }
+        .height(48)
+        .width('100%')
+        .padding({ left: 20, right: 16, top: 8 })
+
+        this.detailSheet()
+      }
+      .width('100%')
+      .borderRadius({ topLeft: 20, topRight: 20 })
+      .backgroundColor(CloudThemeToken.background)
+      .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.18)', offsetY: -8 })
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(100)
   }
 
   @Builder selectFileSheetBuilder() {
@@ -481,9 +629,8 @@ export struct TabFiles {
   itemDetail(item: ObjectInfo) {
     CloudApi.getObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
-        this.detailData.isDir = item.type == Constant.OBJECT_DIR_TYPE
-        this.detailData.name = item.name
-        this.detailData.detailInfo = data
+        this.detailData = new DetailData(item.name, item.type == Constant.OBJECT_DIR_TYPE, data)
+        this.overLap = false
         this.showObjectDetail = true
       },
       onFailure: (msg) => {

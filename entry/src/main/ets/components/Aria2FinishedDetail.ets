@@ -1,5 +1,6 @@
 import { DateUtil } from "@pura/harmony-utils"
 import Constant from "../model/Constant"
+import { CloudThemeToken } from "../model/CloudTheme"
 import { Aria2Files, Aria2Finished, Aria2Status, TaskError } from "../model/net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
 
@@ -24,13 +25,14 @@ export struct Aria2FinishedDetail {
         .fontSize(24)
         .wordBreak(WordBreak.BREAK_ALL)
         .fontWeight(FontWeight.Bolder)
+        .fontColor(CloudThemeToken.textPrimary)
         .padding({right: 40})
 
       Row({space: 10}) {
         Image($r('app.media.ic_bell_fill'))
           .width(20)
           .height(20)
-          .fillColor(this.detailData.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red)
+          .fillColor(this.detailData.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
 
         Text(this.detailData.task_status == Aria2Status.FINISHED ?
           $r('app.string.download_finished') : this.getErrorInfo())
@@ -38,11 +40,11 @@ export struct Aria2FinishedDetail {
           .fontStyle(this.detailData.task_status == Aria2Status.FINISHED ? FontStyle.Normal : FontStyle.Italic)
           .layoutWeight(1)
           .wordBreak(WordBreak.BREAK_ALL)
-          .fontColor(this.detailData.task_status == Aria2Status.FINISHED ? Color.Green : Color.Red)
+          .fontColor(this.detailData.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
       }
       .height(40)
       .width('100%')
-      .borderRadius(5)
+      .borderRadius(CloudThemeToken.cardRadius)
       .padding({left: 10, right: 10})
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
@@ -52,12 +54,14 @@ export struct Aria2FinishedDetail {
       Text($r('app.string.task_detail'))
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
 
       this.taskDetail()
 
       Text($r('app.string.files_list'))
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
 
       List({space: 5}) {
         ForEach(this.detailData.files, (item: Aria2Files, index) => {
@@ -71,10 +75,10 @@ export struct Aria2FinishedDetail {
       this.detailTool()
     }
     .width('100%')
-    .padding({ left: 15, right: 15, top: 25, bottom: this.bottomRectHeight })
+    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding, top: 25, bottom: this.bottomRectHeight })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(Color.White)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder taskDetail() {
@@ -120,14 +124,14 @@ export struct Aria2FinishedDetail {
       Column({space: 5}) {
         Text(title)
           .fontSize(14)
-          .fontColor($r('app.color.common_font_gray'))
+          .fontColor(CloudThemeToken.textSecondary)
         Text(content)
           .wordBreak(WordBreak.BREAK_ALL)
           .maxLines(1)
           .textOverflow({overflow: TextOverflow.Ellipsis})
           .fontSize(16)
           .fontWeight(FontWeight.Bolder)
-          .fontColor(Color.Black)
+          .fontColor(CloudThemeToken.textPrimary)
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
@@ -136,13 +140,14 @@ export struct Aria2FinishedDetail {
       Image(icon)
         .width(24)
         .height(24)
+        .fillColor(CloudThemeToken.primary)
     }
     .height(70)
     .padding(15)
-    .borderRadius(15)
+    .borderRadius(CloudThemeToken.cardRadius)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
-    .backgroundColor($r('app.color.aria2_default_background'))
+    .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder fileItem(fileName: string) {
@@ -150,14 +155,15 @@ export struct Aria2FinishedDetail {
       Text(fileName)
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
         .maxLines(2)
         .wordBreak(WordBreak.BREAK_ALL)
         .textOverflow({overflow: TextOverflow.Ellipsis})
     }
     .width('100%')
     .padding(20)
-    .borderRadius(15)
-    .backgroundColor($r('app.color.aria2_default_background'))
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder detailTool() {
@@ -168,6 +174,7 @@ export struct Aria2FinishedDetail {
       Image($r('app.media.ic_delete_fill'))
         .width(24)
         .height(24)
+        .fillColor(CloudThemeToken.danger)
         .onClick(() => {
           if (this.onDeleteClick) {
             this.onDeleteClick()

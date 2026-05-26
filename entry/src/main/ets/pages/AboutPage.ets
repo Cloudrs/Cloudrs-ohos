@@ -1,6 +1,7 @@
 import { HMRouter } from "@hadss/hmrouter";
 import { CommonTitle } from "../components/CommonTitle";
 import Constant from "../model/Constant";
+import { CloudThemeToken } from "../model/CloudTheme";
 
 const EMAIL: string = 'wangxian@dreamflytech.com'
 
@@ -25,8 +26,8 @@ export struct AboutPage {
       Blank().height(this.bottomRectHeight)
     }
     .width('100%').height('100%')
-    .padding({ left: 15, right: 15 })
-    .backgroundColor($r('app.color.common_background'))
+    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })
+    .backgroundColor(CloudThemeToken.background)
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }
@@ -36,12 +37,13 @@ export struct AboutPage {
       Image($r('app.media.cloudrs'))
         .height(100)
         .width(100)
-        .borderRadius(20)
-        .backgroundColor(Color.White)
+        .borderRadius(CloudThemeToken.surfaceRadius)
+        .backgroundColor(CloudThemeToken.surface)
 
       Text($r('app.string.EntryAbility_label'))
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
     }
     .width('100%')
     .justifyContent(FlexAlign.Center)
@@ -50,14 +52,14 @@ export struct AboutPage {
   @Builder aboutInfo() {
     Column() {
       this.commonInfo($r('app.string.version'), this.appVersion)
-      Divider().strokeWidth('2px').color($r('app.color.default_line_color'))
+      Divider().strokeWidth('1px').color(CloudThemeToken.line)
       this.commonInfo($r('app.string.about_email'), EMAIL)
     }
     .width('100%')
     .padding({left: 10, right: 10})
     .margin({top: 30})
-    .backgroundColor(Color.White)
-    .borderRadius(10)
+    .backgroundColor(CloudThemeToken.surface)
+    .borderRadius(CloudThemeToken.cardRadius)
     .justifyContent(FlexAlign.Center)
   }
 
@@ -66,9 +68,10 @@ export struct AboutPage {
       Text(title)
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
       Text(info)
         .fontSize(14)
-        .fontColor($r('app.color.common_font_gray'))
+        .fontColor(CloudThemeToken.textSecondary)
     }
     .height(50)
     .width('100%')

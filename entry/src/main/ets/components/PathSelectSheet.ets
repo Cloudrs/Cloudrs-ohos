@@ -1,4 +1,5 @@
 import Constant from "../model/Constant";
+import { CloudThemeToken } from "../model/CloudTheme";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
@@ -87,7 +88,7 @@ export struct PathSelectSheet {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.sheet_default_background'))
+    .backgroundColor(CloudThemeToken.background)
     .padding({top: 10, bottom: this.bottomRectHeight})
     .justifyContent(FlexAlign.Start)
   }
@@ -98,11 +99,13 @@ export struct PathSelectSheet {
         Text(this.title ?? '')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)
 
         Text(this.currentPath)
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)
           .textAlign(TextAlign.Center)
           .wordBreak(WordBreak.BREAK_ALL)
@@ -114,13 +117,13 @@ export struct PathSelectSheet {
       Row({space: 10}) {
         Button() {
           Image($r('app.media.ic_xmark_circle_fill'))
-            .fillColor($r('app.color.light_gray'))
+            .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
-        .width(25)
-        .height(25)
-        .borderRadius(18)
-        .backgroundColor($r('app.color.nav_background'))
+        .width(32)
+        .height(32)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
         .onClick(() => {
           if (this.onClose) {
             this.onClose(false)
@@ -131,6 +134,7 @@ export struct PathSelectSheet {
           Text($r('app.string.select_path'))
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
             .textAlign(TextAlign.Center)
             .wordBreak(WordBreak.BREAK_ALL)
             .maxLines(1)
@@ -141,6 +145,7 @@ export struct PathSelectSheet {
             .height(36)
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.primary)
             .padding(5)
             .onClick(() => {
               if (this.onClose) {
@@ -161,7 +166,7 @@ export struct PathSelectSheet {
     .height(70)
     .width('100%')
     .outline({width: {bottom: '2px'}})
-    .outlineColor($r('app.color.default_line_color'))
+    .outlineColor(CloudThemeToken.line)
   }
 
   @Builder dirItem(item: ObjectInfo) {
@@ -170,12 +175,14 @@ export struct PathSelectSheet {
         Image(this.normalIcon)
           .width(30)
           .height(30)
+          .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
         Row({ space: 5 }) {
           Text(item.name)
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
             .wordBreak(WordBreak.BREAK_ALL)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -187,7 +194,7 @@ export struct PathSelectSheet {
             .width(24)
             .height(12)
             .padding({left: this.getPathShow(item) ? 0 : 6, right: this.getPathShow(item)? 0: 6})
-            .fillColor($r('app.color.file_folder_right'))
+            .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
         .height(43)
@@ -195,7 +202,7 @@ export struct PathSelectSheet {
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
         .outline({ width: { bottom: '2px' } })
-        .outlineColor($r('app.color.default_line_color'))
+        .outlineColor(CloudThemeToken.line)
       }
       .height(45)
       .width('100%')
@@ -203,7 +210,7 @@ export struct PathSelectSheet {
       .clip(true)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Center)
-      .backgroundColor(this.currentPath === CloudApi.getTotalPath(item) ? $r('app.color.select_background') : Color.White)
+      .backgroundColor(this.currentPath === CloudApi.getTotalPath(item) ? CloudThemeToken.primarySoft : CloudThemeToken.background)
       .onClick(() => {
         this.currentPath = CloudApi.getTotalPath(item)
         let isShow = this.getPathShow(item)

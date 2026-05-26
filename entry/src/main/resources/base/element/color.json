@@ -179,6 +179,50 @@
     {
       "name": "icon_fill_gray",
       "value": "#8f8e94"
+    },
+    {
+      "name": "cloud_background",
+      "value": "#F6F8FB"
+    },
+    {
+      "name": "cloud_surface",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "cloud_surface_subtle",
+      "value": "#EEF3F8"
+    },
+    {
+      "name": "cloud_surface_translucent",
+      "value": "#DFFFFFFF"
+    },
+    {
+      "name": "cloud_line",
+      "value": "#E4EAF0"
+    },
+    {
+      "name": "cloud_primary",
+      "value": "#0A59F7"
+    },
+    {
+      "name": "cloud_primary_soft",
+      "value": "#E5EEFF"
+    },
+    {
+      "name": "cloud_text_primary",
+      "value": "#111827"
+    },
+    {
+      "name": "cloud_text_secondary",
+      "value": "#6B7280"
+    },
+    {
+      "name": "cloud_danger",
+      "value": "#E5484D"
+    },
+    {
+      "name": "cloud_success",
+      "value": "#2EAD5B"
     }
   ]
 }

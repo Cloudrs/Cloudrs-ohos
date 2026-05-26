@@ -1,5 +1,6 @@
 import Constant from "../model/Constant"
 import { CloudApi } from "../model/net/CloudApi";
+import { CloudThemeToken } from "../model/CloudTheme";
 import { PathSelectSheet } from "./PathSelectSheet";
 
 const TAG: string = 'Aria2Create'
@@ -32,10 +33,13 @@ export struct Aria2Create {
         .wordBreak(WordBreak.BREAK_ALL)
         .width('100%')
         .height(200)
-        .borderRadius(5)
-        .padding(7)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .padding(12)
         .textAlign(TextAlign.Start)
         .align(Alignment.TopStart)
+        .fontColor(CloudThemeToken.textPrimary)
+        .placeholderColor(CloudThemeToken.textSecondary)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
         .onChange((value) => {
           this.urls = value.split(/\r\n|\r|\n/)
           //console.debug(TAG, 'urls: ' + this.urls)
@@ -44,20 +48,24 @@ export struct Aria2Create {
 
       Row({space: 10}) {
         Image($r('app.media.ic_folder_fill'))
-          .width(30)
-          .height(30)
+          .width(24)
+          .height(24)
+          .fillColor(CloudThemeToken.primary)
 
         Text(this.path == undefined ? $r('app.string.aria2_path_select') : this.path)
-          .fontColor(Color.White)
+          .fontColor(CloudThemeToken.textPrimary)
           .fontSize(16)
           .wordBreak(WordBreak.BREAK_ALL)
+          .layoutWeight(1)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .width('100%')
-      .padding(10)
-      .borderRadius(5)
+      .padding(14)
+      .borderRadius(CloudThemeToken.cardRadius)
       .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.Center)
-      .backgroundColor($r('app.color.aria2_path_background'))
+      .justifyContent(FlexAlign.Start)
+      .backgroundColor(CloudThemeToken.surface)
       .onClick(() => {
         this.isShowPathSelect = true
       })
@@ -65,8 +73,9 @@ export struct Aria2Create {
       Button({type: ButtonType.Normal}) {
         Row({space: 10}) {
           Image($r('app.media.ic_tabbar_remote_down'))
-            .width(30)
-            .height(30)
+            .width(22)
+            .height(22)
+            .fillColor(Color.White)
 
           Text($r('app.string.aria2_create_task'))
             .fontSize(16)
@@ -77,8 +86,9 @@ export struct Aria2Create {
         .justifyContent(FlexAlign.Center)
       }
       .width('100%')
-      .padding(10)
-      .borderRadius(5)
+      .height(48)
+      .borderRadius(CloudThemeToken.controlRadius)
+      .backgroundColor(CloudThemeToken.primary)
       .enabled(this.path != undefined && this.inputUrls != '')
       .onClick(() => {
         if (this.path) {
@@ -88,10 +98,10 @@ export struct Aria2Create {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 15, right: 15, top: 15, bottom: this.bottomRectHeight })
+    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding, top: 18, bottom: this.bottomRectHeight })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor($r('app.color.sheet_default_background'))
+    .backgroundColor(CloudThemeToken.background)
     .bindSheet($$this.isShowPathSelect, this.selectPathSheet(), {
       showClose: false
     })

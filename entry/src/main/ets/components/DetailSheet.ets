@@ -1,15 +1,25 @@
 import { DateUtil } from "@pura/harmony-utils"
-import Constant from "../model/Constant"
+import { CloudThemeToken } from "../model/CloudTheme"
 import { DetailData } from "../model/DetailData"
 import { CommonUtil } from "../utils/CommonUtil"
 
 @Component
 export struct DetailSheet {
   @Prop detailData: DetailData
-  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
 
   build() {
-    Column() {
+    Column({ space: 0 }) {
+      Row() {
+        Text($r('app.string.detail_title'))
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .height(48)
+      .alignItems(VerticalAlign.Center)
+
       this.commonRow(this.detailData.isDir ? $r('app.string.detail_dir_name') : $r('app.string.detail_filename'), this.detailData.name)
       this.commonDivider()
 
@@ -34,19 +44,21 @@ export struct DetailSheet {
       this.commonRow($r('app.string.detail_updated_at'), DateUtil.getFormatDateStr(new Date(this.detailData.detailInfo.updated_at)))
       this.commonDivider()
 
-      Blank().height(this.bottomRectHeight)
+      Blank().height(8)
     }
-    .padding({left: 20, right: 20, bottom: 20 })
+    .padding({ left: 20, right: 20, bottom: 20 })
     .width('100%')
+    .constraintSize({ minHeight: 360 })
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder commonRow(title: string|Resource, value: string|Resource) {
     Row() {
       Text(title)
-        .fontColor(Color.Gray)
+        .fontColor(CloudThemeToken.textSecondary)
         .fontSize(16)
       Text(value)
-        .fontColor(Color.Black)
+        .fontColor(CloudThemeToken.textPrimary)
         .fontSize(14)
         .wordBreak(WordBreak.BREAK_ALL)
         .maxLines(1)
@@ -60,6 +72,6 @@ export struct DetailSheet {
   }
 
   @Builder commonDivider() {
-    Divider().color($r('app.color.default_line_color')).strokeWidth('2px')
+    Divider().color(CloudThemeToken.line).strokeWidth('1px')
   }
 }

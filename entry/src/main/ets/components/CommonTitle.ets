@@ -1,5 +1,6 @@
 import { HMRouterMgr } from "@hadss/hmrouter";
 import Constant from "../model/Constant";
+import { CloudThemeToken } from "../model/CloudTheme";
 
 @Component
 export struct CommonTitle {
@@ -12,11 +13,11 @@ export struct CommonTitle {
       Button({type: ButtonType.Circle}) {
         Image($r('app.media.ic_back'))
           .padding(5)
-          .fillColor(Color.Black)
+          .fillColor(CloudThemeToken.textPrimary)
       }
       .width(40)
       .height(40)
-      .backgroundColor($r('app.color.common_icon_background'))
+      .backgroundColor(CloudThemeToken.surface)
       .onClick(() => {
         if (this.onBackClick) {
           this.onBackClick()
@@ -26,14 +27,15 @@ export struct CommonTitle {
       })
 
       Text(this.title)
-        .fontColor(Color.Black)
+        .fontColor(CloudThemeToken.textPrimary)
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
     }
     .height(50)
     .width('100%')
     .margin({top: this.topRectHeight})
-    .backgroundColor($r('app.color.common_background'))
+    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })
+    .backgroundColor(CloudThemeToken.background)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Start)
   }

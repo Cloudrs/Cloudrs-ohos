@@ -10,12 +10,36 @@ const TAG: string = 'SelectFileSheet'
 export struct SelectFileSheet {
   @State showPhotoPicker: boolean = false
   onSelectFinished?: (uris: string[]) => void
+  onClose?: () => void
 
   build() {
-    Column() {
-      // Text($r('app.string.upload'))
-      //   .fontSize(16)
-      //   .fontWeight(FontWeight.Bold)
+    Column({ space: 18 }) {
+      Row() {
+        Text($r('app.string.upload'))
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
+          .layoutWeight(1)
+
+        Button({ type: ButtonType.Normal }) {
+          Image($r('app.media.ic_xmark'))
+            .width(16)
+            .height(16)
+            .fillColor(CloudThemeToken.textSecondary)
+            .draggable(false)
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .onClick(() => {
+          if (this.onClose) {
+            this.onClose()
+          }
+        })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
 
       Row() {
         Column({space:15}) {
@@ -81,7 +105,8 @@ export struct SelectFileSheet {
       .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
-    .padding(20)
+    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
+    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
     .backgroundColor(CloudThemeToken.background)
@@ -111,7 +136,11 @@ export struct SelectFileSheet {
 
   async selectFiles() {
     let uris: Array<string> = [];
-    let context = getContext(this) as common.Context; // 请确保 getContext(this) 返回结果为 UIAbilityContext
+    const context = this.getAbilityContext();
+    if (!context) {
+      console.error(TAG, 'Document picker context is unavailable');
+      return;
+    }
 
     const documentSelectOptions = new picker.DocumentSelectOptions();
     // 选择文档的最大数目（可选）
@@ -135,5 +164,13 @@ export struct SelectFileSheet {
     }).catch((err: BusinessError) => {
       console.error(TAG, `Invoke documentViewPicker.select failed, code is ${err.code}, message is ${err.message}`);
     })
+  }
+
+  private getAbilityContext(): common.UIAbilityContext | undefined {
+    const hostContext = this.getUIContext().getHostContext();
+    if (hostContext) {
+      return hostContext as common.UIAbilityContext;
+    }
+    return undefined;
   }
 }

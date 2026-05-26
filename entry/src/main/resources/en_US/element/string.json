@@ -47,6 +47,26 @@
     {
       "name": "upload_max_concurrent",
       "value": "Max Upload Concurrency"
+    },
+    {
+      "name": "theme_light_title",
+      "value": "Light Mode"
+    },
+    {
+      "name": "theme_light_desc",
+      "value": "Clear, bright surfaces for daytime or well-lit environments."
+    },
+    {
+      "name": "theme_dark_title",
+      "value": "Dark Mode"
+    },
+    {
+      "name": "theme_dark_desc",
+      "value": "Lower brightness for night use and dim environments."
+    },
+    {
+      "name": "get_context_failed",
+      "value": "Page context is unavailable. Try again later."
     }
   ]
 }

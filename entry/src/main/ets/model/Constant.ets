@@ -68,6 +68,12 @@ class Constant {
   TASK_NET_RESUME_MSG: number = -4;
 
   UPLOAD_MAX_CONCURRENT: string = 'upload_max_concurrent';
+
+  APP_THEME_MODE: string = 'app_theme_mode';
+
+  APP_THEME_LIGHT: string = 'light';
+
+  APP_THEME_DARK: string = 'dark';
 }
 
 const constant = new Constant();

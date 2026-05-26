@@ -375,4 +375,9 @@ export interface UploadRequestResponse {
   sessionId: string
   chunkSize: number
   expires: number
+  uploadUrls?: string[]
+  credential?: string
+  completeUrl?: string
+  storagePolicyType?: string
+  storagePolicyRelay?: boolean
 }

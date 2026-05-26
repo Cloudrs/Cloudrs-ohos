@@ -50,6 +50,15 @@ export class CommonUtil {
     return directoryPath === '' ? '/' : directoryPath;
   }
 
+  static getFileName(filePath: string): string {
+    if (filePath.length === 0) {
+      return ''
+    }
+    const normalizedPath = filePath.endsWith('/') ? filePath.substring(0, filePath.length - 1) : filePath
+    const lastSlashIndex = normalizedPath.lastIndexOf('/')
+    return lastSlashIndex === -1 ? normalizedPath : normalizedPath.substring(lastSlashIndex + 1)
+  }
+
   static getLastDirectoryName(filePath: string): string {
     // 分割路径并去除空字符串
     const parts = filePath.split('/').filter(part => part !== '');

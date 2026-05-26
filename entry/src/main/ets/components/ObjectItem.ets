@@ -1,11 +1,10 @@
-
-import { DateUtil } from "@pura/harmony-utils";
 import { ObjectInfo } from "../model/net/ApiTypes";
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
 import { CommonUtil } from "../utils/CommonUtil";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { DateFormatUtil } from "../utils/DateFormatUtil";
 
 const TAG = 'ObjectItem';
 
@@ -79,7 +78,7 @@ export struct ObjectItem {
   }
 
   getDateText(date: string): string {
-    return DateUtil.getFormatDateStr(new Date(date), 'yyyy-MM-dd')
+    return DateFormatUtil.format(new Date(date), 'yyyy-MM-dd')
   }
 
   getFileMetaText(item: ObjectInfo): string {

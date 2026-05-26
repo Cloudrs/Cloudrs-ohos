@@ -1,8 +1,8 @@
-import { DateUtil } from "@pura/harmony-utils"
 import Constant from "../model/Constant"
 import { CloudThemeToken } from "../model/CloudTheme"
 import { Aria2Files, Aria2Finished, Aria2Status, TaskError } from "../model/net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
+import { DateFormatUtil } from "../utils/DateFormatUtil"
 
 @Component
 export struct Aria2FinishedDetail {
@@ -105,13 +105,13 @@ export struct Aria2FinishedDetail {
     Grid() {
       GridItem() {
         this.taskDetailItem($r('app.string.create_date'),
-          DateUtil.getFormatDateStr(new Date(this.detailData.create), 'yyyy-MM-dd'),
+          DateFormatUtil.format(new Date(this.detailData.create), 'yyyy-MM-dd'),
           $r('app.media.ic_calendar_add'))
       }
 
       GridItem() {
         this.taskDetailItem($r('app.string.update_date'),
-          DateUtil.getFormatDateStr(new Date(this.detailData.update), 'yyyy-MM-dd'),
+          DateFormatUtil.format(new Date(this.detailData.update), 'yyyy-MM-dd'),
           $r('app.media.ic_calendar_check'))
       }
 

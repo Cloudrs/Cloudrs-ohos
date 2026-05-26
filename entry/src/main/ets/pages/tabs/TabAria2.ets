@@ -6,17 +6,16 @@ import { Aria2Downloading,
   UserTask, UserTasks } from "../../model/net/ApiTypes";
 import { CloudApi } from "../../model/net/CloudApi";
 import { ContentItem, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
-import { DateUtil } from "@pura/harmony-utils";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { Aria2Create } from "../../components/Aria2Create";
-import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
 import { CloudActionButton } from "../../components/CloudActionButton";
+import { DateFormatUtil } from "../../utils/DateFormatUtil";
 
 const TAG: string = 'TabRemote'
 
@@ -177,30 +176,33 @@ export struct TabRemoteDown {
 
   deleteTaskConfirm(index: number, item: Aria2Finished) {
     const taskName = item.name && item.name.trim().length > 0 && item.name !== '.' ? item.name : item.gid
-    DialogHelper.showAlertDialog({
-      primaryTitle:  $r('app.string.delete_task_confirm'),
-      content: taskName,
-      primaryButton: {value: $r('app.string.dialog_cancel')},
-      secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
-      onAction: (action: number, dialogId: string) => {
-        if (action == DialogAction.TWO) {
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.delete_task_confirm'),
+      message: taskName,
+      primaryButton: {
+        value: $r('app.string.dialog_cancel'),
+        action: () => {}
+      },
+      secondaryButton: {
+        value: $r('app.string.dialog_delete'),
+        action: () => {
           this.showTaskDetailSheet = false
           this.currentFinishedDetail = undefined
           this.currentFinishedIndex = -1
           CloudApi.deleteAria2Task(item.gid, {
-              onSuccess: (data) => {
-                this.aria2FinishedSource.deleteData(index)
-                this.totalFinished = this.aria2FinishedSource.totalCount()
-                this.getAria2Downloading()
-                this.getAria2Finished(true)
-                this.getUserTasks(true)
-                showToast($r('app.string.delete_task_success'))
-              },
-              onFailure: (msg) => {
-                console.error(TAG, '删除任务失败 msg: ' + msg)
-                showToastTips(`删除任务失败：${msg}`, ToastType.Error)
-              }
-            })
+            onSuccess: (data) => {
+              this.aria2FinishedSource.deleteData(index)
+              this.totalFinished = this.aria2FinishedSource.totalCount()
+              this.getAria2Downloading()
+              this.getAria2Finished(true)
+              this.getUserTasks(true)
+              showToast($r('app.string.delete_task_success'))
+            },
+            onFailure: (msg) => {
+              console.error(TAG, '删除任务失败 msg: ' + msg)
+              showToastTips(`删除任务失败：${msg}`, ToastType.Error)
+            }
+          })
         }
       }
     })
@@ -329,7 +331,7 @@ export struct TabRemoteDown {
             .width(12)
             .height(12)
             .fillColor(CloudThemeToken.textSecondary)
-          Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
+          Text(DateFormatUtil.format(new Date(item.update), 'yyyy-MM-dd'))
             .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
         }
@@ -420,7 +422,7 @@ export struct TabRemoteDown {
             .width(12)
             .height(12)
             .fillColor(CloudThemeToken.textSecondary)
-          Text(DateUtil.getFormatDateStr(new Date(item.update), 'yyyy-MM-dd'))
+          Text(DateFormatUtil.format(new Date(item.update), 'yyyy-MM-dd'))
             .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
         }
@@ -588,7 +590,7 @@ export struct TabRemoteDown {
             .width(12)
             .height(12)
             .fillColor(CloudThemeToken.textSecondary)
-          Text(DateUtil.getFormatDateStr(new Date(task.create_date), 'yyyy-MM-dd'))
+          Text(DateFormatUtil.format(new Date(task.create_date), 'yyyy-MM-dd'))
             .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
         }

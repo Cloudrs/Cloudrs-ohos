@@ -176,7 +176,11 @@ export struct iamgePreview {
   async saveImage() {
     if (this.fileParam && this.imageData) {
       try {
-        let context = getContext();
+        const context = this.getAbilityContext();
+        if (!context) {
+          showToast('保存至相册失败')
+          return
+        }
         let photoType: photoAccessHelper.PhotoType = photoAccessHelper.PhotoType.IMAGE;
         let extension: string = this.fileParam.fileExtension;
         let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
@@ -195,7 +199,11 @@ export struct iamgePreview {
   async shareImage() {
     if (this.fileParam && this.imageData) {
       try {
-        let context = getContext(this) as common.UIAbilityContext;
+        const context = this.getAbilityContext();
+        if (!context) {
+          showToast('分享失败')
+          return
+        }
         let path = context.tempDir + '/' + this.fileParam.fileName
         let uri = FileUtil.getUriFromPath(path)
         console.debug(TAG, 'uri: ' + uri)
@@ -220,5 +228,13 @@ export struct iamgePreview {
         showToast('分享失败')
       }
     }
+  }
+
+  getAbilityContext(): common.UIAbilityContext | undefined {
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      return undefined
+    }
+    return hostContext as common.UIAbilityContext
   }
 }

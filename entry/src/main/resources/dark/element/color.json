@@ -1,0 +1,80 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#0D1117"
+    },
+    {
+      "name": "main_window_background",
+      "value": "#0D1117"
+    },
+    {
+      "name": "cloud_background",
+      "value": "#0D1117"
+    },
+    {
+      "name": "cloud_surface",
+      "value": "#151B23"
+    },
+    {
+      "name": "cloud_surface_subtle",
+      "value": "#1F2937"
+    },
+    {
+      "name": "cloud_surface_translucent",
+      "value": "#D9151B23"
+    },
+    {
+      "name": "cloud_line",
+      "value": "#2D3746"
+    },
+    {
+      "name": "cloud_primary",
+      "value": "#4F8CFF"
+    },
+    {
+      "name": "cloud_primary_soft",
+      "value": "#1B2D4D"
+    },
+    {
+      "name": "cloud_text_primary",
+      "value": "#F3F7FB"
+    },
+    {
+      "name": "cloud_text_secondary",
+      "value": "#A7B1C2"
+    },
+    {
+      "name": "cloud_danger",
+      "value": "#FF6B70"
+    },
+    {
+      "name": "cloud_success",
+      "value": "#4FCB7A"
+    },
+    {
+      "name": "sheet_default_background",
+      "value": "#151B23"
+    },
+    {
+      "name": "common_right",
+      "value": "#A7B1C2"
+    },
+    {
+      "name": "common_icon_background",
+      "value": "#1F2937"
+    },
+    {
+      "name": "common_background",
+      "value": "#0D1117"
+    },
+    {
+      "name": "tab_bar_background",
+      "value": "#151B23"
+    },
+    {
+      "name": "tab_bar_default",
+      "value": "#A7B1C2"
+    }
+  ]
+}

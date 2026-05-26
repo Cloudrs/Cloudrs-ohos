@@ -12,6 +12,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Rebuilt `TabPictures` from a placeholder into a local album backup center.
   - Added backup settings, local photo scan, system photo picker fallback, upload flow, persisted state, and path-scoped completed state.
   - Added native local-file upload support with remote directory creation and upload policy resolution.
+  - Added a permission/scan-count hint with manual picker fallback when system album scanning appears incomplete.
 - Runtime permissions:
   - Added `READ_IMAGEVIDEO`, `WRITE_IMAGEVIDEO`, and `GET_NETWORK_INFO` configuration.
   - Added runtime photo permission request before scanning.
@@ -19,6 +20,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Upgraded project SDK target and compatible SDK to HarmonyOS `6.1.1(24)` after confirming local DevEco SDK API 24 support.
   - Added modern cloud design tokens in `CloudThemeToken`.
   - Added resource colors for cloud surfaces, text, line, primary, danger, and success states.
+  - Added app-level light/dark appearance preference with persisted Harmony color mode and dark resource overrides.
   - Updated `HomePage` bottom Tabs to a floating translucent tab bar with selected capsule state.
 - Shared UI components:
   - Added `CloudScaffold` for page background, top safe-area padding, scroll behavior, and bottom tab avoidance.
@@ -30,7 +32,11 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 - Page token migration:
   - Migrated photo backup page surfaces, section headers, empty state, badges, and settings panel to the shared tokens/components.
   - Migrated photo backup page and Mine page to `CloudScaffold`.
+  - Migrated Photo Backup scan/cache context access away from deprecated `getContext` usage.
+  - Migrated File page upload/download and upload source picker context access away from deprecated component `getContext` usage.
   - Migrated Mine page background, card radius, core text colors, storage card, and list rows to the shared tokens.
+  - Reworked Mine page account header, metrics, storage panel, settings rows, feedback row, and logout row into quieter tokenized surfaces.
+  - Added Mine page appearance preference sheet and moved upload concurrency into the More Settings sheet.
   - Migrated File page to `CloudScaffold` while preserving its lazy grid layout.
   - Migrated File page header/title surfaces to the shared tokens.
   - Promoted File page upload, new-folder, view-toggle, and more actions into the visible top toolbar.
@@ -46,11 +52,28 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Migrated shared `PathSelectSheet` background, header, selected directory state, and folder rows to shared theme tokens.
   - Migrated file detail, upload source, download task, and upload task sheets/panels to shared theme tokens.
   - Migrated Login page background, input containers, OTP boxes, action buttons, and text colors to shared theme tokens.
+  - Migrated Login page window setup context access to component UI context.
   - Fixed Login page post-login route target type by falling back to `HOME_PAGE` when `nextPage` is null.
+  - Removed app-side deprecated `getStringSync` usage from Mine page version display.
+  - Migrated app-side `px2vp` usage in EntryAbility safe-area storage and Login page keyboard avoidance to `UIContext.px2vp`.
+  - Added defensive error handling around persisted theme color-mode application.
+  - Hardened local user database reads/writes with exception handling, result-set cleanup, and corrupt cached user JSON fallback.
+  - Hardened background upload/download task queues with guarded search/show/pause/resume/create paths.
+  - Migrated app toast helper from deprecated `promptAction.showToast` to `promptAction.openToast`.
+  - Removed the third-party custom toast dependency from the app toast helper; warning/error tips now use the system toast path.
+  - Migrated `ExitLifecycle` double-back exit context access away from deprecated `getContext(this)` usage.
+  - Migrated file delete, upload conflict, offline task delete, and logout confirmation dialogs from third-party DialogHelper to `UIContext.showAlertDialog`.
+  - Replaced File page rename/new-object text input dialogs with a tokenized in-page Sheet and removed app-side direct `@pura/harmony-dialog` usage.
+  - Removed the unused direct `@pura/harmony-dialog` package dependency after migrating app dialogs to system APIs and tokenized sheets.
+  - Replaced app-side `DateUtil` usage from `@pura/harmony-utils` with a small local `DateFormatUtil`.
+  - Removed two background transfer utility imports from `@pura/harmony-utils` by adding local file-name extraction and dropping an unused upload import.
+  - Added local `FileSystemUtil` and migrated upload queue plus photo backup cache copy/cleanup away from app-side `FileUtil`.
+  - Removed the Home page preview decorator while narrowing the remaining HMRouter decorator warning under API 24 checks.
   - Migrated `CommonTitle` to shared theme tokens.
   - Migrated About page to shared theme tokens.
   - Migrated Image preview top bar to shared theme tokens while preserving black preview content.
   - Removed Image preview `ArrayBuffer | null` save/share warning by guarding empty image data.
+  - Migrated Image preview save/share context access away from deprecated `getContext` usage.
   - Applied `CloudActionButton` to the Offline Download create-task action.
 
 ## In Progress
@@ -75,6 +98,13 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Replace scattered hardcoded colors.
   - Normalize card radius, section spacing, and text colors.
   - Keep existing interaction behavior unchanged while migrating visuals.
+- Migrate Harmony 6.1 context access:
+  - Completed: component pages now use component UI context for photo backup, image preview, file upload/download, upload source picker, and login window setup.
+  - Completed: app-side deprecated `getStringSync` usage has been removed.
+  - Completed: app-side deprecated `px2vp` usage has been migrated to `UIContext.px2vp`.
+  - Completed: `UserDatabase` synchronous store operations are guarded and query result sets are closed safely.
+  - Completed: background transfer queue operations are guarded against request-agent exceptions.
+  - Completed: `ExitLifecycle` now uses HMRouter `HMLifecycleContext.uiContext` to access the host AbilityContext and guards exit failures.
 
 ## Home And Navigation Todo
 
@@ -91,6 +121,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 - Completed so far:
   - File page is now wrapped by `CloudScaffold`.
   - Header/search/transport/title/menu surfaces use shared theme tokens.
+  - Upload/download picker and background transfer startup now use caller-provided UIAbilityContext.
   - File/folder item cards use shared theme tokens.
   - Empty directories show the shared empty-state component.
   - Loading and fetch-failure states are now represented in-page.
@@ -117,15 +148,15 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 
 ## Photo Backup Todo
 
-- Add a permission-state hint when scan count looks lower than expected.
+- Add a permission-state hint when scan count looks lower than expected: completed.
 - Add sync-all waiting flow instead of fixed small batches.
   - First pass completed: manual backup now processes the full current waiting/failed queue instead of a fixed 5-item slice, and shows current batch progress in the header/subtitle.
 - Add pause/cancel controls for backup.
   - First pass completed: backing-up state now has a pause action. It finishes the current image, stops before the next queued image, and can resume from remaining waiting items.
-- Add duplicate remote filename behavior: skip, overwrite, or auto-rename.
-- Add remote existence verification before upload.
+- Add duplicate remote filename behavior: first pass completed with skip-existing behavior.
+- Add remote existence verification before upload: first pass completed for photo backup target directory.
 - Add backup history grouped by remote path.
-- Add cleanup/migration for legacy `photoBackupDoneIds` once path-scoped records are stable.
+- Add cleanup/migration for legacy `photoBackupDoneIds` once path-scoped records are stable: first pass completed for known local photo records.
 - Add better UI for partial permission, no network, empty path, and upload failure.
 
 ## Offline Download Todo
@@ -154,9 +185,9 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Logout.
   - Upload concurrency setting.
 - Modernize UI:
-  - Use a quieter account header.
-  - Use tokenized cards and list rows.
-  - Improve storage panel spacing and typography.
+  - Use a quieter account header: completed.
+  - Use tokenized cards and list rows: completed.
+  - Improve storage panel spacing and typography: completed.
 
 ## Login Page Todo
 
@@ -168,6 +199,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 - Modernize UI:
   - Simplify brand area: first pass completed.
   - Normalize site URL, protocol, username, password, and 2FA input containers: first pass completed.
+  - Window/keyboard setup context access migrated to component UI context.
   - Keep keyboard avoidance behavior.
 
 ## About And Preview Todo
@@ -177,7 +209,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Image preview keeps the black viewing area and uses tokenized top-bar actions.
   - Image preview save/share now guards empty image data before writing.
 - Remaining:
-  - Consider migrating image preview deprecated `getContext` calls to newer context access patterns.
+  - Completed: migrated image preview deprecated `getContext` calls to component UI context access.
 
 ## Sheet Todo
 

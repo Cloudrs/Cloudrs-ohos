@@ -1,7 +1,8 @@
+use napi::{Env, JsFunction, JsObject, threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode}};
 use napi_derive::napi;
-use std::{fs, future::Future, sync::{Mutex, OnceLock}};
+use std::{fs, future::Future, io::{Read, Seek, SeekFrom}, sync::{Mutex, OnceLock}};
 use cloudreve_api::{
-    ApiVersion, CloudreveAPI, DeleteTarget, Error as ApiError, LoginResponse,
+    ApiVersion, CloudreveAPI, Error as ApiError, LoginResponse,
     api::v3::models::{
         Aria2CreateRequest, DeleteObjectRequest, MoveObjectRequest,
         CopyObjectRequest, RenameObjectRequest, SourceItems,
@@ -22,6 +23,7 @@ use cloudreve_api::{
 };
 use serde::Serialize;
 use serde_json::json;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 // ---- v3-compatible DirectoryInfo structs for ArkTS ----
 
@@ -730,7 +732,30 @@ pub async fn get_object_detail(id: String, is_folder: bool) -> napi::Result<Stri
 
 async fn v4_do_delete(api: &CloudreveAPI, items: &[String], dirs: &[String]) -> Result<(), ApiError> {
     for path in items.iter().chain(dirs.iter()) {
-        api.delete(DeleteTarget::Path(path.clone())).await?;
+        let v4 = api.inner().as_v4()
+            .ok_or_else(|| ApiError::UnsupportedFeature("delete".to_string(), "non-v4".to_string()))?;
+        let uri = v4_path_to_uri(path);
+        let url = format!("{}/api/v4/file", v4.base_url.trim_end_matches('/'));
+        let body = json!({
+            "uris": [uri],
+            "unlink": false,
+            "skip_soft_delete": false,
+        });
+        let mut request = v4.http_client.delete(&url).json(&body);
+        if let Some(token) = &v4.token {
+            request = request.bearer_auth(token);
+        }
+        let response: V4ApiResponse<serde_json::Value> = request
+            .send()
+            .await?
+            .json()
+            .await?;
+        if response.code != 0 {
+            return Err(ApiError::Api {
+                code: response.code,
+                message: response.msg,
+            });
+        }
     }
     Ok(())
 }
@@ -954,7 +979,7 @@ pub async fn get_upload_uri(
     name: String,
     last_modified: u32,
     mime_type: String,
-    _chunk_size: u32,
+    chunk_size: u32,
 ) -> napi::Result<String> {
     let api = get_client()?;
     if let Some(v3) = api.inner().as_v3() {
@@ -999,27 +1024,67 @@ pub async fn get_upload_uri(
         } else {
             format!("{}/{}", parent, name)
         };
-        let policy_id = get_v4_policy_id().unwrap_or_default();
+        ensure_remote_directory(&api, parent)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let policy_id = resolve_upload_policy_id(&api, parent)
+            .await
+            .or_else(get_v4_policy_id)
+            .unwrap_or_default();
+        if !policy_id.is_empty() {
+            set_v4_policy_id(Some(policy_id.clone()));
+        }
+        let file_uri = v4_path_to_uri(&file_path);
         let req = CreateUploadSessionRequest {
-            uri: &file_path,
+            uri: &file_uri,
             size: size as u64,
             policy_id: &policy_id,
             last_modified: if last_modified > 0 { Some(last_modified as u64) } else { None },
             mime_type: if mime_type.is_empty() { None } else { Some(&mime_type) },
             metadata: None,
-            entity_type: None,
+            entity_type: if chunk_size > 0 { Some("version") } else { None },
         };
-        let session = v4
-            .create_upload_session(&req)
+        let response: V4ApiResponse<serde_json::Value> = v4
+            .put("/file/upload", &req)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        if response.code != 0 {
+            return Err(napi::Error::from_reason(format!(
+                "API error: {} (code: {})",
+                response.msg, response.code
+            )));
+        }
+        let session = response
+            .data
+            .ok_or_else(|| napi::Error::from_reason(response.msg.clone()))?;
+        let storage_policy = session.get("storage_policy").cloned().unwrap_or_else(|| json!({}));
         let j = json!({
-            "sessionId": session.session_id,
-            "chunkSize": session.chunk_size,
-            "expires": session.expires,
+            "sessionId": json_string(&session, "session_id"),
+            "chunkSize": json_u64(&session, "chunk_size").unwrap_or(0),
+            "expires": json_u64(&session, "expires").unwrap_or(0),
+            "uploadUrls": session.get("upload_urls").cloned().unwrap_or(serde_json::Value::Null),
+            "credential": session.get("credential").cloned().unwrap_or(serde_json::Value::Null),
+            "completeUrl": session.get("completeURL").or_else(|| session.get("complete_url")).cloned().unwrap_or(serde_json::Value::Null),
+            "storagePolicyType": json_string(&storage_policy, "type"),
+            "storagePolicyRelay": storage_policy.get("relay").and_then(|v| v.as_bool()).unwrap_or(false),
         });
         Ok(j.to_string())
     }
+}
+
+fn json_string(value: &serde_json::Value, key: &str) -> String {
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn json_u64(value: &serde_json::Value, key: &str) -> Option<u64> {
+    value.get(key).and_then(|v| {
+        v.as_u64()
+            .or_else(|| v.as_i64().and_then(|n| if n >= 0 { Some(n as u64) } else { None }))
+    })
 }
 
 #[napi]
@@ -1042,6 +1107,200 @@ pub async fn upload_local_file(
     api.upload_file(&remote_path, content, policy_id.as_deref(), overwrite)
         .await
         .map_err(|e| napi::Error::from_reason(e.to_string()))
+}
+
+#[napi]
+pub async fn upload_local_file_chunk(
+    local_path: String,
+    session_id: String,
+    index: u32,
+    offset: f64,
+    length: u32,
+) -> napi::Result<u32> {
+    let (buffer, read_len) = read_local_chunk(&local_path, offset, length)?;
+
+    let api = get_client()?;
+    if let Some(v4) = api.inner().as_v4() {
+        v4.upload_file_chunk(&session_id, index, &buffer)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    } else if let Some(v3) = api.inner().as_v3() {
+        if index > 0 {
+            return Err(napi::Error::from_reason(
+                "v3 chunked upload is not supported by the current native adapter",
+            ));
+        }
+        v3.upload_chunk(&session_id, index, buffer)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    } else {
+        return Err(napi::Error::from_reason("unsupported Cloudreve client"));
+    }
+
+    Ok(read_len as u32)
+}
+
+#[napi]
+pub fn upload_local_file_chunk_with_progress(
+    env: Env,
+    local_path: String,
+    session_id: String,
+    index: u32,
+    offset: f64,
+    length: u32,
+    progress: JsFunction,
+) -> napi::Result<JsObject> {
+    let tsfn: ThreadsafeFunction<f64, ErrorStrategy::Fatal> =
+        progress.create_threadsafe_function(0, |ctx| Ok(vec![ctx.value]))?;
+    let (deferred, promise) = env.create_deferred::<u32, _>()?;
+    napi::bindgen_prelude::spawn(async move {
+        let result = async {
+            let api = get_client()?;
+            if let Some(v4) = api.inner().as_v4() {
+                let url = format!(
+                    "{}/api/v4/file/upload/{}/{}",
+                    v4.base_url.trim_end_matches('/'),
+                    session_id,
+                    index
+                );
+                upload_local_file_to_v4_url_with_progress(
+                    local_path,
+                    url,
+                    v4.token.clone(),
+                    offset,
+                    length,
+                    tsfn,
+                )
+                .await
+            } else {
+                let uploaded = upload_local_file_chunk(local_path, session_id, index, offset, length).await?;
+                let _ = tsfn.call(uploaded as f64, ThreadsafeFunctionCallMode::NonBlocking);
+                Ok(uploaded)
+            }
+        }.await;
+
+        match result {
+            Ok(uploaded) => deferred.resolve(move |_| Ok(uploaded)),
+            Err(error) => deferred.reject(error),
+        }
+    });
+    Ok(promise)
+}
+
+#[napi]
+pub async fn upload_local_file_chunk_to_url(
+    local_path: String,
+    upload_url: String,
+    credential: String,
+    index: u32,
+    offset: f64,
+    length: u32,
+) -> napi::Result<u32> {
+    let (buffer, read_len) = read_local_chunk(&local_path, offset, length)?;
+    let separator = if upload_url.contains('?') { "&" } else { "?" };
+    let url = format!("{}{}chunk={}", upload_url, separator, index);
+    let client = reqwest::Client::new();
+    let mut request = client.post(url).body(buffer);
+    if !credential.is_empty() {
+        request = request.header("Authorization", credential);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown upload URL error".to_string());
+        return Err(napi::Error::from_reason(format!(
+            "upload url failed: {} {}",
+            status, error_text
+        )));
+    }
+
+    Ok(read_len as u32)
+}
+
+async fn upload_local_file_to_v4_url_with_progress(
+    local_path: String,
+    url: String,
+    token: Option<String>,
+    offset: f64,
+    length: u32,
+    tsfn: ThreadsafeFunction<f64, ErrorStrategy::Fatal>,
+) -> napi::Result<u32> {
+    let mut file = tokio::fs::File::open(&local_path)
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("open local file failed: {}", e)))?;
+    file.seek(std::io::SeekFrom::Start(offset.max(0.0) as u64))
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("seek local file failed: {}", e)))?;
+
+    let stream = futures_util::stream::unfold(
+        (file, length as u64, 0u64, tsfn.clone()),
+        |(mut file, remaining, sent, tsfn)| async move {
+            if remaining == 0 {
+                return None;
+            }
+            let read_size = remaining.min(256 * 1024) as usize;
+            let mut buffer = vec![0u8; read_size];
+            match file.read(&mut buffer).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    buffer.truncate(n);
+                    let next_sent = sent + n as u64;
+                    let _ = tsfn.call(next_sent as f64, ThreadsafeFunctionCallMode::NonBlocking);
+                    Some((Ok::<Vec<u8>, std::io::Error>(buffer), (file, remaining - n as u64, next_sent, tsfn)))
+                }
+                Err(e) => Some((Err(e), (file, 0, sent, tsfn))),
+            }
+        },
+    );
+
+    let mut request = reqwest::Client::new()
+        .post(url)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .header(reqwest::header::CONTENT_LENGTH, length.to_string())
+        .body(reqwest::Body::wrap_stream(stream));
+
+    if let Some(token) = token {
+        request = request.bearer_auth(token);
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown upload error".to_string());
+        return Err(napi::Error::from_reason(format!(
+            "upload chunk failed: {} {}",
+            status, error_text
+        )));
+    }
+
+    let _ = tsfn.call(length as f64, ThreadsafeFunctionCallMode::NonBlocking);
+    Ok(length)
+}
+
+fn read_local_chunk(local_path: &str, offset: f64, length: u32) -> napi::Result<(Vec<u8>, usize)> {
+    let mut file = fs::File::open(local_path)
+        .map_err(|e| napi::Error::from_reason(format!("open local file failed: {}", e)))?;
+    file.seek(SeekFrom::Start(offset.max(0.0) as u64))
+        .map_err(|e| napi::Error::from_reason(format!("seek local file failed: {}", e)))?;
+
+    let mut buffer = vec![0u8; length as usize];
+    let read_len = file
+        .read(&mut buffer)
+        .map_err(|e| napi::Error::from_reason(format!("read local chunk failed: {}", e)))?;
+    buffer.truncate(read_len);
+    Ok((buffer, read_len))
 }
 
 // ---- Aria2 ----

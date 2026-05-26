@@ -5,7 +5,8 @@ import {
   nativeGetDirectory, nativeGetObjectDetail,
   nativeDeleteObjects, nativeMoveObjects, nativeCopyObjects,
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
-  nativeGetDownloadUri, nativeGetUploadUri, nativeUploadLocalFile,
+  nativeGetDownloadUri, nativeGetUploadUri, nativeUploadLocalFile, nativeUploadLocalFileChunk,
+  nativeUploadLocalFileChunkWithProgress, nativeUploadLocalFileChunkToUrl,
   nativeAria2Downloading, nativeAria2Finished,
   nativeAria2CreateTask, nativeAria2DeleteTask,
   nativeGetUserTasks,
@@ -172,17 +173,49 @@ export class CloudApi {
     nativeGetDownloadUri(id, callback);
   }
 
-  static getUploadUri(object: ObjectUpload, callback?: HttpCallback<UploadRequestResponse>): void {
+  static getUploadUri(object: ObjectUpload, callback?: HttpCallback<UploadRequestResponse>, overwrite: boolean = false): void {
     nativeGetUploadUri(
       object.path, object.size, object.name,
       object.last_modified, object.mime_type,
-      0,
+      overwrite ? 1 : 0,
       callback
     );
   }
 
   static uploadLocalFile(localPath: string, remotePath: string, overwrite: boolean = false, callback?: HttpCallback<null>): void {
     nativeUploadLocalFile(localPath, remotePath, overwrite, callback);
+  }
+
+  static uploadLocalFileChunk(
+    localPath: string,
+    sessionId: string,
+    index: number,
+    offset: number,
+    length: number
+  ): Promise<number> {
+    return nativeUploadLocalFileChunk(localPath, sessionId, index, offset, length);
+  }
+
+  static uploadLocalFileChunkWithProgress(
+    localPath: string,
+    sessionId: string,
+    index: number,
+    offset: number,
+    length: number,
+    progress: (uploaded: number) => void
+  ): Promise<number> {
+    return nativeUploadLocalFileChunkWithProgress(localPath, sessionId, index, offset, length, progress);
+  }
+
+  static uploadLocalFileChunkToUrl(
+    localPath: string,
+    uploadUrl: string,
+    credential: string,
+    index: number,
+    offset: number,
+    length: number
+  ): Promise<number> {
+    return nativeUploadLocalFileChunkToUrl(localPath, uploadUrl, credential, index, offset, length);
   }
 
   static downloadFile(_uri: string, _filePath: string, _callback?: HttpCallback<string>, _progress?: ProgressCallback): void {

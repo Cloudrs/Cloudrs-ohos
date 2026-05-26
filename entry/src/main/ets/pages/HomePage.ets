@@ -7,8 +7,7 @@ import { TabRemoteDown } from './tabs/TabAria2';
 import { TabMine } from './tabs/TabMine';
 import { CloudThemeToken } from '../model/CloudTheme';
 
-@HMRouter({pageUrl: Constant.HOME_PAGE, interceptors: [Constant.ACCESS_INTERCEPTOR], lifecycle: 'ExitLifecycle'})
-@Preview
+@HMRouter({pageUrl: 'HomePage', interceptors: ['AccessInterceptor'], lifecycle: 'ExitLifecycle'})
 @Component
 export struct HomePage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;

@@ -82,7 +82,7 @@ export struct Uploads {
             .fillColor(this.getStateColor(object.state))
 
           if (object.state == FileModelState.RUNNING) {
-            Text(CommonUtil.formatBytes(object.speed, 1) + '/s')
+            Text(this.getRunningText(object))
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor(CloudThemeToken.textSecondary)
@@ -113,5 +113,15 @@ export struct Uploads {
     .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
+  }
+
+  getRunningText(object: TransportObject): string {
+    if (object.statusText.length > 0) {
+      return object.statusText
+    }
+    if (object.progress >= 99 && object.trans >= object.total) {
+      return '服务端处理中'
+    }
+    return CommonUtil.formatBytes(object.speed, 1) + '/s'
   }
 }

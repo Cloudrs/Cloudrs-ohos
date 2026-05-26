@@ -1,6 +1,5 @@
 import { relationalStore } from '@kit.ArkData';
-import { BusinessError } from '@kit.BasicServicesKit';
-import { DbUserInfo } from './net/ApiTypes';
+import { DbUserInfo, UserInfo } from './net/ApiTypes';
 
 class UserDatabase {
   rdbStore?: relationalStore.RdbStore
@@ -28,7 +27,12 @@ class UserDatabase {
                     refresh_token TEXT DEFAULT '',
                     userinfo TEXT,
                     UNIQUE (url, username) ON CONFLICT REPLACE);`
-      this.rdbStore.executeSync(sql)
+      try {
+        this.rdbStore.executeSync(sql)
+      } catch (err) {
+        console.error('UserDatabase', `创建用户表失败, 错误：${JSON.stringify(err)}`)
+        return
+      }
       // 迁移：为旧表添加 refresh_token 列（已存在则忽略）
       try {
         this.rdbStore.executeSync(`ALTER TABLE ${this.usersTable} ADD COLUMN refresh_token TEXT DEFAULT ''`)
@@ -44,18 +48,24 @@ class UserDatabase {
       return -1
     }
 
-    let id = this.rdbStore.insertSync(this.usersTable, {
-      url: dbUserInfo.url,
-      username: dbUserInfo.username,
-      password: dbUserInfo.password,
-      cookie: dbUserInfo.cookie,
-      expires: dbUserInfo.expires,
-      refresh_token: dbUserInfo.refresh_token ?? '',
-      userinfo: JSON.stringify(dbUserInfo.userinfo)
-    })
+    let id = -1
+    try {
+      id = this.rdbStore.insertSync(this.usersTable, {
+        url: dbUserInfo.url,
+        username: dbUserInfo.username,
+        password: dbUserInfo.password,
+        cookie: dbUserInfo.cookie,
+        expires: dbUserInfo.expires,
+        refresh_token: dbUserInfo.refresh_token ?? '',
+        userinfo: JSON.stringify(dbUserInfo.userinfo)
+      })
+    } catch (err) {
+      console.error('UserDatabase', `插入数据库失败，username:${dbUserInfo.username}, 错误：${JSON.stringify(err)}`)
+      return -1
+    }
 
     if (id < 0) {
-      console.error('UserDatabase', `插入数据库成功，username:${dbUserInfo.username}`)
+      console.error('UserDatabase', `插入数据库失败，username:${dbUserInfo.username}`)
       return -1
     }
 
@@ -71,12 +81,19 @@ class UserDatabase {
     let predicates = new relationalStore.RdbPredicates(this.usersTable)
     predicates.equalTo('username', username)
 
-    let result = this.rdbStore.querySync(predicates)
-    if (result.rowCount > 0) {
-      return true
-    }
-    else {
-      console.warn('UserDatabase', `数据库未查询到该用户${username}`)
+    let result: relationalStore.ResultSet | undefined = undefined
+    try {
+      result = this.rdbStore.querySync(predicates)
+      if (result.rowCount > 0) {
+        return true
+      }
+      else {
+        console.warn('UserDatabase', `数据库未查询到该用户${username}`)
+      }
+    } catch (err) {
+      console.error('UserDatabase', `查询用户失败，username:${username}, 错误：${JSON.stringify(err)}`)
+    } finally {
+      this.closeResult(result)
     }
 
     return false
@@ -91,21 +108,36 @@ class UserDatabase {
     let predicates = new relationalStore.RdbPredicates(this.usersTable)
     predicates.equalTo('username', username)
 
-    let result = this.rdbStore.querySync(predicates, ['url', 'password', 'cookie', 'expires', 'refresh_token', 'userinfo'])
-    if (result.goToFirstRow()) {
-      console.info('UserDatabase', `数据库查询用户${username}成功，个数:${result.rowCount}`)
+    let result: relationalStore.ResultSet | undefined = undefined
+    try {
+      result = this.rdbStore.querySync(predicates, ['url', 'password', 'cookie', 'expires', 'refresh_token', 'userinfo'])
+      if (result.goToFirstRow()) {
+        console.info('UserDatabase', `数据库查询用户${username}成功，个数:${result.rowCount}`)
 
-      let url = result.getString(result.getColumnIndex('url'))
-      let password = result.getString(result.getColumnIndex('password'))
-      let cookie = result.getString(result.getColumnIndex('cookie'))
-      let expires = result.getString(result.getColumnIndex('expires'))
-      let refresh_token = result.getString(result.getColumnIndex('refresh_token'))
-      let userinfo = result.getString(result.getColumnIndex('userinfo'))
-      let dbUserInfo: DbUserInfo = { url, username, password, cookie, expires, refresh_token, userinfo: JSON.parse(userinfo)}
-      return dbUserInfo
-    }
-    else {
-      console.warn('UserDatabase', `数据库未查询到该用户${username}的cookie`)
+        let url = result.getString(result.getColumnIndex('url'))
+        let password = result.getString(result.getColumnIndex('password'))
+        let cookie = result.getString(result.getColumnIndex('cookie'))
+        let expires = result.getString(result.getColumnIndex('expires'))
+        let refresh_token = result.getString(result.getColumnIndex('refresh_token'))
+        let userinfo = result.getString(result.getColumnIndex('userinfo'))
+        let dbUserInfo: DbUserInfo = {
+          url,
+          username,
+          password,
+          cookie,
+          expires,
+          refresh_token,
+          userinfo: this.parseUserInfo(userinfo)
+        }
+        return dbUserInfo
+      }
+      else {
+        console.warn('UserDatabase', `数据库未查询到该用户${username}的cookie`)
+      }
+    } catch (err) {
+      console.error('UserDatabase', `获取用户信息失败，username:${username}, 错误：${JSON.stringify(err)}`)
+    } finally {
+      this.closeResult(result)
     }
 
     return null
@@ -123,12 +155,67 @@ class UserDatabase {
       predicates.equalTo('url', url)
     }
 
-    let id = this.rdbStore.deleteSync(predicates)
+    let id = 0
+    try {
+      id = this.rdbStore.deleteSync(predicates)
+    } catch (err) {
+      console.error('UserDatabase', `数据库删除用户${username}失败，错误：${JSON.stringify(err)}`)
+      return
+    }
     if (id > 0) {
       console.info('UserDatabase', `数据库删除用户${username}成功，个数:${id}`)
     }
     else {
       console.warn('UserDatabase', `数据库未查询到该用户${username}`)
+    }
+  }
+
+  private parseUserInfo(userinfo: string): UserInfo {
+    if (!userinfo || userinfo.length === 0) {
+      return this.createEmptyUserInfo()
+    }
+    try {
+      return JSON.parse(userinfo) as UserInfo
+    } catch (err) {
+      console.error('UserDatabase', `解析用户信息失败，错误：${JSON.stringify(err)}`)
+      return this.createEmptyUserInfo()
+    }
+  }
+
+  private closeResult(result?: relationalStore.ResultSet): void {
+    if (!result) {
+      return
+    }
+    try {
+      result.close()
+    } catch (err) {
+      console.error('UserDatabase', `关闭查询结果失败，错误：${JSON.stringify(err)}`)
+    }
+  }
+
+  private createEmptyUserInfo(): UserInfo {
+    return {
+      id: '',
+      user_name: '',
+      nickname: '',
+      status: 0,
+      avatar: '',
+      created_at: '',
+      preferred_theme: '',
+      anonymous: false,
+      group: {
+        id: '',
+        name: '',
+        allowShare: false,
+        allowRemoteDownload: false,
+        allowArchiveDownload: false,
+        shareDownload: false,
+        compress: false,
+        webdav: false,
+        sourceBatch: 0,
+        advanceDelete: false,
+        allowWebDAVProxy: false
+      }
     }
   }
 }

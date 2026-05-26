@@ -4,7 +4,7 @@ import { request } from '@kit.BasicServicesKit';
 import Constant from '../model/Constant';
 import { FileModel, FileModelState } from '../model/FileModel';
 import Logger from './Logger';
-import { FileUtil } from '@pura/harmony-utils';
+import { CommonUtil } from './CommonUtil';
 
 const TAG: string = 'RequestDownload';
 let isNetPause = false;
@@ -37,27 +37,27 @@ class RequestDownload {
     }
   }
 
-  downloadFileBackground(file: FileModel) {
+  downloadFileBackground(file: FileModel, context?: common.UIAbilityContext) {
     if (file) {
       Logger.info(TAG, 'downloadFile to -> ' + file.path);
-      this.context = getContext(this) as common.UIAbilityContext;
+      if (context) {
+        this.context = context;
+      }
       this.waitList.push(file)
     }
   }
 
   private async flushBackgroundTask() {
-    let tasks = await request.agent.search({
-      state: request.agent.State.RUNNING
-    });
+    const runningCount = await this.getRunningTaskCount();
 
-    if (tasks.length < Constant.TASK_MAX && this.waitList.length > 0) {
+    if (runningCount < Constant.TASK_MAX && this.waitList.length > 0) {
       let downloadList: FileModel[] = [];
-      if (this.waitList.length <= Constant.TASK_MAX - tasks.length) {
+      if (this.waitList.length <= Constant.TASK_MAX - runningCount) {
         downloadList = this.waitList;
         this.waitList = [];
       } else {
-        downloadList = this.waitList.slice(0, Constant.TASK_MAX - tasks.length);
-        this.waitList = this.waitList.slice(Constant.TASK_MAX - tasks.length, this.waitList.length);
+        downloadList = this.waitList.slice(0, Constant.TASK_MAX - runningCount);
+        this.waitList = this.waitList.slice(Constant.TASK_MAX - runningCount, this.waitList.length);
       }
       Logger.info(TAG, `this.waitList = ${JSON.stringify(this.waitList)}`);
       this.createBackgroundTask(downloadList);
@@ -77,7 +77,7 @@ class RequestDownload {
         title: 'download',
         mode: request.agent.Mode.BACKGROUND,
         network: request.agent.Network.ANY,
-        saveas: './' + FileUtil.getFileName(fileModel.path),
+        saveas: './' + CommonUtil.getFileName(fileModel.path),
         overwrite: true,
         gauge: true
       }
@@ -107,9 +107,9 @@ class RequestDownload {
           })
 
           task.on('pause', async (progress: request.agent.Progress) => {
-            let taskInfo = await request.agent.show(task.tid);
-            Logger.info(TAG, `pause,  resean = ${taskInfo.reason}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo.faults)}`);
-            isNetPause = taskInfo.faults === 0;
+            const taskInfo = await this.showTask(task.tid);
+            Logger.info(TAG, `pause, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
+            isNetPause = taskInfo?.faults === 0;
             if (fileModel.callback) {
               if (isNetPause) {
                 fileModel.callback(progress.processed, FileModelState.PAUSED);
@@ -120,8 +120,8 @@ class RequestDownload {
           })
 
           task.on('resume', async (progress: request.agent.Progress) => {
-            let taskInfo = await request.agent.show(task.tid);
-            Logger.info(TAG, `resume,  resean = ${taskInfo.reason}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo.faults)}`);
+            const taskInfo = await this.showTask(task.tid);
+            Logger.info(TAG, `resume, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
             if (fileModel.callback) {
               if (isNetPause) {
                 isNetPause = false;
@@ -133,8 +133,8 @@ class RequestDownload {
           })
 
           task.on('failed', async (progress: request.agent.Progress) => {
-            let taskInfo = await request.agent.show(task.tid);
-            Logger.info(TAG, `fail,  resean = ${taskInfo.reason}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo.faults)}`);
+            const taskInfo = await this.showTask(task.tid);
+            Logger.info(TAG, `fail, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
             if (fileModel.callback) {
               fileModel.callback(progress.processed, FileModelState.FAILED);
             }
@@ -146,6 +146,9 @@ class RequestDownload {
           }).catch((err: Error) => {
             Logger.error(TAG, 'task start error: ', JSON.stringify(err));
           });
+        }).catch((err: Error) => {
+          Logger.error(TAG, `task create error: ${JSON.stringify(err)}`);
+          this.waitList.push(fileModel);
         })
       } catch (err) {
         Logger.error(TAG, `task create error: ${JSON.stringify(err)}`);
@@ -157,18 +160,26 @@ class RequestDownload {
   async pause(id: string) {
     let task = this.getDownloadTask(id)
     if (task) {
-      let taskInfo = await request.agent.show(task.tid);
-      Logger.info(TAG, `task pause, taskInfo  = ${JSON.stringify(taskInfo)}`);
-      await task.pause();
+      try {
+        let taskInfo = await this.showTask(task.tid);
+        Logger.info(TAG, `task pause, taskInfo = ${JSON.stringify(taskInfo)}`);
+        await task.pause();
+      } catch (err) {
+        Logger.error(TAG, `task pause failed, err = ${JSON.stringify(err)}`);
+      }
     }
   }
 
   async resume(id: string) {
     let task = this.getDownloadTask(id)
     if (task) {
-      let taskInfo = await request.agent.show(task.tid);
-      Logger.info(TAG, `task resume, taskInfo  = ${JSON.stringify(taskInfo)}`);
-      await task.resume();
+      try {
+        let taskInfo = await this.showTask(task.tid);
+        Logger.info(TAG, `task resume, taskInfo = ${JSON.stringify(taskInfo)}`);
+        await task.resume();
+      } catch (err) {
+        Logger.error(TAG, `task resume failed, err = ${JSON.stringify(err)}`);
+      }
     }
   }
 
@@ -186,6 +197,27 @@ class RequestDownload {
       } catch (err) {
         Logger.info(TAG, `deleteTask fail, err= ${JSON.stringify(err)}`);
       }
+    }
+  }
+
+  private async getRunningTaskCount(): Promise<number> {
+    try {
+      const tasks = await request.agent.search({
+        state: request.agent.State.RUNNING
+      });
+      return tasks.length;
+    } catch (err) {
+      Logger.error(TAG, `search running tasks failed, err = ${JSON.stringify(err)}`);
+      return 0;
+    }
+  }
+
+  private async showTask(tid: string): Promise<request.agent.TaskInfo | undefined> {
+    try {
+      return await request.agent.show(tid);
+    } catch (err) {
+      Logger.error(TAG, `show task failed, tid = ${tid}, err = ${JSON.stringify(err)}`);
+      return undefined;
     }
   }
 }

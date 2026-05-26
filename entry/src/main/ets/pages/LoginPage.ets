@@ -42,23 +42,35 @@ export struct LoginPage {
   private nextPage: string|null = Constant.HOME_PAGE
 
   aboutToAppear() {
-    window.getLastWindow(getContext(this)).then(currentWindow => {
+    const uiContext = this.getUIContext();
+    const hostContext = this.getUIContext().getHostContext();
+    if (!hostContext) {
+      return;
+    }
+
+    window.getLastWindow(hostContext).then(currentWindow => {
       // 设置窗口的布局为沉浸式布局
-      currentWindow.setWindowLayoutFullScreen(true);
-      let property = currentWindow.getWindowProperties();
+      try {
+        currentWindow.setWindowLayoutFullScreen(true);
+        let property = currentWindow.getWindowProperties();
 
-      // 初始化窗口高度
-      let avoidArea = currentWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_KEYBOARD);
-      this.scrollHeight = px2vp(property.windowRect.height - avoidArea.bottomRect.height);
+        // 初始化窗口高度
+        let avoidArea = currentWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_KEYBOARD);
+        this.scrollHeight = uiContext.px2vp(property.windowRect.height - avoidArea.bottomRect.height);
 
-      // 监听软键盘的隐藏和显示
-      currentWindow.on('avoidAreaChange', data => {
-        if (data.type == window.AvoidAreaType.TYPE_KEYBOARD) {
-          this.keyHeight = px2vp(data.area.bottomRect.height);
-          this.scrollHeight = px2vp(currentWindow.getWindowProperties().windowRect.height - data.area.bottomRect.height);
-          return;
-        }
-      })
+        // 监听软键盘的隐藏和显示
+        currentWindow.on('avoidAreaChange', data => {
+          if (data.type == window.AvoidAreaType.TYPE_KEYBOARD) {
+            this.keyHeight = uiContext.px2vp(data.area.bottomRect.height);
+            this.scrollHeight = uiContext.px2vp(currentWindow.getWindowProperties().windowRect.height - data.area.bottomRect.height);
+            return;
+          }
+        })
+      } catch (err) {
+        console.error('LoginPage', `Window layout init failed: ${(err as Error)?.message ?? err}`)
+      }
+    }).catch((err: Error) => {
+      console.error('LoginPage', `getLastWindow failed: ${err.message}`)
     })
 
     if (HMRouterMgr.getCurrentParam()) {

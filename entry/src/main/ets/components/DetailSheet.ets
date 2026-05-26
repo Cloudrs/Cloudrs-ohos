@@ -1,7 +1,7 @@
-import { DateUtil } from "@pura/harmony-utils"
 import { CloudThemeToken } from "../model/CloudTheme"
 import { DetailData } from "../model/DetailData"
 import { CommonUtil } from "../utils/CommonUtil"
+import { DateFormatUtil } from "../utils/DateFormatUtil"
 
 @Component
 export struct DetailSheet {
@@ -38,10 +38,10 @@ export struct DetailSheet {
         this.commonDivider()
       }
 
-      this.commonRow($r('app.string.detail_created_at'), DateUtil.getFormatDateStr(new Date(this.detailData.detailInfo.created_at)))
+      this.commonRow($r('app.string.detail_created_at'), DateFormatUtil.format(new Date(this.detailData.detailInfo.created_at)))
       this.commonDivider()
 
-      this.commonRow($r('app.string.detail_updated_at'), DateUtil.getFormatDateStr(new Date(this.detailData.detailInfo.updated_at)))
+      this.commonRow($r('app.string.detail_updated_at'), DateFormatUtil.format(new Date(this.detailData.detailInfo.updated_at)))
       this.commonDivider()
 
       Blank().height(8)

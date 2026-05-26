@@ -2,8 +2,7 @@ import { abilityAccessCtrl, common, PermissionRequestResult, Permissions } from 
 import { BusinessError } from '@kit.BasicServicesKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import fs from '@ohos.file.fs';
-import { FileUtil, NetworkUtil } from '@pura/harmony-utils';
+import { NetworkUtil } from '@pura/harmony-utils';
 import Constant from '../../model/Constant';
 import {
   PhotoBackupItem,
@@ -21,6 +20,7 @@ import { SectionHeader } from '../../components/SectionHeader';
 import { EmptyState } from '../../components/EmptyState';
 import { CloudTopBar } from '../../components/CloudTopBar';
 import { CloudScaffold } from '../../components/CloudScaffold';
+import { FileSystemUtil } from '../../utils/FileSystemUtil';
 
 const TAG: string = 'TabPictures';
 
@@ -36,6 +36,7 @@ export struct TabPictures {
   @State backupQueueDone: number = 0;
   @State backupQueueTotal: number = 0;
   @State shouldPauseBackup: boolean = false;
+  @State permissionHint: string = '';
   private doneIds: Set<string> = new Set<string>();
 
   aboutToAppear(): void {
@@ -76,6 +77,7 @@ export struct TabPictures {
     try {
       let data = JSON.parse(json ?? '[]') as PhotoBackupItemData[];
       this.photos = data.map((item: PhotoBackupItemData) => PhotoBackupItem.fromData(item));
+      this.migrateLegacyDoneIds();
       this.refreshDoneStatus();
     } catch (err) {
       console.error(TAG, `load photo records failed: ${(err as Error)?.message ?? err}`);
@@ -182,14 +184,22 @@ export struct TabPictures {
     }
     this.isScanning = true;
     this.backupState = PhotoBackupState.SCANNING;
+    this.permissionHint = '';
     try {
-      let context = getContext(this) as common.UIAbilityContext;
+      let context = this.getAbilityContext();
+      if (!context) {
+        this.permissionHint = '无法获取应用上下文，请稍后重试或重新打开页面。';
+        this.backupState = PhotoBackupState.FAILED;
+        return;
+      }
       let granted = await this.ensurePhotoPermission(context);
       if (!granted) {
+        this.permissionHint = '未获得完整相册读取权限时，系统扫描可能为空。可重新授权，或使用“选择图片加入备份”。';
         showToast('需要允许读取相册后才能扫描图片');
         this.backupState = PhotoBackupState.FAILED;
         return;
       }
+      const previousCount = this.getPhotos().length;
       let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
       let predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
       let fetchOptions: photoAccessHelper.FetchOptions = {
@@ -215,6 +225,11 @@ export struct TabPictures {
           (asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0));
       });
       fetchResult.close();
+      if (nextPhotos.length === 0) {
+        this.permissionHint = '未扫描到本地图片。如果相册中已有图片，请检查相册读取权限，或手动选择图片加入备份。';
+      } else if (previousCount > 0 && nextPhotos.length < previousCount) {
+        this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
+      }
       this.photos = this.mergePhotoList(nextPhotos, true);
       this.updateSettings((settings: PhotoBackupSettings) => {
         settings.lastScanAt = new Date().getTime();
@@ -225,6 +240,7 @@ export struct TabPictures {
     } catch (err) {
       let error = err as BusinessError;
       console.error(TAG, `scan failed: ${error.code}, ${error.message}`);
+      this.permissionHint = '相册扫描失败，请检查系统相册权限。也可以先使用“选择图片加入备份”继续备份指定图片。';
       showToast('扫描本地相册失败，请检查相册读取权限');
       this.backupState = PhotoBackupState.FAILED;
     } finally {
@@ -319,10 +335,42 @@ export struct TabPictures {
   }
 
   hasLegacyDoneId(item: PhotoBackupItem): boolean {
+    return this.getLegacyDoneIds(item).length > 0;
+  }
+
+  getLegacyDoneIds(item: PhotoBackupItem): string[] {
+    let legacyIds: string[] = [];
     if (this.doneIds.has(item.id) || this.doneIds.has(item.uri)) {
-      return true;
+      legacyIds.push(this.doneIds.has(item.id) ? item.id : item.uri);
     }
-    return Array.from(this.doneIds).some((id: string) => id.startsWith(`${item.uri}_`));
+    Array.from(this.doneIds).forEach((id: string) => {
+      if (!this.isPathDoneId(id) && id.startsWith(`${item.uri}_`) && legacyIds.indexOf(id) < 0) {
+        legacyIds.push(id);
+      }
+    });
+    return legacyIds;
+  }
+
+  migrateLegacyDoneIds(): void {
+    if (!this.isDefaultBackupPath()) {
+      return;
+    }
+    let changed = false;
+    this.getPhotos().forEach((item: PhotoBackupItem) => {
+      let scopedKey = this.getDoneKey(item);
+      let legacyIds = this.getLegacyDoneIds(item);
+      if (legacyIds.length === 0) {
+        return;
+      }
+      this.doneIds.add(scopedKey);
+      legacyIds.forEach((id: string) => {
+        this.doneIds.delete(id);
+      });
+      changed = true;
+    });
+    if (changed) {
+      this.saveDoneIds();
+    }
   }
 
   getCurrentPathDoneCount(): number {
@@ -460,6 +508,15 @@ export struct TabPictures {
       item.status = PhotoBackupStatus.UPLOADING;
       item.error = '';
       item.progress = 8;
+      if (await this.remotePhotoExists(item)) {
+        item.progress = 100;
+        item.status = PhotoBackupStatus.COMPLETED;
+        item.error = '';
+        this.doneIds.add(this.getDoneKey(item));
+        this.saveDoneIds();
+        this.savePhotoRecords();
+        return;
+      }
       localPath = await this.copyPhotoToCache(item);
       item.progress = 45;
       await this.uploadPhoto(localPath, this.getRemoteFilePath(item), item);
@@ -475,24 +532,19 @@ export struct TabPictures {
       this.savePhotoRecords();
     } finally {
       if (localPath.length > 0) {
-        try {
-          await FileUtil.unlink(localPath);
-        } catch (_) {
-        }
+        await FileSystemUtil.unlinkIfExists(localPath);
       }
     }
   }
 
   async copyPhotoToCache(item: PhotoBackupItem): Promise<string> {
-    let context = getContext(this) as common.UIAbilityContext;
+    let context = this.getAbilityContext();
+    if (!context) {
+      throw new Error('应用上下文不可用');
+    }
     let fileName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
     let localPath = `${context.cacheDir}/photo_backup_${new Date().getTime()}_${fileName}`;
-    let source = await FileUtil.open(item.uri, fs.OpenMode.READ_ONLY);
-    try {
-      await FileUtil.copyFile(source.fd, localPath);
-    } finally {
-      await FileUtil.close(source.fd);
-    }
+    await FileSystemUtil.copyUriToPath(item.uri, localPath);
     return localPath;
   }
 
@@ -507,6 +559,21 @@ export struct TabPictures {
         },
         onFailure: (message: string) => {
           reject(new Error(message));
+        }
+      });
+    });
+  }
+
+  remotePhotoExists(item: PhotoBackupItem): Promise<boolean> {
+    return new Promise<boolean>((resolve: (value: boolean) => void) => {
+      CloudApi.getFilesInfo(this.normalizeRemotePath(this.settings.remotePath), {
+        onSuccess: (data) => {
+          let exists = (data.objects ?? []).some((object) => object.name === item.name);
+          resolve(exists);
+        },
+        onFailure: (msg: string) => {
+          console.info(TAG, `check remote photo exists skipped: ${msg}`);
+          resolve(false);
         }
       });
     });
@@ -625,6 +692,10 @@ export struct TabPictures {
           .fontColor(CloudThemeToken.textSecondary)
       }
 
+      if (this.permissionHint.length > 0) {
+        this.permissionHintCard();
+      }
+
       if (this.backupState === PhotoBackupState.BACKING_UP) {
         Text(`本轮将连续备份 ${this.backupQueueTotal} 张，已完成 ${this.backupQueueDone} 张。`)
           .fontSize(12)
@@ -656,6 +727,27 @@ export struct TabPictures {
     .padding(16)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder permissionHintCard() {
+    Column({ space: 10 }) {
+      Text(this.permissionHint)
+        .fontSize(12)
+        .fontColor(CloudThemeToken.textSecondary)
+        .width('100%')
+      Button('选择图片加入备份')
+        .fontSize(13)
+        .height(36)
+        .width('100%')
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
+        .onClick(() => {
+          this.pickPhotosForBackup();
+        })
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 
   @Builder metricItem(label: string, value: string) {
@@ -968,5 +1060,13 @@ export struct TabPictures {
         }
       }
     })
+  }
+
+  getAbilityContext(): common.UIAbilityContext | undefined {
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      return undefined
+    }
+    return hostContext as common.UIAbilityContext
   }
 }

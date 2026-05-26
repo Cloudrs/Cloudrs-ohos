@@ -15,7 +15,6 @@ import { FileMenuType, MoreMenuType, ShowType, SortType } from "../../model/Menu
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
 import { DetailSheet } from "../../components/DetailSheet";
-import { DialogAction, DialogHelper } from "@pura/harmony-dialog";
 import { CommonUtil, FileType } from "../../utils/CommonUtil";
 import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
@@ -38,6 +37,18 @@ enum FilePageState {
   IDLE = 'idle',
   LOADING = 'loading',
   FAILED = 'failed'
+}
+
+enum FileInputMode {
+  NONE = 'none',
+  RENAME = 'rename',
+  NEW_OBJECT = 'newObject'
+}
+
+enum FileSheetMode {
+  NONE = 'none',
+  SELECT_FILE = 'selectFile',
+  INPUT = 'input'
 }
 
 class ObjectSelect {
@@ -94,9 +105,18 @@ export struct TabFiles {
   @State uploadingCount: number = 0;
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
-  @State showSelectFile: boolean = false
+  @State showFileSheet: boolean = false
+  @State fileSheetMode: FileSheetMode = FileSheetMode.NONE
   @State filePageState: FilePageState = FilePageState.IDLE
   @State searchKeyword: string = ''
+  @State inputMode: FileInputMode = FileInputMode.NONE
+  @State inputTitle: string|Resource = ''
+  @State inputPlaceholder: string|Resource = ''
+  @State inputValue: string = ''
+  private inputRenameIndex: number = -1
+  private inputRenameItem?: ObjectInfo = undefined
+  private inputNewPath: string = '/'
+  private inputNewIsDir: boolean = true
 
   setThumbData(id: string, pixMap: PixelMap) {
     const updated: Map<string, PixelMap> = new Map(this.thumbImage);
@@ -385,7 +405,7 @@ export struct TabFiles {
           .borderRadius(26)
           .backgroundColor(CloudThemeToken.primary)
           .margin({ right: 16, bottom: this.tabBarHeight + 16 })
-          .onClick(() => { this.showSelectFile = true })
+          .onClick(() => { this.openSelectFileSheet() })
         }
         .margin({ top: 20 })
         .layoutWeight(1)
@@ -397,10 +417,22 @@ export struct TabFiles {
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.showSelectFile, this.selectFileSheetBuilder(), {
+    .bindSheet($$this.showFileSheet, this.fileSheetBuilder(), {
       detents: [SheetSize.FIT_CONTENT],
-      showClose: true,
+      showClose: false,
+      backgroundColor: CloudThemeToken.background,
+      onDisappear: () => {
+        this.resetFileSheetState()
+      }
     })
+  }
+
+  @Builder fileSheetBuilder() {
+    if (this.fileSheetMode === FileSheetMode.SELECT_FILE) {
+      this.selectFileSheetBuilder()
+    } else if (this.fileSheetMode === FileSheetMode.INPUT) {
+      this.inputSheetBuilder()
+    }
   }
 
   @Builder loadingState() {
@@ -463,6 +495,85 @@ export struct TabFiles {
     .justifyContent(FlexAlign.Center)
   }
 
+  @Builder inputSheetBuilder() {
+    Column({ space: 18 }) {
+      Row() {
+        Text(this.inputTitle)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
+          .layoutWeight(1)
+
+        Button({ type: ButtonType.Normal }) {
+          Image($r('app.media.ic_xmark'))
+            .width(16)
+            .height(16)
+            .fillColor(CloudThemeToken.textSecondary)
+            .draggable(false)
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .onClick(() => {
+          this.closeInputSheet()
+        })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      TextInput({ text: this.inputValue, placeholder: this.inputPlaceholder })
+        .width('100%')
+        .height(48)
+        .fontSize(16)
+        .fontColor(CloudThemeToken.textPrimary)
+        .placeholderColor(CloudThemeToken.textSecondary)
+        .backgroundColor(CloudThemeToken.surface)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .border({ width: 1, color: CloudThemeToken.line })
+        .padding({ left: 12, right: 12 })
+        .onChange((value: string) => {
+          this.inputValue = value
+        })
+
+      Row({ space: 12 }) {
+        Text($r('app.string.dialog_cancel'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+          .textAlign(TextAlign.Center)
+          .height(44)
+          .layoutWeight(1)
+          .borderRadius(12)
+          .backgroundColor(CloudThemeToken.surface)
+          .border({ width: 1, color: CloudThemeToken.line })
+          .align(Alignment.Center)
+          .onClick(() => {
+            this.closeInputSheet()
+          })
+
+        Text($r('app.string.finished'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .height(44)
+          .layoutWeight(1)
+          .borderRadius(12)
+          .backgroundColor(CloudThemeToken.primary)
+          .align(Alignment.Center)
+          .onClick(() => {
+            this.confirmInputSheet()
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
+    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
+    .backgroundColor(CloudThemeToken.background)
+  }
+
   @Builder emptyDirectoryState() {
     Column() {
       EmptyState({
@@ -471,7 +582,7 @@ export struct TabFiles {
         description: '上传文件或新建文件夹后，会显示在当前目录。',
         actionText: '上传文件',
         onAction: () => {
-          this.showSelectFile = true
+          this.openSelectFileSheet()
         }
       })
     }
@@ -615,8 +726,11 @@ export struct TabFiles {
 
   @Builder selectFileSheetBuilder() {
     SelectFileSheet({
+      onClose: () => {
+        this.closeFileSheet()
+      },
       onSelectFinished: (uris: string[]) => {
-        this.showSelectFile = false;
+        this.closeFileSheet();
         this.startUpload(uris);
       }
     })
@@ -703,7 +817,7 @@ export struct TabFiles {
         this.itemNew(this.currentPath, false)
         break
       case MoreMenuType.UPLOAD_FILE:
-        this.showSelectFile = true
+        this.openSelectFileSheet()
         break
     }
   }
@@ -723,75 +837,130 @@ export struct TabFiles {
   }
 
   itemRename(index: number, item: ObjectInfo) {
-    DialogHelper.showTextInputDialog({
-      primaryTitle: $r('app.string.rename'),
-      text: item.name,
-      onAction: (action: number, dialogId: string, content: string) => {
-        if (action == DialogAction.TWO) {
-          console.debug(TAG, `action: ${action}, content: ${content}`)
-          if (item.name != content) {
-            CloudApi.renameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
-              onSuccess: (data) => {
-                item.name = content
-                if (item.type == Constant.OBJECT_DIR_TYPE) {
-                  console.info(TAG, 'index dir ' + index)
-                  this.dirDataSource.deleteData(index)
-                  this.dirDataSource.addData(index, item)
-                } else {
-                  console.info(TAG, 'index file ' + index)
-                  this.fileDataSource.deleteData(index)
-                  this.fileDataSource.addData(index, item)
-                }
-                // 修改名称需要重新排序
-                if (this.sortType == SortType.SORT_BY_NAME) {
-                  this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
-                  this.dirDataSource.notifyDataReload()
-                  this.fileDataSource.notifyDataReload()
-                }
-                showToast($r('app.string.rename_success'))
-              },
-              onFailure: (msg) => {
-                console.error(TAG, '重命名失败 msg: ' + msg)
-                showToast($r('app.string.rename_failed'))
-              }
-            })
-          }
+    this.inputMode = FileInputMode.RENAME
+    this.inputTitle = $r('app.string.rename')
+    this.inputPlaceholder = $r('app.string.rename')
+    this.inputValue = item.name
+    this.inputRenameIndex = index
+    this.inputRenameItem = item
+    this.openInputSheet()
+  }
+
+  itemNew(path: string, isDir: boolean) {
+    this.inputMode = FileInputMode.NEW_OBJECT
+    this.inputTitle = isDir ? $r('app.string.more_new_dir') : $r('app.string.more_new_file')
+    this.inputPlaceholder = isDir ? $r('app.string.new_dir_placeholder') : $r('app.string.new_file_placeholder')
+    this.inputValue = ''
+    this.inputNewPath = path
+    this.inputNewIsDir = isDir
+    this.openInputSheet()
+  }
+
+  private openSelectFileSheet(): void {
+    this.fileSheetMode = FileSheetMode.SELECT_FILE
+    this.showFileSheet = true
+  }
+
+  private openInputSheet(): void {
+    this.fileSheetMode = FileSheetMode.INPUT
+    this.showFileSheet = true
+  }
+
+  private closeFileSheet(): void {
+    this.showFileSheet = false
+  }
+
+  private closeInputSheet(): void {
+    this.closeFileSheet()
+  }
+
+  private resetFileSheetState(): void {
+    this.fileSheetMode = FileSheetMode.NONE
+    this.inputMode = FileInputMode.NONE
+    this.inputValue = ''
+    this.inputRenameIndex = -1
+    this.inputRenameItem = undefined
+  }
+
+  private confirmInputSheet(): void {
+    const content = this.inputValue.trim()
+    if (content.length === 0) {
+      return
+    }
+
+    if (this.inputMode === FileInputMode.RENAME) {
+      this.confirmRename(content)
+    } else if (this.inputMode === FileInputMode.NEW_OBJECT) {
+      this.confirmNewObject(content)
+    }
+  }
+
+  private confirmRename(content: string): void {
+    const item = this.inputRenameItem
+    const index = this.inputRenameIndex
+    if (!item || index < 0) {
+      this.closeInputSheet()
+      return
+    }
+
+    if (item.name === content) {
+      this.closeInputSheet()
+      return
+    }
+
+    CloudApi.renameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
+      onSuccess: (data) => {
+        item.name = content
+        if (item.type == Constant.OBJECT_DIR_TYPE) {
+          console.info(TAG, 'index dir ' + index)
+          this.dirDataSource.deleteData(index)
+          this.dirDataSource.addData(index, item)
+        } else {
+          console.info(TAG, 'index file ' + index)
+          this.fileDataSource.deleteData(index)
+          this.fileDataSource.addData(index, item)
         }
+        // 修改名称需要重新排序
+        if (this.sortType == SortType.SORT_BY_NAME) {
+          this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
+          this.dirDataSource.notifyDataReload()
+          this.fileDataSource.notifyDataReload()
+        }
+        this.closeInputSheet()
+        showToast($r('app.string.rename_success'))
+      },
+      onFailure: (msg) => {
+        console.error(TAG, '重命名失败 msg: ' + msg)
+        showToast($r('app.string.rename_failed'))
       }
     })
   }
 
-  itemNew(path: string, isDir: boolean) {
-    DialogHelper.showTextInputDialog({
-      primaryTitle: isDir ? $r('app.string.more_new_dir') : $r('app.string.more_new_file'),
-      text: '',
-      placeholder: isDir ? $r('app.string.new_dir_placeholder') : $r('app.string.new_file_placeholder'),
-      onAction: (action: number, dialogId: string, content: string) => {
-        if (action == DialogAction.TWO) {
-          console.debug(TAG, `新建 content: ${content}`)
-          CloudApi.newObject(path + '/' + content, isDir, {
-            onSuccess: (data) => {
-              this.getFileList(true, this.currentPath)
-              showToast(`新建${content}成功`)
-            },
-            onFailure: (msg) => {
-              console.error(TAG, '新建文件/文件夹失败 msg: ' + msg)
-              showToast(`新建${content}失败`)
-            }
-          })
-        }
+  private confirmNewObject(content: string): void {
+    CloudApi.newObject(`${this.inputNewPath}/${content}`, this.inputNewIsDir, {
+      onSuccess: (data) => {
+        this.closeInputSheet()
+        this.getFileList(true, this.currentPath)
+        showToast(`新建${content}成功`)
+      },
+      onFailure: (msg) => {
+        console.error(TAG, '新建文件/文件夹失败 msg: ' + msg)
+        showToast(`新建${content}失败`)
       }
     })
   }
 
   itemDelete(index: number, item: ObjectInfo) {
-    DialogHelper.showAlertDialog({
-      primaryTitle:  $r('app.string.delete_confirm'),
-      content: item.name,
-      primaryButton: {value: $r('app.string.dialog_cancel')},
-      secondaryButton: {value: $r('app.string.dialog_delete'), role: ButtonRole.ERROR},
-      onAction: (action: number, dialogId: string) => {
-        if (action == DialogAction.TWO) {
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.delete_confirm'),
+      message: item.name,
+      primaryButton: {
+        value: $r('app.string.dialog_cancel'),
+        action: () => {}
+      },
+      secondaryButton: {
+        value: $r('app.string.dialog_delete'),
+        action: () => {
           CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
             onSuccess: (data) => {
               if (item.type == Constant.OBJECT_DIR_TYPE) {
@@ -814,7 +983,11 @@ export struct TabFiles {
 
   itemDownload(index: number, item: ObjectInfo) {
     try {
-      let context = getContext(this) as common.UIAbilityContext;
+      const context = this.getAbilityContext();
+      if (!context) {
+        showToast($r('app.string.get_context_failed'));
+        return;
+      }
       const documentSaveOptions = new picker.DocumentSaveOptions();
       documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
       let documentPicker = new picker.DocumentViewPicker(context);
@@ -842,7 +1015,7 @@ export struct TabFiles {
             })
 
             // 创建下载任务
-            requestDownload.downloadFileBackground(fileModel)
+            requestDownload.downloadFileBackground(fileModel, context)
           },
           onFailure: (msg) => {
             console.error(TAG, 'get download uri failed, msg: ' + msg)
@@ -860,7 +1033,11 @@ export struct TabFiles {
   startUpload(uris: string[]): void {
     if (uris.length === 0) return;
 
-    const context = getContext(this) as common.UIAbilityContext;
+    const context = this.getAbilityContext();
+    if (!context) {
+      showToast($r('app.string.get_context_failed'));
+      return;
+    }
     const uploadPath = this.currentPath;
     const onDirChanged = () => { this.getFileList(true, uploadPath); };
     const onTaskEnd = () => { if (this.uploadingCount > 0) this.uploadingCount--; };
@@ -876,16 +1053,12 @@ export struct TabFiles {
       return;
     }
 
-    DialogHelper.showAlertDialog({
-      primaryTitle: $r('app.string.upload_conflict_title'),
-      content: conflictNames.join('\n'),
-      primaryButton: { value: $r('app.string.upload_skip_existing') },
-      secondaryButton: { value: $r('app.string.upload_overwrite_all') },
-      onAction: (action: number, _dialogId: string) => {
-        if (action == DialogAction.TWO) {
-          this.uploadingCount += uris.length;
-          uploadManager.enqueue(uris, this.currentPath, true, context, this.uploadObjects, onDirChanged, onTaskEnd);
-        } else {
+    this.getUIContext().showAlertDialog({
+      title: $r('app.string.upload_conflict_title'),
+      message: conflictNames.join('\n'),
+      primaryButton: {
+        value: $r('app.string.upload_skip_existing'),
+        action: () => {
           const conflictSet = new Set<string>(conflictNames);
           const filteredUris = uris.filter(uri => {
             try { return !conflictSet.has(uploadManager.extractFileName(uri)); } catch { return true; }
@@ -895,7 +1068,22 @@ export struct TabFiles {
             uploadManager.enqueue(filteredUris, this.currentPath, false, context, this.uploadObjects, onDirChanged, onTaskEnd);
           }
         }
+      },
+      secondaryButton: {
+        value: $r('app.string.upload_overwrite_all'),
+        action: () => {
+          this.uploadingCount += uris.length;
+          uploadManager.enqueue(uris, this.currentPath, true, context, this.uploadObjects, onDirChanged, onTaskEnd);
+        }
       }
     });
+  }
+
+  private getAbilityContext(): common.UIAbilityContext | undefined {
+    const hostContext = this.getUIContext().getHostContext();
+    if (hostContext) {
+      return hostContext as common.UIAbilityContext;
+    }
+    return undefined;
   }
 }

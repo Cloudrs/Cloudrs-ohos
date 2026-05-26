@@ -281,6 +281,10 @@
       "value": "更新于:"
     },
     {
+      "name": "storage_available",
+      "value": "可用空间"
+    },
+    {
       "name": "logout_confim",
       "value": "确认退出"
     },
@@ -535,6 +539,26 @@
     {
       "name": "upload_max_concurrent",
       "value": "最大上传并发数"
+    },
+    {
+      "name": "theme_light_title",
+      "value": "亮色模式"
+    },
+    {
+      "name": "theme_light_desc",
+      "value": "适合白天和明亮环境，界面保持清爽明亮。"
+    },
+    {
+      "name": "theme_dark_title",
+      "value": "暗色模式"
+    },
+    {
+      "name": "theme_dark_desc",
+      "value": "适合夜间和低光环境，降低屏幕亮度刺激。"
+    },
+    {
+      "name": "get_context_failed",
+      "value": "当前页面上下文不可用，请稍后重试"
     }
   ]
 }

@@ -1,7 +1,6 @@
-import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
-import { DialogHelper } from '@pura/harmony-dialog'
 import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
 import { HMRouterMgr } from '@hadss/hmrouter';
@@ -11,9 +10,6 @@ import { VERSION_NAME } from 'BuildProfile';
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
-    DialogHelper.setDefaultConfig((config) => {
-      config.uiAbilityContext = this.context
-    })
 
     // HMRouter初始化
     HMRouterMgr.init({context: this.context})
@@ -25,16 +21,23 @@ export default class EntryAbility extends UIAbility {
 
   async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
     // 全屏及获取规避区域高度
-    let windowClass = windowStage.getMainWindowSync()
-    windowClass.setWindowLayoutFullScreen(true)
-    let bottomRectHeight = windowClass
-      .getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
-      .bottomRect.height
-    AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, px2vp(bottomRectHeight))
-    let topRectHeight = windowClass
-      .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
-      .topRect.height
-    AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, px2vp(topRectHeight))
+    try {
+      let windowClass = windowStage.getMainWindowSync()
+      const uiContext = windowClass.getUIContext()
+      windowClass.setWindowLayoutFullScreen(true)
+      let bottomRectHeight = windowClass
+        .getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
+        .bottomRect.height
+      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, uiContext.px2vp(bottomRectHeight))
+      let topRectHeight = windowClass
+        .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
+        .topRect.height
+      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, uiContext.px2vp(topRectHeight))
+    } catch (err) {
+      hilog.error(0x0000, 'testTag', 'Failed to initialize window layout. Cause: %{public}s', JSON.stringify(err) ?? '');
+      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, 0)
+      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, 0)
+    }
     AppStorage.setOrCreate(Constant.APP_VERSION, VERSION_NAME)
 
     // Main window is created, set main page for this ability
@@ -42,6 +45,7 @@ export default class EntryAbility extends UIAbility {
 
     // 初始化用户加密首选项
     UserPreferences.init(this.context, Constant.USER_PREFERENCES)
+    this.applySavedThemeMode()
 
     // 初始化用户信息数据库
     await UserDatabase.init(this.context)
@@ -68,5 +72,20 @@ export default class EntryAbility extends UIAbility {
   onBackground(): void {
     // Ability has back to background
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
+  }
+
+  applySavedThemeMode(): void {
+    const themeMode = UserPreferences.getSync(
+      Constant.USER_PREFERENCES,
+      Constant.APP_THEME_MODE,
+      Constant.APP_THEME_LIGHT
+    ) as string
+    try {
+      this.context.setColorMode(themeMode === Constant.APP_THEME_DARK
+        ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
+        : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT)
+    } catch (err) {
+      hilog.error(0x0000, 'testTag', 'Failed to apply theme mode. Cause: %{public}s', JSON.stringify(err) ?? '');
+    }
   }
 }

@@ -11,11 +11,12 @@ name = "cloudreve"
 napi = { version = "2", default-features = false, features = ["napi4", "tokio_rt"] }
 napi-derive = "2"
 cloudreve-api = { path = "D:\\Code\\rust\\cloudreve-rs\\cloudreve-api" }
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
-tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider", "stream"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "fs", "io-util"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
+futures-util = "0.3"
 
 [build-dependencies]
 napi-build = "2"

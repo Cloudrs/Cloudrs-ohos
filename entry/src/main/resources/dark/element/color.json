@@ -49,8 +49,16 @@
       "value": "#FF6B70"
     },
     {
+      "name": "cloud_danger_soft",
+      "value": "#3A1D24"
+    },
+    {
       "name": "cloud_success",
       "value": "#4FCB7A"
+    },
+    {
+      "name": "cloud_success_soft",
+      "value": "#173323"
     },
     {
       "name": "sheet_default_background",

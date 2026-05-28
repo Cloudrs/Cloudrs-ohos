@@ -19,6 +19,7 @@ export const uploadLocalFile: (localPath: string, remotePath: string, overwrite:
 export const uploadLocalFileChunk: (localPath: string, sessionId: string, index: number, offset: number, length: number) => Promise<number>;
 export const uploadLocalFileChunkWithProgress: (localPath: string, sessionId: string, index: number, offset: number, length: number, progress: (uploaded: number) => void) => Promise<number>;
 export const uploadLocalFileChunkToUrl: (localPath: string, uploadUrl: string, credential: string, index: number, offset: number, length: number) => Promise<number>;
+export const uploadLocalFileChunkToUrlWithProgress: (localPath: string, uploadUrl: string, credential: string, index: number, offset: number, length: number, progress: (uploaded: number) => void) => Promise<number>;
 export const aria2Downloading: () => Promise<string>;
 export const aria2Finished: (page: number) => Promise<string>;
 export const aria2CreateTask: (dst: string, urls: string[]) => Promise<void>;

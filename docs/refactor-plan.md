@@ -49,8 +49,10 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Migrated Offline Download downloading, finished, failed, and queue cards to tokenized surfaces.
   - Migrated Offline Download empty states to the shared `EmptyState`.
   - Migrated Offline Download create-task and finished-detail sheets to shared theme tokens.
+  - Added shared soft success/danger theme tokens and migrated Offline Download detail status surfaces to them.
   - Migrated shared `PathSelectSheet` background, header, selected directory state, and folder rows to shared theme tokens.
   - Migrated file detail, upload source, download task, and upload task sheets/panels to shared theme tokens.
+  - Migrated File page context menu dividers and destructive action color to shared theme tokens.
   - Migrated Login page background, input containers, OTP boxes, action buttons, and text colors to shared theme tokens.
   - Migrated Login page window setup context access to component UI context.
   - Fixed Login page post-login route target type by falling back to `HOME_PAGE` when `nextPage` is null.
@@ -75,6 +77,12 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Removed Image preview `ArrayBuffer | null` save/share warning by guarding empty image data.
   - Migrated Image preview save/share context access away from deprecated `getContext` usage.
   - Applied `CloudActionButton` to the Offline Download create-task action.
+  - Added chunked cache-copy progress before upload so large selected files show a `准备上传` stage instead of blocking silently.
+  - Added streaming progress callbacks for V4 remote `upload_urls` direct uploads, not only local storage uploads.
+  - Migrated Image preview share temp-file write/cleanup and File page download completion move from third-party `FileUtil` to local `FileSystemUtil`.
+  - Replaced photo backup Wi-Fi detection from third-party `NetworkUtil` with local `NetworkStateUtil` backed by Harmony `connection` APIs.
+  - Migrated Photo Backup settings action and path row arrow to shared theme tokens.
+  - Removed the direct `@pura/harmony-utils` package dependency after app-side imports were eliminated.
 
 ## In Progress
 
@@ -105,6 +113,8 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Completed: `UserDatabase` synchronous store operations are guarded and query result sets are closed safely.
   - Completed: background transfer queue operations are guarded against request-agent exceptions.
   - Completed: `ExitLifecycle` now uses HMRouter `HMLifecycleContext.uiContext` to access the host AbilityContext and guards exit failures.
+- Reduce third-party utility dependency surface:
+  - Completed: app-side `DialogHelper`, `FileUtil`, `DateUtil`, `NetworkUtil`, toast helper, and transfer helper imports from Pura utilities have been removed or replaced by local wrappers/system APIs.
 
 ## Home And Navigation Todo
 
@@ -112,7 +122,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Phone portrait.
   - Tablet landscape.
   - 2-in-1 wide viewport.
-- Add motion only where it improves clarity, such as selected tab transition.
+- Add motion only where it improves clarity, such as selected tab transition: first pass completed for floating tab selection.
 
 ## File Page Todo
 
@@ -145,6 +155,10 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Fetch failure: first pass completed.
   - Refreshing: first pass completed with soft same-directory refresh that keeps existing content visible.
   - Long filename handling: first pass completed with middle truncation that preserves file extensions.
+  - Upload preparation: first pass completed with chunked URI-to-cache copy progress and UI yielding for large files.
+  - Remote direct upload progress: first pass completed with native streaming progress for `upload_urls` chunks.
+  - Download completion file move: migrated to local `FileSystemUtil`.
+  - Responsive grid columns: first pass completed for phone, tablet, and 2-in-1 widths.
 
 ## Photo Backup Todo
 
@@ -158,6 +172,8 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 - Add backup history grouped by remote path.
 - Add cleanup/migration for legacy `photoBackupDoneIds` once path-scoped records are stable: first pass completed for known local photo records.
 - Add better UI for partial permission, no network, empty path, and upload failure.
+- Wi-Fi-only network check: migrated to local `NetworkStateUtil` using Harmony `connection` APIs.
+- Responsive thumbnail grid: first pass completed for phone, tablet, and 2-in-1 widths.
 
 ## Offline Download Todo
 

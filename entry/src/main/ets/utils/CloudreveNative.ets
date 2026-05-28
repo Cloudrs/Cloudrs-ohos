@@ -5,7 +5,8 @@ import {
   getDirectory, getObjectDetail,
   deleteObjects, moveObjects, copyObjects,
   renameObject, newDirectory, newFile,
-  getDownloadUri, getUploadUri, uploadLocalFile, uploadLocalFileChunk, uploadLocalFileChunkWithProgress, uploadLocalFileChunkToUrl,
+  getDownloadUri, getUploadUri, uploadLocalFile, uploadLocalFileChunk, uploadLocalFileChunkWithProgress,
+  uploadLocalFileChunkToUrl, uploadLocalFileChunkToUrlWithProgress,
   aria2Downloading, aria2Finished,
   aria2CreateTask, aria2DeleteTask,
   getUserTasks,
@@ -168,6 +169,18 @@ export function nativeUploadLocalFileChunkToUrl(
   length: number
 ): Promise<number> {
   return uploadLocalFileChunkToUrl(localPath, uploadUrl, credential, index, offset, length);
+}
+
+export function nativeUploadLocalFileChunkToUrlWithProgress(
+  localPath: string,
+  uploadUrl: string,
+  credential: string,
+  index: number,
+  offset: number,
+  length: number,
+  progress: (uploaded: number) => void
+): Promise<number> {
+  return uploadLocalFileChunkToUrlWithProgress(localPath, uploadUrl, credential, index, offset, length, progress);
 }
 
 export function nativeAria2Downloading<T>(callback?: HttpCallback<T>): void {

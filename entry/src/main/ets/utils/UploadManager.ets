@@ -92,10 +92,24 @@ class UploadManager {
       const cachePath = `${context.cacheDir}/upload_${new Date().getTime()}_${++this._taskCounter}_${fileName}`;
 
       try {
-        await FileSystemUtil.copyUriToPath(uri, cachePath);
+        const sourceSize = FileSystemUtil.getFileSize(uri);
+        if (sourceSize > 0) {
+          transportObject.item.size = sourceSize;
+          transportObject.total = sourceSize;
+        }
+        transportObject.statusText = '准备上传';
+        transportObject.update(0, FileModelState.RUNNING);
+        await FileSystemUtil.copyUriToPath(uri, cachePath, (copied: number, total: number) => {
+          if (total > 0 && transportObject.total <= 0) {
+            transportObject.item.size = total;
+            transportObject.total = total;
+          }
+          transportObject.update(copied, FileModelState.RUNNING);
+        });
       } catch (err) {
         console.error(TAG, `copy to cache failed: ${(err as Error)?.message ?? err}`);
         FileSystemUtil.unlinkIfExists(cachePath);
+        transportObject.statusText = '';
         transportObject.state = FileModelState.FAILED;
         this._finish(onTaskEnd);
         return;
@@ -108,6 +122,9 @@ class UploadManager {
       } catch {
         // size stays 0, not critical
       }
+      transportObject.trans = 0;
+      transportObject.progress = 0;
+      transportObject.speed = 0;
       transportObject.update(0, FileModelState.RUNNING);
       transportObject.statusText = '';
 
@@ -167,7 +184,18 @@ class UploadManager {
       const length = Math.min(chunkSize, transportObject.total - offset);
       const chunkOffset = offset;
       const uploaded = useRemoteNode
-        ? await CloudApi.uploadLocalFileChunkToUrl(cachePath, uploadUrls[0], session.credential ?? '', index, chunkOffset, length)
+        ? await CloudApi.uploadLocalFileChunkToUrlWithProgress(
+          cachePath,
+          uploadUrls[0],
+          session.credential ?? '',
+          index,
+          chunkOffset,
+          length,
+          (uploadedInChunk: number) => {
+            const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk));
+            transportObject.update(current, FileModelState.RUNNING);
+          }
+        )
         : session.chunkSize <= 0
           ? await CloudApi.uploadLocalFileChunkWithProgress(
             cachePath,

@@ -244,7 +244,7 @@ export struct ObjectItem {
 
       MenuItemGroup() {
         MenuItem(this.commonMenuBuilder($r('app.string.delete')))
-          .contentFontColor(Color.Red)
+          .contentFontColor(CloudThemeToken.danger)
           .onClick(() => {
             if (this.onMenuClick) {
               this.onMenuClick(item, FileMenuType.DELETE)
@@ -257,11 +257,11 @@ export struct ObjectItem {
     .margin(0)
     .backgroundColor(CloudThemeToken.surface)
     .menuItemDivider({
-      color: $r("app.color.menu_divider_line"),
+      color: CloudThemeToken.line,
       strokeWidth: {value: 2, unit: LengthUnit.PX}
     })
     .menuItemGroupDivider({
-      color: $r("app.color.menu_divider_group_line"),
+      color: CloudThemeToken.surfaceSubtle,
       strokeWidth: LengthMetrics.vp(5),
       startMargin: LengthMetrics.vp(0),
       endMargin: LengthMetrics.vp(0)

@@ -221,8 +221,16 @@
       "value": "#E5484D"
     },
     {
+      "name": "cloud_danger_soft",
+      "value": "#FDECEE"
+    },
+    {
       "name": "cloud_success",
       "value": "#2EAD5B"
+    },
+    {
+      "name": "cloud_success_soft",
+      "value": "#EAF8EF"
     }
   ]
 }

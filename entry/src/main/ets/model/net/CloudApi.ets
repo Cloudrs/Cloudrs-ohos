@@ -7,6 +7,7 @@ import {
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
   nativeGetDownloadUri, nativeGetUploadUri, nativeUploadLocalFile, nativeUploadLocalFileChunk,
   nativeUploadLocalFileChunkWithProgress, nativeUploadLocalFileChunkToUrl,
+  nativeUploadLocalFileChunkToUrlWithProgress,
   nativeAria2Downloading, nativeAria2Finished,
   nativeAria2CreateTask, nativeAria2DeleteTask,
   nativeGetUserTasks,
@@ -216,6 +217,18 @@ export class CloudApi {
     length: number
   ): Promise<number> {
     return nativeUploadLocalFileChunkToUrl(localPath, uploadUrl, credential, index, offset, length);
+  }
+
+  static uploadLocalFileChunkToUrlWithProgress(
+    localPath: string,
+    uploadUrl: string,
+    credential: string,
+    index: number,
+    offset: number,
+    length: number,
+    progress: (uploaded: number) => void
+  ): Promise<number> {
+    return nativeUploadLocalFileChunkToUrlWithProgress(localPath, uploadUrl, credential, index, offset, length, progress);
   }
 
   static downloadFile(_uri: string, _filePath: string, _callback?: HttpCallback<string>, _progress?: ProgressCallback): void {

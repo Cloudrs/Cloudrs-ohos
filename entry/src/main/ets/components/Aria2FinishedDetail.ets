@@ -69,7 +69,7 @@ export struct Aria2FinishedDetail {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
       .backgroundColor(this.detailData.task_status == Aria2Status.FINISHED ?
-        $r("app.color.aria2_status_finished") : $r("app.color.aria2_status_error"))
+        CloudThemeToken.successSoft : CloudThemeToken.dangerSoft)
 
       Text($r('app.string.task_detail'))
         .fontSize(18)

@@ -21,7 +21,6 @@ import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 import { common } from "@kit.AbilityKit";
 import { BusinessError } from "@kit.BasicServicesKit";
 import { picker } from '@kit.CoreFileKit';
-import { FileUtil } from "@pura/harmony-utils";
 import { TransportObject } from "../../model/TransportObject";
 import { requestDownload } from "../../utils/RequestDownload";
 import { FileModel, FileModelState } from "../../model/FileModel";
@@ -30,6 +29,7 @@ import { uploadManager } from '../../utils/UploadManager';
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
+import { FileSystemUtil } from "../../utils/FileSystemUtil";
 
 const TAG = 'TabFiles';
 
@@ -113,6 +113,7 @@ export struct TabFiles {
   @State inputTitle: string|Resource = ''
   @State inputPlaceholder: string|Resource = ''
   @State inputValue: string = ''
+  @State gridWidth: number = 0
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
   private inputNewPath: string = '/'
@@ -171,9 +172,52 @@ export struct TabFiles {
         return item.name.toLowerCase().includes(keyword)
       })
     }
-    this.isGridPadding = this.dirDataSource.totalCount() % 2 ? true : false
+    this.isGridPadding = this.getFolderPaddingCount() > 0
     this.dirDataSource.notifyDataReload()
     this.fileDataSource.notifyDataReload()
+  }
+
+  getGridColumns(): number {
+    if (this.showType !== ShowType.SHOW_ICON) {
+      return 1
+    }
+    if (this.gridWidth >= 960) {
+      return 5
+    }
+    if (this.gridWidth >= 720) {
+      return 4
+    }
+    if (this.gridWidth >= 520) {
+      return 3
+    }
+    return 2
+  }
+
+  getGridColumnsTemplate(): string {
+    const columns = this.getGridColumns()
+    let templates: string[] = []
+    for (let index = 0; index < columns; index++) {
+      templates.push('1fr')
+    }
+    return templates.join(' ')
+  }
+
+  getFolderPaddingCount(): number {
+    if (this.showType !== ShowType.SHOW_ICON) {
+      return 0
+    }
+    const columns = this.getGridColumns()
+    const remainder = this.dirDataSource.totalCount() % columns
+    return remainder === 0 ? 0 : columns - remainder
+  }
+
+  getFolderPaddingItems(): number[] {
+    const count = this.getFolderPaddingCount()
+    let items: number[] = []
+    for (let index = 0; index < count; index++) {
+      items.push(index)
+    }
+    return items
   }
 
   onBackPressedCallback(): boolean {
@@ -274,7 +318,7 @@ export struct TabFiles {
       objects.forEach((item) => {
         if (item.type == Constant.OBJECT_DIR_TYPE) {
           this.dirDataSource.deleteDataByItem(item)
-          this.isGridPadding = this.dirDataSource.totalCount() % 2 ? true : false
+          this.isGridPadding = this.getFolderPaddingCount() > 0
         } else {
           this.fileDataSource.deleteDataByItem(item)
         }
@@ -282,7 +326,7 @@ export struct TabFiles {
     } else if (this.objectSelect.index !== -1) {
       if (objects[0].type == Constant.OBJECT_DIR_TYPE) {
         this.dirDataSource.deleteData(this.objectSelect.index)
-        this.isGridPadding = this.dirDataSource.totalCount() % 2 ? true : false
+        this.isGridPadding = this.getFolderPaddingCount() > 0
       } else {
         this.fileDataSource.deleteData(this.objectSelect.index)
       }
@@ -626,10 +670,9 @@ export struct TabFiles {
         })
       }, (item: ObjectInfo, index: number) => item.id)
 
-      /*文件夹奇数时最后一个填充一个空成员*/
-      if (this.showType == ShowType.SHOW_ICON && this.isGridPadding) {
+      ForEach(this.getFolderPaddingItems(), (item: number) => {
         GridItem()
-      }
+      }, (item: number) => `folder-padding-${item}`)
 
       LazyForEach(this.fileDataSource, (item: ObjectInfo, index: number) => {
         GridItem() {
@@ -645,16 +688,23 @@ export struct TabFiles {
       }, (item: ObjectInfo, index: number) => item.id)
     }
     .cachedCount(5)
-    .maxCount(2)
+    .maxCount(this.getGridColumns())
     .padding({ left: 10, right: 10, bottom: this.tabBarHeight+10 })
     .width('100%')
     .height('100%') //!!!使用lazyforeach必须设置高度才能有效
     .rowsGap(7)
     .columnsGap(7)
-    .columnsTemplate(this.showType == ShowType.SHOW_ICON ? '1fr 1fr' : '1fr')
+    .columnsTemplate(this.getGridColumnsTemplate())
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: 300})
     .scrollBarWidth(2)
+    .onAreaChange((oldValue: Area, newValue: Area) => {
+      const width = Number(newValue.width)
+      if (!Number.isNaN(width) && Math.abs(width - this.gridWidth) >= 1) {
+        this.gridWidth = width
+        this.isGridPadding = this.getFolderPaddingCount() > 0
+      }
+    })
     .bindSheet($$this.showPathSelect, this.selectPathSheet(), {
       showClose: false
     })
@@ -965,7 +1015,7 @@ export struct TabFiles {
             onSuccess: (data) => {
               if (item.type == Constant.OBJECT_DIR_TYPE) {
                 this.dirDataSource.deleteData(index)
-                this.isGridPadding = this.dirDataSource.totalCount()%2 ? true : false
+                this.isGridPadding = this.getFolderPaddingCount() > 0
               } else {
                 this.fileDataSource.deleteData(index)
               }
@@ -992,7 +1042,7 @@ export struct TabFiles {
       documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
       let documentPicker = new picker.DocumentViewPicker(context);
       documentPicker.save(documentSaveOptions).then((documentSaveResult: Array<string>) => {
-        let filePath = FileUtil.getFilePath(documentSaveResult[0] + '/' + item.name );
+        let filePath = FileSystemUtil.getPathFromUri(documentSaveResult[0] + '/' + item.name);
         console.debug(TAG, 'documentViewPicker.save to file succeed and uris are:' + filePath);
         CloudApi.getDownloadUri(item.id, {
           onSuccess: (data) => {
@@ -1005,9 +1055,9 @@ export struct TabFiles {
               object.update(trans, state)
               if (state == FileModelState.COMPLETED) {
                 console.debug(TAG, `${context.cacheDir}/${object.item.name} -> ` + filePath)
-                FileUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
+                FileSystemUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
                   console.debug(TAG, 'move to ' + filePath)
-                }).catch((err: BusinessError) => {0
+                }).catch((err: Error) => {
                   console.error(TAG, `err: ${err}`)
                 })
                 this.downloadingCount--

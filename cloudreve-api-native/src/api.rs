@@ -1163,10 +1163,11 @@ pub fn upload_local_file_chunk_with_progress(
                     session_id,
                     index
                 );
-                upload_local_file_to_v4_url_with_progress(
+                let auth_header = v4.token.clone().map(|token| format!("Bearer {}", token));
+                upload_local_file_to_url_with_progress(
                     local_path,
                     url,
-                    v4.token.clone(),
+                    auth_header,
                     offset,
                     length,
                     tsfn,
@@ -1178,6 +1179,42 @@ pub fn upload_local_file_chunk_with_progress(
                 Ok(uploaded)
             }
         }.await;
+
+        match result {
+            Ok(uploaded) => deferred.resolve(move |_| Ok(uploaded)),
+            Err(error) => deferred.reject(error),
+        }
+    });
+    Ok(promise)
+}
+
+#[napi]
+pub fn upload_local_file_chunk_to_url_with_progress(
+    env: Env,
+    local_path: String,
+    upload_url: String,
+    credential: String,
+    index: u32,
+    offset: f64,
+    length: u32,
+    progress: JsFunction,
+) -> napi::Result<JsObject> {
+    let tsfn: ThreadsafeFunction<f64, ErrorStrategy::Fatal> =
+        progress.create_threadsafe_function(0, |ctx| Ok(vec![ctx.value]))?;
+    let (deferred, promise) = env.create_deferred::<u32, _>()?;
+    napi::bindgen_prelude::spawn(async move {
+        let separator = if upload_url.contains('?') { "&" } else { "?" };
+        let url = format!("{}{}chunk={}", upload_url, separator, index);
+        let auth_header = if credential.is_empty() { None } else { Some(credential) };
+        let result = upload_local_file_to_url_with_progress(
+            local_path,
+            url,
+            auth_header,
+            offset,
+            length,
+            tsfn,
+        )
+        .await;
 
         match result {
             Ok(uploaded) => deferred.resolve(move |_| Ok(uploaded)),
@@ -1223,10 +1260,10 @@ pub async fn upload_local_file_chunk_to_url(
     Ok(read_len as u32)
 }
 
-async fn upload_local_file_to_v4_url_with_progress(
+async fn upload_local_file_to_url_with_progress(
     local_path: String,
     url: String,
-    token: Option<String>,
+    auth_header: Option<String>,
     offset: f64,
     length: u32,
     tsfn: ThreadsafeFunction<f64, ErrorStrategy::Fatal>,
@@ -1265,8 +1302,8 @@ async fn upload_local_file_to_v4_url_with_progress(
         .header(reqwest::header::CONTENT_LENGTH, length.to_string())
         .body(reqwest::Body::wrap_stream(stream));
 
-    if let Some(token) = token {
-        request = request.bearer_auth(token);
+    if let Some(auth_header) = auth_header {
+        request = request.header(reqwest::header::AUTHORIZATION, auth_header);
     }
 
     let response = request

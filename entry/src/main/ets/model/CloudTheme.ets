@@ -17,7 +17,9 @@ export class CloudThemeToken {
   static readonly textPrimary: ResourceColor = $r('app.color.cloud_text_primary')
   static readonly textSecondary: ResourceColor = $r('app.color.cloud_text_secondary')
   static readonly danger: ResourceColor = $r('app.color.cloud_danger')
+  static readonly dangerSoft: ResourceColor = $r('app.color.cloud_danger_soft')
   static readonly success: ResourceColor = $r('app.color.cloud_success')
+  static readonly successSoft: ResourceColor = $r('app.color.cloud_success_soft')
 }
 
 export enum CloudLayoutMode {

@@ -3,7 +3,6 @@ import { image } from "@kit.ImageKit";
 import { CloudApi } from "../model/net/CloudApi";
 import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../model/Params";
-import { FileUtil } from "@pura/harmony-utils";
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from "@kit.MediaLibraryKit";
 import { showToast } from "../utils/ToastUtil";
@@ -11,6 +10,7 @@ import { systemShare } from "@kit.ShareKit";
 import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { FileSystemUtil } from "../utils/FileSystemUtil";
 
 const TAG: string = 'ImagePreview'
 
@@ -205,9 +205,9 @@ export struct iamgePreview {
           return
         }
         let path = context.tempDir + '/' + this.fileParam.fileName
-        let uri = FileUtil.getUriFromPath(path)
+        let uri = FileSystemUtil.getUriFromPath(path)
         console.debug(TAG, 'uri: ' + uri)
-        await FileUtil.writeEasy(uri, this.imageData, false)
+        await FileSystemUtil.writeArrayBuffer(path, this.imageData)
         // 保存到应用沙箱先，后续支持直接将arraybuffer发送就最好了
         let data: systemShare.SharedData = new systemShare.SharedData({
           utd: uniformTypeDescriptor.UniformDataType.IMAGE,
@@ -221,7 +221,7 @@ export struct iamgePreview {
         })
         controller.on('dismiss', () => {
           console.debug(TAG, 'share dismiss, unlink image file!')
-          FileUtil.unlink(path)
+          FileSystemUtil.unlinkIfExists(path)
         })
       } catch(err) {
         console.error(TAG, `share image failed with error: ${err.code}, ${err.message}`);

@@ -76,6 +76,7 @@ export struct HomePage {
       .backgroundColor(this.currentIndex === tab.tabId ? CloudThemeToken.primary : Color.Transparent)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
+      .animation({ duration: 180, curve: Curve.EaseOut })
 
       if (this.currentIndex !== tab.tabId) {
         Text(tab.text)
@@ -90,5 +91,6 @@ export struct HomePage {
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
+    .animation({ duration: 180, curve: Curve.EaseOut })
   }
 }

@@ -1,18 +1,19 @@
 import Constant from '../model/Constant';
 import { HMRouter } from '@hadss/hmrouter';
-import { TabId, TabItem, TabList } from '../model/TabData';
 import { TabFiles } from './tabs/TabFiles';
 import { TabPictures } from './tabs/TabPictures';
 import { TabRemoteDown } from './tabs/TabAria2';
 import { TabMine } from './tabs/TabMine';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { FloatingCloudTabBar } from '../components/FloatingCloudTabBar';
 
-@HMRouter({pageUrl: 'HomePage', interceptors: ['AccessInterceptor'], lifecycle: 'ExitLifecycle'})
+@HMRouter({pageUrl: Constant.HOME_PAGE, interceptors: [Constant.ACCESS_INTERCEPTOR], lifecycle: 'ExitLifecycle'})
 @Component
 export struct HomePage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @State currentIndex: number = 0;
+  @State pageWidth: number = 0;
   @State overLap: boolean = true
   private controller: TabsController = new TabsController()
 
@@ -21,76 +22,54 @@ export struct HomePage {
   }
 
   build() {
-    Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
-      TabContent() {
-        TabFiles({ overLap: this.overLap })
-      }.tabBar(this.TabBuilder(TabList[TabId.FILES]))
+    Stack({ alignContent: Alignment.Bottom }) {
+      Tabs({ barPosition: BarPosition.End, controller: this.controller }) {
+        TabContent() {
+          TabFiles({ overLap: this.overLap })
+        }
 
-      TabContent() {
-        TabPictures()
-      }.tabBar(this.TabBuilder(TabList[TabId.PICTURES]))
+        TabContent() {
+          TabPictures({ overLap: this.overLap })
+        }
 
-      TabContent() {
-        TabRemoteDown()
-      }.tabBar(this.TabBuilder(TabList[TabId.REMOTE_DOWN]))
+        TabContent() {
+          TabRemoteDown({ overLap: this.overLap })
+        }
 
-      TabContent() {
-        TabMine()
-      }.tabBar(this.TabBuilder(TabList[TabId.MINE]))
-    }
-    .width('100%')
-    .barHeight(this.overLap ? this.tabBarHeight : 0)
-    .barWidth(this.overLap ? '92%' : '0%')
-    .layoutWeight(1)
-    .barOverlap(true)
-    .barBackgroundColor(CloudThemeToken.surfaceTranslucent)
-    .barBackgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
-    .barMode(BarMode.Fixed)
-    .backgroundColor(CloudThemeToken.background)
-    .onChange((index) => {
-      this.currentIndex = index;
-      return true
-    })
-  }
-
-  @Builder
-  TabBuilder(tab: TabItem) {
-    Column() {
-      Row({ space: this.currentIndex === tab.tabId ? 5 : 0 }) {
-        Image(tab.image)
-          .width(20)
-          .height(20)
-          .fillColor(this.currentIndex === tab.tabId ? Color.White : CloudThemeToken.textSecondary)
-        if (this.currentIndex === tab.tabId) {
-          Text(tab.text)
-            .fontSize(12)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        TabContent() {
+          TabMine({ overLap: this.overLap })
         }
       }
-      .height(42)
-      .padding({ left: this.currentIndex === tab.tabId ? 14 : 0, right: this.currentIndex === tab.tabId ? 14 : 0 })
-      .borderRadius(CloudThemeToken.controlRadius)
-      .backgroundColor(this.currentIndex === tab.tabId ? CloudThemeToken.primary : Color.Transparent)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(VerticalAlign.Center)
-      .animation({ duration: 180, curve: Curve.EaseOut })
+      .width('100%')
+      .height('100%')
+      .barHeight(0)
+      .barWidth(0)
+      .barOverlap(true)
+      .barMode(BarMode.Fixed)
+      .backgroundColor(CloudThemeToken.background)
+      .onAreaChange((oldArea: Area, newArea: Area) => {
+        let width = Number(newArea.width)
+        if (!Number.isNaN(width) && Math.abs(width - this.pageWidth) >= 1) {
+          this.pageWidth = width
+        }
+      })
+      .onChange((index) => {
+        this.currentIndex = index;
+        return true
+      })
 
-      if (this.currentIndex !== tab.tabId) {
-        Text(tab.text)
-          .fontSize(10)
-          .fontColor(CloudThemeToken.textSecondary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
+      FloatingCloudTabBar({
+        currentIndex: this.currentIndex,
+        visible: this.overLap,
+        bottomInset: this.bottomRectHeight,
+        containerWidth: this.pageWidth,
+        onTabClick: (index: number) => {
+          this.currentIndex = index
+          this.controller.changeIndex(index)
+        }
+      })
     }
-    .padding({ top: 8, bottom: this.bottomRectHeight + 8 })
     .width('100%')
     .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .animation({ duration: 180, curve: Curve.EaseOut })
   }
 }

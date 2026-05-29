@@ -13,7 +13,7 @@ export struct SelectFileSheet {
   onClose?: () => void
 
   build() {
-    Column({ space: 18 }) {
+    Column({ space: 16 }) {
       Row() {
         Text($r('app.string.upload'))
           .fontSize(18)
@@ -23,13 +23,13 @@ export struct SelectFileSheet {
 
         Button({ type: ButtonType.Normal }) {
           Image($r('app.media.ic_xmark'))
-            .width(16)
-            .height(16)
+            .width(CloudThemeToken.sheetActionIconSize)
+            .height(CloudThemeToken.sheetActionIconSize)
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
-        .width(36)
-        .height(36)
+        .width(CloudThemeToken.smallIconButtonSize)
+        .height(CloudThemeToken.smallIconButtonSize)
         .borderRadius(CloudThemeToken.controlRadius)
         .backgroundColor(CloudThemeToken.surfaceSubtle)
         .onClick(() => {
@@ -41,68 +41,35 @@ export struct SelectFileSheet {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      Row() {
-        Column({space:15}) {
-          Image($r('app.media.ic_select_files'))
-            .width(40)
-            .height(40)
-            .fillColor(CloudThemeToken.primary)
+      Column({ space: 10 }) {
+        this.uploadSourceItem(
+          $r('app.media.ic_upload_file_modern'),
+          $r('app.string.local_files'),
+          '从文管选择任意文件',
+          CloudThemeToken.uploadFileSoft,
+          () => {
+            this.selectFiles()
+          })
 
-          Text($r('app.string.local_files'))
-            .fontSize(14)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(88)
-        .height(88)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .backgroundColor(CloudThemeToken.surface)
-        .justifyContent(FlexAlign.Center)
-        .onClick(async () => {
-          this.selectFiles()
-        })
+        this.uploadSourceItem(
+          $r('app.media.ic_upload_photo_modern'),
+          $r('app.string.local_photos'),
+          '从相册选择图片',
+          CloudThemeToken.uploadPhotoSoft,
+          () => {
+            this.selectPhotos(false)
+          })
 
-        Column({space:15}) {
-          Image($r('app.media.ic_select_photos'))
-            .width(40)
-            .height(40)
-            .fillColor(CloudThemeToken.primary)
-
-          Text($r('app.string.local_photos'))
-            .fontSize(14)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(88)
-        .height(88)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .backgroundColor(CloudThemeToken.surface)
-        .justifyContent(FlexAlign.Center)
-        .onClick(async () => {
-          this.selectPhotos(false)
-        })
-
-        Column({space:15}) {
-          Image($r('app.media.ic_select_videos'))
-            .width(40)
-            .height(40)
-            .fillColor(CloudThemeToken.primary)
-
-          Text($r('app.string.local_videos'))
-            .fontSize(14)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(88)
-        .height(88)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .backgroundColor(CloudThemeToken.surface)
-        .justifyContent(FlexAlign.Center)
-        .onClick(() => {
-          this.selectPhotos(true)
-        })
+        this.uploadSourceItem(
+          $r('app.media.ic_upload_video_modern'),
+          $r('app.string.local_videos'),
+          '从相册选择视频',
+          CloudThemeToken.uploadVideoSoft,
+          () => {
+            this.selectPhotos(true)
+          })
       }
       .width('100%')
-      .height(112)
-      .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
     .padding({ left: 20, right: 20, top: 18, bottom: 28 })
@@ -110,6 +77,56 @@ export struct SelectFileSheet {
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
     .backgroundColor(CloudThemeToken.background)
+  }
+
+  @Builder uploadSourceItem(icon: Resource, title: ResourceStr, description: ResourceStr,
+    iconBackground: ResourceColor, onClick: () => void) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Row({ space: 12 }) {
+        Stack() {
+          Image(icon)
+            .width(CloudThemeToken.sheetOptionIconSize)
+            .height(CloudThemeToken.sheetOptionIconSize)
+            .draggable(false)
+        }
+        .width(CloudThemeToken.uploadSourceIconBoxSize)
+        .height(CloudThemeToken.uploadSourceIconBoxSize)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(iconBackground)
+
+        Column({ space: 4 }) {
+          Text(title)
+            .fontSize(16)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(description)
+            .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Image($r('app.media.ic_chevron_right'))
+          .width(CloudThemeToken.sheetActionIconSize)
+          .height(CloudThemeToken.sheetActionIconSize)
+          .fillColor(CloudThemeToken.textSecondary)
+          .draggable(false)
+      }
+      .width('100%')
+      .height('100%')
+      .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.SpaceBetween)
+    }
+    .width('100%')
+    .height(CloudThemeToken.uploadSourceRowHeight)
+    .padding({ left: 14, right: 14 })
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
+    .onClick(onClick)
   }
 
   async selectPhotos(isVideo: boolean) {

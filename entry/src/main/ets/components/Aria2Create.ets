@@ -87,18 +87,18 @@ export struct Aria2Create {
           Image($r('app.media.ic_tabbar_remote_down'))
             .width(22)
             .height(22)
-            .fillColor(Color.White)
+            .fillColor(CloudThemeToken.onPrimary)
 
           Text($r('app.string.aria2_create_task'))
             .fontSize(16)
-            .fontColor(Color.White)
+            .fontColor(CloudThemeToken.onPrimary)
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Center)
       }
       .width('100%')
-      .height(48)
+      .height(CloudThemeToken.inputHeight)
       .borderRadius(CloudThemeToken.controlRadius)
       .backgroundColor(CloudThemeToken.primary)
       .enabled(this.path != undefined && this.inputUrls.trim() != '')

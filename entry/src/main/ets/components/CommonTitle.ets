@@ -15,8 +15,8 @@ export struct CommonTitle {
           .padding(5)
           .fillColor(CloudThemeToken.textPrimary)
       }
-      .width(40)
-      .height(40)
+      .width(CloudThemeToken.iconButtonSize)
+      .height(CloudThemeToken.iconButtonSize)
       .backgroundColor(CloudThemeToken.surface)
       .onClick(() => {
         if (this.onBackClick) {
@@ -31,7 +31,7 @@ export struct CommonTitle {
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
     }
-    .height(50)
+    .height(CloudThemeToken.titleBarHeight)
     .width('100%')
     .margin({top: this.topRectHeight})
     .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })

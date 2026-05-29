@@ -1,5 +1,5 @@
 import Constant from "../model/Constant"
-import { CloudThemeToken } from "../model/CloudTheme"
+import { CloudLayoutMode, CloudThemeToken } from "../model/CloudTheme"
 import { Aria2Files, Aria2Finished, Aria2Status, TaskError } from "../model/net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
 import { DateFormatUtil } from "../utils/DateFormatUtil"
@@ -8,6 +8,7 @@ import { DateFormatUtil } from "../utils/DateFormatUtil"
 export struct Aria2FinishedDetail {
   @Prop detailData: Aria2Finished
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  @State detailGridWidth: number = 0
   onDeleteClick?: () => void
 
   getTaskName(): string {
@@ -37,6 +38,26 @@ export struct Aria2FinishedDetail {
     }
 
     return '任务执行失败'
+  }
+
+  getDetailGridColumns(): number {
+    let layoutMode = CloudThemeToken.getLayoutMode(this.detailGridWidth)
+    if (layoutMode === CloudLayoutMode.WIDE) {
+      return 3
+    }
+    if (layoutMode === CloudLayoutMode.TABLET) {
+      return 2
+    }
+    return this.detailGridWidth >= CloudThemeToken.twoColumnBreakpoint ? 2 : 1
+  }
+
+  getDetailGridColumnsTemplate(): string {
+    let columns = this.getDetailGridColumns()
+    let templates: string[] = []
+    for (let index = 0; index < columns; index++) {
+      templates.push('1fr')
+    }
+    return templates.join(' ')
   }
 
   build() {
@@ -133,10 +154,17 @@ export struct Aria2FinishedDetail {
           $r('app.media.ic_node'))
       }
     }
-    .columnsTemplate('1fr 1fr')
-    .maxCount(2)
+    .columnsTemplate(this.getDetailGridColumnsTemplate())
+    .maxCount(this.getDetailGridColumns())
     .columnsGap(10)
     .rowsGap(10)
+    .width('100%')
+    .onAreaChange((oldArea: Area, newArea: Area) => {
+      let width = Number(newArea.width)
+      if (!Number.isNaN(width) && Math.abs(width - this.detailGridWidth) >= 1) {
+        this.detailGridWidth = width
+      }
+    })
   }
 
   @Builder taskDetailItem(title: ResourceStr, content: ResourceStr, icon: Resource) {

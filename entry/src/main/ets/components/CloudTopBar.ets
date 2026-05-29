@@ -45,8 +45,8 @@ export struct CloudTopBar {
   @Builder iconButton(icon: ResourceStr, onClick: () => void) {
     Button() {
       Image(icon)
-        .width(22)
-        .height(22)
+        .width(CloudThemeToken.actionIconSize)
+        .height(CloudThemeToken.actionIconSize)
         .fillColor(CloudThemeToken.textPrimary)
         .draggable(false)
     }

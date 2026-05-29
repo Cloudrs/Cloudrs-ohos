@@ -15,7 +15,7 @@ function rowCommonStyle() {
   .borderRadius(CloudThemeToken.cardRadius)
   .backgroundColor(CloudThemeToken.surface)
   .width('100%')
-  .height(48)
+  .height(CloudThemeToken.inputHeight)
   .alignItems(VerticalAlign.Center)
 }
 
@@ -87,8 +87,8 @@ export struct LoginPage {
             Image($r('app.media.ic_arrow_left_circle'))
               .fillColor(CloudThemeToken.textSecondary)
           }
-          .width(34)
-          .height(34)
+          .width(CloudThemeToken.smallIconButtonSize)
+          .height(CloudThemeToken.smallIconButtonSize)
           .backgroundColor(CloudThemeToken.surface)
           .borderRadius(CloudThemeToken.controlRadius)
           .onClick(() => {
@@ -247,11 +247,11 @@ export struct LoginPage {
   @Builder buttonContinue() {
     Button($r("app.string.login_continue"))
       .margin({top: 10})
-      .height(48)
+      .height(CloudThemeToken.inputHeight)
       .width("100%")
       .borderRadius(CloudThemeToken.controlRadius)
       .backgroundColor(CloudThemeToken.primary)
-      .fontColor(Color.White)
+      .fontColor(CloudThemeToken.onPrimary)
       .onClick(() => {
         if (!this.websiteInvalid) {
           this.websiteTest()
@@ -285,10 +285,10 @@ export struct LoginPage {
   }
 
   @Styles loginTextInputStyle() {
-    .borderRadius(0)
+    .borderRadius(CloudThemeToken.inputInnerRadius)
     .layoutWeight(1)
     .padding(0)
-    .backgroundColor(Color.Transparent)
+    .backgroundColor(CloudThemeToken.transparent)
   }
 
   @Builder showWebsiteInput() {
@@ -334,13 +334,13 @@ export struct LoginPage {
             .height(52)
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
-            .borderRadius(10)
+            .borderRadius(CloudThemeToken.otpCellRadius)
             .backgroundColor(CloudThemeToken.surface)
             .border({
               width: 2,
               color: this.otpCode.length === item
                 ? CloudThemeToken.primary
-                : Color.Transparent
+                : CloudThemeToken.transparent
             })
           }, (item: number) => item.toString())
         }
@@ -411,8 +411,8 @@ export struct LoginPage {
   }
 
   @Styles scanAndUsersCommon() {
-    .height(36)
-    .width(36)
+    .height(CloudThemeToken.smallIconButtonSize)
+    .width(CloudThemeToken.smallIconButtonSize)
     .borderRadius(CloudThemeToken.controlRadius)
     .backgroundColor(CloudThemeToken.surface)
   }

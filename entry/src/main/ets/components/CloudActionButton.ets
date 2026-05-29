@@ -29,7 +29,7 @@ export struct CloudActionButton {
     switch (this.style) {
       case CloudActionButtonStyle.PRIMARY:
       case CloudActionButtonStyle.DANGER:
-        return Color.White
+        return CloudThemeToken.onPrimary
       default:
         return CloudThemeToken.textPrimary
     }

@@ -112,3 +112,15 @@ export interface PhotoBackupItemData {
   progress?: number
   error?: string
 }
+
+export class PhotoBackupPathHistory {
+  path: string = ''
+  count: number = 0
+  isCurrent: boolean = false
+
+  constructor(path: string, count: number, isCurrent: boolean) {
+    this.path = path
+    this.count = count
+    this.isCurrent = isCurrent
+  }
+}

@@ -37,9 +37,9 @@ export struct TabFilesHeader {
                 .padding(5)
                 .fillColor(CloudThemeToken.textPrimary)
             }
-            .width(36)
-            .height(36)
-            .borderRadius(18)
+            .width(CloudThemeToken.iconButtonSize)
+            .height(CloudThemeToken.iconButtonSize)
+            .borderRadius(CloudThemeToken.controlRadius)
             .backgroundColor(CloudThemeToken.surface)
             .onClick(() => {
               if (this.onBackClick) {
@@ -74,9 +74,9 @@ export struct TabFilesHeader {
                 .fillColor(CloudThemeToken.textPrimary)
             }
           }
-          .width(36)
-          .height(36)
-          .borderRadius(18)
+          .width(CloudThemeToken.iconButtonSize)
+          .height(CloudThemeToken.iconButtonSize)
+          .borderRadius(CloudThemeToken.controlRadius)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
           .onClick(() => {
             this.showTransport = true
@@ -95,9 +95,9 @@ export struct TabFilesHeader {
               .padding(10)
               .fillColor(CloudThemeToken.textPrimary)
           }
-          .width(36)
-          .height(36)
-          .borderRadius(18)
+          .width(CloudThemeToken.iconButtonSize)
+          .height(CloudThemeToken.iconButtonSize)
+          .borderRadius(CloudThemeToken.controlRadius)
           .backgroundColor(CloudThemeToken.surface)
           .onClick(() => {
             if (this.onPersonClick) {
@@ -109,12 +109,12 @@ export struct TabFilesHeader {
         .justifyContent(FlexAlign.Center)
       }
       .width('100%')
-      .height(36)
+      .height(CloudThemeToken.iconButtonSize)
       .justifyContent(FlexAlign.SpaceBetween)
     }
     .padding({ left: 10, right: 10 })
     .width('100%')
-    .height(40)
+    .height(CloudThemeToken.iconButtonSize)
     .align(Alignment.Center)
     .justifyContent(FlexAlign.Center)
   }

@@ -6,6 +6,7 @@ import Constant from '../../model/Constant';
 import {
   PhotoBackupItem,
   PhotoBackupItemData,
+  PhotoBackupPathHistory,
   PhotoBackupSettings,
   PhotoBackupState,
   PhotoBackupStatus
@@ -26,6 +27,7 @@ const TAG: string = 'TabPictures';
 
 @Component
 export struct TabPictures {
+  @Link overLap: boolean
   @State settingsEnabled: boolean = false;
   @State settingsRemotePath: string = '/Photos/Camera';
   @State settingsWifiOnly: boolean = true;
@@ -130,6 +132,9 @@ export struct TabPictures {
     if (!this.getSettingsEnabled()) {
       return '未开启';
     }
+    if (!this.hasBackupPath()) {
+      return '请选择备份路径';
+    }
     if (this.backupState === PhotoBackupState.SCANNING) {
       return '正在扫描本地相册';
     }
@@ -157,6 +162,9 @@ export struct TabPictures {
     }
     if (this.getFailedItems().length > 0) {
       return '重试失败';
+    }
+    if (!this.hasBackupPath()) {
+      return '选择路径';
     }
     return '立即备份';
   }
@@ -193,6 +201,14 @@ export struct TabPictures {
 
   getSettingsRemotePath(): string {
     return this.settingsRemotePath;
+  }
+
+  getBackupPathText(): string {
+    return this.hasBackupPath() ? this.getSettingsRemotePath() : '未选择备份路径';
+  }
+
+  hasBackupPath(): boolean {
+    return this.getSettingsRemotePath().trim().length > 0;
   }
 
   getSettingsWifiOnly(): boolean {
@@ -447,6 +463,38 @@ export struct TabPictures {
     return id.startsWith(`${this.normalizeRemotePath(this.getSettingsRemotePath())}|`);
   }
 
+  getBackupPathHistory(): PhotoBackupPathHistory[] {
+    let pathCounts: Map<string, number> = new Map<string, number>();
+    Array.from(this.doneIds).forEach((id: string) => {
+      if (!this.isPathDoneId(id)) {
+        return;
+      }
+      let separatorIndex = id.indexOf('|');
+      let path = id.substring(0, separatorIndex);
+      pathCounts.set(path, (pathCounts.get(path) ?? 0) + 1);
+    });
+
+    let currentPath = this.normalizeRemotePath(this.getSettingsRemotePath());
+    if (this.isDefaultBackupPath()) {
+      let legacyCount = Array.from(this.doneIds).filter((id: string) => !this.isPathDoneId(id)).length;
+      if (legacyCount > 0) {
+        pathCounts.set(currentPath, Math.max(pathCounts.get(currentPath) ?? 0, legacyCount));
+      }
+    }
+
+    let result: PhotoBackupPathHistory[] = [];
+    pathCounts.forEach((count: number, path: string) => {
+      result.push(new PhotoBackupPathHistory(path, count, path === currentPath));
+    });
+    result.sort((left: PhotoBackupPathHistory, right: PhotoBackupPathHistory) => {
+      if (left.isCurrent !== right.isCurrent) {
+        return left.isCurrent ? -1 : 1;
+      }
+      return right.count - left.count;
+    });
+    return result;
+  }
+
   getNameFromUri(uri: string): string {
     let path = uri.split('?')[0];
     let segments = path.split('/');
@@ -476,6 +524,11 @@ export struct TabPictures {
         settings.enabled = true;
       });
       this.showSettings = true;
+      return;
+    }
+    if (!this.hasBackupPath()) {
+      this.showSettings = true;
+      showToast('请先选择相册备份路径');
       return;
     }
     if (this.getPhotos().length === 0) {
@@ -656,12 +709,17 @@ export struct TabPictures {
           this.sectionWaiting();
           this.sectionFailed();
           this.sectionCompleted();
+          this.sectionBackupHistory();
       }
     }
     .width('100%')
     .height('100%')
     .bindSheet($$this.showPathSelect, this.pathSelectSheet(), {
-      showClose: false
+      showClose: false,
+      backgroundColor: CloudThemeToken.background,
+      onDisappear: () => {
+        this.showPathSelect = false;
+      }
     })
   }
 
@@ -684,7 +742,7 @@ export struct TabPictures {
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
-          Text(this.getSettingsEnabled() ? `目标路径 ${this.getSettingsRemotePath()}` : '开启后会扫描本地图片并备份到云端')
+          Text(this.getSettingsEnabled() ? `目标路径 ${this.getBackupPathText()}` : '开启后会扫描本地图片并备份到云端')
             .fontSize(12)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
@@ -732,6 +790,10 @@ export struct TabPictures {
 
       if (this.permissionHint.length > 0) {
         this.permissionHintCard();
+      }
+
+      if (this.getSettingsEnabled() && !this.hasBackupPath()) {
+        this.emptyPathCard();
       }
 
       if (this.backupState === PhotoBackupState.BACKING_UP) {
@@ -787,6 +849,27 @@ export struct TabPictures {
     .padding(12)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
+  }
+
+  @Builder emptyPathCard() {
+    Column({ space: 10 }) {
+      Text('还没有选择云端备份路径，选择路径后才会开始上传图片。')
+        .fontSize(12)
+        .fontColor(CloudThemeToken.textSecondary)
+        .width('100%')
+      Button('选择备份路径')
+        .fontSize(13)
+        .height(36)
+        .width('100%')
+        .buttonStyle(ButtonStyleMode.TEXTUAL)
+        .onClick(() => {
+          this.openPathSelectSheet();
+        })
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.primarySoft)
   }
 
   @Builder metricItem(label: string, value: string) {
@@ -860,8 +943,59 @@ export struct TabPictures {
   @Builder sectionFailed() {
     if (this.getFailedItems().length > 0) {
       SectionHeader({ title: '失败', count: this.getFailedItems().length });
+      this.failedActionCard();
       this.photoGrid(this.getFailedItems().slice(0, 12), PhotoBackupStatus.FAILED);
     }
+  }
+
+  @Builder failedActionCard() {
+    Column({ space: 10 }) {
+      Row() {
+        Column({ space: 4 }) {
+          Text('部分图片备份失败')
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text(this.getFirstFailureMessage())
+            .fontSize(12)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Button('重试')
+          .fontSize(13)
+          .height(34)
+          .backgroundColor(CloudThemeToken.dangerSoft)
+          .fontColor(CloudThemeToken.danger)
+          .onClick(() => {
+            this.startBackup();
+          })
+      }
+      .width('100%')
+
+      if (this.getSettingsWifiOnly()) {
+        Text('如果当前设备没有 Wi-Fi，可在设置中临时改为任意网络后再重试。')
+          .fontSize(12)
+          .fontColor(CloudThemeToken.textSecondary)
+          .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.dangerSoft)
+  }
+
+  getFirstFailureMessage(): string {
+    let failed = this.getFailedItems();
+    if (failed.length === 0) {
+      return '请稍后重试备份。';
+    }
+    let message = failed[0].error;
+    return message.length > 0 ? message : '请稍后重试备份。';
   }
 
   @Builder sectionCompleted() {
@@ -869,6 +1003,55 @@ export struct TabPictures {
       SectionHeader({ title: '最近完成', count: this.getCompletedItems().length });
       this.photoGrid(this.getCompletedItems().slice(0, 18), PhotoBackupStatus.COMPLETED);
     }
+  }
+
+  @Builder sectionBackupHistory() {
+    if (this.getBackupPathHistory().length > 0) {
+      SectionHeader({ title: '备份历史', count: this.getBackupPathHistory().length });
+      Column({ space: 10 }) {
+        ForEach(this.getBackupPathHistory(), (history: PhotoBackupPathHistory) => {
+          this.backupHistoryRow(history);
+        }, (history: PhotoBackupPathHistory) => history.path)
+      }
+      .width('100%')
+    }
+  }
+
+  @Builder backupHistoryRow(history: PhotoBackupPathHistory) {
+    Row({ space: 12 }) {
+      Column({ space: 4 }) {
+        Row({ space: 8 }) {
+          Text(history.path)
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+
+          if (history.isCurrent) {
+            Text('当前')
+              .fontSize(11)
+              .fontColor(CloudThemeToken.primary)
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .borderRadius(10)
+              .backgroundColor(CloudThemeToken.primarySoft)
+          }
+        }
+        .width('100%')
+
+        Text(`${history.count} 张图片已记录为已备份`)
+          .fontSize(12)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(history.isCurrent ? CloudThemeToken.surface : CloudThemeToken.surfaceSubtle)
+    .border({ width: history.isCurrent ? 1 : 0, color: CloudThemeToken.line })
   }
 
   @Builder photoGrid(items: PhotoBackupItem[], status: PhotoBackupStatus) {
@@ -884,7 +1067,7 @@ export struct TabPictures {
 
             Text(this.getBadgeText(status))
               .fontSize(10)
-              .fontColor(Color.White)
+              .fontColor(CloudThemeToken.onPrimary)
               .padding({ left: 6, right: 6, top: 3, bottom: 3 })
               .backgroundColor(this.getBadgeColor(status))
               .borderRadius(8)
@@ -931,13 +1114,13 @@ export struct TabPictures {
   }
 
   getPhotoGridColumns(): number {
-    if (this.photoGridWidth >= 920) {
+    if (this.photoGridWidth >= CloudThemeToken.wideBreakpoint) {
       return 6;
     }
-    if (this.photoGridWidth >= 720) {
+    if (this.photoGridWidth >= CloudThemeToken.tabletBreakpoint) {
       return 5;
     }
-    if (this.photoGridWidth >= 520) {
+    if (this.photoGridWidth >= CloudThemeToken.twoColumnBreakpoint) {
       return 4;
     }
     return 3;
@@ -980,9 +1163,16 @@ export struct TabPictures {
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
-        Button('收起')
-          .fontSize(13)
-          .height(32)
+        Button({ type: ButtonType.Normal }) {
+          Image($r('app.media.ic_xmark'))
+            .width(18)
+            .height(18)
+            .fillColor(CloudThemeToken.textSecondary)
+        }
+          .width(CloudThemeToken.smallIconButtonSize)
+          .height(CloudThemeToken.smallIconButtonSize)
+          .borderRadius(CloudThemeToken.controlRadius)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
           .onClick(() => {
             this.showSettings = false;
           })
@@ -1023,7 +1213,7 @@ export struct TabPictures {
           Text('仅 Wi-Fi')
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.settingsWifiOnly ? Color.White : CloudThemeToken.textPrimary)
+            .fontColor(this.settingsWifiOnly ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
             .height(38)
@@ -1040,7 +1230,7 @@ export struct TabPictures {
           Text('任意网络')
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
-            .fontColor(!this.settingsWifiOnly ? Color.White : CloudThemeToken.textPrimary)
+            .fontColor(!this.settingsWifiOnly ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
             .height(38)
@@ -1115,7 +1305,7 @@ export struct TabPictures {
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
-        Text(this.getSettingsRemotePath())
+        Text(this.getBackupPathText())
           .fontSize(12)
           .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)
@@ -1135,7 +1325,7 @@ export struct TabPictures {
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
     .onClick(() => {
-      this.showPathSelect = true;
+      this.openPathSelectSheet();
     })
   }
 
@@ -1144,12 +1334,20 @@ export struct TabPictures {
       title: $r('app.string.backup_to'),
       filterDirId: '',
       onClose: (isFinished: boolean, path?: string) => {
-        this.showPathSelect = false;
+        this.closePathSelectSheet();
         if (isFinished && path && path.length > 0) {
           this.updateRemotePath(path);
         }
       }
     })
+  }
+
+  private openPathSelectSheet(): void {
+    this.showPathSelect = true;
+  }
+
+  private closePathSelectSheet(): void {
+    this.showPathSelect = false;
   }
 
   getAbilityContext(): common.UIAbilityContext | undefined {

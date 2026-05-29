@@ -23,6 +23,7 @@ enum MineSheetType {
 @Preview
 @Component
 export struct TabMine {
+  @Link overLap: boolean
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
@@ -131,7 +132,11 @@ export struct TabMine {
     .width('100%')
     .height('100%')
     .bindSheet($$this.showSettingsSheet, this.settingsSheet(), {
-      showClose: false
+      showClose: false,
+      backgroundColor: CloudThemeToken.background,
+      onDisappear: () => {
+        this.showSettingsSheet = false
+      }
     })
   }
 
@@ -384,7 +389,7 @@ export struct TabMine {
           .height(30)
           .borderRadius(CloudThemeToken.cardRadius)
           .padding(7)
-          .fillColor(Color.White)
+          .fillColor(CloudThemeToken.onPrimary)
           .backgroundColor(backgroundColor)
           .draggable(false)
 
@@ -427,7 +432,7 @@ export struct TabMine {
     Row({ space: 10 }) {
       Image(icon)
         .width(30).height(30).borderRadius(CloudThemeToken.cardRadius).padding(7)
-        .fillColor(Color.White).backgroundColor(bgColor)
+        .fillColor(CloudThemeToken.onPrimary).backgroundColor(bgColor)
         .draggable(false)
 
       Text(title)
@@ -634,7 +639,7 @@ export struct TabMine {
           .height(28)
           .borderRadius(14)
           .padding(5)
-          .fillColor(Color.White)
+          .fillColor(CloudThemeToken.onPrimary)
           .backgroundColor(backgroundColor)
           .draggable(false)
 

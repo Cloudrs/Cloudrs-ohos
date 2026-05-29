@@ -83,6 +83,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Replaced photo backup Wi-Fi detection from third-party `NetworkUtil` with local `NetworkStateUtil` backed by Harmony `connection` APIs.
   - Migrated Photo Backup settings action and path row arrow to shared theme tokens.
   - Removed the direct `@pura/harmony-utils` package dependency after app-side imports were eliminated.
+  - System bottom sheets stay above the custom floating tab bar without toggling it, avoiding delayed tab-bar restoration after gesture dismiss; the custom File detail overlay still hides the tab bar.
 
 ## In Progress
 
@@ -105,6 +106,12 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 - Migrate existing pages to tokens:
   - Replace scattered hardcoded colors.
   - Normalize card radius, section spacing, and text colors.
+  - Floating navigation light/shadow/radius values moved into `CloudThemeToken`: first pass completed.
+  - File header/title icon action sizing and radius normalized to shared tokens: first pass completed.
+  - Login page inner input, OTP cell, and small icon button metrics moved into shared tokens: first pass completed.
+  - Shared semantic colors for on-primary, transparent, and image preview background added to `CloudThemeToken`: first pass completed.
+  - Common title, menu, action icon, and form input metrics moved into shared tokens: first pass completed.
+  - Transfer list file icons, state icons, and progress capsule metrics moved into shared tokens: first pass completed.
   - Keep existing interaction behavior unchanged while migrating visuals.
 - Migrate Harmony 6.1 context access:
   - Completed: component pages now use component UI context for photo backup, image preview, file upload/download, upload source picker, and login window setup.
@@ -123,6 +130,18 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Tablet landscape.
   - 2-in-1 wide viewport.
 - Add motion only where it improves clarity, such as selected tab transition: first pass completed for floating tab selection.
+- Rebuild bottom navigation as an API 23+ immersive floating cloud tab bar:
+  - Status: first pass implemented; device runtime verification pending.
+  - Replace the current built-in `Tabs` tab bar with a custom `FloatingCloudTabBar` overlay driven by `TabsController.changeIndex()`.
+  - Keep `Tabs` as the page content container, but hide the system tab bar with zero height.
+  - Use Harmony API 23+ blur/material capabilities where available, with `CloudThemeToken.surfaceTranslucent` as the compatibility fallback.
+  - Add a light-sense treatment: translucent glass surface, soft shadow, top highlight line, selected capsule glow, and smooth selected-state animation.
+  - Keep bottom safe-area handling through `NAV_BOTTOM_RECT_HEIGHT` and update `TAB_BAR_HEIGHT` if the final visual height changes.
+  - Adapt layout by width: compact phone width, centered max-width floating bar for tablet and 2-in-1.
+  - Responsive breakpoints and floating tab bar dimensions moved into `CloudThemeToken`, backed by `CloudLayoutMode`: first pass completed.
+  - File and photo grids now share the same responsive breakpoint tokens: first pass completed.
+  - Verify that file detail overlays and other full-screen sheets can still hide or cover the bottom navigation when needed.
+    - File detail overlay hides the custom floating tab bar; system bottom sheets now rely on overlay layering instead of toggling the bar to avoid delayed restoration: first pass completed.
 
 ## File Page Todo
 
@@ -169,9 +188,13 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - First pass completed: backing-up state now has a pause action. It finishes the current image, stops before the next queued image, and can resume from remaining waiting items.
 - Add duplicate remote filename behavior: first pass completed with skip-existing behavior.
 - Add remote existence verification before upload: first pass completed for photo backup target directory.
-- Add backup history grouped by remote path.
+- Add backup history grouped by remote path: first pass completed with path-level completed counts and current-path marker.
 - Add cleanup/migration for legacy `photoBackupDoneIds` once path-scoped records are stable: first pass completed for known local photo records.
 - Add better UI for partial permission, no network, empty path, and upload failure.
+  - Partial permission / scan-limited hint: first pass completed.
+  - Wi-Fi waiting state with simulator-friendly network override: first pass completed.
+  - Upload failure hint and retry action: first pass completed.
+  - Empty path handling: first pass completed with visible path warning and upload guard.
 - Wi-Fi-only network check: migrated to local `NetworkStateUtil` using Harmony `connection` APIs.
 - Responsive thumbnail grid: first pass completed for phone, tablet, and 2-in-1 widths.
 
@@ -191,6 +214,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 - Remaining UI work:
   - Show speed, file count, and save path more clearly in a denser task card layout: first pass completed.
   - Move create task to a top action or floating action button: completed with the existing top action.
+  - Finished task detail metric grid now adapts across phone, tablet, and wide layouts: first pass completed.
 
 ## Mine Page Todo
 
@@ -222,7 +246,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 
 - Completed so far:
   - About page uses shared background, surface, line, radius, and text tokens.
-  - Image preview keeps the black viewing area and uses tokenized top-bar actions.
+  - Image preview keeps the black viewing area and uses tokenized top-bar actions and title/loading metrics.
   - Image preview save/share now guards empty image data before writing.
 - Remaining:
   - Completed: migrated image preview deprecated `getContext` calls to component UI context access.
@@ -230,11 +254,11 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 ## Sheet Todo
 
 - Modernize these sheets without changing behavior:
-  - File detail sheet.
-  - Path select sheet: first tokenized pass completed.
-  - Upload source sheet: first tokenized pass completed.
+  - File detail sheet: first tokenized summary/list pass completed.
+  - Path select sheet: first tokenized pass completed; header, row, folder icon, and chevron metrics now use shared sheet tokens.
+  - Upload source sheet: first tokenized pass completed; option tile/icon metrics now use shared sheet tokens.
   - Transfer progress sheet: upload/download panels first tokenized pass completed.
-  - Photo backup settings surface.
+  - Photo backup settings surface: first tokenized pass completed, including icon close action.
 - Keep sheet title and background treatment consistent.
 
 ## Verification Checklist

@@ -89,8 +89,8 @@ export struct iamgePreview {
       Column() {
         if (this.isLoading) {
           LoadingProgress()
-            .width(40)
-            .height(40)
+            .width(CloudThemeToken.iconButtonSize)
+            .height(CloudThemeToken.iconButtonSize)
         }
         else {
           Image(this.imagePixelMap)
@@ -98,7 +98,7 @@ export struct iamgePreview {
         }
       }
       .width('100%')
-      .backgroundColor(Color.Black)
+      .backgroundColor(CloudThemeToken.previewBackground)
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
 
@@ -109,7 +109,7 @@ export struct iamgePreview {
           })
       }
       .width('100%')
-      .backgroundColor(Color.Black)
+      .backgroundColor(CloudThemeToken.previewBackground)
       .alignItems(HorizontalAlign.Center)
       .padding({top:10, bottom: this.bottomRectHeight})
     }
@@ -127,8 +127,8 @@ export struct iamgePreview {
             .draggable(false)
             .padding(5)
         }
-        .width(36)
-        .height(36)
+        .width(CloudThemeToken.smallIconButtonSize)
+        .height(CloudThemeToken.smallIconButtonSize)
         .borderRadius(CloudThemeToken.controlRadius)
         .backgroundColor(CloudThemeToken.surface)
         .onClick(() => {
@@ -152,8 +152,8 @@ export struct iamgePreview {
             .padding(5)
         }
         .margin({top: 4})
-        .width(36)
-        .height(36)
+        .width(CloudThemeToken.smallIconButtonSize)
+        .height(CloudThemeToken.smallIconButtonSize)
         .borderRadius(CloudThemeToken.controlRadius)
         .backgroundColor(CloudThemeToken.surface)
         .onClick(() => {
@@ -169,7 +169,7 @@ export struct iamgePreview {
       Divider().strokeWidth(1).color(CloudThemeToken.line)
     }
     .justifyContent(FlexAlign.Center)
-    .height(50)
+    .height(CloudThemeToken.titleBarHeight)
     .width('100%')
   }
 

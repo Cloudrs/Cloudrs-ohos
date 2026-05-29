@@ -181,13 +181,13 @@ export struct TabFiles {
     if (this.showType !== ShowType.SHOW_ICON) {
       return 1
     }
-    if (this.gridWidth >= 960) {
+    if (this.gridWidth >= CloudThemeToken.wideBreakpoint) {
       return 5
     }
-    if (this.gridWidth >= 720) {
+    if (this.gridWidth >= CloudThemeToken.tabletBreakpoint) {
       return 4
     }
-    if (this.gridWidth >= 520) {
+    if (this.gridWidth >= CloudThemeToken.twoColumnBreakpoint) {
       return 3
     }
     return 2
@@ -442,7 +442,7 @@ export struct TabFiles {
             Image($r('app.media.ic_arrowshape_up'))
               .width(24)
               .height(24)
-              .fillColor(Color.White)
+              .fillColor(CloudThemeToken.onPrimary)
           }
           .width(52)
           .height(52)
@@ -466,6 +466,7 @@ export struct TabFiles {
       showClose: false,
       backgroundColor: CloudThemeToken.background,
       onDisappear: () => {
+        this.showFileSheet = false
         this.resetFileSheetState()
       }
     })
@@ -512,7 +513,7 @@ export struct TabFiles {
       .padding({ left: 14, right: 16 })
       .borderRadius(18)
       .backgroundColor(CloudThemeToken.surface)
-      .shadow({ radius: 12, color: 'rgba(24, 36, 56, 0.12)', offsetY: 4 })
+      .shadow({ radius: 12, color: CloudThemeToken.refreshShadow, offsetY: 4 })
     }
     .width('100%')
     .height('100%')
@@ -599,7 +600,7 @@ export struct TabFiles {
         Text($r('app.string.finished'))
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
-          .fontColor(Color.White)
+          .fontColor(CloudThemeToken.onPrimary)
           .textAlign(TextAlign.Center)
           .height(44)
           .layoutWeight(1)
@@ -706,7 +707,11 @@ export struct TabFiles {
       }
     })
     .bindSheet($$this.showPathSelect, this.selectPathSheet(), {
-      showClose: false
+      showClose: false,
+      backgroundColor: CloudThemeToken.background,
+      onDisappear: () => {
+        this.showPathSelect = false
+      }
     })
   }
 
@@ -715,7 +720,7 @@ export struct TabFiles {
       title: this.objectSelect.selectPathTitle,
       filterDirId: this.objectSelect.selectPathId,
       onClose: (isFinished: boolean, path?: string) => {
-        this.showPathSelect = false
+        this.closePathSelectSheet()
         if (isFinished && path && path != '') {
           console.debug(TAG, 'select path: ' + path)
           this.copyMoveObjects(path)
@@ -733,7 +738,7 @@ export struct TabFiles {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('rgba(0, 0, 0, 0.28)')
+        .backgroundColor(CloudThemeToken.overlayScrim)
         .onClick(() => {
           this.showObjectDetail = false
           this.overLap = true
@@ -765,9 +770,9 @@ export struct TabFiles {
         this.detailSheet()
       }
       .width('100%')
-      .borderRadius({ topLeft: 20, topRight: 20 })
+      .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
       .backgroundColor(CloudThemeToken.background)
-      .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.18)', offsetY: -8 })
+      .shadow({ radius: 24, color: CloudThemeToken.sheetShadow, offsetY: -8 })
     }
     .width('100%')
     .height('100%')
@@ -832,7 +837,7 @@ export struct TabFiles {
         else {
           this.objectSelect.selectPathId = ''
         }
-        this.showPathSelect = true
+        this.openPathSelectSheet()
         break
       case FileMenuType.DOWNLOAD:
         this.itemDownload(index, item)
@@ -922,6 +927,14 @@ export struct TabFiles {
 
   private closeInputSheet(): void {
     this.closeFileSheet()
+  }
+
+  private openPathSelectSheet(): void {
+    this.showPathSelect = true
+  }
+
+  private closePathSelectSheet(): void {
+    this.showPathSelect = false
   }
 
   private resetFileSheetState(): void {

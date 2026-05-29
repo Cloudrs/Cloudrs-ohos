@@ -21,6 +21,7 @@ const TAG: string = 'TabRemote'
 
 @Component
 export struct TabRemoteDown {
+  @Link overLap: boolean
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.download_offline') }, { text: $r('app.string.task_queue') }] as SegmentButtonItemTuple,
@@ -186,7 +187,7 @@ export struct TabRemoteDown {
       secondaryButton: {
         value: $r('app.string.dialog_delete'),
         action: () => {
-          this.showTaskDetailSheet = false
+          this.closeTaskDetailSheet()
           this.currentFinishedDetail = undefined
           this.currentFinishedIndex = -1
           CloudApi.deleteAria2Task(item.gid, {
@@ -222,7 +223,7 @@ export struct TabRemoteDown {
     Aria2Create({onFinished: () => {
       this.getAria2Downloading()
       this.getAria2Finished(true)
-      this.showCreateSheet = false
+      this.closeCreateSheet()
     }})
   }
 
@@ -238,13 +239,16 @@ export struct TabRemoteDown {
       CloudActionButton({
         icon: $r('app.media.ic_plus'),
         onAction: () => {
-          this.showCreateSheet = true
+          this.openCreateSheet()
         }
       })
       .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
         detents: [SheetSize.FIT_CONTENT],
         title: {title: $r('app.string.download_offline')},
         backgroundColor: CloudThemeToken.background,
+        onDisappear: () => {
+          this.showCreateSheet = false
+        }
       })
     }
     .width('100%')
@@ -460,7 +464,7 @@ export struct TabRemoteDown {
       console.debug(TAG, 'onClick')
       this.currentFinishedDetail = item
       this.currentFinishedIndex = index
-      this.showTaskDetailSheet = true
+      this.openTaskDetailSheet()
     })
   }
 
@@ -528,7 +532,11 @@ export struct TabRemoteDown {
         }
       })
       .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
-        detents: [SheetSize.FIT_CONTENT]
+        detents: [SheetSize.FIT_CONTENT],
+        backgroundColor: CloudThemeToken.background,
+        onDisappear: () => {
+          this.showTaskDetailSheet = false
+        }
       })
     }
     .layoutWeight(1)
@@ -674,5 +682,21 @@ export struct TabRemoteDown {
     } catch (e) {
       return errorJson
     }
+  }
+
+  private openCreateSheet(): void {
+    this.showCreateSheet = true
+  }
+
+  private closeCreateSheet(): void {
+    this.showCreateSheet = false
+  }
+
+  private openTaskDetailSheet(): void {
+    this.showTaskDetailSheet = true
+  }
+
+  private closeTaskDetailSheet(): void {
+    this.showTaskDetailSheet = false
   }
 }

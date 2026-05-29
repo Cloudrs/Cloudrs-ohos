@@ -63,7 +63,9 @@ export struct Downloads {
 
   @Builder downloadItem(object: TransportObject) {
     Row({space: 10}) {
-      Image(CommonUtil.getFileIconInfo(object.item.name).icon).width(40).height(40)
+      Image(CommonUtil.getFileIconInfo(object.item.name).icon)
+        .width(CloudThemeToken.transferFileIconSize)
+        .height(CloudThemeToken.transferFileIconSize)
 
       Column({space: 8}) {
         Text(object.item.name)
@@ -77,8 +79,8 @@ export struct Downloads {
 
         Row({space: 5}) {
           Image(this.getDownloadIcon(object.state))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.transferStateIconSize)
+            .height(CloudThemeToken.transferStateIconSize)
             .fillColor(this.getStateColor(object.state))
 
           if (object.state == FileModelState.RUNNING) {
@@ -104,8 +106,8 @@ export struct Downloads {
         .style({
           showDefaultPercentage: true
         })
-        .width(60)
-        .height(30)
+        .width(CloudThemeToken.transferProgressWidth)
+        .height(CloudThemeToken.transferProgressHeight)
     }
     .width('100%')
     .padding(10)

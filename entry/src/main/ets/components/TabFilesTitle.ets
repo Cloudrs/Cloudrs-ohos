@@ -80,9 +80,9 @@ export struct TabFilesTitle {
               .height(18)
               .fillColor(CloudThemeToken.textPrimary)
           }
-          .width(38)
-          .height(38)
-          .borderRadius(19)
+          .width(CloudThemeToken.iconButtonSize)
+          .height(CloudThemeToken.iconButtonSize)
+          .borderRadius(CloudThemeToken.controlRadius)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
           .onClick(() => {
             if (this.onMoreClick) {
@@ -96,9 +96,9 @@ export struct TabFilesTitle {
               .height(18)
               .fillColor(CloudThemeToken.textPrimary)
           }
-          .width(38)
-          .height(38)
-          .borderRadius(19)
+          .width(CloudThemeToken.iconButtonSize)
+          .height(CloudThemeToken.iconButtonSize)
+          .borderRadius(CloudThemeToken.controlRadius)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
           .onClick(() => {
             this.toggleShowType()
@@ -110,9 +110,9 @@ export struct TabFilesTitle {
               .height(18)
               .fillColor(this.showMenu ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
           }
-          .width(38)
-          .height(38)
-          .borderRadius(19)
+          .width(CloudThemeToken.iconButtonSize)
+          .height(CloudThemeToken.iconButtonSize)
+          .borderRadius(CloudThemeToken.controlRadius)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
           .bindMenu(this.moreMenu(), {onAppear: () => {
             this.showMenu = true
@@ -238,7 +238,7 @@ export struct TabFilesTitle {
           })
       }
     }
-    .width(220)
+    .width(CloudThemeToken.menuWidth)
     .padding(0)
     .margin(0)
     .backgroundColor(CloudThemeToken.surface)
@@ -261,7 +261,7 @@ export struct TabFilesTitle {
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
-        .height(50)
+        .height(CloudThemeToken.menuItemLabelHeight)
 
         Image(isSelected ? $r('app.media.ic_selected') : '')
           .width(24)
@@ -269,7 +269,7 @@ export struct TabFilesTitle {
     }
     .padding({left: 20, right: 20})
     .width('100%')
-    .height(45)
+    .height(CloudThemeToken.menuItemHeight)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }
@@ -281,7 +281,7 @@ export struct TabFilesTitle {
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
-        .height(50)
+        .height(CloudThemeToken.menuItemLabelHeight)
 
       Row({space: 10}) {
         Image(isSelected ? isReverse ? $r('app.media.ic_sort_arrow_down') : $r('app.media.ic_sort_arrow_up') : '')
@@ -296,7 +296,7 @@ export struct TabFilesTitle {
     }
     .padding({left: 20, right: 20})
     .width('100%')
-    .height(45)
+    .height(CloudThemeToken.menuItemHeight)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }

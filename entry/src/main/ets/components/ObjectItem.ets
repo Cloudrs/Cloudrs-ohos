@@ -252,7 +252,7 @@ export struct ObjectItem {
           })
       }
     }
-    .width(220)
+    .width(CloudThemeToken.menuWidth)
     .padding(0)
     .margin(0)
     .backgroundColor(CloudThemeToken.surface)
@@ -283,7 +283,7 @@ export struct ObjectItem {
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
-        .height(50)
+        .height(CloudThemeToken.menuItemLabelHeight)
         .layoutWeight(1)
 
       Image(isSelected ? $r('app.media.ic_selected') : '')
@@ -292,7 +292,7 @@ export struct ObjectItem {
     }
     .padding({left: 20, right: 20})
     .width('100%')
-    .height(50)
+    .height(CloudThemeToken.menuItemLabelHeight)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }

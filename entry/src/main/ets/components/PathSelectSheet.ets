@@ -120,8 +120,8 @@ export struct PathSelectSheet {
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
-        .width(32)
-        .height(32)
+        .width(CloudThemeToken.smallIconButtonSize)
+        .height(CloudThemeToken.smallIconButtonSize)
         .borderRadius(CloudThemeToken.controlRadius)
         .backgroundColor(CloudThemeToken.surfaceSubtle)
         .onClick(() => {
@@ -142,7 +142,7 @@ export struct PathSelectSheet {
             .layoutWeight(1)
 
           Text($r('app.string.finished'))
-            .height(36)
+            .height(CloudThemeToken.sheetConfirmHeight)
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.primary)
@@ -163,7 +163,7 @@ export struct PathSelectSheet {
       .justifyContent(FlexAlign.SpaceBetween)
     }
     .justifyContent(FlexAlign.SpaceBetween)
-    .height(70)
+    .height(CloudThemeToken.sheetHeaderHeight)
     .width('100%')
     .outline({width: {bottom: '2px'}})
     .outlineColor(CloudThemeToken.line)
@@ -173,8 +173,8 @@ export struct PathSelectSheet {
     Column() {
       Row({ space: 10 }) {
         Image(this.normalIcon)
-          .width(30)
-          .height(30)
+          .width(CloudThemeToken.pathFolderIconSize)
+          .height(CloudThemeToken.pathFolderIconSize)
           .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
@@ -187,24 +187,24 @@ export struct PathSelectSheet {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
-            .height(32)
+            .height(CloudThemeToken.pathLabelHeight)
             .layoutWeight(1)
 
           Image(this.getPathShow(item) ? this.downIcon : this.rightIcon)
-            .width(24)
-            .height(12)
+            .width(CloudThemeToken.pathChevronWidth)
+            .height(CloudThemeToken.pathChevronHeight)
             .padding({left: this.getPathShow(item) ? 0 : 6, right: this.getPathShow(item)? 0: 6})
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
-        .height(43)
+        .height(CloudThemeToken.pathInnerRowHeight)
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
         .outline({ width: { bottom: '2px' } })
         .outlineColor(CloudThemeToken.line)
       }
-      .height(45)
+      .height(CloudThemeToken.pathRowHeight)
       .width('100%')
       .padding({ left: this.getPathPadding(CloudApi.getTotalPath(item)), right: 15})
       .clip(true)

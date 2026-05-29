@@ -37,15 +37,15 @@ export struct CloudActionButton {
 
   build() {
     Button({ type: ButtonType.Normal }) {
-      Row({ space: this.text === '' ? 0 : 8 }) {
+      Row({ space: this.text === '' ? 0 : CloudThemeToken.actionButtonContentGap }) {
         Image(this.icon)
-          .width(20)
-          .height(20)
+          .width(CloudThemeToken.actionButtonIconSize)
+          .height(CloudThemeToken.actionButtonIconSize)
           .fillColor(this.getForegroundColor())
 
         if (this.text !== '') {
           Text(this.text)
-            .fontSize(15)
+            .fontSize(CloudThemeToken.actionButtonTextSize)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.getForegroundColor())
             .maxLines(1)
@@ -56,8 +56,11 @@ export struct CloudActionButton {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Center)
     }
-    .height(40)
-    .padding({ left: this.text === '' ? 10 : 14, right: this.text === '' ? 10 : 14 })
+    .height(CloudThemeToken.actionButtonHeight)
+    .padding({
+      left: this.text === '' ? CloudThemeToken.actionButtonIconPadding : CloudThemeToken.actionButtonTextPadding,
+      right: this.text === '' ? CloudThemeToken.actionButtonIconPadding : CloudThemeToken.actionButtonTextPadding
+    })
     .borderRadius(CloudThemeToken.controlRadius)
     .backgroundColor(this.getBackgroundColor())
     .enabled(this.isEnabled)

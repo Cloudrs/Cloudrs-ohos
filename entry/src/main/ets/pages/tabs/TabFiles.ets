@@ -380,7 +380,7 @@ export struct TabFiles {
         bottomPadding: 0,
         horizontalPadding: 0
       }) {
-        Column({ space: 10 }) {
+        Column({ space: CloudThemeToken.spacingCard }) {
           TabFilesHeader({
             isRoot: this.isRoot,
             searchKeyword: this.searchKeyword,
@@ -403,7 +403,7 @@ export struct TabFiles {
             }
           })
         }
-        .height(96)
+        .height(CloudThemeToken.cardHeight2xl)
         .justifyContent(FlexAlign.Center)
 
         Stack({alignContent: Alignment.BottomEnd}) {
@@ -440,18 +440,18 @@ export struct TabFiles {
 
           Button() {
             Image($r('app.media.ic_arrowshape_up'))
-              .width(24)
-              .height(24)
+              .width(CloudThemeToken.icon3xl)
+              .height(CloudThemeToken.icon3xl)
               .fillColor(CloudThemeToken.onPrimary)
           }
-          .width(52)
-          .height(52)
-          .borderRadius(26)
+          .width(CloudThemeToken.iconBox3xl)
+          .height(CloudThemeToken.rowHeight4xl)
+          .borderRadius(CloudThemeToken.controlRadiusRoundXl)
           .backgroundColor(CloudThemeToken.primary)
-          .margin({ right: 16, bottom: this.tabBarHeight + 16 })
+          .margin({ right: CloudThemeToken.spacingPage, bottom: this.tabBarHeight + CloudThemeToken.spacingPage })
           .onClick(() => { this.openSelectFileSheet() })
         }
-        .margin({ top: 20 })
+        .margin({ top: CloudThemeToken.pageTopPadding })
         .layoutWeight(1)
       }
 
@@ -481,18 +481,18 @@ export struct TabFiles {
   }
 
   @Builder loadingState() {
-    Column({ space: 12 }) {
+    Column({ space: CloudThemeToken.spacingSection }) {
       LoadingProgress()
-        .width(36)
-        .height(36)
+        .width(CloudThemeToken.iconBoxSm)
+        .height(CloudThemeToken.iconBoxSm)
         .color(CloudThemeToken.primary)
       Text('正在加载文件')
-        .fontSize(14)
+        .fontSize(CloudThemeToken.textSizeBody)
         .fontColor(CloudThemeToken.textSecondary)
     }
     .width('100%')
     .height('100%')
-    .padding({ bottom: this.tabBarHeight + 32 })
+    .padding({ bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomPadding })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .backgroundColor(CloudThemeToken.background)
@@ -500,24 +500,24 @@ export struct TabFiles {
 
   @Builder refreshingHint() {
     Column() {
-      Row({ space: 8 }) {
+      Row({ space: CloudThemeToken.spacingXl }) {
         LoadingProgress()
-          .width(18)
-          .height(18)
+          .width(CloudThemeToken.iconLg)
+          .height(CloudThemeToken.iconLg)
           .color(CloudThemeToken.primary)
         Text('正在刷新')
-          .fontSize(13)
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
           .fontColor(CloudThemeToken.textPrimary)
       }
-      .height(36)
-      .padding({ left: 14, right: 16 })
-      .borderRadius(18)
+      .height(CloudThemeToken.iconBoxSm)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
       .backgroundColor(CloudThemeToken.surface)
       .shadow({ radius: 12, color: CloudThemeToken.refreshShadow, offsetY: 4 })
     }
     .width('100%')
     .height('100%')
-    .padding({ top: 8 })
+    .padding({ top: CloudThemeToken.spacingXl })
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.Start)
   }
@@ -534,30 +534,30 @@ export struct TabFiles {
         }
       })
     }
-    .padding({ left: 20, right: 20, bottom: this.tabBarHeight + 32 })
+    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomPadding })
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.Center)
   }
 
   @Builder inputSheetBuilder() {
-    Column({ space: 18 }) {
+    Column({ space: CloudThemeToken.spacingSheetTop }) {
       Row() {
         Text(this.inputTitle)
-          .fontSize(18)
+          .fontSize(CloudThemeToken.textSizeTitle)
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
 
         Button({ type: ButtonType.Normal }) {
           Image($r('app.media.ic_xmark'))
-            .width(16)
-            .height(16)
+            .width(CloudThemeToken.iconMd)
+            .height(CloudThemeToken.iconMd)
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
-        .width(36)
-        .height(36)
+        .width(CloudThemeToken.iconBoxSm)
+        .height(CloudThemeToken.iconBoxSm)
         .borderRadius(CloudThemeToken.controlRadius)
         .backgroundColor(CloudThemeToken.surfaceSubtle)
         .onClick(() => {
@@ -569,42 +569,42 @@ export struct TabFiles {
 
       TextInput({ text: this.inputValue, placeholder: this.inputPlaceholder })
         .width('100%')
-        .height(48)
-        .fontSize(16)
+        .height(CloudThemeToken.rowHeight2xl)
+        .fontSize(CloudThemeToken.textSizeLarge)
         .fontColor(CloudThemeToken.textPrimary)
         .placeholderColor(CloudThemeToken.textSecondary)
         .backgroundColor(CloudThemeToken.surface)
         .borderRadius(CloudThemeToken.controlRadius)
-        .border({ width: 1, color: CloudThemeToken.line })
-        .padding({ left: 12, right: 12 })
+        .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+        .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
         .onChange((value: string) => {
           this.inputValue = value
         })
 
-      Row({ space: 12 }) {
+      Row({ space: CloudThemeToken.spacingSection }) {
         Text($r('app.string.dialog_cancel'))
-          .fontSize(15)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .textAlign(TextAlign.Center)
-          .height(44)
+          .height(CloudThemeToken.rowHeightXl)
           .layoutWeight(1)
-          .borderRadius(12)
+          .borderRadius(CloudThemeToken.controlRadiusLg)
           .backgroundColor(CloudThemeToken.surface)
-          .border({ width: 1, color: CloudThemeToken.line })
+          .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
           .align(Alignment.Center)
           .onClick(() => {
             this.closeInputSheet()
           })
 
         Text($r('app.string.finished'))
-          .fontSize(15)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.onPrimary)
           .textAlign(TextAlign.Center)
-          .height(44)
+          .height(CloudThemeToken.rowHeightXl)
           .layoutWeight(1)
-          .borderRadius(12)
+          .borderRadius(CloudThemeToken.controlRadiusLg)
           .backgroundColor(CloudThemeToken.primary)
           .align(Alignment.Center)
           .onClick(() => {
@@ -614,7 +614,7 @@ export struct TabFiles {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
+    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, top: CloudThemeToken.spacingSheetTop, bottom: CloudThemeToken.spacingSheetBottom })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -631,7 +631,7 @@ export struct TabFiles {
         }
       })
     }
-    .padding({ left: 20, right: 20, bottom: this.tabBarHeight + 32 })
+    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomPadding })
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.Center)
@@ -650,7 +650,7 @@ export struct TabFiles {
         }
       })
     }
-    .padding({ left: 20, right: 20, bottom: this.tabBarHeight + 32 })
+    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomPadding })
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.Center)
@@ -690,7 +690,7 @@ export struct TabFiles {
     }
     .cachedCount(5)
     .maxCount(this.getGridColumns())
-    .padding({ left: 10, right: 10, bottom: this.tabBarHeight+10 })
+    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard, bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
     .width('100%')
     .height('100%') //!!!使用lazyforeach必须设置高度才能有效
     .rowsGap(7)
@@ -750,22 +750,22 @@ export struct TabFiles {
             .layoutWeight(1)
           Button() {
             Image($r('app.media.ic_xmark'))
-              .width(18)
-              .height(18)
+              .width(CloudThemeToken.iconLg)
+              .height(CloudThemeToken.iconLg)
               .fillColor(CloudThemeToken.textSecondary)
           }
-            .width(38)
-            .height(38)
-            .borderRadius(19)
+            .width(CloudThemeToken.iconBoxMd)
+            .height(CloudThemeToken.iconBoxMd)
+            .borderRadius(CloudThemeToken.controlRadiusRoundLg)
             .backgroundColor(CloudThemeToken.surfaceSubtle)
             .onClick(() => {
               this.showObjectDetail = false
               this.overLap = true
             })
         }
-        .height(48)
+        .height(CloudThemeToken.rowHeight2xl)
         .width('100%')
-        .padding({ left: 20, right: 16, top: 8 })
+        .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingPage, top: CloudThemeToken.spacingXl })
 
         this.detailSheet()
       }

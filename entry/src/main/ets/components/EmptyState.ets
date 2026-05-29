@@ -11,29 +11,29 @@ export struct EmptyState {
   onSecondaryAction?: () => void
 
   build() {
-    Column({ space: 12 }) {
+    Column({ space: CloudThemeToken.emptyStateGap }) {
       if (this.icon !== '') {
         Image(this.icon)
-          .width(56)
-          .height(56)
+          .width(CloudThemeToken.emptyStateIconSize)
+          .height(CloudThemeToken.emptyStateIconSize)
           .draggable(false)
       }
 
       Text(this.title)
-        .fontSize(17)
+        .fontSize(CloudThemeToken.emptyStateTitleSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
         .textAlign(TextAlign.Center)
 
       Text(this.description)
-        .fontSize(13)
+        .fontSize(CloudThemeToken.emptyStateDescriptionSize)
         .fontColor(CloudThemeToken.textSecondary)
         .textAlign(TextAlign.Center)
-        .lineHeight(19)
+        .lineHeight(CloudThemeToken.emptyStateDescriptionLineHeight)
 
       if (this.actionText !== undefined && this.onAction !== undefined) {
         Button(this.actionText)
-          .height(38)
+          .height(CloudThemeToken.emptyStatePrimaryActionHeight)
           .onClick(() => {
             this.onAction?.()
           })
@@ -42,16 +42,16 @@ export struct EmptyState {
       if (this.secondaryActionText !== undefined && this.onSecondaryAction !== undefined) {
         Button(this.secondaryActionText)
           .buttonStyle(ButtonStyleMode.TEXTUAL)
-          .fontSize(14)
+          .fontSize(CloudThemeToken.emptyStateSecondaryActionSize)
           .fontColor(CloudThemeToken.primary)
-          .height(34)
+          .height(CloudThemeToken.emptyStateSecondaryActionHeight)
           .onClick(() => {
             this.onSecondaryAction?.()
           })
       }
     }
     .width('100%')
-    .padding(24)
+    .padding(CloudThemeToken.emptyStatePadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
     .alignItems(HorizontalAlign.Center)

@@ -61,50 +61,53 @@ export struct Aria2FinishedDetail {
   }
 
   build() {
-    Column({space: 15}){
+    Column({ space: CloudThemeToken.aria2DetailGap }){
       Text(this.getTaskName())
-        .fontSize(24)
+        .fontSize(CloudThemeToken.aria2DetailTitleSize)
         .wordBreak(WordBreak.BREAK_ALL)
         .fontWeight(FontWeight.Bolder)
         .fontColor(CloudThemeToken.textPrimary)
-        .padding({right: 40})
+        .padding({ right: CloudThemeToken.aria2DetailTitleRightPadding })
 
-      Row({space: 10}) {
+      Row({ space: CloudThemeToken.aria2DetailStatusGap }) {
         Image($r('app.media.ic_bell_fill'))
-          .width(20)
-          .height(20)
+          .width(CloudThemeToken.aria2DetailStatusIconSize)
+          .height(CloudThemeToken.aria2DetailStatusIconSize)
           .fillColor(this.detailData.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
 
         Text(this.detailData.task_status == Aria2Status.FINISHED ?
           $r('app.string.download_finished') : this.getErrorInfo())
-          .fontSize(14)
+          .fontSize(CloudThemeToken.aria2DetailStatusTextSize)
           .fontStyle(this.detailData.task_status == Aria2Status.FINISHED ? FontStyle.Normal : FontStyle.Italic)
           .layoutWeight(1)
           .wordBreak(WordBreak.BREAK_ALL)
           .fontColor(this.detailData.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
       }
-      .height(40)
+      .height(CloudThemeToken.aria2DetailStatusHeight)
       .width('100%')
       .borderRadius(CloudThemeToken.cardRadius)
-      .padding({left: 10, right: 10})
+      .padding({
+        left: CloudThemeToken.aria2DetailStatusHorizontalPadding,
+        right: CloudThemeToken.aria2DetailStatusHorizontalPadding
+      })
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
       .backgroundColor(this.detailData.task_status == Aria2Status.FINISHED ?
         CloudThemeToken.successSoft : CloudThemeToken.dangerSoft)
 
       Text($r('app.string.task_detail'))
-        .fontSize(18)
+        .fontSize(CloudThemeToken.aria2DetailSectionTitleSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
 
       this.taskDetail()
 
       Text($r('app.string.files_list'))
-        .fontSize(18)
+        .fontSize(CloudThemeToken.aria2DetailSectionTitleSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
 
-      List({space: 5}) {
+      List({ space: CloudThemeToken.aria2DetailFileListGap }) {
         ForEach(this.detailData.files, (item: Aria2Files, index) => {
           this.fileItem(item.path)
         })
@@ -116,7 +119,12 @@ export struct Aria2FinishedDetail {
       this.detailTool()
     }
     .width('100%')
-    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding, top: 25, bottom: this.bottomRectHeight })
+    .padding({
+      left: CloudThemeToken.pagePadding,
+      right: CloudThemeToken.pagePadding,
+      top: CloudThemeToken.aria2DetailSheetTopPadding,
+      bottom: this.bottomRectHeight
+    })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
     .backgroundColor(CloudThemeToken.background)
@@ -156,8 +164,8 @@ export struct Aria2FinishedDetail {
     }
     .columnsTemplate(this.getDetailGridColumnsTemplate())
     .maxCount(this.getDetailGridColumns())
-    .columnsGap(10)
-    .rowsGap(10)
+    .columnsGap(CloudThemeToken.aria2DetailGridGap)
+    .rowsGap(CloudThemeToken.aria2DetailGridGap)
     .width('100%')
     .onAreaChange((oldArea: Area, newArea: Area) => {
       let width = Number(newArea.width)
@@ -169,15 +177,15 @@ export struct Aria2FinishedDetail {
 
   @Builder taskDetailItem(title: ResourceStr, content: ResourceStr, icon: Resource) {
     Row() {
-      Column({space: 5}) {
+      Column({ space: CloudThemeToken.aria2DetailCardTextGap }) {
         Text(title)
-          .fontSize(14)
+          .fontSize(CloudThemeToken.aria2DetailCardTitleSize)
           .fontColor(CloudThemeToken.textSecondary)
         Text(content)
           .wordBreak(WordBreak.BREAK_ALL)
           .maxLines(1)
           .textOverflow({overflow: TextOverflow.Ellipsis})
-          .fontSize(16)
+          .fontSize(CloudThemeToken.aria2DetailCardContentSize)
           .fontWeight(FontWeight.Bolder)
           .fontColor(CloudThemeToken.textPrimary)
       }
@@ -186,12 +194,12 @@ export struct Aria2FinishedDetail {
       .justifyContent(FlexAlign.Center)
 
       Image(icon)
-        .width(24)
-        .height(24)
+        .width(CloudThemeToken.aria2DetailCardIconSize)
+        .height(CloudThemeToken.aria2DetailCardIconSize)
         .fillColor(CloudThemeToken.primary)
     }
-    .height(70)
-    .padding(15)
+    .height(CloudThemeToken.aria2DetailCardHeight)
+    .padding(CloudThemeToken.aria2DetailCardPadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
@@ -201,7 +209,7 @@ export struct Aria2FinishedDetail {
   @Builder fileItem(fileName: string) {
     Row() {
       Text(fileName)
-        .fontSize(16)
+        .fontSize(CloudThemeToken.aria2DetailFileTextSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
         .maxLines(2)
@@ -209,7 +217,7 @@ export struct Aria2FinishedDetail {
         .textOverflow({overflow: TextOverflow.Ellipsis})
     }
     .width('100%')
-    .padding(20)
+    .padding(CloudThemeToken.aria2DetailFilePadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
   }
@@ -220,8 +228,8 @@ export struct Aria2FinishedDetail {
         .layoutWeight(1)
 
       Image($r('app.media.ic_delete_fill'))
-        .width(24)
-        .height(24)
+        .width(CloudThemeToken.aria2DetailToolIconSize)
+        .height(CloudThemeToken.aria2DetailToolIconSize)
         .fillColor(CloudThemeToken.danger)
         .onClick(() => {
           if (this.onDeleteClick) {
@@ -230,8 +238,12 @@ export struct Aria2FinishedDetail {
         })
     }
     .width('100%')
-    .height(30)
-    .padding({ left: 10, right: 10, bottom: 20 })
+    .height(CloudThemeToken.aria2DetailToolHeight)
+    .padding({
+      left: CloudThemeToken.aria2DetailToolHorizontalPadding,
+      right: CloudThemeToken.aria2DetailToolHorizontalPadding,
+      bottom: CloudThemeToken.aria2DetailToolBottomPadding
+    })
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }

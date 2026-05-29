@@ -735,15 +735,15 @@ export struct TabPictures {
   }
 
   @Builder summaryCard() {
-    Column({ space: 16 }) {
+    Column({ space: CloudThemeToken.spacingPage }) {
       Row() {
-        Column({ space: 4 }) {
+        Column({ space: CloudThemeToken.spacingXs }) {
         Text(this.getSettingsEnabled() ? '备份已开启' : '备份未开启')
-            .fontSize(18)
+            .fontSize(CloudThemeToken.textSizeTitle)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
           Text(this.getSettingsEnabled() ? `目标路径 ${this.getBackupPathText()}` : '开启后会扫描本地图片并备份到云端')
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -751,10 +751,10 @@ export struct TabPictures {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        Row({ space: 8 }) {
+        Row({ space: CloudThemeToken.spacingXl }) {
           Button(this.getPrimaryActionText())
-            .fontSize(14)
-            .height(34)
+            .fontSize(CloudThemeToken.textSizeBody)
+            .height(CloudThemeToken.rowHeightSm)
             .enabled(this.backupState !== PhotoBackupState.BACKING_UP)
             .onClick(() => {
               this.startBackup();
@@ -762,8 +762,8 @@ export struct TabPictures {
 
           if (this.backupState === PhotoBackupState.BACKING_UP) {
             Button('暂停')
-              .fontSize(14)
-              .height(34)
+              .fontSize(CloudThemeToken.textSizeBody)
+              .height(CloudThemeToken.rowHeightSm)
               .backgroundColor(CloudThemeToken.surfaceSubtle)
               .fontColor(CloudThemeToken.textPrimary)
               .onClick(() => {
@@ -784,7 +784,7 @@ export struct TabPictures {
 
       if (this.getSettingsEnabled() && this.getSettingsWifiOnly()) {
         Text('默认仅在 Wi-Fi 下自动备份，可在设置中改为任意网络或手动备份。')
-          .fontSize(12)
+          .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
       }
 
@@ -798,20 +798,20 @@ export struct TabPictures {
 
       if (this.backupState === PhotoBackupState.BACKING_UP) {
         Text(`本轮将连续备份 ${this.backupQueueTotal} 张，已完成 ${this.backupQueueDone} 张。`)
-          .fontSize(12)
+          .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
       }
 
       if (this.backupState === PhotoBackupState.PAUSED) {
         Text('备份已暂停，点击继续备份会处理剩余待备份图片。')
-          .fontSize(12)
+          .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
       }
 
       if (this.backupState === PhotoBackupState.WAITING_NETWORK && this.getSettingsWifiOnly()) {
         Button('模拟器测试：改为任意网络')
-          .fontSize(13)
-          .height(36)
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .height(CloudThemeToken.iconBoxSm)
           .width('100%')
           .backgroundColor(CloudThemeToken.primarySoft)
           .fontColor(CloudThemeToken.primary)
@@ -825,20 +825,20 @@ export struct TabPictures {
       }
     }
     .width('100%')
-    .padding(16)
+    .padding(CloudThemeToken.spacingPage)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder permissionHintCard() {
-    Column({ space: 10 }) {
+    Column({ space: CloudThemeToken.spacingCard }) {
       Text(this.permissionHint)
-        .fontSize(12)
+        .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.textSecondary)
         .width('100%')
       Button('选择图片加入备份')
-        .fontSize(13)
-        .height(36)
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .height(CloudThemeToken.iconBoxSm)
         .width('100%')
         .buttonStyle(ButtonStyleMode.TEXTUAL)
         .onClick(() => {
@@ -846,20 +846,20 @@ export struct TabPictures {
         })
     }
     .width('100%')
-    .padding(12)
+    .padding(CloudThemeToken.spacingSection)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 
   @Builder emptyPathCard() {
-    Column({ space: 10 }) {
+    Column({ space: CloudThemeToken.spacingCard }) {
       Text('还没有选择云端备份路径，选择路径后才会开始上传图片。')
-        .fontSize(12)
+        .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.textSecondary)
         .width('100%')
       Button('选择备份路径')
-        .fontSize(13)
-        .height(36)
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .height(CloudThemeToken.iconBoxSm)
         .width('100%')
         .buttonStyle(ButtonStyleMode.TEXTUAL)
         .onClick(() => {
@@ -867,23 +867,23 @@ export struct TabPictures {
         })
     }
     .width('100%')
-    .padding(12)
+    .padding(CloudThemeToken.spacingSection)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.primarySoft)
   }
 
   @Builder metricItem(label: string, value: string) {
-    Column({ space: 4 }) {
+    Column({ space: CloudThemeToken.spacingXs }) {
       Text(value)
-        .fontSize(20)
+        .fontSize(CloudThemeToken.textSizeHeadline)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
       Text(label)
-        .fontSize(12)
+        .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.textSecondary)
     }
     .width('23%')
-    .height(58)
+    .height(CloudThemeToken.rowHeight5xl)
     .justifyContent(FlexAlign.Center)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
     .borderRadius(CloudThemeToken.cardRadius)
@@ -892,7 +892,7 @@ export struct TabPictures {
   @Builder sectionUploading() {
     if (this.getUploadingItems().length > 0) {
       SectionHeader({ title: '正在备份', count: this.getUploadingItems().length });
-      Column({ space: 10 }) {
+      Column({ space: CloudThemeToken.spacingCard }) {
         ForEach(this.getUploadingItems(), (item: PhotoBackupItem) => {
           this.uploadingItem(item);
         }, (item: PhotoBackupItem) => item.id)
@@ -901,32 +901,32 @@ export struct TabPictures {
   }
 
   @Builder uploadingItem(item: PhotoBackupItem) {
-    Row({ space: 12 }) {
+    Row({ space: CloudThemeToken.spacingSection }) {
       Image(item.uri)
-        .width(52)
-        .height(52)
+        .width(CloudThemeToken.iconBox3xl)
+        .height(CloudThemeToken.rowHeight4xl)
         .objectFit(ImageFit.Cover)
-        .borderRadius(10)
+        .borderRadius(CloudThemeToken.controlRadiusMd)
 
-      Column({ space: 8 }) {
+      Column({ space: CloudThemeToken.spacingXl }) {
         Text(item.name)
-          .fontSize(15)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Progress({ value: item.progress, total: 100, type: ProgressType.Linear })
-          .height(6)
+          .height(CloudThemeToken.thinProgressHeight)
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
 
       Text(`${item.progress}%`)
-        .fontSize(12)
+        .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.textSecondary)
     }
     .width('100%')
-    .padding(12)
+    .padding(CloudThemeToken.spacingSection)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
   }
@@ -949,15 +949,15 @@ export struct TabPictures {
   }
 
   @Builder failedActionCard() {
-    Column({ space: 10 }) {
+    Column({ space: CloudThemeToken.spacingCard }) {
       Row() {
-        Column({ space: 4 }) {
+        Column({ space: CloudThemeToken.spacingXs }) {
           Text('部分图片备份失败')
-            .fontSize(15)
+            .fontSize(CloudThemeToken.textSizeBodyPlus)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
           Text(this.getFirstFailureMessage())
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -966,8 +966,8 @@ export struct TabPictures {
         .alignItems(HorizontalAlign.Start)
 
         Button('重试')
-          .fontSize(13)
-          .height(34)
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .height(CloudThemeToken.rowHeightSm)
           .backgroundColor(CloudThemeToken.dangerSoft)
           .fontColor(CloudThemeToken.danger)
           .onClick(() => {
@@ -978,13 +978,13 @@ export struct TabPictures {
 
       if (this.getSettingsWifiOnly()) {
         Text('如果当前设备没有 Wi-Fi，可在设置中临时改为任意网络后再重试。')
-          .fontSize(12)
+          .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
           .width('100%')
       }
     }
     .width('100%')
-    .padding(14)
+    .padding(CloudThemeToken.spacingPanel)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.dangerSoft)
   }
@@ -1008,7 +1008,7 @@ export struct TabPictures {
   @Builder sectionBackupHistory() {
     if (this.getBackupPathHistory().length > 0) {
       SectionHeader({ title: '备份历史', count: this.getBackupPathHistory().length });
-      Column({ space: 10 }) {
+      Column({ space: CloudThemeToken.spacingCard }) {
         ForEach(this.getBackupPathHistory(), (history: PhotoBackupPathHistory) => {
           this.backupHistoryRow(history);
         }, (history: PhotoBackupPathHistory) => history.path)
@@ -1018,11 +1018,11 @@ export struct TabPictures {
   }
 
   @Builder backupHistoryRow(history: PhotoBackupPathHistory) {
-    Row({ space: 12 }) {
-      Column({ space: 4 }) {
-        Row({ space: 8 }) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Column({ space: CloudThemeToken.spacingXs }) {
+        Row({ space: CloudThemeToken.spacingXl }) {
           Text(history.path)
-            .fontSize(15)
+            .fontSize(CloudThemeToken.textSizeBodyPlus)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
             .maxLines(1)
@@ -1031,24 +1031,24 @@ export struct TabPictures {
 
           if (history.isCurrent) {
             Text('当前')
-              .fontSize(11)
+              .fontSize(CloudThemeToken.textSizeMicro)
               .fontColor(CloudThemeToken.primary)
-              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-              .borderRadius(10)
+              .padding({ left: CloudThemeToken.spacingXl, right: CloudThemeToken.spacingXl, top: CloudThemeToken.spacingTiny, bottom: CloudThemeToken.spacingTiny })
+              .borderRadius(CloudThemeToken.controlRadiusMd)
               .backgroundColor(CloudThemeToken.primarySoft)
           }
         }
         .width('100%')
 
         Text(`${history.count} 张图片已记录为已备份`)
-          .fontSize(12)
+          .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .padding(14)
+    .padding(CloudThemeToken.spacingPanel)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(history.isCurrent ? CloudThemeToken.surface : CloudThemeToken.surfaceSubtle)
     .border({ width: history.isCurrent ? 1 : 0, color: CloudThemeToken.line })
@@ -1063,14 +1063,14 @@ export struct TabPictures {
               .width('100%')
               .aspectRatio(1)
               .objectFit(ImageFit.Cover)
-              .borderRadius(12)
+              .borderRadius(CloudThemeToken.controlRadiusLg)
 
             Text(this.getBadgeText(status))
-              .fontSize(10)
+              .fontSize(CloudThemeToken.textSizeTiny)
               .fontColor(CloudThemeToken.onPrimary)
-              .padding({ left: 6, right: 6, top: 3, bottom: 3 })
+              .padding({ left: CloudThemeToken.spacingMd, right: CloudThemeToken.spacingMd, top: CloudThemeToken.spacingTiny, bottom: CloudThemeToken.spacingTiny })
               .backgroundColor(this.getBadgeColor(status))
-              .borderRadius(8)
+              .borderRadius(CloudThemeToken.controlRadiusSm)
               .margin(6)
           }
           .width('100%')
@@ -1156,17 +1156,17 @@ export struct TabPictures {
   }
 
   @Builder settingsPanel() {
-    Column({ space: 16 }) {
+    Column({ space: CloudThemeToken.spacingPage }) {
       Row() {
         Text('相册备份设置')
-          .fontSize(18)
+          .fontSize(CloudThemeToken.textSizeTitle)
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
         Button({ type: ButtonType.Normal }) {
           Image($r('app.media.ic_xmark'))
-            .width(18)
-            .height(18)
+            .width(CloudThemeToken.iconLg)
+            .height(CloudThemeToken.iconLg)
             .fillColor(CloudThemeToken.textSecondary)
         }
           .width(CloudThemeToken.smallIconButtonSize)
@@ -1181,7 +1181,7 @@ export struct TabPictures {
 
       Row() {
         Text('开启相册备份')
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
@@ -1197,26 +1197,26 @@ export struct TabPictures {
           })
       }
       .width('100%')
-      .height(48)
-      .padding({ left: 14, right: 14 })
+      .height(CloudThemeToken.rowHeight2xl)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
       .borderRadius(CloudThemeToken.cardRadius)
       .backgroundColor(CloudThemeToken.surfaceSubtle)
 
       this.pathRow();
 
-      Column({ space: 8 }) {
+      Column({ space: CloudThemeToken.spacingXl }) {
         Text('网络条件')
-          .fontSize(15)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
           .fontWeight(FontWeight.Medium)
           .width('100%')
-        Row({ space: 8 }) {
+        Row({ space: CloudThemeToken.spacingXl }) {
           Text('仅 Wi-Fi')
-            .fontSize(14)
+            .fontSize(CloudThemeToken.textSizeBody)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.settingsWifiOnly ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
-            .height(38)
+            .height(CloudThemeToken.iconBoxMd)
             .borderRadius(CloudThemeToken.controlRadius)
             .backgroundColor(this.settingsWifiOnly ? CloudThemeToken.primary : CloudThemeToken.surfaceSubtle)
             .align(Alignment.Center)
@@ -1228,12 +1228,12 @@ export struct TabPictures {
             })
 
           Text('任意网络')
-            .fontSize(14)
+            .fontSize(CloudThemeToken.textSizeBody)
             .fontWeight(FontWeight.Medium)
             .fontColor(!this.settingsWifiOnly ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
             .textAlign(TextAlign.Center)
             .layoutWeight(1)
-            .height(38)
+            .height(CloudThemeToken.iconBoxMd)
             .borderRadius(CloudThemeToken.controlRadius)
             .backgroundColor(!this.settingsWifiOnly ? CloudThemeToken.primary : CloudThemeToken.surfaceSubtle)
             .align(Alignment.Center)
@@ -1251,7 +1251,7 @@ export struct TabPictures {
 
       Row() {
         Text('自动备份')
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
@@ -1264,22 +1264,22 @@ export struct TabPictures {
           })
       }
       .width('100%')
-      .height(48)
-      .padding({ left: 14, right: 14 })
+      .height(CloudThemeToken.rowHeight2xl)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
       .borderRadius(CloudThemeToken.cardRadius)
       .backgroundColor(CloudThemeToken.surfaceSubtle)
 
-      Row({ space: 10 }) {
+      Row({ space: CloudThemeToken.spacingCard }) {
         Button('重新扫描本地相册')
           .layoutWeight(1)
-          .height(44)
+          .height(CloudThemeToken.rowHeightXl)
           .onClick(() => {
             this.showSettings = false;
             this.scanLocalPhotos();
           })
         Button('选择图片加入')
           .layoutWeight(1)
-          .height(44)
+          .height(CloudThemeToken.rowHeightXl)
           .buttonStyle(ButtonStyleMode.TEXTUAL)
           .onClick(() => {
             this.pickPhotosForBackup();
@@ -1288,11 +1288,11 @@ export struct TabPictures {
       .width('100%')
 
       Text('备份只会上传本地图片到远程路径，不会删除本地照片，也不会自动删除云端文件。')
-        .fontSize(12)
+        .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.textSecondary)
         .width('100%')
     }
-    .padding(16)
+    .padding(CloudThemeToken.spacingPage)
     .width('100%')
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
@@ -1300,13 +1300,13 @@ export struct TabPictures {
 
   @Builder pathRow() {
     Row() {
-      Column({ space: 4 }) {
+      Column({ space: CloudThemeToken.spacingXs }) {
         Text('备份路径')
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
         Text(this.getBackupPathText())
-          .fontSize(12)
+          .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1315,13 +1315,13 @@ export struct TabPictures {
       .alignItems(HorizontalAlign.Start)
 
       Image($r('app.media.ic_chevron_right'))
-        .width(14)
-        .height(14)
+        .width(CloudThemeToken.iconSm)
+        .height(CloudThemeToken.iconSm)
         .fillColor(CloudThemeToken.textSecondary)
     }
     .width('100%')
-    .height(58)
-    .padding({ left: 14, right: 14 })
+    .height(CloudThemeToken.rowHeight5xl)
+    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
     .onClick(() => {

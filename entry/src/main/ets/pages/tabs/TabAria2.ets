@@ -231,7 +231,7 @@ export struct TabRemoteDown {
     Stack({alignContent: Alignment.End}) {
       Row() {
         SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
-          .width(160)
+          .width(CloudThemeToken.filesSegmentWidth)
       }
       .width('100%')
       .justifyContent(FlexAlign.Center)
@@ -252,7 +252,7 @@ export struct TabRemoteDown {
       })
     }
     .width('100%')
-    .height(40)
+    .height(CloudThemeToken.iconBoxLg)
   }
 
   getDownloadLength(files: Aria2Files[]) {
@@ -289,23 +289,23 @@ export struct TabRemoteDown {
   }
 
   @Builder downloadingItem(item: Aria2Downloading) {
-    Row({space: 12}) {
+    Row({ space: CloudThemeToken.spacingSection }) {
       Stack({alignContent: Alignment.Center}) {
         DataPanel({ values: [item.downloaded], max: item.total, type: DataPanelType.Circle })
-          .width(48)
-          .height(48)
-          .strokeWidth(4)
+          .width(CloudThemeToken.iconBox2xl)
+          .height(CloudThemeToken.rowHeight2xl)
+          .strokeWidth(CloudThemeToken.strongProgressStrokeWidth)
           .valueColors([CloudThemeToken.primary])
 
         Text(this.getProgressText(item.downloaded, item.total))
-          .fontSize(10)
+          .fontSize(CloudThemeToken.textSizeTiny)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
       }
 
-      Column({space: 8}) {
+      Column({ space: CloudThemeToken.spacingXl }) {
         Text(this.getTaskName(item.name))
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
@@ -313,42 +313,42 @@ export struct TabRemoteDown {
 
         Progress({value: item.downloaded, total: item.total, type: ProgressType.Capsule})
           .width('100%')
-          .height(6)
+          .height(CloudThemeToken.thinProgressHeight)
           .color(CloudThemeToken.primary)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
 
-        Row({space: 8}) {
+        Row({ space: CloudThemeToken.spacingXl }) {
           Image($r('app.media.ic_arrowshape_down'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.iconXs)
+            .height(CloudThemeToken.iconXs)
             .fillColor(CloudThemeToken.textPrimary)
           Text(CommonUtil.formatBytes(item.speed, 1)+'/s')
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
 
           Text(this.getFileCountText(item.info.files ? item.info.files.length : 1))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
 
           Image($r('app.media.ic_calendar'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.iconXs)
+            .height(CloudThemeToken.iconXs)
             .fillColor(CloudThemeToken.textSecondary)
           Text(DateFormatUtil.format(new Date(item.update), 'yyyy-MM-dd'))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
         }
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
 
-        Row({space: 6}) {
+        Row({ space: CloudThemeToken.spacingMd }) {
           Image($r('app.media.ic_folder'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.iconXs)
+            .height(CloudThemeToken.iconXs)
             .fillColor(CloudThemeToken.textSecondary)
           Text(this.getPathText(item.dst))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -361,9 +361,9 @@ export struct TabRemoteDown {
       .justifyContent(FlexAlign.Center)
     }
     .width('100%')
-    .height(104)
+    .height(CloudThemeToken.cardHeight3xl)
     .borderRadius(CloudThemeToken.cardRadius)
-    .padding(12)
+    .padding(CloudThemeToken.spacingSection)
     .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       console.debug(TAG, 'onClick')
@@ -384,62 +384,62 @@ export struct TabRemoteDown {
   }
 
   @Builder finishedItem(index: number, item: Aria2Finished) {
-    Row({space: 12}) {
+    Row({ space: CloudThemeToken.spacingSection }) {
       Stack({alignContent: Alignment.Center}) {
         DataPanel({ values: [this.getDownloadLength(item.files)], max: item.total, type: DataPanelType.Circle })
-          .width(48)
-          .height(48)
-          .strokeWidth(4)
+          .width(CloudThemeToken.iconBox2xl)
+          .height(CloudThemeToken.rowHeight2xl)
+          .strokeWidth(CloudThemeToken.strongProgressStrokeWidth)
           .closeEffect(true)
           .valueColors([item.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger])
 
         Text(item.files?.length ? item.files.length.toString() : '0')
-          .fontSize(14)
+          .fontSize(CloudThemeToken.textSizeBody)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
       }
 
-      Column({space: 7}) {
+      Column({ space: CloudThemeToken.spacingLg }) {
         Text(this.getTaskName(item.name))
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .textOverflow({overflow: TextOverflow.Ellipsis})
 
-        Row({space: 8}) {
+        Row({ space: CloudThemeToken.spacingXl }) {
           Image(item.task_status == Aria2Status.FINISHED ?
             $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.iconXs)
+            .height(CloudThemeToken.iconXs)
             .fillColor(item.task_status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
           Text(this.getTaskStatus(item.task_status))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
 
           Text(this.getFileCountText(item.files ? item.files.length : 0))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
 
           Image($r('app.media.ic_calendar'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.iconXs)
+            .height(CloudThemeToken.iconXs)
             .fillColor(CloudThemeToken.textSecondary)
           Text(DateFormatUtil.format(new Date(item.update), 'yyyy-MM-dd'))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
         }
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
 
-        Row({space: 6}) {
+        Row({ space: CloudThemeToken.spacingMd }) {
           Image($r('app.media.ic_folder'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.iconXs)
+            .height(CloudThemeToken.iconXs)
             .fillColor(CloudThemeToken.textSecondary)
           Text(this.getPathText(item.dst))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -452,13 +452,13 @@ export struct TabRemoteDown {
       .justifyContent(FlexAlign.Center)
 
       Image($r('app.media.ic_dot_grid_1x2'))
-        .width(24)
-        .height(24)
+        .width(CloudThemeToken.icon3xl)
+        .height(CloudThemeToken.icon3xl)
     }
     .width('100%')
-    .height(92)
+    .height(CloudThemeToken.cardHeightXl)
     .borderRadius(CloudThemeToken.cardRadius)
-    .padding(12)
+    .padding(CloudThemeToken.spacingSection)
     .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
       console.debug(TAG, 'onClick')
@@ -509,13 +509,13 @@ export struct TabRemoteDown {
       Grid(this.scroller) {
         this.downloading()
         GridItem() {
-          Row().height(10)
+          Row().height(CloudThemeToken.spacingCard)
         }
         this.finished()
       }
       .width('100%')
       .height('100%')
-      .padding({bottom: this.tabBarHeight+10})
+      .padding({ bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
       .columnsTemplate('1fr')
@@ -565,7 +565,7 @@ export struct TabRemoteDown {
       }
       .width('100%')
       .height('100%')
-      .padding({bottom: this.tabBarHeight+10})
+      .padding({ bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
       .columnsTemplate('1fr')
@@ -591,20 +591,20 @@ export struct TabRemoteDown {
   }
 
   @Builder taskQueueItem(task: UserTask) {
-    Row({space: 12}) {
-      Column({space: 8}) {
-        Row({space: 8}) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Column({ space: CloudThemeToken.spacingXl }) {
+        Row({ space: CloudThemeToken.spacingXl }) {
           Image($r('app.media.ic_calendar'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.iconXs)
+            .height(CloudThemeToken.iconXs)
             .fillColor(CloudThemeToken.textSecondary)
           Text(DateFormatUtil.format(new Date(task.create_date), 'yyyy-MM-dd'))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
         }
 
         Text(this.getTaskName(task.name))
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
@@ -612,40 +612,40 @@ export struct TabRemoteDown {
 
         Progress({value: task.progress, total: 100, type: ProgressType.Capsule})
           .width('100%')
-          .height(6)
+          .height(CloudThemeToken.thinProgressHeight)
           .color(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
 
-        Row({space: 8}) {
+        Row({ space: CloudThemeToken.spacingXl }) {
           Image(task.status == Aria2Status.FINISHED ?
             $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
-              .width(12)
-              .height(12)
+              .width(CloudThemeToken.iconXs)
+              .height(CloudThemeToken.iconXs)
               .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
 
           Text($r('app.string.last_progress'))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
 
           Text(`${task.progress}%`)
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
 
           Text(task.status == Aria2Status.FINISHED ?
             $r("app.string.finished") : $r("app.string.failed"))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
         }
 
         if (task.status != Aria2Status.FINISHED) {
-          Row({space: 5}) {
+          Row({ space: CloudThemeToken.spacingSm }) {
             Image($r('app.media.ic_info_circle'))
-              .width(12)
-              .height(12)
+              .width(CloudThemeToken.iconXs)
+              .height(CloudThemeToken.iconXs)
               .fillColor(CloudThemeToken.textSecondary)
 
             Text(this.getErrorInfo(task.error))
-              .fontSize(12)
+              .fontSize(CloudThemeToken.textSizeSmall)
               .fontColor(CloudThemeToken.danger)
               .maxLines(2)
               .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -658,8 +658,8 @@ export struct TabRemoteDown {
       .layoutWeight(1)
 
       Image($r('app.media.ic_task_circle'))
-        .width(40)
-        .height(40)
+        .width(CloudThemeToken.iconBoxLg)
+        .height(CloudThemeToken.iconBoxLg)
         .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
     }
     .width('100%')
@@ -667,7 +667,7 @@ export struct TabRemoteDown {
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     .borderRadius(CloudThemeToken.cardRadius)
-    .padding(12)
+    .padding(CloudThemeToken.spacingSection)
     .backgroundColor(CloudThemeToken.surface)
   }
 

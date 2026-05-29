@@ -30,11 +30,11 @@ export struct TabFilesHeader {
   build() {
     Column() {
       Row() {
-        Row({ space: 10 }) {
+        Row({ space: CloudThemeToken.filesHeaderGap }) {
           if (!this.isRoot) {
             Button() {
               Image($r('app.media.ic_back'))
-                .padding(5)
+                .padding(CloudThemeToken.filesHeaderBackIconPadding)
                 .fillColor(CloudThemeToken.textPrimary)
             }
             .width(CloudThemeToken.iconButtonSize)
@@ -46,8 +46,9 @@ export struct TabFilesHeader {
                 this.onBackClick()
               }
             })
-            .transition(TransitionEffect.OPACITY.animation({duration: 200})
-              .combine(TransitionEffect.scale({x: 0, y: 0}).animation({duration: 200})))
+            .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration })
+              .combine(TransitionEffect.scale({ x: 0, y: 0 })
+                .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration })))
           }
 
           Search({ value: $$this.searchKeyword, placeholder: $r("app.string.header_search") })
@@ -62,15 +63,15 @@ export struct TabFilesHeader {
         }
         .width('50%')
 
-        Row({ space: 10 }) {
+        Row({ space: CloudThemeToken.filesHeaderGap }) {
           Button() {
             Badge({
               count: this.downloadingCount+this.uploadingCount,
-              style: {badgeSize:12},
+              style: { badgeSize: CloudThemeToken.filesHeaderBadgeSize },
               position: BadgePosition.RightTop
             }) {
               Image($r('app.media.ic_transport'))
-                .padding(10)
+                .padding(CloudThemeToken.filesHeaderIconPadding)
                 .fillColor(CloudThemeToken.textPrimary)
             }
           }
@@ -92,7 +93,7 @@ export struct TabFilesHeader {
 
           Button() {
             Image($r('app.media.ic_person'))
-              .padding(10)
+              .padding(CloudThemeToken.filesHeaderIconPadding)
               .fillColor(CloudThemeToken.textPrimary)
           }
           .width(CloudThemeToken.iconButtonSize)
@@ -105,14 +106,14 @@ export struct TabFilesHeader {
             }
           })
         }
-        .width(100)
+        .width(CloudThemeToken.filesHeaderActionWidth)
         .justifyContent(FlexAlign.Center)
       }
       .width('100%')
       .height(CloudThemeToken.iconButtonSize)
       .justifyContent(FlexAlign.SpaceBetween)
     }
-    .padding({ left: 10, right: 10 })
+    .padding({ left: CloudThemeToken.filesHeaderPadding, right: CloudThemeToken.filesHeaderPadding })
     .width('100%')
     .height(CloudThemeToken.iconButtonSize)
     .align(Alignment.Center)
@@ -122,7 +123,7 @@ export struct TabFilesHeader {
   @Builder transportTitle(title: ResourceStr) {
     Row() {
       Text(title)
-        .fontSize(18)
+        .fontSize(CloudThemeToken.filesTransportTitleSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
     }
@@ -142,14 +143,19 @@ export struct TabFilesHeader {
         }
       }
       .width('100%')
-      .margin({top: 10})
+      .margin({ top: CloudThemeToken.filesTransportContentTopMargin })
       .borderRadius(CloudThemeToken.cardRadius)
       .backgroundColor(CloudThemeToken.background)
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Center)
       .justifyContent(FlexAlign.Center)
     }
-    .padding({left: 10, right: 10, top: 10, bottom: 20})
+    .padding({
+      left: CloudThemeToken.filesHeaderPadding,
+      right: CloudThemeToken.filesHeaderPadding,
+      top: CloudThemeToken.filesHeaderPadding,
+      bottom: CloudThemeToken.filesTransportPaddingBottom
+    })
     .height('100%')
     .width('100%')
     .backgroundColor(CloudThemeToken.background)

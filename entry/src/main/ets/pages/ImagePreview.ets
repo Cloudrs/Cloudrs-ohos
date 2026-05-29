@@ -16,7 +16,7 @@ const TAG: string = 'ImagePreview'
 
 @HMRouter({pageUrl: Constant.IAMGE_PREVIEW_PAGE})
 @Component
-export struct iamgePreview {
+export struct ImagePreviewPage {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State imagePixelMap:PixelMap | undefined | Resource = undefined;
@@ -53,12 +53,12 @@ export struct iamgePreview {
             this.imageWidth = '100%';
           } else {
             this.imagePixelMap = $r('app.media.ic_picture_damage');
-            this.imageWidth = 128;
+            this.imageWidth = CloudThemeToken.imagePreviewErrorImageSize;
           }
         } catch (err) {
           console.error(TAG, `Load preview failed: ${(err as Error)?.message ?? err}`);
           this.imagePixelMap = $r('app.media.ic_picture_damage');
-          this.imageWidth = 128;
+          this.imageWidth = CloudThemeToken.imagePreviewErrorImageSize;
         } finally {
           req.destroy();
           this.isLoading = false;
@@ -67,7 +67,7 @@ export struct iamgePreview {
       onFailure: (msg) => {
         console.error(TAG, `Get download URI failed: ${msg}`);
         this.imagePixelMap = $r('app.media.ic_picture_damage');
-        this.imageWidth = 128;
+        this.imageWidth = CloudThemeToken.imagePreviewErrorImageSize;
         this.isLoading = false;
       }
     });
@@ -111,7 +111,7 @@ export struct iamgePreview {
       .width('100%')
       .backgroundColor(CloudThemeToken.previewBackground)
       .alignItems(HorizontalAlign.Center)
-      .padding({top:10, bottom: this.bottomRectHeight})
+      .padding({ top: CloudThemeToken.imagePreviewSaveTopPadding, bottom: this.bottomRectHeight })
     }
     .width('100%')
     .height('100%')
@@ -125,7 +125,7 @@ export struct iamgePreview {
           Image($r('app.media.ic_xmark_circle_fill'))
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
-            .padding(5)
+            .padding(CloudThemeToken.imagePreviewHeaderButtonPadding)
         }
         .width(CloudThemeToken.smallIconButtonSize)
         .height(CloudThemeToken.smallIconButtonSize)
@@ -136,7 +136,7 @@ export struct iamgePreview {
         })
 
         Text(this.fileParam ? this.fileParam.fileName : '')
-          .fontSize(16)
+          .fontSize(CloudThemeToken.imagePreviewTitleSize)
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .textAlign(TextAlign.Center)
@@ -149,9 +149,9 @@ export struct iamgePreview {
           Image($r('app.media.ic_share'))
             .draggable(false)
             .fillColor(CloudThemeToken.textPrimary)
-            .padding(5)
+            .padding(CloudThemeToken.imagePreviewHeaderButtonPadding)
         }
-        .margin({top: 4})
+        .margin({ top: CloudThemeToken.imagePreviewShareTopMargin })
         .width(CloudThemeToken.smallIconButtonSize)
         .height(CloudThemeToken.smallIconButtonSize)
         .borderRadius(CloudThemeToken.controlRadius)
@@ -165,8 +165,8 @@ export struct iamgePreview {
       .height('100%')
       .justifyContent(FlexAlign.Center)
       .layoutWeight(1)
-      .padding(10)
-      Divider().strokeWidth(1).color(CloudThemeToken.line)
+      .padding(CloudThemeToken.imagePreviewHeaderPadding)
+      Divider().strokeWidth(CloudThemeToken.imagePreviewDividerWidth).color(CloudThemeToken.line)
     }
     .justifyContent(FlexAlign.Center)
     .height(CloudThemeToken.titleBarHeight)

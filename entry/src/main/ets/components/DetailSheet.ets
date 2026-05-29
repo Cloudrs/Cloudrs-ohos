@@ -28,67 +28,71 @@ export struct DetailSheet {
   }
 
   build() {
-    Column({ space: 16 }) {
+    Column({ space: CloudThemeToken.detailSheetGap }) {
       this.header()
       this.summary()
       this.detailList()
-      Blank().height(4)
+      Blank().height(CloudThemeToken.detailSpacerHeight)
     }
-    .padding({ left: 20, right: 20, bottom: 20 })
+    .padding({
+      left: CloudThemeToken.detailSheetHorizontalPadding,
+      right: CloudThemeToken.detailSheetHorizontalPadding,
+      bottom: CloudThemeToken.detailSheetBottomPadding
+    })
     .width('100%')
-    .constraintSize({ minHeight: 360 })
+    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder header() {
     Row() {
       Text($r('app.string.detail_title'))
-        .fontSize(20)
+        .fontSize(CloudThemeToken.textSizeHeadline)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
     }
     .width('100%')
-    .height(44)
+    .height(CloudThemeToken.detailSheetHeaderHeight)
     .alignItems(VerticalAlign.Center)
   }
 
   @Builder summary() {
-    Row({ space: 12 }) {
+    Row({ space: CloudThemeToken.detailSheetSummaryGap }) {
       Stack() {
         Image(this.detailData.isDir ? $r('app.media.folder_fill') : $r('app.media.ic_doc_text_fill'))
-          .width(30)
-          .height(30)
+          .width(CloudThemeToken.detailSheetIconSize)
+          .height(CloudThemeToken.detailSheetIconSize)
           .objectFit(ImageFit.Contain)
       }
-      .width(56)
-      .height(56)
+      .width(CloudThemeToken.detailSheetIconBoxSize)
+      .height(CloudThemeToken.detailSheetIconBoxSize)
       .borderRadius(CloudThemeToken.cardRadius)
       .backgroundColor(CloudThemeToken.primarySoft)
 
-      Column({ space: 6 }) {
+      Column({ space: CloudThemeToken.detailSheetTextGap }) {
         Text(this.detailData.name)
-          .fontSize(17)
+          .fontSize(CloudThemeToken.textSizeLargePlus)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(2)
           .wordBreak(WordBreak.BREAK_ALL)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(this.detailData.isDir ? '文件夹' : CommonUtil.formatBytes(this.detailData.detailInfo.size))
-          .fontSize(13)
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
           .fontColor(CloudThemeToken.textSecondary)
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .padding(14)
+    .padding(CloudThemeToken.detailSheetSummaryPadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder detailList() {
-    Column({ space: 0 }) {
+    Column({ space: CloudThemeToken.zero }) {
       this.commonRow(this.getTypeText(), this.detailData.name)
       this.commonDivider()
       this.commonRow($r('app.string.detail_size'), CommonUtil.formatBytes(this.detailData.detailInfo.size))
@@ -108,27 +112,30 @@ export struct DetailSheet {
       this.commonRow($r('app.string.detail_updated_at'), this.formatTime(this.detailData.detailInfo.updated_at))
     }
     .width('100%')
-    .padding({ left: 14, right: 14 })
+    .padding({
+      left: CloudThemeToken.detailSheetListHorizontalPadding,
+      right: CloudThemeToken.detailSheetListHorizontalPadding
+    })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder commonRow(title: ResourceStr, value: ResourceStr) {
-    Row({ space: 16 }) {
+    Row({ space: CloudThemeToken.detailSheetRowGap }) {
       Text(title)
         .fontColor(CloudThemeToken.textSecondary)
-        .fontSize(14)
+        .fontSize(CloudThemeToken.textSizeBody)
         .maxLines(1)
       Text(value)
         .fontColor(CloudThemeToken.textPrimary)
-        .fontSize(14)
+        .fontSize(CloudThemeToken.textSizeBody)
         .wordBreak(WordBreak.BREAK_ALL)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.MARQUEE })
         .textAlign(TextAlign.End)
         .layoutWeight(1)
     }
-    .height(48)
+    .height(CloudThemeToken.detailSheetRowHeight)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
   }

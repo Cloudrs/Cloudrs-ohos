@@ -153,8 +153,8 @@ export struct TabMine {
   }
 
   @Builder userInfo() {
-    Column({space: 16}) {
-      Row({space: 14}) {
+    Column({ space: CloudThemeToken.spacingPage }) {
+      Row({ space: CloudThemeToken.spacingPanel }) {
         Image(this.userAvatar ?? $r("app.media.ic_default_avatar"))
           .width(this.avatarSize)
           .height(this.avatarSize)
@@ -163,24 +163,24 @@ export struct TabMine {
           .borderColor(CloudThemeToken.line)
           .draggable(false)
 
-        Column({space: 6}) {
+        Column({ space: CloudThemeToken.spacingMd }) {
           Text(this.siteConfig ? this.siteConfig.user.nickname : '')
-            .fontSize(22)
+            .fontSize(CloudThemeToken.textSizeHero)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
             .maxLines(1)
             .textOverflow({overflow: TextOverflow.Ellipsis})
 
           Text(this.siteConfig ? this.siteConfig.user.user_name : this.currentUser)
-            .fontSize(14)
+            .fontSize(CloudThemeToken.textSizeBody)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({overflow: TextOverflow.Ellipsis})
 
           Text(this.siteConfig?.user.group.name ?? '')
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.primary)
-            .padding({left: 10, right: 10, top: 4, bottom: 4})
+            .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard, top: CloudThemeToken.spacingXs, bottom: CloudThemeToken.spacingXs })
             .borderRadius(CloudThemeToken.controlRadius)
             .backgroundColor(CloudThemeToken.primarySoft)
         }
@@ -190,15 +190,15 @@ export struct TabMine {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      Row({space: 10}) {
+      Row({ space: CloudThemeToken.spacingCard }) {
         this.metricCell($r('app.string.user_id'), this.getUserIdText())
         this.metricCell($r('app.string.user_group'), this.getGroupNameText())
         this.metricCell($r('app.string.user_days'), this.getUserDaysText())
       }
       .width('100%')
-      .height(76)
+      .height(CloudThemeToken.cardHeightLg)
     }
-    .padding(16)
+    .padding(CloudThemeToken.spacingPage)
     .width('100%')
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
@@ -232,12 +232,12 @@ export struct TabMine {
   }
 
   @Builder metricCell(label: ResourceStr, value: string) {
-    Column({space: 6}) {
+    Column({ space: CloudThemeToken.spacingMd }) {
       Text(label)
-        .fontSize(12)
+        .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.textSecondary)
       Text(value)
-        .fontSize(18)
+        .fontSize(CloudThemeToken.textSizeTitle)
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
         .maxLines(1)
@@ -245,7 +245,7 @@ export struct TabMine {
     }
     .layoutWeight(1)
     .height('100%')
-    .padding(10)
+    .padding(CloudThemeToken.spacingCard)
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Center)
     .borderRadius(CloudThemeToken.cardRadius)
@@ -253,25 +253,25 @@ export struct TabMine {
   }
 
   @Builder storageInfo() {
-    Column({space: 14}) {
+    Column({ space: CloudThemeToken.spacingPanel }) {
       Row() {
-        Column({space: 8}) {
+        Column({ space: CloudThemeToken.spacingXl }) {
           Text($r('app.string.storage_used'))
-            .fontSize(15)
+            .fontSize(CloudThemeToken.textSizeBodyPlus)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
 
           Text(this.userStorage ? `${CommonUtil.formatBytes(this.userStorage.used)} / ${CommonUtil.formatBytes(this.userStorage.total)}` : '')
-            .fontSize(20)
+            .fontSize(CloudThemeToken.textSizeHeadline)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
 
-          Row({space: 5}) {
+          Row({ space: CloudThemeToken.spacingSm }) {
             Text($r('app.string.storage_update_date'))
-              .fontSize(12)
+              .fontSize(CloudThemeToken.textSizeSmall)
               .fontColor(CloudThemeToken.textSecondary)
             Text(this.updateDate ? `${DateFormatUtil.format(this.updateDate, 'yyyy/MM/dd')}` : '')
-              .fontSize(12)
+              .fontSize(CloudThemeToken.textSizeSmall)
               .fontColor(CloudThemeToken.textSecondary)
           }
           .justifyContent(FlexAlign.Start)
@@ -281,13 +281,13 @@ export struct TabMine {
 
         Stack({alignContent: Alignment.Center}) {
           DataPanel({ values: [this.userStorage?.used ?? 0], max: this.userStorage?.total ?? 100, type: DataPanelType.Circle })
-            .width(96)
-            .height(96)
-            .strokeWidth(10)
+            .width(CloudThemeToken.panelLargeSize)
+            .height(CloudThemeToken.cardHeight2xl)
+            .strokeWidth(CloudThemeToken.storageProgressStrokeWidth)
             .valueColors([CloudThemeToken.primary])
 
           Text(this.getStoragePercentText())
-            .fontSize(15)
+            .fontSize(CloudThemeToken.textSizeBodyPlus)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
         }
@@ -296,24 +296,24 @@ export struct TabMine {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.SpaceBetween)
 
-      Column({space: 8}) {
+      Column({ space: CloudThemeToken.spacingXl }) {
         Progress({value: this.userStorage?.used ?? 0, total: this.userStorage?.total ?? 100, type: ProgressType.Capsule})
           .width('100%')
-          .height(8)
+          .height(CloudThemeToken.storageProgressHeight)
           .color(CloudThemeToken.primary)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
 
-        Row({space: 4}) {
+        Row({ space: CloudThemeToken.spacingXs }) {
           Text($r('app.string.storage_available'))
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
           Text(this.userStorage ? CommonUtil.formatBytes(this.userStorage.free) : '')
-            .fontSize(12)
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
           Blank()
           Image($r('app.media.ic_externaldrive_fill'))
-            .width(16)
-            .height(16)
+            .width(CloudThemeToken.iconMd)
+            .height(CloudThemeToken.iconMd)
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
@@ -321,11 +321,11 @@ export struct TabMine {
         .alignItems(VerticalAlign.Center)
       }
     }
-    .padding(16)
+    .padding(CloudThemeToken.spacingPage)
     .width('100%')
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
-    .border({ width: 1, color: CloudThemeToken.line })
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
   getStoragePercentText(): string {
@@ -337,16 +337,16 @@ export struct TabMine {
 
   @Builder logoutButton() {
     Button({type: ButtonType.Normal}) {
-      Row({space: 10}) {
+      Row({ space: CloudThemeToken.spacingCard }) {
         Image($r('app.media.ic_square_logout'))
-          .width(22)
-          .height(22)
+          .width(CloudThemeToken.icon2xl)
+          .height(CloudThemeToken.icon2xl)
           .fillColor(CloudThemeToken.danger)
           .draggable(false)
 
         Text($r('app.string.logout'))
           .fontColor(CloudThemeToken.danger)
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .layoutWeight(1)
       }
@@ -355,11 +355,11 @@ export struct TabMine {
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height(52)
+    .height(CloudThemeToken.rowHeight4xl)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
-    .border({ width: 1, color: CloudThemeToken.line })
-    .padding({ left: 14, right: 14 })
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
     .onClick(() => {
       this.getUIContext().showAlertDialog({
         title: $r('app.string.logout_confim'),
@@ -380,45 +380,45 @@ export struct TabMine {
     })
   }
 
-  @Builder rowWithNext(icon: ResourceStr, backgroundColor: ResourceStr,
+  @Builder rowWithNext(icon: ResourceStr, backgroundColor: ResourceColor,
     title: ResourceStr, sub_title?: ResourceStr, onClickCallback?: ()=>void) {
     Button({type: ButtonType.Normal}) {
-      Row({space: 10}) {
+      Row({ space: CloudThemeToken.spacingCard }) {
         Image(icon)
-          .width(30)
-          .height(30)
+          .width(CloudThemeToken.iconBoxXs)
+          .height(CloudThemeToken.iconBoxXs)
           .borderRadius(CloudThemeToken.cardRadius)
-          .padding(7)
+          .padding(CloudThemeToken.spacingLg)
           .fillColor(CloudThemeToken.onPrimary)
           .backgroundColor(backgroundColor)
           .draggable(false)
 
         Text(title)
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
 
         if (sub_title) {
           Text(sub_title)
-            .fontSize(14)
+            .fontSize(CloudThemeToken.textSizeBody)
             .fontColor(CloudThemeToken.textSecondary)
         }
         Image($r('app.media.ic_chevron_right'))
-          .width(12)
-          .height(12)
+          .width(CloudThemeToken.iconXs)
+          .height(CloudThemeToken.iconXs)
           .fillColor(CloudThemeToken.textSecondary)
           .draggable(false)
       }
       .width('100%')
       .height('100%')
-      .padding({left: 10, right: 10})
+      .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height(52)
+    .height(CloudThemeToken.rowHeight4xl)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
-    .border({ width: 1, color: CloudThemeToken.line })
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .onClick(() => {
       if (onClickCallback) {
         onClickCallback()
@@ -426,17 +426,17 @@ export struct TabMine {
     })
   }
 
-  @Builder rowWithSelect(icon: ResourceStr, bgColor: ResourceStr,
+  @Builder rowWithSelect(icon: ResourceStr, bgColor: ResourceColor,
     title: ResourceStr, currentValue: number,
     options: SelectOption[], onChange: (val: number) => void) {
-    Row({ space: 10 }) {
+    Row({ space: CloudThemeToken.spacingCard }) {
       Image(icon)
-        .width(30).height(30).borderRadius(CloudThemeToken.cardRadius).padding(7)
+        .width(CloudThemeToken.iconBoxXs).height(CloudThemeToken.iconBoxXs).borderRadius(CloudThemeToken.cardRadius).padding(CloudThemeToken.spacingLg)
         .fillColor(CloudThemeToken.onPrimary).backgroundColor(bgColor)
         .draggable(false)
 
       Text(title)
-        .fontSize(16)
+        .fontSize(CloudThemeToken.textSizeLarge)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
 
@@ -444,38 +444,38 @@ export struct TabMine {
         .value(currentValue.toString())
         .selected(currentValue - 1)
         .onSelect((index: number) => { onChange(index + 1); })
-        .width(70)
+        .width(CloudThemeToken.mineSelectWidth)
     }
     .width('100%')
-    .height(52)
-    .padding({ left: 10, right: 10 })
+    .height(CloudThemeToken.rowHeight4xl)
+    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
-    .border({ width: 1, color: CloudThemeToken.line })
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .alignItems(VerticalAlign.Center)
   }
 
   @Builder settingButton() {
-    Column({space: 10}) {
+    Column({ space: CloudThemeToken.spacingCard }) {
       this.rowWithNext($r('app.media.ic_privacy_secure'),
-        $r('app.color.setting_icon_privacy_background'),
+        CloudThemeToken.settingIconPrivacyBackground,
         $r('app.string.user_privacy_secure'))
       this.rowWithNext($r('app.media.ic_theme_setting'),
-        $r('app.color.setting_icon_theme_background'),
+        CloudThemeToken.settingIconThemeBackground,
         $r("app.string.user_theme_setting"),
         this.getThemeModeText(),
         () => {
           this.openSettingsSheet(MineSheetType.THEME)
         })
       this.rowWithNext($r('app.media.ic_more_setting'),
-        $r('app.color.setting_icon_more_background'),
+        CloudThemeToken.settingIconMoreBackground,
         $r('app.string.more_setting'),
         undefined,
         () => {
           this.openSettingsSheet(MineSheetType.MORE)
         })
       this.rowWithNext($r('app.media.ic_info_circle'),
-        $r('app.color.setting_icon_about'),
+        CloudThemeToken.settingIconAboutBackground,
         $r('app.string.about'),
         this.versionInfo,
         () => { HMRouterMgr.push({pageUrl: Constant.ABOUT_PAGE}) }
@@ -504,7 +504,7 @@ export struct TabMine {
   }
 
   @Builder themeSettingsSheet() {
-    Column({ space: 16 }) {
+    Column({ space: CloudThemeToken.spacingPage }) {
       this.sheetHeader($r('app.string.user_theme_setting'), () => {
         this.closeSettingsSheet()
       })
@@ -521,20 +521,20 @@ export struct TabMine {
       )
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
+    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, top: CloudThemeToken.spacingSheetTop, bottom: CloudThemeToken.spacingSheetBottom })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder moreSettingsSheet() {
-    Column({ space: 16 }) {
+    Column({ space: CloudThemeToken.spacingPage }) {
       this.sheetHeader($r('app.string.more_setting'), () => {
         this.closeSettingsSheet()
       })
 
       this.rowWithSelect(
         $r('app.media.ic_more_setting'),
-        $r('app.color.setting_icon_more_background'),
+        CloudThemeToken.settingIconMoreBackground,
         $r('app.string.upload_max_concurrent'),
         this.uploadMaxConcurrent,
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => ({ value: n.toString() } as SelectOption)),
@@ -549,7 +549,7 @@ export struct TabMine {
       )
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
+    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, top: CloudThemeToken.spacingSheetTop, bottom: CloudThemeToken.spacingSheetBottom })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -557,20 +557,20 @@ export struct TabMine {
   @Builder sheetHeader(title: ResourceStr, onClose: () => void) {
     Row() {
       Text(title)
-        .fontSize(18)
+        .fontSize(CloudThemeToken.textSizeTitle)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
 
       Button({ type: ButtonType.Normal }) {
         Image($r('app.media.ic_xmark_circle_fill'))
-          .width(22)
-          .height(22)
+          .width(CloudThemeToken.icon2xl)
+          .height(CloudThemeToken.icon2xl)
           .fillColor(CloudThemeToken.textSecondary)
           .draggable(false)
       }
-      .width(36)
-      .height(36)
+      .width(CloudThemeToken.iconBoxSm)
+      .height(CloudThemeToken.iconBoxSm)
       .borderRadius(CloudThemeToken.controlRadius)
       .backgroundColor(CloudThemeToken.surfaceSubtle)
       .onClick(onClose)
@@ -580,14 +580,14 @@ export struct TabMine {
   }
 
   @Builder themeOptionRow(title: ResourceStr, description: ResourceStr, mode: string) {
-    Row({ space: 12 }) {
-      Column({ space: 4 }) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Column({ space: CloudThemeToken.spacingXs }) {
         Text(title)
-          .fontSize(16)
+          .fontSize(CloudThemeToken.textSizeLarge)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
         Text(description)
-          .fontSize(12)
+          .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
       }
       .layoutWeight(1)
@@ -595,18 +595,18 @@ export struct TabMine {
 
       if (this.themeMode === mode) {
         Image($r('app.media.ic_checkmark_circle'))
-          .width(22)
-          .height(22)
+          .width(CloudThemeToken.icon2xl)
+          .height(CloudThemeToken.icon2xl)
           .fillColor(CloudThemeToken.primary)
           .draggable(false)
       }
     }
     .width('100%')
-    .height(64)
-    .padding({ left: 14, right: 14 })
+    .height(CloudThemeToken.cardHeightSm)
+    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(this.themeMode === mode ? CloudThemeToken.primarySoft : CloudThemeToken.surface)
-    .border({ width: 1, color: this.themeMode === mode ? CloudThemeToken.primary : CloudThemeToken.line })
+    .border({ width: CloudThemeToken.lineWidth, color: this.themeMode === mode ? CloudThemeToken.primary : CloudThemeToken.line })
     .onClick(() => {
       this.setThemeMode(mode)
     })
@@ -631,40 +631,40 @@ export struct TabMine {
     }
   }
 
-  @Builder rowWithJump(icon: ResourceStr, backgroundColor: ResourceStr, title: ResourceStr, url: string) {
+  @Builder rowWithJump(icon: ResourceStr, backgroundColor: ResourceColor, title: ResourceStr, url: string) {
     Button({type: ButtonType.Normal}) {
-      Row({space: 10}) {
+      Row({ space: CloudThemeToken.spacingCard }) {
         Image(icon)
-          .width(28)
-          .height(28)
-          .borderRadius(14)
-          .padding(5)
+          .width(CloudThemeToken.icon4xl)
+          .height(CloudThemeToken.icon4xl)
+          .borderRadius(CloudThemeToken.controlRadiusXl)
+          .padding(CloudThemeToken.spacingSm)
           .fillColor(CloudThemeToken.onPrimary)
           .backgroundColor(backgroundColor)
           .draggable(false)
 
         Hyperlink(url, title)
-          .height(20)
+          .height(CloudThemeToken.iconXl)
           .color(CloudThemeToken.textPrimary)
           .draggable(false)
           .layoutWeight(1)
 
         Image($r('app.media.ic_web_jump'))
-          .width(16)
-          .height(16)
+          .width(CloudThemeToken.iconMd)
+          .height(CloudThemeToken.iconMd)
           .fillColor(CloudThemeToken.textSecondary)
           .draggable(false)
       }
       .width('100%')
       .height('100%')
-      .padding({left: 10, right: 10})
+      .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .height(50)
+    .height(CloudThemeToken.rowHeight3xl)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
-    .border({ width: 1, color: CloudThemeToken.line })
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .onClick(() => {
       this.webUrl = url
       this.webShow = true
@@ -672,15 +672,14 @@ export struct TabMine {
   }
 
   @Builder webButton() {
-    Column({space: 10}) {
+    Column({ space: CloudThemeToken.spacingCard }) {
       this.rowWithJump($r('app.media.ic_feedback'),
-        $r('app.color.icon_web_jump'),
+        CloudThemeToken.settingIconWebJumpBackground,
         $r('app.string.feedback'),
         'https://gitee.com/larriti/cloudrs-ohos/issues'
       )
     }
     .width('100%')
-    // .margin({top: 10})
     .justifyContent(FlexAlign.Center)
   }
 }

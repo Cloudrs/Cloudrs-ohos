@@ -16,7 +16,7 @@ export struct Downloads {
       if (this.downloadObjects.totalCount() == 0) {
         this.noItem()
       } else {
-        List({space: 10}) {
+        List({ space: CloudThemeToken.transferListGap }) {
           LazyForEach(this.downloadObjects, (item: TransportObject, index) => {
             this.downloadItem(item)
           }, (item: TransportObject, index) => item.item.id + index)
@@ -62,14 +62,14 @@ export struct Downloads {
   }
 
   @Builder downloadItem(object: TransportObject) {
-    Row({space: 10}) {
+    Row({ space: CloudThemeToken.transferItemGap }) {
       Image(CommonUtil.getFileIconInfo(object.item.name).icon)
         .width(CloudThemeToken.transferFileIconSize)
         .height(CloudThemeToken.transferFileIconSize)
 
-      Column({space: 8}) {
+      Column({ space: CloudThemeToken.transferTextGap }) {
         Text(object.item.name)
-          .fontSize(16)
+          .fontSize(CloudThemeToken.transferNameSize)
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .wordBreak(WordBreak.BREAK_ALL)
@@ -77,7 +77,7 @@ export struct Downloads {
           .textOverflow({overflow: TextOverflow.Ellipsis})
           .ellipsisMode(EllipsisMode.CENTER)
 
-        Row({space: 5}) {
+        Row({ space: CloudThemeToken.transferMetaGap }) {
           Image(this.getDownloadIcon(object.state))
             .width(CloudThemeToken.transferStateIconSize)
             .height(CloudThemeToken.transferStateIconSize)
@@ -85,14 +85,14 @@ export struct Downloads {
 
           if (object.state == FileModelState.RUNNING) {
             Text(CommonUtil.formatBytes(object.speed, 1) + '/s')
-              .fontSize(12)
+              .fontSize(CloudThemeToken.transferMetaSize)
               .fontWeight(FontWeight.Medium)
               .fontColor(CloudThemeToken.textSecondary)
-              .margin({right: 10})
+              .margin({ right: CloudThemeToken.transferSpeedRightMargin })
           }
 
           Text(`${CommonUtil.formatBytes(object.trans, 1)}/${CommonUtil.formatBytes(object.total, 1)}`)
-            .fontSize(12)
+            .fontSize(CloudThemeToken.transferMetaSize)
             .fontColor(CloudThemeToken.textSecondary)
         }
         .alignItems(VerticalAlign.Center)
@@ -110,7 +110,7 @@ export struct Downloads {
         .height(CloudThemeToken.transferProgressHeight)
     }
     .width('100%')
-    .padding(10)
+    .padding(CloudThemeToken.transferItemPadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)

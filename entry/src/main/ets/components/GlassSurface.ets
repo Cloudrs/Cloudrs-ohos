@@ -15,6 +15,6 @@ export struct GlassSurface {
     .padding(this.paddingValue)
     .borderRadius(this.radius)
     .backgroundColor(this.background)
-    .border({ width: 1, color: CloudThemeToken.line })
+    .border({ width: CloudThemeToken.glassSurfaceBorderWidth, color: CloudThemeToken.line })
   }
 }

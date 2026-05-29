@@ -41,7 +41,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Migrated File page header/title surfaces to the shared tokens.
   - Promoted File page upload, new-folder, view-toggle, and more actions into the visible top toolbar.
   - Removed the duplicate upload picker sheet from `TabFilesTitle`; uploads now route through the parent File page flow.
-  - Migrated ObjectItem file/folder cards, thumbnail area, menu background, and text colors to shared tokens.
+  - Migrated ObjectItem file/folder cards, thumbnail area, stable row/card metrics, menu background, menu metrics, and text colors to shared tokens.
   - Added unified EmptyState for empty File directories.
   - Added File page loading and fetch-failure states with retry action.
   - Removed remaining `Function.bind` usage in File page callbacks.
@@ -77,6 +77,21 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Removed Image preview `ArrayBuffer | null` save/share warning by guarding empty image data.
   - Migrated Image preview save/share context access away from deprecated `getContext` usage.
   - Applied `CloudActionButton` to the Offline Download create-task action.
+  - Migrated `CloudActionButton`, `CloudTopBar`, and `EmptyState` component metrics to shared theme tokens.
+  - Migrated `SectionHeader`, `GlassSurface`, `CommonTitle`, `CloudScaffold`, and `FloatingCloudTabBar` metrics to shared theme tokens.
+  - Migrated About page spacing, logo, info row, and typography metrics to shared theme tokens.
+  - Migrated File page header/title actions and transfer upload/download list metrics to shared theme tokens.
+  - Migrated PathSelectSheet, SelectFileSheet, and Offline Download create-task form metrics to shared theme tokens.
+  - Migrated Offline Download finished-detail sheet title, status banner, metric grid, file list, and toolbar metrics to shared theme tokens.
+  - Migrated Image Preview error image, header controls, title, divider, and save bar metrics to shared theme tokens.
+  - Renamed the Image Preview page component struct to `ImagePreviewPage` while preserving the existing route URL constant.
+  - Migrated Login page layout, logo, input icons, OTP cells, action motion, footer buttons, and privacy text metrics to shared theme tokens.
+  - Completed a broad tokenization sweep across remaining tabs and pages:
+    - Offline Download list/card/progress metrics.
+    - File page state overlays, action button, input sheet, detail overlay, and grid spacing.
+    - Mine page account, storage, setting rows, theme sheet, and link rows.
+    - Photo Backup summary, cards, history rows, photo grid badges, and settings panel.
+    - Common file icon fallback background color.
   - Added chunked cache-copy progress before upload so large selected files show a `准备上传` stage instead of blocking silently.
   - Added streaming progress callbacks for V4 remote `upload_urls` direct uploads, not only local storage uploads.
   - Migrated Image preview share temp-file write/cleanup and File page download completion move from third-party `FileUtil` to local `FileSystemUtil`.
@@ -104,14 +119,14 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - `GlassSurface` for translucent surfaces: completed.
   - `CloudActionButton` for icon and primary actions: completed.
 - Migrate existing pages to tokens:
-  - Replace scattered hardcoded colors.
-  - Normalize card radius, section spacing, and text colors.
-  - Floating navigation light/shadow/radius values moved into `CloudThemeToken`: first pass completed.
+  - Replace scattered hardcoded colors: broad sweep completed; remaining scan hit is a false positive token name containing `2`.
+  - Normalize card radius, section spacing, and text colors: broad sweep completed.
+  - Floating navigation light/shadow/radius/animation/spacing values moved into `CloudThemeToken`: first pass completed.
   - File header/title icon action sizing and radius normalized to shared tokens: first pass completed.
   - Login page inner input, OTP cell, and small icon button metrics moved into shared tokens: first pass completed.
   - Shared semantic colors for on-primary, transparent, and image preview background added to `CloudThemeToken`: first pass completed.
   - Common title, menu, action icon, and form input metrics moved into shared tokens: first pass completed.
-  - Transfer list file icons, state icons, and progress capsule metrics moved into shared tokens: first pass completed.
+  - Transfer list spacing, typography, file icons, state icons, and progress capsule metrics moved into shared tokens: first pass completed.
   - Keep existing interaction behavior unchanged while migrating visuals.
 - Migrate Harmony 6.1 context access:
   - Completed: component pages now use component UI context for photo backup, image preview, file upload/download, upload source picker, and login window setup.
@@ -214,7 +229,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 - Remaining UI work:
   - Show speed, file count, and save path more clearly in a denser task card layout: first pass completed.
   - Move create task to a top action or floating action button: completed with the existing top action.
-  - Finished task detail metric grid now adapts across phone, tablet, and wide layouts: first pass completed.
+  - Finished task detail metric grid now adapts across phone, tablet, and wide layouts: completed with tokenized detail-sheet metrics.
 
 ## Mine Page Todo
 
@@ -238,15 +253,15 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Failure prompts.
 - Modernize UI:
   - Simplify brand area: first pass completed.
-  - Normalize site URL, protocol, username, password, and 2FA input containers: first pass completed.
+  - Normalize site URL, protocol, username, password, 2FA input containers, logo, footer buttons, and privacy text metrics: completed with shared tokens.
   - Window/keyboard setup context access migrated to component UI context.
   - Keep keyboard avoidance behavior.
 
 ## About And Preview Todo
 
 - Completed so far:
-  - About page uses shared background, surface, line, radius, and text tokens.
-  - Image preview keeps the black viewing area and uses tokenized top-bar actions and title/loading metrics.
+  - About page uses shared background, surface, line, radius, text, spacing, logo, and row metric tokens.
+  - Image preview keeps the black viewing area and uses tokenized top-bar actions, title, loading/error image, divider, and save bar metrics.
   - Image preview save/share now guards empty image data before writing.
 - Remaining:
   - Completed: migrated image preview deprecated `getContext` calls to component UI context access.
@@ -254,9 +269,9 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 ## Sheet Todo
 
 - Modernize these sheets without changing behavior:
-  - File detail sheet: first tokenized summary/list pass completed.
-  - Path select sheet: first tokenized pass completed; header, row, folder icon, and chevron metrics now use shared sheet tokens.
-  - Upload source sheet: first tokenized pass completed; option tile/icon metrics now use shared sheet tokens.
+  - File detail sheet: tokenized summary/list layout, icon box, row height, and sheet spacing.
+  - Path select sheet: tokenized header, row, folder icon, chevron, indentation, and spacing metrics.
+  - Upload source sheet: tokenized header, option row, icon box, text, and sheet padding metrics.
   - Transfer progress sheet: upload/download panels first tokenized pass completed.
   - Photo backup settings surface: first tokenized pass completed, including icon close action.
 - Keep sheet title and background treatment consistent.

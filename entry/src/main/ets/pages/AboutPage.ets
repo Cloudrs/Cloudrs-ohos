@@ -12,16 +12,16 @@ export struct AboutPage {
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
 
   build() {
-    Column({space: 10}) {
+    Column({ space: CloudThemeToken.aboutPageGap }) {
       CommonTitle({title: $r('app.string.about')})
 
-      Blank().height(20)
+      Blank().height(CloudThemeToken.aboutLogoTopGap)
       this.logoTitle()
 
       this.aboutInfo()
 
       Blank().layoutWeight(1)
-      Hyperlink('https://beian.miit.gov.cn', $r('app.string.icp_id')).height(12)
+      Hyperlink('https://beian.miit.gov.cn', $r('app.string.icp_id')).height(CloudThemeToken.aboutIcpHeight)
 
       Blank().height(this.bottomRectHeight)
     }
@@ -33,15 +33,15 @@ export struct AboutPage {
   }
 
   @Builder logoTitle() {
-    Column({space: 10}) {
+    Column({ space: CloudThemeToken.aboutLogoGap }) {
       Image($r('app.media.cloudrs'))
-        .height(100)
-        .width(100)
+        .height(CloudThemeToken.aboutLogoSize)
+        .width(CloudThemeToken.aboutLogoSize)
         .borderRadius(CloudThemeToken.surfaceRadius)
         .backgroundColor(CloudThemeToken.surface)
 
       Text($r('app.string.EntryAbility_label'))
-        .fontSize(20)
+        .fontSize(CloudThemeToken.aboutTitleSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
     }
@@ -56,8 +56,8 @@ export struct AboutPage {
       this.commonInfo($r('app.string.about_email'), EMAIL)
     }
     .width('100%')
-    .padding({left: 10, right: 10})
-    .margin({top: 30})
+    .padding({ left: CloudThemeToken.aboutInfoHorizontalPadding, right: CloudThemeToken.aboutInfoHorizontalPadding })
+    .margin({ top: CloudThemeToken.aboutInfoTopMargin })
     .backgroundColor(CloudThemeToken.surface)
     .borderRadius(CloudThemeToken.cardRadius)
     .justifyContent(FlexAlign.Center)
@@ -66,14 +66,14 @@ export struct AboutPage {
   @Builder commonInfo(title: ResourceStr, info: ResourceStr) {
     Row () {
       Text(title)
-        .fontSize(16)
+        .fontSize(CloudThemeToken.aboutInfoTitleSize)
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
       Text(info)
-        .fontSize(14)
+        .fontSize(CloudThemeToken.aboutInfoTextSize)
         .fontColor(CloudThemeToken.textSecondary)
     }
-    .height(50)
+    .height(CloudThemeToken.aboutInfoRowHeight)
     .width('100%')
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)

@@ -55,7 +55,7 @@ export struct TabFilesTitle {
       Row() {
         Column() {
           Text(this.mainTitle)
-            .fontSize(22)
+            .fontSize(CloudThemeToken.filesTitleMainSize)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
             .wordBreak(WordBreak.BREAK_ALL)
@@ -63,21 +63,21 @@ export struct TabFilesTitle {
             .textOverflow({ overflow: TextOverflow.MARQUEE })
 
           Text(this.subTitle)
-            .fontSize(12)
+            .fontSize(CloudThemeToken.filesTitleSubtitleSize)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-        .height(44)
+        .height(CloudThemeToken.filesTitleTextHeight)
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.SpaceBetween)
 
-        Row({ space: 8 }) {
+        Row({ space: CloudThemeToken.filesTitleActionGap }) {
           Button({ type: ButtonType.Normal }) {
             Image($r('app.media.ic_folder_badge_plus'))
-              .width(18)
-              .height(18)
+              .width(CloudThemeToken.filesTitleActionIconSize)
+              .height(CloudThemeToken.filesTitleActionIconSize)
               .fillColor(CloudThemeToken.textPrimary)
           }
           .width(CloudThemeToken.iconButtonSize)
@@ -92,8 +92,8 @@ export struct TabFilesTitle {
 
           Button({ type: ButtonType.Normal }) {
             Image(this.showType === ShowType.SHOW_ICON ? $r('app.media.ic_list_bullet_circle') : $r('app.media.ic_grid'))
-              .width(18)
-              .height(18)
+              .width(CloudThemeToken.filesTitleActionIconSize)
+              .height(CloudThemeToken.filesTitleActionIconSize)
               .fillColor(CloudThemeToken.textPrimary)
           }
           .width(CloudThemeToken.iconButtonSize)
@@ -106,8 +106,8 @@ export struct TabFilesTitle {
 
           Button({ type: ButtonType.Normal }) {
             Image($r('app.media.ic_square_more'))
-              .width(18)
-              .height(18)
+              .width(CloudThemeToken.filesTitleActionIconSize)
+              .height(CloudThemeToken.filesTitleActionIconSize)
               .fillColor(this.showMenu ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
           }
           .width(CloudThemeToken.iconButtonSize)
@@ -121,12 +121,12 @@ export struct TabFilesTitle {
           }})
         }
       }
-      .padding({ left: 20, right: 20 })
+      .padding({ left: CloudThemeToken.filesTitleHorizontalPadding, right: CloudThemeToken.filesTitleHorizontalPadding })
       .width('100%')
       .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
-    .height(56)
+    .height(CloudThemeToken.filesTitleHeight)
     .align(Alignment.Center)
     .justifyContent(FlexAlign.Center)
   }
@@ -239,7 +239,7 @@ export struct TabFilesTitle {
       }
     }
     .width(CloudThemeToken.menuWidth)
-    .padding(0)
+    .padding(CloudThemeToken.zero)
     .margin(0)
     .backgroundColor(CloudThemeToken.surface)
     .menuItemDivider({
@@ -257,17 +257,20 @@ export struct TabFilesTitle {
   @Builder commonMenu(content: ResourceStr, isSelected?: boolean) {
     Row() {
       Text(content)
-        .fontSize(15)
+        .fontSize(CloudThemeToken.objectMenuTextSize)
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
         .height(CloudThemeToken.menuItemLabelHeight)
 
         Image(isSelected ? $r('app.media.ic_selected') : '')
-          .width(24)
-          .height(24)
+          .width(CloudThemeToken.objectMenuIconSize)
+          .height(CloudThemeToken.objectMenuIconSize)
     }
-    .padding({left: 20, right: 20})
+    .padding({
+      left: CloudThemeToken.objectMenuHorizontalPadding,
+      right: CloudThemeToken.objectMenuHorizontalPadding
+    })
     .width('100%')
     .height(CloudThemeToken.menuItemHeight)
     .alignItems(VerticalAlign.Center)
@@ -277,24 +280,27 @@ export struct TabFilesTitle {
   @Builder sortMenu(content: ResourceStr, isSelected: boolean, isReverse: boolean) {
     Row() {
       Text(content)
-        .fontSize(15)
+        .fontSize(CloudThemeToken.objectMenuTextSize)
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
         .height(CloudThemeToken.menuItemLabelHeight)
 
-      Row({space: 10}) {
+      Row({ space: CloudThemeToken.filesSortIconGroupGap }) {
         Image(isSelected ? isReverse ? $r('app.media.ic_sort_arrow_down') : $r('app.media.ic_sort_arrow_up') : '')
-          .width(24)
-          .height(24)
+          .width(CloudThemeToken.objectMenuIconSize)
+          .height(CloudThemeToken.objectMenuIconSize)
         Image(isSelected ? $r('app.media.ic_selected') : '')
-          .width(24)
-          .height(24)
+          .width(CloudThemeToken.objectMenuIconSize)
+          .height(CloudThemeToken.objectMenuIconSize)
       }
-      .width('50%')
+      .width(CloudThemeToken.filesSortIconGroupWidthPercent)
       .justifyContent(FlexAlign.SpaceBetween)
     }
-    .padding({left: 20, right: 20})
+    .padding({
+      left: CloudThemeToken.objectMenuHorizontalPadding,
+      right: CloudThemeToken.objectMenuHorizontalPadding
+    })
     .width('100%')
     .height(CloudThemeToken.menuItemHeight)
     .alignItems(VerticalAlign.Center)

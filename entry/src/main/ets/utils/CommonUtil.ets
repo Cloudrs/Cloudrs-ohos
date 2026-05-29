@@ -1,4 +1,6 @@
 
+import { CloudThemeToken } from "../model/CloudTheme";
+
 export enum FileType {
   IMAGE = 'image',
   VIDEO = 'video',
@@ -24,7 +26,7 @@ export enum FileType {
 export interface FileIconInfo {
   icon: Resource,
   color?: Resource,
-  backgroundColor?: Resource,
+  backgroundColor?: ResourceColor,
 }
 
 export class CommonUtil {
@@ -146,7 +148,7 @@ export class CommonUtil {
     let fileType = CommonUtil.getFileType(fileName)
     let fileIconInfo: FileIconInfo = {
       icon: $r('app.media.ic_doc_plaintext_fill'),
-      backgroundColor: $r('app.color.file_icon_background')
+      backgroundColor: CloudThemeToken.fileIconBackground
     }
 
     switch (fileType){

@@ -10,15 +10,15 @@ export struct SectionHeader {
   build() {
     Row() {
       Text(this.title)
-        .fontSize(17)
+        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
 
       if (this.count !== undefined) {
         Text(this.count.toString())
-          .fontSize(13)
+          .fontSize(CloudThemeToken.sectionHeaderCountSize)
           .fontColor(CloudThemeToken.textSecondary)
-          .margin({ left: 8 })
+          .margin({ left: CloudThemeToken.sectionHeaderCountGap })
       }
 
       Blank()
@@ -26,17 +26,17 @@ export struct SectionHeader {
       if (this.actionText !== undefined && this.onAction !== undefined) {
         Button(this.actionText)
           .buttonStyle(ButtonStyleMode.TEXTUAL)
-          .fontSize(13)
+          .fontSize(CloudThemeToken.sectionHeaderActionSize)
           .fontColor(CloudThemeToken.primary)
-          .height(32)
+          .height(CloudThemeToken.sectionHeaderActionHeight)
           .onClick(() => {
             this.onAction?.()
           })
       }
     }
     .width('100%')
-    .height(36)
+    .height(CloudThemeToken.sectionHeaderHeight)
     .alignItems(VerticalAlign.Center)
-    .margin({ top: 4 })
+    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
   }
 }

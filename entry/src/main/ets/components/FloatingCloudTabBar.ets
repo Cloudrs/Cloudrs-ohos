@@ -17,7 +17,7 @@ export struct FloatingCloudTabBar {
     if (this.getLayoutMode() !== CloudLayoutMode.PHONE) {
       return CloudThemeToken.floatingTabBarMaxWidth
     }
-    return '92%'
+    return CloudThemeToken.floatingTabBarPhoneWidthPercent
   }
 
   private getItemWidth(): Length {
@@ -42,30 +42,41 @@ export struct FloatingCloudTabBar {
           }
           .width('100%')
           .height(CloudThemeToken.floatingTabBarVisualHeight)
-          .padding({ left: 8, right: 8 })
+          .padding({
+            left: CloudThemeToken.floatingTabBarHorizontalPadding,
+            right: CloudThemeToken.floatingTabBarHorizontalPadding
+          })
           .alignItems(VerticalAlign.Center)
           .justifyContent(FlexAlign.SpaceBetween)
 
           Divider()
-            .width('88%')
-            .height(1)
+            .width(CloudThemeToken.floatingTabBarHighlightWidthPercent)
+            .height(CloudThemeToken.floatingTabBarHighlightHeight)
             .color(CloudThemeToken.glassHighlight)
-            .margin({ top: 1 })
+            .margin({ top: CloudThemeToken.floatingTabBarHighlightTopMargin })
         }
         .width(this.getBarWidth())
         .height(CloudThemeToken.floatingTabBarVisualHeight)
         .borderRadius(CloudThemeToken.tabBarRadius)
         .backgroundColor(CloudThemeToken.surfaceTranslucent)
         .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
-        .border({ width: 1, color: CloudThemeToken.line })
-        .shadow({ radius: 26, color: CloudThemeToken.floatingShadow, offsetX: 0, offsetY: 12 })
+        .border({ width: CloudThemeToken.floatingTabBarBorderWidth, color: CloudThemeToken.line })
+        .shadow({
+          radius: CloudThemeToken.floatingTabBarShadowRadius,
+          color: CloudThemeToken.floatingShadow,
+          offsetX: 0,
+          offsetY: CloudThemeToken.floatingTabBarShadowOffsetY
+        })
       }
       .width('100%')
       .padding({ bottom: this.bottomInset + CloudThemeToken.floatingTabBarBottomGap })
       .alignItems(HorizontalAlign.Center)
       .hitTestBehavior(HitTestMode.Transparent)
-      .zIndex(20)
-      .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut }))
+      .zIndex(CloudThemeToken.floatingTabBarZIndex)
+      .transition(TransitionEffect.OPACITY.animation({
+        duration: CloudThemeToken.floatingTabBarTransitionDuration,
+        curve: Curve.EaseOut
+      }))
     }
   }
 
@@ -73,15 +84,15 @@ export struct FloatingCloudTabBar {
   TabButton(tab: TabItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Stack({ alignContent: Alignment.Top }) {
-        Row({ space: this.isSelected(tab) ? 6 : 0 }) {
+        Row({ space: this.isSelected(tab) ? CloudThemeToken.floatingTabSelectedGap : 0 }) {
           Image(tab.image)
-            .width(20)
-            .height(20)
+            .width(CloudThemeToken.floatingTabIconSize)
+            .height(CloudThemeToken.floatingTabIconSize)
             .fillColor(this.isSelected(tab) ? CloudThemeToken.onPrimary : CloudThemeToken.textSecondary)
 
           if (this.isSelected(tab)) {
             Text(tab.text)
-              .fontSize(12)
+              .fontSize(CloudThemeToken.floatingTabTextSize)
               .fontWeight(FontWeight.Medium)
               .fontColor(CloudThemeToken.onPrimary)
               .maxLines(1)
@@ -95,10 +106,10 @@ export struct FloatingCloudTabBar {
 
         if (this.isSelected(tab)) {
           Divider()
-            .width(42)
-            .height(1)
+            .width(CloudThemeToken.floatingTabSelectedHighlightWidth)
+            .height(CloudThemeToken.floatingTabSelectedHighlightHeight)
             .color(CloudThemeToken.selectedHighlight)
-            .margin({ top: 3 })
+            .margin({ top: CloudThemeToken.floatingTabSelectedHighlightTopMargin })
         }
       }
       .width('100%')
@@ -106,10 +117,18 @@ export struct FloatingCloudTabBar {
     }
     .width(this.getItemWidth())
     .height(CloudThemeToken.floatingTabItemHeight)
-    .padding({ left: this.isSelected(tab) ? 12 : 0, right: this.isSelected(tab) ? 12 : 0 })
+    .padding({
+      left: this.isSelected(tab) ? CloudThemeToken.floatingTabSelectedHorizontalPadding : 0,
+      right: this.isSelected(tab) ? CloudThemeToken.floatingTabSelectedHorizontalPadding : 0
+    })
     .borderRadius(CloudThemeToken.controlRadius)
     .backgroundColor(this.isSelected(tab) ? CloudThemeToken.primary : CloudThemeToken.transparent)
-    .shadow(this.isSelected(tab) ? { radius: 14, color: CloudThemeToken.selectedGlow, offsetX: 0, offsetY: 6 } : {
+    .shadow(this.isSelected(tab) ? {
+      radius: CloudThemeToken.floatingTabSelectedShadowRadius,
+      color: CloudThemeToken.selectedGlow,
+      offsetX: 0,
+      offsetY: CloudThemeToken.floatingTabSelectedShadowOffsetY
+    } : {
       radius: 0,
       color: CloudThemeToken.transparent,
       offsetX: 0,
@@ -120,6 +139,6 @@ export struct FloatingCloudTabBar {
         this.onTabClick(tab.tabId)
       }
     })
-    .animation({ duration: 180, curve: Curve.EaseOut })
+    .animation({ duration: CloudThemeToken.floatingTabAnimationDuration, curve: Curve.EaseOut })
   }
 }

@@ -22,11 +22,11 @@ export struct PathSelectSheet {
 
   getPathPadding(path: string) {
     if (path == '/') {
-      return 15
+      return CloudThemeToken.pathItemBasePadding
     }
 
     let num = path.split('/').length-1
-    return 15 + num*10
+    return CloudThemeToken.pathItemBasePadding + num * CloudThemeToken.pathItemDepthPadding
   }
 
   putDirs(path: string, dirs: ObjectInfo[]) {
@@ -73,7 +73,7 @@ export struct PathSelectSheet {
   }
 
   build() {
-    Column({space: 5}) {
+    Column({ space: CloudThemeToken.pathSheetGap }) {
       this.header()
 
       List() {
@@ -89,21 +89,21 @@ export struct PathSelectSheet {
     .width('100%')
     .height('100%')
     .backgroundColor(CloudThemeToken.background)
-    .padding({top: 10, bottom: this.bottomRectHeight})
+    .padding({ top: CloudThemeToken.pathSheetTopPadding, bottom: this.bottomRectHeight })
     .justifyContent(FlexAlign.Start)
   }
 
   @Builder header() {
     Column() {
-      Row({space: 2}) {
+      Row({ space: CloudThemeToken.pathSheetTitleGap }) {
         Text(this.title ?? '')
-          .fontSize(14)
+          .fontSize(CloudThemeToken.pathSheetTitleSize)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)
 
         Text(this.currentPath)
-          .fontSize(14)
+          .fontSize(CloudThemeToken.pathSheetTitleSize)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)
@@ -114,7 +114,7 @@ export struct PathSelectSheet {
       .width('100%')
       .justifyContent(FlexAlign.Center)
 
-      Row({space: 10}) {
+      Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
         Button() {
           Image($r('app.media.ic_xmark_circle_fill'))
             .fillColor(CloudThemeToken.textSecondary)
@@ -132,7 +132,7 @@ export struct PathSelectSheet {
 
         Row() {
           Text($r('app.string.select_path'))
-            .fontSize(16)
+            .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
             .textAlign(TextAlign.Center)
@@ -143,10 +143,10 @@ export struct PathSelectSheet {
 
           Text($r('app.string.finished'))
             .height(CloudThemeToken.sheetConfirmHeight)
-            .fontSize(16)
+            .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.primary)
-            .padding(5)
+            .padding(CloudThemeToken.pathSheetConfirmPadding)
             .onClick(() => {
               if (this.onClose) {
                 this.onClose(true, this.currentPath)
@@ -157,7 +157,10 @@ export struct PathSelectSheet {
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.SpaceBetween)
       }
-      .padding({left: 15, right: 15})
+      .padding({
+        left: CloudThemeToken.pathSheetHeaderHorizontalPadding,
+        right: CloudThemeToken.pathSheetHeaderHorizontalPadding
+      })
       .layoutWeight(1)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.SpaceBetween)
@@ -171,16 +174,16 @@ export struct PathSelectSheet {
 
   @Builder dirItem(item: ObjectInfo) {
     Column() {
-      Row({ space: 10 }) {
+      Row({ space: CloudThemeToken.pathItemGap }) {
         Image(this.normalIcon)
           .width(CloudThemeToken.pathFolderIconSize)
           .height(CloudThemeToken.pathFolderIconSize)
           .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
-        Row({ space: 5 }) {
+        Row({ space: CloudThemeToken.pathItemNameGap }) {
           Text(item.name)
-            .fontSize(16)
+            .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
             .wordBreak(WordBreak.BREAK_ALL)
@@ -193,7 +196,10 @@ export struct PathSelectSheet {
           Image(this.getPathShow(item) ? this.downIcon : this.rightIcon)
             .width(CloudThemeToken.pathChevronWidth)
             .height(CloudThemeToken.pathChevronHeight)
-            .padding({left: this.getPathShow(item) ? 0 : 6, right: this.getPathShow(item)? 0: 6})
+            .padding({
+              left: this.getPathShow(item) ? 0 : CloudThemeToken.pathChevronCollapsedPadding,
+              right: this.getPathShow(item) ? 0 : CloudThemeToken.pathChevronCollapsedPadding
+            })
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
@@ -206,7 +212,10 @@ export struct PathSelectSheet {
       }
       .height(CloudThemeToken.pathRowHeight)
       .width('100%')
-      .padding({ left: this.getPathPadding(CloudApi.getTotalPath(item)), right: 15})
+      .padding({
+        left: this.getPathPadding(CloudApi.getTotalPath(item)),
+        right: CloudThemeToken.pathItemBasePadding
+      })
       .clip(true)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Center)

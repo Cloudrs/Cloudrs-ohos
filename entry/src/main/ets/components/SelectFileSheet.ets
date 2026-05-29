@@ -13,10 +13,10 @@ export struct SelectFileSheet {
   onClose?: () => void
 
   build() {
-    Column({ space: 16 }) {
+    Column({ space: CloudThemeToken.uploadSourceSheetGap }) {
       Row() {
         Text($r('app.string.upload'))
-          .fontSize(18)
+          .fontSize(CloudThemeToken.uploadSourceTitleSize)
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
@@ -41,7 +41,7 @@ export struct SelectFileSheet {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      Column({ space: 10 }) {
+      Column({ space: CloudThemeToken.uploadSourceListGap }) {
         this.uploadSourceItem(
           $r('app.media.ic_upload_file_modern'),
           $r('app.string.local_files'),
@@ -72,7 +72,12 @@ export struct SelectFileSheet {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 18, bottom: 28 })
+    .padding({
+      left: CloudThemeToken.uploadSourceSheetHorizontalPadding,
+      right: CloudThemeToken.uploadSourceSheetHorizontalPadding,
+      top: CloudThemeToken.uploadSourceSheetTopPadding,
+      bottom: CloudThemeToken.uploadSourceSheetBottomPadding
+    })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
@@ -82,7 +87,7 @@ export struct SelectFileSheet {
   @Builder uploadSourceItem(icon: Resource, title: ResourceStr, description: ResourceStr,
     iconBackground: ResourceColor, onClick: () => void) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: 12 }) {
+      Row({ space: CloudThemeToken.uploadSourceItemGap }) {
         Stack() {
           Image(icon)
             .width(CloudThemeToken.sheetOptionIconSize)
@@ -94,15 +99,15 @@ export struct SelectFileSheet {
         .borderRadius(CloudThemeToken.controlRadius)
         .backgroundColor(iconBackground)
 
-        Column({ space: 4 }) {
+        Column({ space: CloudThemeToken.uploadSourceTextGap }) {
           Text(title)
-            .fontSize(16)
+            .fontSize(CloudThemeToken.uploadSourceTitleTextSize)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(description)
-            .fontSize(12)
+            .fontSize(CloudThemeToken.uploadSourceDescriptionSize)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -123,7 +128,10 @@ export struct SelectFileSheet {
     }
     .width('100%')
     .height(CloudThemeToken.uploadSourceRowHeight)
-    .padding({ left: 14, right: 14 })
+    .padding({
+      left: CloudThemeToken.uploadSourceItemHorizontalPadding,
+      right: CloudThemeToken.uploadSourceItemHorizontalPadding
+    })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
     .onClick(onClick)

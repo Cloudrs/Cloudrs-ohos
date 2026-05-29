@@ -80,7 +80,7 @@ export struct LoginPage {
   }
 
   build() {
-    Column({space: 10}) {
+    Column({ space: CloudThemeToken.loginPageGap }) {
       Column() {
         Row() {
           Button() {
@@ -100,14 +100,14 @@ export struct LoginPage {
             }
           })
         }
-        .height(30)
-        .margin({ top: 20 })
+        .height(CloudThemeToken.loginBackRowHeight)
+        .margin({ top: CloudThemeToken.loginBackTopMargin })
         .width('100%')
         .justifyContent(FlexAlign.Start)
         .visibility(this.websiteInvalid ? Visibility.Visible : Visibility.Hidden)
-        .animation({ duration: 500 })
+        .animation({ duration: CloudThemeToken.loginTransitionDuration })
 
-        Column({ space: 10 }) {
+        Column({ space: CloudThemeToken.loginContentGap }) {
           // 显示login及标题
           this.showLoginHeader()
           // 根据状态显示不同输入框
@@ -123,15 +123,18 @@ export struct LoginPage {
           // 提示
           if (!this.websiteInvalid) {
             Text($r("app.string.login_tips"))
-              .fontSize(11)
+              .fontSize(CloudThemeToken.loginTipsTextSize)
               .fontColor(CloudThemeToken.textSecondary)
-              .margin({ left: 10, right: 10 })
+              .margin({
+                left: CloudThemeToken.loginTipsHorizontalMargin,
+                right: CloudThemeToken.loginTipsHorizontalMargin
+              })
           }
         }
         .width('100%')
       }
 
-      Column({space: 12}) {
+      Column({ space: CloudThemeToken.loginFooterGap }) {
         // 扫描添加及历史账户
         this.buttonScanAndUsers()
 
@@ -140,7 +143,12 @@ export struct LoginPage {
       }
     }
     .height("100%")
-    .padding({top: 20, left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding, bottom: this.keyHeight ? 0 : 20})
+    .padding({
+      top: CloudThemeToken.loginPageVerticalPadding,
+      left: CloudThemeToken.pagePadding,
+      right: CloudThemeToken.pagePadding,
+      bottom: this.keyHeight ? 0 : CloudThemeToken.loginPageVerticalPadding
+    })
     .backgroundColor(CloudThemeToken.background)
     .justifyContent(FlexAlign.SpaceBetween)
   }
@@ -233,10 +241,10 @@ export struct LoginPage {
   @Builder showLoginHeader() {
     Image(this.websiteLogo)
       .draggable(false)
-      .width(180)
+      .width(CloudThemeToken.loginLogoWidth)
 
     Text(this.loginTitle)
-      .fontSize(20)
+      .fontSize(CloudThemeToken.loginTitleSize)
       .fontWeight(FontWeight.Bold)
       .fontColor(CloudThemeToken.textPrimary)
       .maxLines(2)
@@ -246,7 +254,7 @@ export struct LoginPage {
 
   @Builder buttonContinue() {
     Button($r("app.string.login_continue"))
-      .margin({top: 10})
+      .margin({ top: CloudThemeToken.loginContinueTopMargin })
       .height(CloudThemeToken.inputHeight)
       .width("100%")
       .borderRadius(CloudThemeToken.controlRadius)
@@ -280,22 +288,26 @@ export struct LoginPage {
           this.protocol = 'http://'
         })
     }
-    .width(200)
-    .menuItemDivider({strokeWidth: LengthMetrics.px(1), color: CloudThemeToken.line})
+    .width(CloudThemeToken.loginProtocolMenuWidth)
+    .menuItemDivider({ strokeWidth: LengthMetrics.px(CloudThemeToken.loginProtocolDividerWidthPx),
+      color: CloudThemeToken.line })
   }
 
   @Styles loginTextInputStyle() {
     .borderRadius(CloudThemeToken.inputInnerRadius)
     .layoutWeight(1)
-    .padding(0)
+    .padding(CloudThemeToken.zero)
     .backgroundColor(CloudThemeToken.transparent)
   }
 
   @Builder showWebsiteInput() {
     Row() {
       Image($r("app.media.ic_worldclock_fill"))
-        .width(20)
-        .margin({ left: 5, right: 5 })
+        .width(CloudThemeToken.loginInputIconSize)
+        .margin({
+          left: CloudThemeToken.loginWebsiteIconHorizontalMargin,
+          right: CloudThemeToken.loginWebsiteIconHorizontalMargin
+        })
         .fillColor(CloudThemeToken.primary)
 
       Text(this.protocol)
@@ -315,29 +327,29 @@ export struct LoginPage {
   }
 
   @Builder showOtpInput() {
-    Column({ space: 16 }) {
+    Column({ space: CloudThemeToken.loginOtpGap }) {
       Text('请输入身份验证器中的6位验证码')
-        .fontSize(13)
+        .fontSize(CloudThemeToken.loginOtpHintSize)
         .fontColor(CloudThemeToken.textSecondary)
         .width('100%')
         .textAlign(TextAlign.Center)
 
       Stack() {
-        Row({ space: 8 }) {
+        Row({ space: CloudThemeToken.loginOtpCellGap }) {
           ForEach([0, 1, 2, 3, 4, 5], (item: number) => {
             Column() {
               Text(item < this.otpCode.length ? this.otpCode[item] : '')
-                .fontSize(22)
+                .fontSize(CloudThemeToken.loginOtpCellTextSize)
                 .fontWeight(FontWeight.Bold)
             }
-            .width(44)
-            .height(52)
+            .width(CloudThemeToken.loginOtpCellWidth)
+            .height(CloudThemeToken.loginOtpCellHeight)
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
             .borderRadius(CloudThemeToken.otpCellRadius)
             .backgroundColor(CloudThemeToken.surface)
             .border({
-              width: 2,
+              width: CloudThemeToken.loginOtpBorderWidth,
               color: this.otpCode.length === item
                 ? CloudThemeToken.primary
                 : CloudThemeToken.transparent
@@ -351,7 +363,7 @@ export struct LoginPage {
           .type(InputType.Number)
           .maxLength(6)
           .width('100%')
-          .height(52)
+          .height(CloudThemeToken.loginOtpCellHeight)
           .opacity(0.01)
           .defaultFocus(true)
           .onChange((value) => {
@@ -362,17 +374,20 @@ export struct LoginPage {
           })
       }
       .width('100%')
-      .height(52)
+      .height(CloudThemeToken.loginOtpCellHeight)
     }
   }
 
   @Builder showLoginInput() {
-    Column({space: 10}) {
+    Column({ space: CloudThemeToken.loginInputGroupGap }) {
       // 用户名
       Row() {
         Image($r("app.media.ic_envelope"))
-          .width(20)
-          .margin({ left: 10, right: 10 })
+          .width(CloudThemeToken.loginInputIconSize)
+          .margin({
+            left: CloudThemeToken.loginInputIconHorizontalMargin,
+            right: CloudThemeToken.loginInputIconHorizontalMargin
+          })
           .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
@@ -389,8 +404,11 @@ export struct LoginPage {
       // 密码
       Row() {
         Image($r("app.media.ic_key_horizontal"))
-          .width(20)
-          .margin({ left: 10, right: 10 })
+          .width(CloudThemeToken.loginInputIconSize)
+          .margin({
+            left: CloudThemeToken.loginInputIconHorizontalMargin,
+            right: CloudThemeToken.loginInputIconHorizontalMargin
+          })
           .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
@@ -404,10 +422,12 @@ export struct LoginPage {
           })
       }
       .rowCommonStyle()
-      .transition(TransitionEffect.OPACITY.animation({duration: 500})
-        .combine(TransitionEffect.translate({y: -30}).animation({duration: 500})))
+      .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginTransitionDuration })
+        .combine(TransitionEffect.translate({ y: CloudThemeToken.loginPasswordTransitionOffsetY })
+          .animation({ duration: CloudThemeToken.loginTransitionDuration })))
     }
-    .transition(TransitionEffect.asymmetric(undefined, TransitionEffect.OPACITY.animation({duration: 150})))
+    .transition(TransitionEffect.asymmetric(undefined,
+      TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginInputDisappearDuration })))
   }
 
   @Styles scanAndUsersCommon() {
@@ -418,17 +438,17 @@ export struct LoginPage {
   }
 
   @Builder buttonScanAndUsers() {
-    Row({space: 10}) {
+    Row({ space: CloudThemeToken.loginFooterButtonGap }) {
       Button() {
         Image($r("app.media.ic_line_viewfinder"))
-          .padding(5)
+          .padding(CloudThemeToken.loginFooterIconPadding)
           .fillColor(CloudThemeToken.primary)
       }
       .scanAndUsersCommon()
 
       Button() {
         Image($r("app.media.ic_person_2"))
-          .padding(5)
+          .padding(CloudThemeToken.loginFooterIconPadding)
           .fillColor(CloudThemeToken.textSecondary)
       }
       .scanAndUsersCommon()
@@ -438,22 +458,13 @@ export struct LoginPage {
   @Builder privacyText() {
     Flex({wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center}) {
       Text($r('app.string.login_service_prefix'))
-        .fontSize(11)
+        .fontSize(CloudThemeToken.loginPrivacyTextSize)
         .fontColor(CloudThemeToken.textSecondary)
-
-      // Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_service")) {
-      // }
-      // .color($r("app.color.select_primary"))
-      // .height(13)
-      //
-      // Text(" 和 ")
-      //   .fontSize(11)
-      //   .fontColor($r("app.color.light_gray"))
 
       Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_privacy")) {
       }
       .color(CloudThemeToken.primary)
-      .height(13)
+      .height(CloudThemeToken.loginPrivacyLinkHeight)
     }
     .width("100%")
     .margin({bottom: this.keyHeight})

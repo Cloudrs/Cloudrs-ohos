@@ -20,7 +20,7 @@ function itemStyle() {
 
 @Extend(Text)
 function itemFileNameStyle() {
-  .fontSize(16)
+  .fontSize(CloudThemeToken.textSizeLarge)
   .fontWeight(FontWeight.Medium)
   .fontColor(CloudThemeToken.textPrimary)
   .maxLines(1)
@@ -30,7 +30,7 @@ function itemFileNameStyle() {
 
 @Extend(Text)
 function itemFileDateStyle() {
-  .fontSize(12)
+  .fontSize(CloudThemeToken.textSizeSmall)
   .fontColor(CloudThemeToken.textSecondary)
   .maxLines(1)
   .textOverflow({overflow: TextOverflow.Ellipsis})
@@ -99,13 +99,15 @@ export struct ObjectItem {
 
   @Builder dirItem(item: ObjectInfo) {
     Column() {
-      Row({ space: 12 }) {
+      Row({ space: CloudThemeToken.objectItemGap }) {
         Image(this.getItemIcon(item.name, true))
-          .width(this.showType == ShowType.SHOW_LIST ? 36 : 40)
-          .height(this.showType == ShowType.SHOW_LIST ? 36 : 40)
+          .width(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
+          CloudThemeToken.objectGridFolderIconSize)
+          .height(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
+          CloudThemeToken.objectGridFolderIconSize)
           .draggable(false)
 
-        Column({ space: 3 }) {
+        Column({ space: CloudThemeToken.objectMetaGap }) {
           //TODO: 加入是否下载为本地的图标
           Text(this.getDisplayName(item.name, this.showType == ShowType.SHOW_LIST ? 42 : 26))
             .itemFileNameStyle()
@@ -114,14 +116,14 @@ export struct ObjectItem {
             .itemFileDateStyle()
         }
         .layoutWeight(1)
-        .height(42)
+        .height(CloudThemeToken.objectTextBlockHeight)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
 
         if (this.showType == ShowType.SHOW_LIST) {
           Image($r('app.media.ic_chevron_right'))
-            .width(12)
-            .height(12)
+            .width(CloudThemeToken.objectChevronSize)
+            .height(CloudThemeToken.objectChevronSize)
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
         }
@@ -129,8 +131,9 @@ export struct ObjectItem {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
-    .height(this.showType == ShowType.SHOW_LIST ? 58 : 54)
-    .padding({left: 12, right: 12})
+    .height(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListRowHeight :
+    CloudThemeToken.objectGridFolderHeight)
+    .padding({ left: CloudThemeToken.objectHorizontalPadding, right: CloudThemeToken.objectHorizontalPadding })
     .itemStyle()
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
@@ -141,7 +144,7 @@ export struct ObjectItem {
   }
 
   @Builder fileIconItem(item: ObjectInfo) {
-    Column({space: 10}) {
+    Column({ space: CloudThemeToken.objectGridGap }) {
       Stack({ alignContent: Alignment.Center }) {
         if (this.getThumbData(item.id)) {
           Image(this.getThumbData(item.id))
@@ -151,8 +154,8 @@ export struct ObjectItem {
             .draggable(false)
         } else {
           Image(CommonUtil.getFileIconInfo(item.name).icon)
-            .width(56)
-            .height(56)
+            .width(CloudThemeToken.objectGridFileIconSize)
+            .height(CloudThemeToken.objectGridFileIconSize)
             .draggable(false)
         }
       }
@@ -162,15 +165,19 @@ export struct ObjectItem {
       .backgroundColor(this.getThumbData(item.id) ? CloudThemeToken.surfaceSubtle :
         CommonUtil.getFileIconInfo(item.name).backgroundColor)
 
-      Column({ space: 3 }) {
+      Column({ space: CloudThemeToken.objectMetaGap }) {
         Text(this.getDisplayName(item.name, 28))
           .itemFileNameStyle()
 
         Text(this.getDateText(item.date))
           .itemFileDateStyle()
       }
-      .height(40)
-      .padding({left: 7, right: 7, bottom: 5})
+      .height(CloudThemeToken.objectGridTextHeight)
+      .padding({
+        left: CloudThemeToken.objectGridTextHorizontalPadding,
+        right: CloudThemeToken.objectGridTextHorizontalPadding,
+        bottom: CloudThemeToken.objectGridTextBottomPadding
+      })
       .alignItems(HorizontalAlign.Start)
       .justifyContent(FlexAlign.Center)
     }
@@ -180,7 +187,7 @@ export struct ObjectItem {
         hoverScale: [1.0, 1.0]
       }
     })
-    .height(160)
+    .height(CloudThemeToken.objectGridFileHeight)
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     .itemStyle()
@@ -188,13 +195,13 @@ export struct ObjectItem {
 
   @Builder fileListItem(item: ObjectInfo) {
     Column() {
-      Row({ space: 12 }) {
+      Row({ space: CloudThemeToken.objectItemGap }) {
         Image(this.getItemIcon(item.name, false))
-          .width(36)
-          .height(36)
+          .width(CloudThemeToken.objectListIconSize)
+          .height(CloudThemeToken.objectListIconSize)
           .draggable(false)
 
-        Column({ space: 3 }) {
+        Column({ space: CloudThemeToken.objectMetaGap }) {
           //TODO: 加入是否下载为本地的图标
           Text(this.getDisplayName(item.name, 42))
             .itemFileNameStyle()
@@ -203,15 +210,15 @@ export struct ObjectItem {
             .itemFileDateStyle()
         }
         .layoutWeight(1)
-        .height(42)
+        .height(CloudThemeToken.objectTextBlockHeight)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
       }
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
-    .height(58)
-    .padding({left: 12, right: 12})
+    .height(CloudThemeToken.objectListRowHeight)
+    .padding({ left: CloudThemeToken.objectHorizontalPadding, right: CloudThemeToken.objectHorizontalPadding })
     .itemStyle()
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
@@ -253,7 +260,7 @@ export struct ObjectItem {
       }
     }
     .width(CloudThemeToken.menuWidth)
-    .padding(0)
+    .padding(CloudThemeToken.zero)
     .margin(0)
     .backgroundColor(CloudThemeToken.surface)
     .menuItemDivider({
@@ -280,17 +287,20 @@ export struct ObjectItem {
   @Builder commonMenuBuilder(content: ResourceStr, isSelected?: boolean) {
     Row() {
       Text(content)
-        .fontSize(15)
+        .fontSize(CloudThemeToken.objectMenuTextSize)
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.textPrimary)
         .height(CloudThemeToken.menuItemLabelHeight)
         .layoutWeight(1)
 
       Image(isSelected ? $r('app.media.ic_selected') : '')
-        .width(24)
-        .height(24)
+        .width(CloudThemeToken.objectMenuIconSize)
+        .height(CloudThemeToken.objectMenuIconSize)
     }
-    .padding({left: 20, right: 20})
+    .padding({
+      left: CloudThemeToken.objectMenuHorizontalPadding,
+      right: CloudThemeToken.objectMenuHorizontalPadding
+    })
     .width('100%')
     .height(CloudThemeToken.menuItemLabelHeight)
     .alignItems(VerticalAlign.Center)

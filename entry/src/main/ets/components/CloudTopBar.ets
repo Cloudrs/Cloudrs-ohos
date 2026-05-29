@@ -11,9 +11,9 @@ export struct CloudTopBar {
 
   build() {
     Row() {
-      Column({ space: 4 }) {
+      Column({ space: CloudThemeToken.topBarTextGap }) {
         Text(this.title)
-          .fontSize(28)
+          .fontSize(CloudThemeToken.topBarTitleSize)
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
@@ -21,7 +21,7 @@ export struct CloudTopBar {
 
         if (this.subtitle !== undefined) {
           Text(this.subtitle)
-            .fontSize(13)
+            .fontSize(CloudThemeToken.topBarSubtitleSize)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -54,7 +54,7 @@ export struct CloudTopBar {
     .height(CloudThemeToken.iconButtonSize)
     .borderRadius(CloudThemeToken.controlRadius)
     .backgroundColor(CloudThemeToken.surface)
-    .margin({ left: 8 })
+    .margin({ left: CloudThemeToken.topBarActionGap })
     .onClick(onClick)
   }
 }

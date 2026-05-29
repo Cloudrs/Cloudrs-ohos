@@ -17,7 +17,7 @@ export struct Uploads {
       if (this.uploadObjects.totalCount() == 0) {
         this.noItem()
       } else {
-        List({space: 10}) {
+        List({ space: CloudThemeToken.transferListGap }) {
           LazyForEach(this.uploadObjects, (item: TransportObject, index) => {
             this.uploadItem(item)
           }, (item: TransportObject, index) => item.path + index)
@@ -62,14 +62,14 @@ export struct Uploads {
   }
 
   @Builder uploadItem(object: TransportObject) {
-    Row({space: 10}) {
+    Row({ space: CloudThemeToken.transferItemGap }) {
       Image(CommonUtil.getFileIconInfo(object.item.name).icon)
         .width(CloudThemeToken.transferFileIconSize)
         .height(CloudThemeToken.transferFileIconSize)
 
-      Column({space: 8}) {
+      Column({ space: CloudThemeToken.transferTextGap }) {
         Text(object.item.name)
-          .fontSize(16)
+          .fontSize(CloudThemeToken.transferNameSize)
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .wordBreak(WordBreak.BREAK_ALL)
@@ -77,7 +77,7 @@ export struct Uploads {
           .textOverflow({overflow: TextOverflow.Ellipsis})
           .ellipsisMode(EllipsisMode.CENTER)
 
-        Row({space: 5}) {
+        Row({ space: CloudThemeToken.transferMetaGap }) {
           Image(this.getUploadIcon(object.state))
             .width(CloudThemeToken.transferStateIconSize)
             .height(CloudThemeToken.transferStateIconSize)
@@ -85,14 +85,14 @@ export struct Uploads {
 
           if (object.state == FileModelState.RUNNING) {
             Text(this.getRunningText(object))
-              .fontSize(12)
+              .fontSize(CloudThemeToken.transferMetaSize)
               .fontWeight(FontWeight.Medium)
               .fontColor(CloudThemeToken.textSecondary)
-              .margin({right: 10})
+              .margin({ right: CloudThemeToken.transferSpeedRightMargin })
           }
 
           Text(`${CommonUtil.formatBytes(object.trans, 1)}/${CommonUtil.formatBytes(object.total, 1)}`)
-            .fontSize(12)
+            .fontSize(CloudThemeToken.transferMetaSize)
             .fontColor(CloudThemeToken.textSecondary)
         }
         .alignItems(VerticalAlign.Center)
@@ -110,7 +110,7 @@ export struct Uploads {
         .height(CloudThemeToken.transferProgressHeight)
     }
     .width('100%')
-    .padding(10)
+    .padding(CloudThemeToken.transferItemPadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)

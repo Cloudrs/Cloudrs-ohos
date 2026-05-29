@@ -5,8 +5,8 @@ import { CloudThemeToken } from '../model/CloudTheme';
 export struct CloudScaffold {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
-  topPadding: number = 12
-  bottomPadding: number = 24
+  topPadding: number = CloudThemeToken.scaffoldTopPadding
+  bottomPadding: number = CloudThemeToken.scaffoldBottomPadding
   horizontalPadding: number = CloudThemeToken.pagePadding
   scrollable: boolean = true
   avoidTabBar: boolean = true

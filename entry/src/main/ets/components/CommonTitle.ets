@@ -9,10 +9,10 @@ export struct CommonTitle {
   onBackClick?: ()=>void
 
   build() {
-    Row({space: 10}) {
+    Row({ space: CloudThemeToken.commonTitleGap }) {
       Button({type: ButtonType.Circle}) {
         Image($r('app.media.ic_back'))
-          .padding(5)
+          .padding(CloudThemeToken.commonTitleIconPadding)
           .fillColor(CloudThemeToken.textPrimary)
       }
       .width(CloudThemeToken.iconButtonSize)
@@ -28,7 +28,7 @@ export struct CommonTitle {
 
       Text(this.title)
         .fontColor(CloudThemeToken.textPrimary)
-        .fontSize(20)
+        .fontSize(CloudThemeToken.commonTitleTextSize)
         .fontWeight(FontWeight.Bold)
     }
     .height(CloudThemeToken.titleBarHeight)

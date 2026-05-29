@@ -20,7 +20,6 @@ enum MineSheetType {
   THEME = 'theme'
 }
 
-@Preview
 @Component
 export struct TabMine {
   @Link overLap: boolean

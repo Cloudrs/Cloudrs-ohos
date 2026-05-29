@@ -21,7 +21,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Added modern cloud design tokens in `CloudThemeToken`.
   - Added resource colors for cloud surfaces, text, line, primary, danger, and success states.
   - Added app-level light/dark appearance preference with persisted Harmony color mode and dark resource overrides.
-  - Updated `HomePage` bottom Tabs to a floating translucent tab bar with selected capsule state.
+  - Updated `HomePage` bottom navigation to a full-width floating translucent capsule driven by system `Tabs` page switching.
 - Shared UI components:
   - Added `CloudScaffold` for page background, top safe-area padding, scroll behavior, and bottom tab avoidance.
   - Added `CloudTopBar` for page title, subtitle, and icon actions.
@@ -78,7 +78,7 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Migrated Image preview save/share context access away from deprecated `getContext` usage.
   - Applied `CloudActionButton` to the Offline Download create-task action.
   - Migrated `CloudActionButton`, `CloudTopBar`, and `EmptyState` component metrics to shared theme tokens.
-  - Migrated `SectionHeader`, `GlassSurface`, `CommonTitle`, `CloudScaffold`, and `FloatingCloudTabBar` metrics to shared theme tokens.
+  - Migrated `SectionHeader`, `GlassSurface`, `CommonTitle`, `CloudScaffold`, and bottom tab metrics to shared theme tokens.
   - Migrated About page spacing, logo, info row, and typography metrics to shared theme tokens.
   - Migrated File page header/title actions and transfer upload/download list metrics to shared theme tokens.
   - Migrated PathSelectSheet, SelectFileSheet, and Offline Download create-task form metrics to shared theme tokens.
@@ -98,7 +98,11 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
   - Replaced photo backup Wi-Fi detection from third-party `NetworkUtil` with local `NetworkStateUtil` backed by Harmony `connection` APIs.
   - Migrated Photo Backup settings action and path row arrow to shared theme tokens.
   - Removed the direct `@pura/harmony-utils` package dependency after app-side imports were eliminated.
-  - System bottom sheets stay above the custom floating tab bar without toggling it, avoiding delayed tab-bar restoration after gesture dismiss; the custom File detail overlay still hides the tab bar.
+  - System bottom sheets stay above the bottom navigation without toggling it, avoiding delayed tab-bar restoration after gesture dismiss; the custom File detail overlay still hides the tab bar.
+  - Removed the remaining `@Preview` decorator from `TabMine`.
+  - Moved Home bottom navigation margins and item padding into `CloudThemeToken`.
+  - Rechecked the reference `ohtotptoken` project and aligned Home navigation to the same official `@kit.UIDesignKit` `HdsTabs.barFloatingStyle` path.
+  - Removed the app-side custom floating tab overlay from the active route; bottom navigation material, floating layout, and press light are now delegated to the system HDS tabs implementation.
 
 ## In Progress
 
@@ -140,23 +144,24 @@ This document tracks the full modern cloud-drive UI refactor. The implementation
 
 ## Home And Navigation Todo
 
-- Validate floating tab bar on:
+- Validate bottom tab bar on:
   - Phone portrait.
   - Tablet landscape.
   - 2-in-1 wide viewport.
-- Add motion only where it improves clarity, such as selected tab transition: first pass completed for floating tab selection.
+- Add motion only where it improves clarity, such as selected tab transition.
 - Rebuild bottom navigation as an API 23+ immersive floating cloud tab bar:
-  - Status: first pass implemented; device runtime verification pending.
-  - Replace the current built-in `Tabs` tab bar with a custom `FloatingCloudTabBar` overlay driven by `TabsController.changeIndex()`.
-  - Keep `Tabs` as the page content container, but hide the system tab bar with zero height.
-  - Use Harmony API 23+ blur/material capabilities where available, with `CloudThemeToken.surfaceTranslucent` as the compatibility fallback.
-  - Add a light-sense treatment: translucent glass surface, soft shadow, top highlight line, selected capsule glow, and smooth selected-state animation.
+  - Status: official HDS floating tab implementation is active and build-verified.
+  - Completed: replaced the custom floating tab overlay with `@kit.UIDesignKit` `HdsTabs`.
+  - Completed: bottom navigation now uses `barFloatingStyle` with adaptive `systemMaterialEffect`, following the `ohtotptoken` reference implementation.
+  - Completed: press light, floating material, and tab transition behavior are delegated to the system HDS component instead of app-side touch tracking.
+  - Use Harmony API 23+ HDS material capabilities where available, with existing theme surfaces retained for page content.
   - Keep bottom safe-area handling through `NAV_BOTTOM_RECT_HEIGHT` and update `TAB_BAR_HEIGHT` if the final visual height changes.
-  - Adapt layout by width: compact phone width, centered max-width floating bar for tablet and 2-in-1.
-  - Responsive breakpoints and floating tab bar dimensions moved into `CloudThemeToken`, backed by `CloudLayoutMode`: first pass completed.
+  - Adapt layout by width after device verification if HDS defaults do not match tablet or 2-in-1 expectations.
+  - Responsive breakpoints and bottom tab bar dimensions moved into `CloudThemeToken`, backed by `CloudLayoutMode`: first pass completed.
+  - Home/bottom tab bar runtime constants are tokenized; no new hardcoded nav dimensions should be introduced.
   - File and photo grids now share the same responsive breakpoint tokens: first pass completed.
   - Verify that file detail overlays and other full-screen sheets can still hide or cover the bottom navigation when needed.
-    - File detail overlay hides the custom floating tab bar; system bottom sheets now rely on overlay layering instead of toggling the bar to avoid delayed restoration: first pass completed.
+    - File detail overlay hides the bottom tab bar by collapsing bar height; system bottom sheets rely on overlay layering instead of toggling the bar to avoid delayed restoration: first pass completed.
 
 ## File Page Todo
 

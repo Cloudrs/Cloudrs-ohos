@@ -52,6 +52,15 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
   - Image preview
   - Common title and file icon surfaces
   - Path select, upload source, transfer, and detail sheets
+- Completed a follow-up deep visual scan and tokenized remaining non-token menu margins, divider widths, grid gaps, refresh offsets, scrollbar width, shadow values, and animation duration values in the main tabs/components.
+- Aligned the offline-download nested path sheet with the shared sheet background token.
+- Tokenized remaining overlay z-index, hidden opacity, and transition scale values.
+- Tokenized shared disabled opacity and remaining offline task-card minimum height.
+- Tokenized square thumbnail aspect ratio and path history border width.
+- Tokenized page scaffold padding, avatar circle math, avatar border width, and photo backup preview-progress timing values.
+- Tokenized string-based divider/outline widths and remaining visual zero branches in shared components and login layout.
+- Centralized login 2FA code length as a semantic token used by validation, input length, and OTP cell rendering.
+- Normalized sheet dismiss state cleanup for transport, offline download path selection, and Mine settings sheets.
 
 ### Home And Navigation
 
@@ -106,6 +115,7 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
   - Remote backup path setting
   - Wi-Fi-only / any-network setting
   - Auto backup setting
+  - Concurrent upload setting with default 5 parallel backup workers
   - Local photo scan
   - System photo picker fallback
   - Persisted backup settings
@@ -114,12 +124,38 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
   - Manual backup of all current waiting/failed items
   - Pause/resume for backup queue
   - Failure retry
+  - Failed photo retry no longer blocks the waiting backup queue
   - Empty path guard
   - Partial permission / scan-limited hint
   - Simulator-friendly network override
+  - Direct any-network recovery action for waiting-network and failed backup states
+  - Explicit reactive summary counters so scan results refresh immediately in the overview card
+  - Forced summary-card refresh revision for local/completed/waiting/failed counter updates
+  - Summary counter string snapshots bound directly to the overview card
+  - Compact backup-history preview with overflow summary for many remote paths
+  - Tokenized photo picker limit, section preview limits, and completed-progress constants
 - Added native local-file upload support with remote directory creation and upload policy resolution.
 - Added skip-existing behavior for duplicate remote filenames.
 - Added remote existence verification before upload.
+- Added a per-backup remote filename cache so album backup no longer re-queries the same remote directory for every photo.
+- Added cached section preview arrays and incremental counter updates so local, waiting, completed, failed, and uploading counts refresh immediately during backup.
+- Added a single reactive metric snapshot for the photo backup overview card, including the active uploading count, so scan and backup counters repaint together during concurrent uploads.
+- Scoped photo backup counter, queue, and progress state mutations through `UIContext.runScopedTask()` so async upload callbacks repaint the active page reliably.
+- Replaced photo backup metric tiles with direct state bindings, invalidated the `photos` state array on status changes, and added a tokenized low-frequency active-backup stats refresh timer.
+- Reduced active-backup repaint flicker by keeping the stats refresh counter-only, removing forced summary remount IDs, and showing a token-limited recent-completed thumbnail preview during backup.
+- Stabilized active-backup photo grids by freezing the waiting preview, batching recent-completed preview updates, and rendering photo section counters directly inside `TabPictures` instead of through the shared `SectionHeader` component.
+- Removed the active-backup full stats polling pass and split photo preview grids into a dedicated component so counter changes do not keep rebuilding the waiting/completed image grids.
+- Migrated photo backup preview grids to the same `LazyDataSource` + `LazyForEach` pattern used by the file list, with tokenized cached count and explicit grid height for effective nested-grid lazy loading.
+- Migrated the photo backup page container from `Scroll + Column` to page-level `List` sections so backup counter updates no longer force a full column remeasure of all preview sections.
+- Switched photo backup previews from direct `Image(photoUri)` rendering to visible-item system thumbnail `PixelMap` loading and a bounded thumbnail cache, matching the file list cache pattern more closely.
+- Debounced photo-record persistence during active backup and flushes records on pause, completion, or page exit to reduce backup-page jank.
+- Serialized local photo URI copy into the app cache and reduced copy chunk pressure so backup upload concurrency does not run multiple synchronous photo reads on the UI thread.
+- During active backup, replaced large waiting/completed thumbnail grids and backup-history rendering with compact count rows to avoid repeated image decoding and large `doneIds` scans.
+- Debounced `photoBackupDoneIds` persistence during active backup so thousands of completed photos no longer trigger synchronous growing preference writes per item.
+- Moved album-backup photo URI copying into Harmony `taskpool` so heavy local file reads no longer execute on the ArkUI main thread.
+- Restored the waiting-photo thumbnail preview during active backup after moving the heavy copy path off the main thread.
+- Restored uploading-photo thumbnails for the small active worker set while keeping completed/history sections lightweight during backup.
+- Let the photo backup page render its own tokenized scroll scaffold so high-frequency backup counters update directly in the page build tree.
 - Migrated Wi-Fi-only network check to local `NetworkStateUtil` backed by Harmony `connection` APIs.
 - Added cleanup/migration path for known legacy `photoBackupDoneIds` records.
 - Added responsive thumbnail grid for phone, tablet, and 2-in-1 widths.
@@ -182,6 +218,14 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
   - Offline download create task
   - Offline download finished detail
   - Photo backup settings
+- Added loading, failed, retry, and empty-directory states to the shared path selection sheet used by file operations, photo backup, and offline download.
+- Added `CloudDialogUtil` and migrated delete-task, delete-file, and logout confirmation dialogs to a shared confirm-dialog path.
+- Added picker-opening progress, disabled duplicate taps, and failure feedback to the upload source sheet.
+- Added explicit transfer status text and state-colored progress bars for upload and download task sheets.
+- Replaced remaining task/photo progress totals with the shared percentage token.
+- Extended `CloudDialogUtil` for two-action dialogs and migrated the upload conflict dialog to the shared dialog path.
+- Removed stale file-card TODO markers and tokenized file-card context-menu preview scale values.
+- Hardened image-share temp-file cleanup when share creation fails after writing the sandbox file.
 
 ## Pending Acceptance
 
@@ -262,7 +306,7 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
 
 ### Global Polish
 
-- Continue scanning for deeper hardcoded colors, dimensions, radius values, and spacing in legacy surfaces.
+- Continue periodic scans for deeper hardcoded colors, dimensions, radius values, and spacing in legacy surfaces.
 - Keep all new UI changes tokenized through `CloudThemeToken`; do not add new hardcoded visual values in page code.
 - Normalize remaining deep component typography and interaction states.
 
@@ -280,9 +324,9 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
 
 ### Photo Backup
 
-- Improve edge-state copy and visual density after device testing.
+- Continue edge-state visual density checks after more real-device testing.
 - Verify path-scoped completed-state migration with more real albums and remote paths.
-- Consider a clearer grouped history view if backup history grows large.
+- Validate compact backup-history preview with real multi-path albums.
 
 ### Offline Download
 

@@ -3,12 +3,15 @@ import { BusinessError } from "@kit.BasicServicesKit"
 import { common } from "@kit.AbilityKit"
 import { picker } from "@kit.CoreFileKit"
 import { CloudThemeToken } from "../model/CloudTheme"
+import { showToastTips, ToastType } from "../utils/ToastUtil"
 
 const TAG: string = 'SelectFileSheet'
 
 @Component
 export struct SelectFileSheet {
   @State showPhotoPicker: boolean = false
+  @State isPicking: boolean = false
+  @State pickingText: string = ''
   onSelectFinished?: (uris: string[]) => void
   onClose?: () => void
 
@@ -70,6 +73,24 @@ export struct SelectFileSheet {
           })
       }
       .width('100%')
+
+      if (this.isPicking) {
+        Row({ space: CloudThemeToken.spacingXl }) {
+          LoadingProgress()
+            .width(CloudThemeToken.iconLg)
+            .height(CloudThemeToken.iconLg)
+            .color(CloudThemeToken.primary)
+          Text(this.pickingText)
+            .fontSize(CloudThemeToken.textSizeSmallPlus)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        .height(CloudThemeToken.rowHeightMd)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Center)
+      }
     }
     .width('100%')
     .padding({
@@ -132,12 +153,28 @@ export struct SelectFileSheet {
       left: CloudThemeToken.uploadSourceItemHorizontalPadding,
       right: CloudThemeToken.uploadSourceItemHorizontalPadding
     })
+    .enabled(!this.isPicking)
+    .opacity(this.isPicking ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
     .onClick(onClick)
   }
 
+  private startPicking(text: string): void {
+    this.isPicking = true
+    this.pickingText = text
+  }
+
+  private stopPicking(): void {
+    this.isPicking = false
+    this.pickingText = ''
+  }
+
   async selectPhotos(isVideo: boolean) {
+    if (this.isPicking) {
+      return
+    }
+    this.startPicking(isVideo ? '正在打开视频选择器' : '正在打开图片选择器')
     let uris: Array<string> = [];
 
     const photoViewPicker = new photoAccessHelper.PhotoViewPicker();
@@ -151,19 +188,28 @@ export struct SelectFileSheet {
     photoViewPicker.select(photoSelectOptions).then((photoSelectResult: photoAccessHelper.PhotoSelectResult) => {
       uris = photoSelectResult.photoUris;
       console.info(TAG, 'photoViewPicker.select to file succeed and uris are:' + uris);
+      this.stopPicking()
       if (uris.length > 0 && this.onSelectFinished) {
         this.onSelectFinished(uris)
       }
     }).catch((err: BusinessError) => {
+      this.stopPicking()
       console.error(TAG, `Invoke photoViewPicker.select failed, code is ${err.code}, message is ${err.message}`);
+      showToastTips(isVideo ? '选择视频失败' : '选择图片失败', ToastType.Error)
     })
   }
 
   async selectFiles() {
+    if (this.isPicking) {
+      return
+    }
+    this.startPicking('正在打开文件选择器')
     let uris: Array<string> = [];
     const context = this.getAbilityContext();
     if (!context) {
+      this.stopPicking()
       console.error(TAG, 'Document picker context is unavailable');
+      showToastTips($r('app.string.get_context_failed'), ToastType.Error)
       return;
     }
 
@@ -182,12 +228,15 @@ export struct SelectFileSheet {
     documentViewPicker.select(documentSelectOptions).then((documentSelectResult: Array<string>) => {
       //文件选择成功后，返回被选中文档的uri结果集。
       uris = documentSelectResult;
+      this.stopPicking()
       if (uris.length > 0 && this.onSelectFinished) {
         this.onSelectFinished(uris)
       }
       console.info(TAG, 'documentViewPicker.select to file succeed and uris are:' + uris);
     }).catch((err: BusinessError) => {
+      this.stopPicking()
       console.error(TAG, `Invoke documentViewPicker.select failed, code is ${err.code}, message is ${err.message}`);
+      showToastTips('选择文件失败', ToastType.Error)
     })
   }
 

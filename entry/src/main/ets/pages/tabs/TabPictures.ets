@@ -2,6 +2,7 @@ import { abilityAccessCtrl, common, PermissionRequestResult, Permissions } from 
 import { BusinessError } from '@kit.BasicServicesKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { image } from '@kit.ImageKit';
 import Constant from '../../model/Constant';
 import {
   PhotoBackupItem,
@@ -16,22 +17,26 @@ import UserPreferences from '../../model/UserPreferences';
 import { PathSelectSheet } from '../../components/PathSelectSheet';
 import { showToast } from '../../utils/ToastUtil';
 import { CloudThemeToken } from '../../model/CloudTheme';
-import { SectionHeader } from '../../components/SectionHeader';
 import { EmptyState } from '../../components/EmptyState';
 import { CloudTopBar } from '../../components/CloudTopBar';
-import { CloudScaffold } from '../../components/CloudScaffold';
 import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
+import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
+import LazyDataSource from '../../utils/LazyDataSource';
 
 const TAG: string = 'TabPictures';
 
 @Component
 export struct TabPictures {
   @Link overLap: boolean
+  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
+  @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
+  @Provide photoBackupThumbs: Map<string, PixelMap> = new Map<string, PixelMap>();
   @State settingsEnabled: boolean = false;
   @State settingsRemotePath: string = '/Photos/Camera';
   @State settingsWifiOnly: boolean = true;
   @State settingsAutoBackup: boolean = true;
+  @State settingsUploadConcurrent: number = CloudThemeToken.photoBackupDefaultConcurrent;
   @State settingsLastScanAt: number = 0;
   @State backupState: PhotoBackupState = PhotoBackupState.IDLE;
   @State photos: PhotoBackupItem[] = [];
@@ -45,15 +50,61 @@ export struct TabPictures {
   @State permissionHint: string = '';
   @State photoGridWidth: number = 0;
   @State settingsRevision: number = 0;
+  @State localPhotoCount: number = 0;
+  @State completedPhotoCount: number = 0;
+  @State waitingPhotoCount: number = 0;
+  @State failedPhotoCount: number = 0;
+  @State uploadingPhotoCount: number = 0;
+  @State localPhotoCountText: string = '0';
+  @State uploadingPhotoCountText: string = '0';
+  @State completedPhotoCountText: string = '0';
+  @State waitingPhotoCountText: string = '0';
+  @State failedPhotoCountText: string = '0';
+  @State backupQueueText: string = '0/0';
+  @State uploadingPreviewItems: PhotoBackupItem[] = [];
+  @State waitingPreviewItems: PhotoBackupItem[] = [];
+  @State failedPreviewItems: PhotoBackupItem[] = [];
+  @State completedPreviewItems: PhotoBackupItem[] = [];
+  @State uploadingPreviewDataSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource();
+  @State waitingPreviewDataSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource();
+  @State failedPreviewDataSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource();
+  @State completedPreviewDataSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource();
   private doneIds: Set<string> = new Set<string>();
+  private photoRecordsSaveTimer: number = -1;
+  private doneIdsSaveTimer: number = -1;
+  private completedPreviewFlushTimer: number = -1;
+  private pendingCompletedPreviewItems: PhotoBackupItem[] = [];
+  private remotePhotoNameCache: Set<string> | null = null;
+  private photoCopyQueue: Promise<void> = Promise.resolve();
+  private photoAssetCache: Map<string, photoAccessHelper.PhotoAsset> = new Map<string, photoAccessHelper.PhotoAsset>();
+  private thumbnailLoadingIds: Set<string> = new Set<string>();
 
   aboutToAppear(): void {
+    this.bindPreviewDataSources();
     this.loadSettings();
     this.loadDoneIds();
     this.loadPhotoRecords();
     if (this.getSettingsEnabled()) {
       this.scanLocalPhotos();
     }
+  }
+
+  aboutToDisappear(): void {
+    this.stopCompletedPreviewFlush();
+    this.flushDoneIdsSave();
+    this.flushPhotoRecordsSave();
+  }
+
+  bindPreviewDataSources(): void {
+    const onPreviewDataGet = (index: number, item: PhotoBackupItem) => {
+      if (item) {
+        this.loadPhotoThumbnail(item);
+      }
+    };
+    this.uploadingPreviewDataSource.onDataGet = onPreviewDataGet;
+    this.waitingPreviewDataSource.onDataGet = onPreviewDataGet;
+    this.failedPreviewDataSource.onDataGet = onPreviewDataGet;
+    this.completedPreviewDataSource.onDataGet = onPreviewDataGet;
   }
 
   loadSettings(): void {
@@ -75,11 +126,37 @@ export struct TabPictures {
       console.error(TAG, `load done ids failed: ${(err as Error)?.message ?? err}`);
       this.doneIds = new Set<string>();
     }
+    this.refreshPhotoStats();
   }
 
-  saveDoneIds(): void {
+  saveDoneIds(refreshStats: boolean = true): void {
+    this.persistDoneIds();
+    if (refreshStats) {
+      this.refreshPhotoStats();
+    }
+  }
+
+  persistDoneIds(): void {
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_DONE_IDS,
       JSON.stringify(Array.from(this.doneIds)));
+  }
+
+  scheduleDoneIdsSave(): void {
+    if (this.doneIdsSaveTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.doneIdsSaveTimer);
+    }
+    this.doneIdsSaveTimer = setTimeout(() => {
+      this.doneIdsSaveTimer = -1;
+      this.persistDoneIds();
+    }, CloudThemeToken.photoBackupSaveDebounceMs);
+  }
+
+  flushDoneIdsSave(): void {
+    if (this.doneIdsSaveTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.doneIdsSaveTimer);
+      this.doneIdsSaveTimer = -1;
+    }
+    this.persistDoneIds();
   }
 
   loadPhotoRecords(): void {
@@ -92,12 +169,37 @@ export struct TabPictures {
     } catch (err) {
       console.error(TAG, `load photo records failed: ${(err as Error)?.message ?? err}`);
       this.photos = [];
+      this.refreshPhotoStats();
     }
   }
 
   savePhotoRecords(): void {
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_ITEMS,
       JSON.stringify(this.getPhotos().map((item: PhotoBackupItem) => item.toData())));
+    this.refreshPhotoStats();
+  }
+
+  persistPhotoRecords(): void {
+    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_ITEMS,
+      JSON.stringify(this.getPhotos().map((item: PhotoBackupItem) => item.toData())));
+  }
+
+  schedulePhotoRecordsSave(): void {
+    if (this.photoRecordsSaveTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.photoRecordsSaveTimer);
+    }
+    this.photoRecordsSaveTimer = setTimeout(() => {
+      this.photoRecordsSaveTimer = -1;
+      this.persistPhotoRecords();
+    }, CloudThemeToken.photoBackupSaveDebounceMs);
+  }
+
+  flushPhotoRecordsSave(): void {
+    if (this.photoRecordsSaveTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.photoRecordsSaveTimer);
+      this.photoRecordsSaveTimer = -1;
+    }
+    this.persistPhotoRecords();
   }
 
   getPhotos(): PhotoBackupItem[] {
@@ -121,11 +223,314 @@ export struct TabPictures {
   }
 
   getLocalCount(): number {
-    return Math.max(this.getPhotos().length, this.getCurrentPathDoneCount());
+    return this.localPhotoCount;
   }
 
   getCompletedCount(): number {
-    return Math.max(this.getCompletedItems().length, this.getCurrentPathDoneCount());
+    return this.completedPhotoCount;
+  }
+
+  hasPhotoThumbnail(item: PhotoBackupItem): boolean {
+    return this.photoBackupThumbs.has(item.id);
+  }
+
+  setPhotoThumbnail(item: PhotoBackupItem, pixelMap: PixelMap): void {
+    const next = new Map<string, PixelMap>(this.photoBackupThumbs);
+    next.set(item.id, pixelMap);
+    while (next.size > CloudThemeToken.photoBackupThumbnailCacheLimit) {
+      const firstKey = next.keys().next().value as string | undefined;
+      if (!firstKey) {
+        break;
+      }
+      next.delete(firstKey);
+    }
+    this.photoBackupThumbs = next;
+  }
+
+  async loadPhotoThumbnail(item: PhotoBackupItem): Promise<void> {
+    if (this.hasPhotoThumbnail(item) || this.thumbnailLoadingIds.has(item.id)) {
+      return;
+    }
+    const asset = this.photoAssetCache.get(item.id);
+    if (!asset) {
+      return;
+    }
+    this.thumbnailLoadingIds.add(item.id);
+    try {
+      const size: image.Size = {
+        width: CloudThemeToken.photoBackupThumbnailSize,
+        height: CloudThemeToken.photoBackupThumbnailSize
+      };
+      const pixelMap = await asset.getThumbnail(size);
+      this.runInUiScope(() => {
+        this.setPhotoThumbnail(item, pixelMap);
+      });
+    } catch (err) {
+      console.warn(TAG, `load photo thumbnail failed: ${(err as Error)?.message ?? err}`);
+    } finally {
+      this.thumbnailLoadingIds.delete(item.id);
+    }
+  }
+
+  refreshPhotoStats(): void {
+    let waitingCount = 0;
+    let uploadingCount = 0;
+    let completedCount = 0;
+    let failedCount = 0;
+    let uploadingPreview: PhotoBackupItem[] = [];
+    let waitingPreview: PhotoBackupItem[] = [];
+    let failedPreview: PhotoBackupItem[] = [];
+    let completedPreview: PhotoBackupItem[] = [];
+    this.getPhotos().forEach((item: PhotoBackupItem) => {
+      if (item.status === PhotoBackupStatus.WAITING) {
+        waitingCount++;
+        if (waitingPreview.length < CloudThemeToken.photoBackupWaitingPreviewLimit) {
+          waitingPreview.push(item);
+        }
+      } else if (item.status === PhotoBackupStatus.UPLOADING) {
+        uploadingCount++;
+        uploadingPreview.push(item);
+      } else if (item.status === PhotoBackupStatus.COMPLETED) {
+        completedCount++;
+        const completedPreviewLimit = this.isBackupRunning() ? CloudThemeToken.photoBackupActiveCompletedPreviewLimit :
+          CloudThemeToken.photoBackupCompletedPreviewLimit;
+        if (completedPreview.length < completedPreviewLimit) {
+          completedPreview.push(item);
+        }
+      } else if (item.status === PhotoBackupStatus.FAILED) {
+        failedCount++;
+        if (failedPreview.length < CloudThemeToken.photoBackupFailedPreviewLimit) {
+          failedPreview.push(item);
+        }
+      }
+    });
+    let currentPathDoneCount = this.getCurrentPathDoneCount();
+    this.runInUiScope(() => {
+      this.localPhotoCount = Math.max(this.getPhotos().length, currentPathDoneCount);
+      this.completedPhotoCount = Math.max(completedCount, currentPathDoneCount);
+      this.waitingPhotoCount = waitingCount;
+      this.uploadingPhotoCount = uploadingCount;
+      this.failedPhotoCount = failedCount;
+      this.uploadingPreviewItems = uploadingPreview;
+      this.waitingPreviewItems = waitingPreview;
+      this.failedPreviewItems = failedPreview;
+      this.completedPreviewItems = completedPreview;
+      this.syncAllPreviewDataSources();
+      this.refreshPhotoCountText();
+    });
+  }
+
+  syncAllPreviewDataSources(): void {
+    this.uploadingPreviewDataSource.replaceAll(this.uploadingPreviewItems);
+    this.waitingPreviewDataSource.replaceAll(this.waitingPreviewItems);
+    this.failedPreviewDataSource.replaceAll(this.failedPreviewItems);
+    this.completedPreviewDataSource.replaceAll(this.completedPreviewItems);
+  }
+
+  syncPreviewDataSource(status: PhotoBackupStatus): void {
+    if (status === PhotoBackupStatus.UPLOADING) {
+      this.uploadingPreviewDataSource.replaceAll(this.uploadingPreviewItems);
+    } else if (status === PhotoBackupStatus.WAITING) {
+      this.waitingPreviewDataSource.replaceAll(this.waitingPreviewItems);
+    } else if (status === PhotoBackupStatus.FAILED) {
+      this.failedPreviewDataSource.replaceAll(this.failedPreviewItems);
+    } else if (status === PhotoBackupStatus.COMPLETED) {
+      this.completedPreviewDataSource.replaceAll(this.completedPreviewItems);
+    }
+  }
+
+  refreshPhotoCountText(): void {
+    const localText = this.localPhotoCount.toString();
+    const uploadingText = this.uploadingPhotoCount.toString();
+    const completedText = this.completedPhotoCount.toString();
+    const waitingText = this.waitingPhotoCount.toString();
+    const failedText = this.failedPhotoCount.toString();
+    if (this.localPhotoCountText === localText &&
+      this.uploadingPhotoCountText === uploadingText &&
+      this.completedPhotoCountText === completedText &&
+      this.waitingPhotoCountText === waitingText &&
+      this.failedPhotoCountText === failedText) {
+      return;
+    }
+    this.localPhotoCountText = localText;
+    this.uploadingPhotoCountText = uploadingText;
+    this.completedPhotoCountText = completedText;
+    this.waitingPhotoCountText = waitingText;
+    this.failedPhotoCountText = failedText;
+  }
+
+  runInUiScope(task: () => void): void {
+    try {
+      this.getUIContext().runScopedTask(task);
+    } catch (err) {
+      console.warn(TAG, `run ui scoped task failed: ${(err as Error)?.message ?? err}`);
+      task();
+    }
+  }
+
+  refreshBackupQueueText(): void {
+    const nextText = `${this.backupQueueDone}/${this.backupQueueTotal}`;
+    if (this.backupQueueText === nextText) {
+      return;
+    }
+    this.backupQueueText = nextText;
+  }
+
+  resetBackupQueue(total: number): void {
+    this.runInUiScope(() => {
+      this.backupQueueDone = 0;
+      this.backupQueueTotal = total;
+      this.refreshBackupQueueText();
+    });
+  }
+
+  markBackupQueueItemDone(): void {
+    this.runInUiScope(() => {
+      this.backupQueueDone++;
+      this.refreshBackupQueueText();
+    });
+  }
+
+  scheduleCompletedPreviewFlush(item: PhotoBackupItem): void {
+    this.pendingCompletedPreviewItems.push(item);
+    if (this.completedPreviewFlushTimer >= CloudThemeToken.zero) {
+      return;
+    }
+    this.completedPreviewFlushTimer = setTimeout(() => {
+      this.flushCompletedPreviewUpdates();
+    }, CloudThemeToken.photoBackupPreviewFlushMs);
+  }
+
+  stopCompletedPreviewFlush(): void {
+    if (this.completedPreviewFlushTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.completedPreviewFlushTimer);
+      this.completedPreviewFlushTimer = -1;
+    }
+  }
+
+  flushCompletedPreviewUpdates(): void {
+    this.stopCompletedPreviewFlush();
+    if (this.pendingCompletedPreviewItems.length === 0) {
+      return;
+    }
+    const pendingItems = this.pendingCompletedPreviewItems.slice();
+    this.pendingCompletedPreviewItems = [];
+    this.runInUiScope(() => {
+      let next = this.completedPreviewItems.slice();
+      pendingItems.forEach((item: PhotoBackupItem) => {
+        next = this.removePreviewItem(next, item);
+        next.push(item);
+      });
+      const limit = this.isBackupRunning() ? CloudThemeToken.photoBackupActiveCompletedPreviewLimit :
+        CloudThemeToken.photoBackupCompletedPreviewLimit;
+      this.completedPreviewItems = next.slice(Math.max(next.length - limit, CloudThemeToken.zero));
+      this.syncPreviewDataSource(PhotoBackupStatus.COMPLETED);
+    });
+  }
+
+  movePhotoStats(previousStatus: PhotoBackupStatus, nextStatus: PhotoBackupStatus): void {
+    if (previousStatus === nextStatus) {
+      return;
+    }
+    if (previousStatus === PhotoBackupStatus.WAITING) {
+      this.waitingPhotoCount = Math.max(this.waitingPhotoCount - 1, CloudThemeToken.zero);
+    } else if (previousStatus === PhotoBackupStatus.UPLOADING) {
+      this.uploadingPhotoCount = Math.max(this.uploadingPhotoCount - 1, CloudThemeToken.zero);
+    } else if (previousStatus === PhotoBackupStatus.COMPLETED) {
+      this.completedPhotoCount = Math.max(this.completedPhotoCount - 1, CloudThemeToken.zero);
+    } else if (previousStatus === PhotoBackupStatus.FAILED) {
+      this.failedPhotoCount = Math.max(this.failedPhotoCount - 1, CloudThemeToken.zero);
+    }
+
+    if (nextStatus === PhotoBackupStatus.WAITING) {
+      this.waitingPhotoCount++;
+    } else if (nextStatus === PhotoBackupStatus.UPLOADING) {
+      this.uploadingPhotoCount++;
+    } else if (nextStatus === PhotoBackupStatus.COMPLETED) {
+      this.completedPhotoCount++;
+    } else if (nextStatus === PhotoBackupStatus.FAILED) {
+      this.failedPhotoCount++;
+    }
+  }
+
+  removePreviewItem(items: PhotoBackupItem[], item: PhotoBackupItem): PhotoBackupItem[] {
+    return items.filter((current: PhotoBackupItem) => current.id !== item.id);
+  }
+
+  addPreviewItem(items: PhotoBackupItem[], item: PhotoBackupItem, limit: number): PhotoBackupItem[] {
+    let next = this.removePreviewItem(items, item);
+    next.unshift(item);
+    return next.slice(CloudThemeToken.zero, limit);
+  }
+
+  updatePhotoPreviewStatus(item: PhotoBackupItem, previousStatus: PhotoBackupStatus, nextStatus: PhotoBackupStatus): void {
+    let previousPreviewChanged = false;
+    let nextPreviewChanged = false;
+    if (previousStatus === PhotoBackupStatus.UPLOADING) {
+      this.uploadingPreviewItems = this.removePreviewItem(this.uploadingPreviewItems, item);
+      previousPreviewChanged = true;
+    } else if (previousStatus === PhotoBackupStatus.WAITING) {
+      if (!this.isBackupRunning()) {
+        this.waitingPreviewItems = this.removePreviewItem(this.waitingPreviewItems, item);
+        previousPreviewChanged = true;
+      }
+    } else if (previousStatus === PhotoBackupStatus.FAILED) {
+      this.failedPreviewItems = this.removePreviewItem(this.failedPreviewItems, item);
+      previousPreviewChanged = true;
+    } else if (previousStatus === PhotoBackupStatus.COMPLETED) {
+      this.completedPreviewItems = this.removePreviewItem(this.completedPreviewItems, item);
+      previousPreviewChanged = true;
+    }
+
+    if (nextStatus === PhotoBackupStatus.UPLOADING) {
+      this.uploadingPreviewItems = this.addPreviewItem(this.uploadingPreviewItems, item, this.getSettingsUploadConcurrent());
+      nextPreviewChanged = true;
+    } else if (nextStatus === PhotoBackupStatus.WAITING) {
+      this.waitingPreviewItems = this.addPreviewItem(this.waitingPreviewItems, item,
+        CloudThemeToken.photoBackupWaitingPreviewLimit);
+      nextPreviewChanged = true;
+    } else if (nextStatus === PhotoBackupStatus.FAILED) {
+      this.failedPreviewItems = this.addPreviewItem(this.failedPreviewItems, item,
+        CloudThemeToken.photoBackupFailedPreviewLimit);
+      nextPreviewChanged = true;
+    } else if (nextStatus === PhotoBackupStatus.COMPLETED) {
+      if (this.isBackupRunning()) {
+        this.scheduleCompletedPreviewFlush(item);
+      } else {
+        this.completedPreviewItems = this.addPreviewItem(this.completedPreviewItems, item,
+          CloudThemeToken.photoBackupCompletedPreviewLimit);
+        nextPreviewChanged = true;
+      }
+    }
+
+    if (previousPreviewChanged) {
+      this.syncPreviewDataSource(previousStatus);
+    }
+    if (nextPreviewChanged) {
+      this.syncPreviewDataSource(nextStatus);
+    }
+  }
+
+  setPhotoStatus(item: PhotoBackupItem, status: PhotoBackupStatus, progress: number, error: string = ''): void {
+    this.runInUiScope(() => {
+      const previousStatus = item.status;
+      item.status = status;
+      item.progress = progress;
+      item.error = error;
+      this.movePhotoStats(previousStatus, status);
+      this.updatePhotoPreviewStatus(item, previousStatus, status);
+      this.refreshPhotoCountText();
+    });
+  }
+
+  updatePhotoProgress(item: PhotoBackupItem, progress: number): void {
+    this.runInUiScope(() => {
+      item.progress = progress;
+    });
+  }
+
+  isBackupRunning(): boolean {
+    return this.backupState === PhotoBackupState.BACKING_UP;
   }
 
   getStatusText(): string {
@@ -139,13 +544,13 @@ export struct TabPictures {
       return '正在扫描本地相册';
     }
     if (this.backupState === PhotoBackupState.BACKING_UP) {
-      return `正在备份 ${this.backupQueueDone}/${this.backupQueueTotal} 张`;
+      return `正在备份 ${this.backupQueueText} 张`;
     }
     if (this.backupState === PhotoBackupState.WAITING_NETWORK) {
       return '等待 Wi-Fi';
     }
     if (this.backupState === PhotoBackupState.PAUSED) {
-      return `已暂停 ${this.backupQueueDone}/${this.backupQueueTotal} 张`;
+      return `已暂停 ${this.backupQueueText} 张`;
     }
     return `${this.getSettingsWifiOnly() ? '仅 Wi-Fi' : '任意网络'} · ${this.getSettingsRemotePath()}`;
   }
@@ -160,11 +565,14 @@ export struct TabPictures {
     if (this.backupState === PhotoBackupState.PAUSED) {
       return '继续备份';
     }
-    if (this.getFailedItems().length > 0) {
-      return '重试失败';
-    }
     if (!this.hasBackupPath()) {
       return '选择路径';
+    }
+    if (this.waitingPhotoCount > 0) {
+      return '立即备份';
+    }
+    if (this.failedPhotoCount > 0) {
+      return '重试失败';
     }
     return '立即备份';
   }
@@ -183,6 +591,7 @@ export struct TabPictures {
     settings.remotePath = this.settingsRemotePath;
     settings.wifiOnly = this.settingsWifiOnly;
     settings.autoBackup = this.settingsAutoBackup;
+    settings.uploadConcurrent = this.settingsUploadConcurrent;
     settings.lastScanAt = this.settingsLastScanAt;
     return settings;
   }
@@ -192,6 +601,7 @@ export struct TabPictures {
     this.settingsRemotePath = settings.remotePath;
     this.settingsWifiOnly = settings.wifiOnly;
     this.settingsAutoBackup = settings.autoBackup;
+    this.settingsUploadConcurrent = this.normalizeUploadConcurrent(settings.uploadConcurrent);
     this.settingsLastScanAt = settings.lastScanAt;
   }
 
@@ -219,6 +629,34 @@ export struct TabPictures {
     return this.settingsAutoBackup;
   }
 
+  getSettingsUploadConcurrent(): number {
+    return this.settingsUploadConcurrent;
+  }
+
+  normalizeUploadConcurrent(value: number): number {
+    return Math.min(Math.max(value, CloudThemeToken.photoBackupMinConcurrent), CloudThemeToken.photoBackupMaxConcurrent);
+  }
+
+  updateUploadConcurrent(delta: number): void {
+    let nextValue = this.normalizeUploadConcurrent(this.getSettingsUploadConcurrent() + delta);
+    if (nextValue === this.getSettingsUploadConcurrent()) {
+      return;
+    }
+    this.updateSettings((settings: PhotoBackupSettings) => {
+      settings.uploadConcurrent = nextValue;
+    });
+  }
+
+  allowAnyNetworkBackup(): void {
+    this.updateSettings((settings: PhotoBackupSettings) => {
+      settings.wifiOnly = false;
+    });
+    if (this.backupState === PhotoBackupState.WAITING_NETWORK) {
+      this.backupState = PhotoBackupState.IDLE;
+    }
+    showToast('已允许任意网络备份');
+  }
+
   updateRemotePath(path: string): void {
     if (path.length === 0 || path === this.getSettingsRemotePath()) {
       return;
@@ -228,7 +666,7 @@ export struct TabPictures {
     });
     this.refreshDoneStatus();
     this.savePhotoRecords();
-    this.backupState = this.getWaitingItems().length > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
+    this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
     showToast('已切换备份路径，状态已重新同步');
   }
 
@@ -274,9 +712,11 @@ export struct TabPictures {
         if (asset.photoType !== photoAccessHelper.PhotoType.IMAGE) {
           return;
         }
-        nextPhotos.push(this.createBackupItem(asset.uri, asset.displayName,
+        const item = this.createBackupItem(asset.uri, asset.displayName,
           (asset.get(photoAccessHelper.PhotoKeys.SIZE) as number) ?? 0,
-          (asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0));
+          (asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0);
+        this.photoAssetCache.set(item.id, asset);
+        nextPhotos.push(item);
       });
       fetchResult.close();
       if (nextPhotos.length === 0) {
@@ -285,12 +725,13 @@ export struct TabPictures {
         this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
       }
       this.photos = this.mergePhotoList(nextPhotos, true);
+      this.refreshPhotoStats();
       this.updateSettings((settings: PhotoBackupSettings) => {
         settings.lastScanAt = new Date().getTime();
       });
       this.savePhotoRecords();
-      showToast(`已扫描到 ${this.getPhotos().length} 张本地图片`);
-      this.backupState = this.getWaitingItems().length > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
+      showToast(`已扫描到 ${this.localPhotoCount} 张本地图片`);
+      this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
     } catch (err) {
       let error = err as BusinessError;
       console.error(TAG, `scan failed: ${error.code}, ${error.message}`);
@@ -306,7 +747,7 @@ export struct TabPictures {
     try {
       let options = new photoAccessHelper.PhotoSelectOptions();
       options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
-      options.maxSelectNumber = 50;
+      options.maxSelectNumber = CloudThemeToken.photoBackupPickerMaxSelect;
       let picker = new photoAccessHelper.PhotoViewPicker();
       let result = await picker.select(options);
       let uris = result.photoUris ?? [];
@@ -317,11 +758,12 @@ export struct TabPictures {
         let item = this.createBackupItem(uri, this.getNameFromUri(uri), 0, new Date().getTime());
         item.id = uri;
         item.status = this.isPhotoDone(item) ? PhotoBackupStatus.COMPLETED : PhotoBackupStatus.WAITING;
-        item.progress = item.status === PhotoBackupStatus.COMPLETED ? 100 : 0;
+        item.progress = item.status === PhotoBackupStatus.COMPLETED ? CloudThemeToken.percentageFull : CloudThemeToken.zero;
         return item;
       });
       let before = this.getPhotos().length;
       this.photos = this.mergePhotoList(selectedItems, true);
+      this.refreshPhotoStats();
       let added = this.getPhotos().length - before;
       this.savePhotoRecords();
       showToast(added > 0 ? `已加入 ${added} 张图片` : '选择的图片已在备份列表中');
@@ -338,7 +780,7 @@ export struct TabPictures {
   createBackupItem(uri: string, name: string, size: number, modifiedAt: number): PhotoBackupItem {
     let item = new PhotoBackupItem(uri, name.length > 0 ? name : this.getNameFromUri(uri), size, modifiedAt);
     item.status = this.isPhotoDone(item) ? PhotoBackupStatus.COMPLETED : PhotoBackupStatus.WAITING;
-    item.progress = item.status === PhotoBackupStatus.COMPLETED ? 100 : 0;
+    item.progress = item.status === PhotoBackupStatus.COMPLETED ? CloudThemeToken.percentageFull : CloudThemeToken.zero;
     return item;
   }
 
@@ -362,18 +804,19 @@ export struct TabPictures {
       this.applyDoneStatus(item, true);
       return item;
     });
+    this.refreshPhotoStats();
   }
 
   applyDoneStatus(item: PhotoBackupItem, resetNotDone: boolean): void {
     if (this.isPhotoDone(item)) {
       item.status = PhotoBackupStatus.COMPLETED;
-      item.progress = 100;
+      item.progress = CloudThemeToken.percentageFull;
       item.error = '';
       return;
     }
     if (resetNotDone && item.status !== PhotoBackupStatus.FAILED) {
       item.status = PhotoBackupStatus.WAITING;
-      item.progress = 0;
+      item.progress = CloudThemeToken.zero;
       item.error = '';
     }
   }
@@ -495,6 +938,15 @@ export struct TabPictures {
     return result;
   }
 
+  getVisibleBackupPathHistory(): PhotoBackupPathHistory[] {
+    return this.getBackupPathHistory().slice(CloudThemeToken.zero, CloudThemeToken.photoBackupHistoryPreviewLimit);
+  }
+
+  getHiddenBackupPathHistoryCount(): number {
+    let hiddenCount = this.getBackupPathHistory().length - CloudThemeToken.photoBackupHistoryPreviewLimit;
+    return Math.max(hiddenCount, CloudThemeToken.zero);
+  }
+
   getNameFromUri(uri: string): string {
     let path = uri.split('?')[0];
     let segments = path.split('/');
@@ -518,7 +970,7 @@ export struct TabPictures {
     }
   }
 
-  startBackup(): void {
+  startBackup(retryFailedOnly: boolean = false): void {
     if (!this.getSettingsEnabled()) {
       this.updateSettings((settings: PhotoBackupSettings) => {
         settings.enabled = true;
@@ -537,7 +989,7 @@ export struct TabPictures {
     }
     let failedItems = this.getFailedItems();
     let waitingItems = this.getWaitingItems();
-    let targets = failedItems.length > 0 ? failedItems : waitingItems;
+    let targets = retryFailedOnly ? failedItems : (waitingItems.length > 0 ? waitingItems : failedItems);
     if (targets.length === 0) {
       showToast('没有需要备份的图片');
       return;
@@ -548,8 +1000,7 @@ export struct TabPictures {
       showToast('当前不是 Wi-Fi，已暂停相册备份');
       return;
     }
-    this.backupQueueDone = 0;
-    this.backupQueueTotal = targets.length;
+    this.resetBackupQueue(targets.length);
     this.shouldPauseBackup = false;
     this.backupState = PhotoBackupState.BACKING_UP;
     this.runBackup(targets);
@@ -576,51 +1027,70 @@ export struct TabPictures {
   }
 
   async runBackup(targets: PhotoBackupItem[]): Promise<void> {
-    for (let index = 0; index < targets.length; index++) {
+    let nextIndex = 0;
+    const workerCount = Math.min(this.getSettingsUploadConcurrent(), targets.length);
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < targets.length && !this.shouldPauseBackup) {
+        const currentIndex = nextIndex;
+        nextIndex++;
+        await this.backupItem(targets[currentIndex], currentIndex);
+        this.markBackupQueueItemDone();
+      }
+    };
+    try {
+      this.remotePhotoNameCache = await this.loadRemotePhotoNameCache();
+      let workers: Promise<void>[] = [];
+      for (let index = CloudThemeToken.zero; index < workerCount; index++) {
+        workers.push(runWorker());
+      }
+      await Promise.all(workers);
       if (this.shouldPauseBackup) {
-        this.backupState = PhotoBackupState.PAUSED;
+        this.flushCompletedPreviewUpdates();
+        this.runInUiScope(() => {
+          this.backupState = PhotoBackupState.PAUSED;
+        });
+        this.flushDoneIdsSave();
+        this.flushPhotoRecordsSave();
+        this.refreshPhotoStats();
         return;
       }
-      await this.backupItem(targets[index], index);
-      this.backupQueueDone = index + 1;
-      if (this.shouldPauseBackup) {
-        this.backupState = PhotoBackupState.PAUSED;
-        return;
+      this.flushCompletedPreviewUpdates();
+      this.flushDoneIdsSave();
+      this.flushPhotoRecordsSave();
+      this.refreshPhotoStats();
+      if (this.uploadingPhotoCount === 0) {
+        this.runInUiScope(() => {
+          this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
+        });
       }
-    }
-    if (this.getUploadingItems().length === 0) {
-      this.backupState = this.getWaitingItems().length > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
+    } finally {
+      this.remotePhotoNameCache = null;
     }
   }
 
   async backupItem(item: PhotoBackupItem, index: number): Promise<void> {
     let localPath = '';
     try {
-      item.status = PhotoBackupStatus.UPLOADING;
-      item.error = '';
-      item.progress = 8;
+      this.setPhotoStatus(item, PhotoBackupStatus.UPLOADING, CloudThemeToken.photoBackupStartProgress);
       if (await this.remotePhotoExists(item)) {
-        item.progress = 100;
-        item.status = PhotoBackupStatus.COMPLETED;
-        item.error = '';
+        this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
+        this.markRemotePhotoKnown(item);
         this.doneIds.add(this.getDoneKey(item));
-        this.saveDoneIds();
-        this.savePhotoRecords();
+        this.scheduleDoneIdsSave();
+        this.schedulePhotoRecordsSave();
         return;
       }
       localPath = await this.copyPhotoToCache(item);
-      item.progress = 45;
+      this.updatePhotoProgress(item, CloudThemeToken.photoBackupCopyProgress);
       await this.uploadPhoto(localPath, this.getRemoteFilePath(item), item);
-      item.progress = 100;
-      item.status = PhotoBackupStatus.COMPLETED;
+      this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
+      this.markRemotePhotoKnown(item);
       this.doneIds.add(this.getDoneKey(item));
-      this.saveDoneIds();
-      this.savePhotoRecords();
+      this.scheduleDoneIdsSave();
+      this.schedulePhotoRecordsSave();
     } catch (err) {
-      item.status = PhotoBackupStatus.FAILED;
-      item.error = this.getErrorMessage(err);
-      item.progress = 0;
-      this.savePhotoRecords();
+      this.setPhotoStatus(item, PhotoBackupStatus.FAILED, CloudThemeToken.zero, this.getErrorMessage(err));
+      this.schedulePhotoRecordsSave();
     } finally {
       if (localPath.length > 0) {
         await FileSystemUtil.unlinkIfExists(localPath);
@@ -629,21 +1099,37 @@ export struct TabPictures {
   }
 
   async copyPhotoToCache(item: PhotoBackupItem): Promise<string> {
-    let context = this.getAbilityContext();
-    if (!context) {
-      throw new Error('应用上下文不可用');
+    return this.withPhotoCopySlot(async (): Promise<string> => {
+      let context = this.getAbilityContext();
+      if (!context) {
+        throw new Error('应用上下文不可用');
+      }
+      let fileName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
+      let localPath = `${context.cacheDir}/photo_backup_${new Date().getTime()}_${fileName}`;
+      await FileSystemUtil.copyUriToPathInBackground(item.uri, localPath);
+      return localPath;
+    });
+  }
+
+  async withPhotoCopySlot(task: () => Promise<string>): Promise<string> {
+    let releaseCopySlot: () => void = () => {};
+    const previousCopy = this.photoCopyQueue;
+    this.photoCopyQueue = new Promise<void>((resolve: () => void) => {
+      releaseCopySlot = resolve;
+    });
+    await previousCopy;
+    try {
+      return await task();
+    } finally {
+      releaseCopySlot();
     }
-    let fileName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
-    let localPath = `${context.cacheDir}/photo_backup_${new Date().getTime()}_${fileName}`;
-    await FileSystemUtil.copyUriToPath(item.uri, localPath);
-    return localPath;
   }
 
   uploadPhoto(localPath: string, remotePath: string, item: PhotoBackupItem): Promise<void> {
     return new Promise<void>((resolve: () => void, reject: (reason: Error) => void) => {
       CloudApi.uploadLocalFile(localPath, remotePath, false, {
         onStart: () => {
-          item.progress = 55;
+          this.updatePhotoProgress(item, CloudThemeToken.photoBackupUploadStartProgress);
         },
         onSuccess: () => {
           resolve();
@@ -655,10 +1141,35 @@ export struct TabPictures {
     });
   }
 
+  loadRemotePhotoNameCache(): Promise<Set<string>> {
+    return new Promise<Set<string>>((resolve: (value: Set<string>) => void) => {
+      CloudApi.getFilesInfo(this.normalizeRemotePath(this.getSettingsRemotePath()), {
+        onSuccess: (data: DirectoryInfo) => {
+          let names = new Set<string>();
+          (data.objects ?? []).forEach((object: ObjectInfo) => {
+            names.add(object.name);
+          });
+          resolve(names);
+        },
+        onFailure: (msg: string) => {
+          console.info(TAG, `load remote photo names skipped: ${msg}`);
+          resolve(new Set<string>());
+        }
+      });
+    });
+  }
+
+  markRemotePhotoKnown(item: PhotoBackupItem): void {
+    this.remotePhotoNameCache?.add(item.name);
+  }
+
   remotePhotoExists(item: PhotoBackupItem): Promise<boolean> {
+    if (this.remotePhotoNameCache) {
+      return Promise.resolve(this.remotePhotoNameCache.has(item.name));
+    }
     return new Promise<boolean>((resolve: (value: boolean) => void) => {
       CloudApi.getFilesInfo(this.normalizeRemotePath(this.getSettingsRemotePath()), {
-        onSuccess: (data) => {
+        onSuccess: (data: DirectoryInfo) => {
           let exists = (data.objects ?? []).some((object) => object.name === item.name);
           resolve(exists);
         },
@@ -691,26 +1202,67 @@ export struct TabPictures {
 
   previewBackupProgress(item: PhotoBackupItem, index: number): void {
     setTimeout(() => {
-      if (item.status === PhotoBackupStatus.UPLOADING && item.progress < 65) {
-        item.progress = 65;
+      if (item.status === PhotoBackupStatus.UPLOADING && item.progress < CloudThemeToken.photoBackupPreviewProgress) {
+        this.updatePhotoProgress(item, CloudThemeToken.photoBackupPreviewProgress);
       }
-    }, 400 + index * 120);
+    }, CloudThemeToken.photoBackupPreviewDelayMs + index * CloudThemeToken.photoBackupPreviewDelayStepMs);
   }
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      CloudScaffold() {
-          this.header();
+      Column({ space: CloudThemeToken.sectionGap }) {
+        this.header();
+
+        List({ space: CloudThemeToken.sectionGap }) {
           if (this.showSettings) {
-            this.settingsPanel();
+            ListItem() {
+              this.settingsPanel();
+            }
           }
-          this.summaryCard();
-          this.sectionUploading();
-          this.sectionWaiting();
-          this.sectionFailed();
-          this.sectionCompleted();
-          this.sectionBackupHistory();
+          ListItem() {
+            this.summaryCard();
+          }
+          if (this.uploadingPhotoCount > 0) {
+            ListItem() {
+              this.sectionUploading();
+            }
+          }
+          if (this.waitingPhotoCount > 0 || this.getPhotos().length === 0) {
+            ListItem() {
+              this.sectionWaiting();
+            }
+          }
+          if (this.failedPhotoCount > 0) {
+            ListItem() {
+              this.sectionFailed();
+            }
+          }
+          if (this.completedPhotoCount > 0) {
+            ListItem() {
+              this.sectionCompleted();
+            }
+          }
+          if (!this.isBackupRunning()) {
+            ListItem() {
+              this.sectionBackupHistory();
+            }
+          }
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .padding({ bottom: this.tabBarHeight + CloudThemeToken.scaffoldBottomPadding })
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+        .clip(true)
       }
+      .width('100%')
+      .height('100%')
+      .padding({
+        left: CloudThemeToken.pagePadding,
+        right: CloudThemeToken.pagePadding,
+        top: this.topRectHeight + CloudThemeToken.scaffoldTopPadding
+      })
+      .backgroundColor(CloudThemeToken.background)
     }
     .width('100%')
     .height('100%')
@@ -774,10 +1326,80 @@ export struct TabPictures {
       }
 
       Row() {
-        this.metricItem('本地', this.getLocalCount().toString());
-        this.metricItem('已备份', this.getCompletedCount().toString());
-        this.metricItem('待备份', this.getWaitingItems().length.toString());
-        this.metricItem('失败', this.getFailedItems().length.toString());
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text(this.localPhotoCountText)
+            .fontSize(CloudThemeToken.textSizeHeadline)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('本地')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .width(CloudThemeToken.photoBackupMetricWidth)
+        .height(CloudThemeToken.rowHeight5xl)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .borderRadius(CloudThemeToken.cardRadius)
+
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text(this.uploadingPhotoCountText)
+            .fontSize(CloudThemeToken.textSizeHeadline)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('上传中')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .width(CloudThemeToken.photoBackupMetricWidth)
+        .height(CloudThemeToken.rowHeight5xl)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .borderRadius(CloudThemeToken.cardRadius)
+
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text(this.completedPhotoCountText)
+            .fontSize(CloudThemeToken.textSizeHeadline)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('已备份')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .width(CloudThemeToken.photoBackupMetricWidth)
+        .height(CloudThemeToken.rowHeight5xl)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .borderRadius(CloudThemeToken.cardRadius)
+
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text(this.waitingPhotoCountText)
+            .fontSize(CloudThemeToken.textSizeHeadline)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('待备份')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .width(CloudThemeToken.photoBackupMetricWidth)
+        .height(CloudThemeToken.rowHeight5xl)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .borderRadius(CloudThemeToken.cardRadius)
+
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text(this.failedPhotoCountText)
+            .fontSize(CloudThemeToken.textSizeHeadline)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('失败')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .width(CloudThemeToken.photoBackupMetricWidth)
+        .height(CloudThemeToken.rowHeight5xl)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .borderRadius(CloudThemeToken.cardRadius)
       }
       .width('100%')
       .justifyContent(FlexAlign.SpaceBetween)
@@ -797,7 +1419,7 @@ export struct TabPictures {
       }
 
       if (this.backupState === PhotoBackupState.BACKING_UP) {
-        Text(`本轮将连续备份 ${this.backupQueueTotal} 张，已完成 ${this.backupQueueDone} 张。`)
+        Text(`本轮备份进度 ${this.backupQueueText} 张。`)
           .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
       }
@@ -809,18 +1431,14 @@ export struct TabPictures {
       }
 
       if (this.backupState === PhotoBackupState.WAITING_NETWORK && this.getSettingsWifiOnly()) {
-        Button('模拟器测试：改为任意网络')
+        Button('允许任意网络备份')
           .fontSize(CloudThemeToken.textSizeSmallPlus)
           .height(CloudThemeToken.iconBoxSm)
           .width('100%')
           .backgroundColor(CloudThemeToken.primarySoft)
           .fontColor(CloudThemeToken.primary)
           .onClick(() => {
-            this.updateSettings((settings: PhotoBackupSettings) => {
-              settings.wifiOnly = false;
-            });
-            this.backupState = PhotoBackupState.IDLE;
-            showToast('已允许任意网络备份');
+            this.allowAnyNetworkBackup();
           })
       }
     }
@@ -872,35 +1490,232 @@ export struct TabPictures {
     .backgroundColor(CloudThemeToken.primarySoft)
   }
 
-  @Builder metricItem(label: string, value: string) {
-    Column({ space: CloudThemeToken.spacingXs }) {
-      Text(value)
-        .fontSize(CloudThemeToken.textSizeHeadline)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-      Text(label)
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
-    }
-    .width('23%')
-    .height(CloudThemeToken.rowHeight5xl)
-    .justifyContent(FlexAlign.Center)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
-    .borderRadius(CloudThemeToken.cardRadius)
-  }
-
   @Builder sectionUploading() {
-    if (this.getUploadingItems().length > 0) {
-      SectionHeader({ title: '正在备份', count: this.getUploadingItems().length });
+    if (this.uploadingPhotoCount > 0) {
       Column({ space: CloudThemeToken.spacingCard }) {
-        ForEach(this.getUploadingItems(), (item: PhotoBackupItem) => {
+        this.uploadingSectionHeader();
+        ForEach(this.uploadingPreviewItems, (item: PhotoBackupItem) => {
           this.uploadingItem(item);
         }, (item: PhotoBackupItem) => item.id)
       }
+      .width('100%')
     }
   }
 
   @Builder uploadingItem(item: PhotoBackupItem) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      if (this.photoBackupThumbs.has(item.id)) {
+        Image(this.photoBackupThumbs.get(item.id))
+          .width(CloudThemeToken.iconBox3xl)
+          .height(CloudThemeToken.rowHeight4xl)
+          .objectFit(ImageFit.Cover)
+          .borderRadius(CloudThemeToken.controlRadiusMd)
+      } else {
+        this.uploadingUriThumbnail(item);
+      }
+
+      Column({ space: CloudThemeToken.spacingXl }) {
+        Text(item.name)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Progress({ value: item.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Linear })
+          .height(CloudThemeToken.thinProgressHeight)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Text(`${item.progress}%`)
+        .fontSize(CloudThemeToken.textSizeSmall)
+        .fontColor(CloudThemeToken.textSecondary)
+    }
+    .width('100%')
+    .padding(CloudThemeToken.spacingSection)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder uploadingThumbnailPlaceholder() {
+    Stack({ alignContent: Alignment.Center }) {
+      Image($r('app.media.ic_select_photos'))
+        .width(CloudThemeToken.iconBoxLg)
+        .height(CloudThemeToken.iconBoxLg)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.iconBox3xl)
+    .height(CloudThemeToken.rowHeight4xl)
+    .borderRadius(CloudThemeToken.controlRadiusMd)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
+  }
+
+  @Builder uploadingUriThumbnail(item: PhotoBackupItem) {
+    Stack({ alignContent: Alignment.Center }) {
+      this.uploadingThumbnailPlaceholder();
+      Image(item.uri)
+        .width(CloudThemeToken.iconBox3xl)
+        .height(CloudThemeToken.rowHeight4xl)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(CloudThemeToken.controlRadiusMd)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.iconBox3xl)
+    .height(CloudThemeToken.rowHeight4xl)
+    .clip(true)
+    .onAppear(() => {
+      this.loadPhotoThumbnail(item);
+    })
+  }
+
+  @Builder uploadingSectionHeader() {
+    Row() {
+      Text('正在备份')
+        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+
+      Text(this.uploadingPhotoCountText)
+        .fontSize(CloudThemeToken.sectionHeaderCountSize)
+        .fontColor(CloudThemeToken.textSecondary)
+        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
+
+      Blank()
+    }
+    .width('100%')
+    .height(CloudThemeToken.sectionHeaderHeight)
+    .alignItems(VerticalAlign.Center)
+    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
+  }
+
+  @Builder waitingSectionHeader() {
+    Row() {
+      Text('待备份')
+        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+
+      Text(this.waitingPhotoCountText)
+        .fontSize(CloudThemeToken.sectionHeaderCountSize)
+        .fontColor(CloudThemeToken.textSecondary)
+        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
+
+      Blank()
+    }
+    .width('100%')
+    .height(CloudThemeToken.sectionHeaderHeight)
+    .alignItems(VerticalAlign.Center)
+    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
+  }
+
+  @Builder failedSectionHeader() {
+    Row() {
+      Text('失败')
+        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+
+      Text(this.failedPhotoCountText)
+        .fontSize(CloudThemeToken.sectionHeaderCountSize)
+        .fontColor(CloudThemeToken.textSecondary)
+        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
+
+      Blank()
+    }
+    .width('100%')
+    .height(CloudThemeToken.sectionHeaderHeight)
+    .alignItems(VerticalAlign.Center)
+    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
+  }
+
+  @Builder completedSectionHeader() {
+    Row() {
+      Text('最近完成')
+        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+
+      Text(this.completedPhotoCountText)
+        .fontSize(CloudThemeToken.sectionHeaderCountSize)
+        .fontColor(CloudThemeToken.textSecondary)
+        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
+
+      Blank()
+    }
+    .width('100%')
+    .height(CloudThemeToken.sectionHeaderHeight)
+    .alignItems(VerticalAlign.Center)
+    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
+  }
+
+  @Builder backupHistorySectionHeader() {
+    Row() {
+      Text('备份历史')
+        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+
+      Text(this.getVisibleBackupPathHistory().length.toString())
+        .fontSize(CloudThemeToken.sectionHeaderCountSize)
+        .fontColor(CloudThemeToken.textSecondary)
+        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
+
+      Blank()
+    }
+    .width('100%')
+    .height(CloudThemeToken.sectionHeaderHeight)
+    .alignItems(VerticalAlign.Center)
+    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
+  }
+
+  @Builder photoBackupPlaceholder(status: PhotoBackupStatus) {
+    Text(this.getBadgeText(status))
+      .fontSize(CloudThemeToken.textSizeSmall)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.getBadgeColor(status))
+      .textAlign(TextAlign.Center)
+      .width(CloudThemeToken.iconBox3xl)
+      .height(CloudThemeToken.rowHeight4xl)
+      .borderRadius(CloudThemeToken.controlRadiusMd)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+  }
+
+  @Builder compactPhotoSection(title: string, count: number, description: string, status: PhotoBackupStatus) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Circle()
+        .width(CloudThemeToken.photoBackupCompactDotSize)
+        .height(CloudThemeToken.photoBackupCompactDotSize)
+        .fill(this.getBadgeColor(status))
+
+      Column({ space: CloudThemeToken.spacingXs }) {
+        Text(title)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+        Text(description)
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Text(count.toString())
+        .fontSize(CloudThemeToken.textSizeBodyPlus)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .textAlign(TextAlign.End)
+        .width(CloudThemeToken.photoBackupCompactBadgeWidth)
+    }
+    .width('100%')
+    .padding(CloudThemeToken.spacingPanel)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder legacyUploadingItem(item: PhotoBackupItem) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Image(item.uri)
         .width(CloudThemeToken.iconBox3xl)
@@ -915,7 +1730,7 @@ export struct TabPictures {
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Progress({ value: item.progress, total: 100, type: ProgressType.Linear })
+        Progress({ value: item.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Linear })
           .height(CloudThemeToken.thinProgressHeight)
       }
       .layoutWeight(1)
@@ -932,19 +1747,27 @@ export struct TabPictures {
   }
 
   @Builder sectionWaiting() {
-    if (this.getWaitingItems().length > 0) {
-      SectionHeader({ title: '待备份', count: this.getWaitingItems().length });
-      this.photoGrid(this.getWaitingItems().slice(0, 24), PhotoBackupStatus.WAITING);
+    if (this.waitingPhotoCount > 0) {
+      Column({ space: CloudThemeToken.spacingCard }) {
+        this.waitingSectionHeader();
+        this.photoGrid(this.waitingPreviewDataSource, PhotoBackupStatus.WAITING);
+      }
+      .width('100%')
     } else if (this.getPhotos().length === 0) {
       this.emptyState();
     }
   }
 
   @Builder sectionFailed() {
-    if (this.getFailedItems().length > 0) {
-      SectionHeader({ title: '失败', count: this.getFailedItems().length });
-      this.failedActionCard();
-      this.photoGrid(this.getFailedItems().slice(0, 12), PhotoBackupStatus.FAILED);
+    if (this.failedPhotoCount > 0) {
+      Column({ space: CloudThemeToken.spacingCard }) {
+        this.failedSectionHeader();
+        this.failedActionCard();
+        if (!this.isBackupRunning()) {
+          this.photoGrid(this.failedPreviewDataSource, PhotoBackupStatus.FAILED);
+        }
+      }
+      .width('100%')
     }
   }
 
@@ -971,16 +1794,31 @@ export struct TabPictures {
           .backgroundColor(CloudThemeToken.dangerSoft)
           .fontColor(CloudThemeToken.danger)
           .onClick(() => {
-            this.startBackup();
+            this.startBackup(true);
           })
       }
       .width('100%')
 
       if (this.getSettingsWifiOnly()) {
-        Text('如果当前设备没有 Wi-Fi，可在设置中临时改为任意网络后再重试。')
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-          .width('100%')
+        Row({ space: CloudThemeToken.spacingMd }) {
+          Text('当前仍按仅 Wi-Fi 条件备份，没有 Wi-Fi 时可允许任意网络后重试。')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+            .layoutWeight(1)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+          Button('允许任意网络')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .height(CloudThemeToken.rowHeightSm)
+            .backgroundColor(CloudThemeToken.surface)
+            .fontColor(CloudThemeToken.primary)
+            .onClick(() => {
+              this.allowAnyNetworkBackup();
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
     }
     .width('100%')
@@ -990,7 +1828,7 @@ export struct TabPictures {
   }
 
   getFirstFailureMessage(): string {
-    let failed = this.getFailedItems();
+    let failed = this.failedPreviewItems.length > 0 ? this.failedPreviewItems : this.getFailedItems();
     if (failed.length === 0) {
       return '请稍后重试备份。';
     }
@@ -999,19 +1837,30 @@ export struct TabPictures {
   }
 
   @Builder sectionCompleted() {
-    if (this.getCompletedItems().length > 0) {
-      SectionHeader({ title: '最近完成', count: this.getCompletedItems().length });
-      this.photoGrid(this.getCompletedItems().slice(0, 18), PhotoBackupStatus.COMPLETED);
+    if (this.completedPhotoCount > 0) {
+      Column({ space: CloudThemeToken.spacingCard }) {
+        this.completedSectionHeader();
+        if (this.completedPreviewItems.length > 0) {
+          this.photoGrid(this.completedPreviewDataSource, PhotoBackupStatus.COMPLETED);
+        } else {
+          this.compactPhotoSection('已备份', this.completedPhotoCount, '备份完成后展示最近图片',
+            PhotoBackupStatus.COMPLETED);
+        }
+      }
+      .width('100%')
     }
   }
 
   @Builder sectionBackupHistory() {
     if (this.getBackupPathHistory().length > 0) {
-      SectionHeader({ title: '备份历史', count: this.getBackupPathHistory().length });
       Column({ space: CloudThemeToken.spacingCard }) {
-        ForEach(this.getBackupPathHistory(), (history: PhotoBackupPathHistory) => {
+        this.backupHistorySectionHeader();
+        ForEach(this.getVisibleBackupPathHistory(), (history: PhotoBackupPathHistory) => {
           this.backupHistoryRow(history);
         }, (history: PhotoBackupPathHistory) => history.path)
+        if (this.getHiddenBackupPathHistoryCount() > 0) {
+          this.backupHistoryMoreRow(this.getHiddenBackupPathHistoryCount());
+        }
       }
       .width('100%')
     }
@@ -1051,42 +1900,40 @@ export struct TabPictures {
     .padding(CloudThemeToken.spacingPanel)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(history.isCurrent ? CloudThemeToken.surface : CloudThemeToken.surfaceSubtle)
-    .border({ width: history.isCurrent ? 1 : 0, color: CloudThemeToken.line })
+    .border({ width: history.isCurrent ? CloudThemeToken.lineWidth : CloudThemeToken.zero, color: CloudThemeToken.line })
   }
 
-  @Builder photoGrid(items: PhotoBackupItem[], status: PhotoBackupStatus) {
-    Grid() {
-      ForEach(items, (item: PhotoBackupItem) => {
-        GridItem() {
-          Stack({ alignContent: Alignment.TopEnd }) {
-            Image(item.uri)
-              .width('100%')
-              .aspectRatio(1)
-              .objectFit(ImageFit.Cover)
-              .borderRadius(CloudThemeToken.controlRadiusLg)
+  @Builder backupHistoryMoreRow(count: number) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Text(`还有 ${count} 个历史路径`)
+        .fontSize(CloudThemeToken.textSizeBody)
+        .fontColor(CloudThemeToken.textSecondary)
+        .layoutWeight(1)
 
-            Text(this.getBadgeText(status))
-              .fontSize(CloudThemeToken.textSizeTiny)
-              .fontColor(CloudThemeToken.onPrimary)
-              .padding({ left: CloudThemeToken.spacingMd, right: CloudThemeToken.spacingMd, top: CloudThemeToken.spacingTiny, bottom: CloudThemeToken.spacingTiny })
-              .backgroundColor(this.getBadgeColor(status))
-              .borderRadius(CloudThemeToken.controlRadiusSm)
-              .margin(6)
-          }
-          .width('100%')
-          .aspectRatio(1)
-        }
-      }, (item: PhotoBackupItem) => item.id)
+      Text('保留记录')
+        .fontSize(CloudThemeToken.textSizeSmall)
+        .fontColor(CloudThemeToken.primary)
     }
-    .columnsTemplate(this.getPhotoGridColumnsTemplate())
-    .maxCount(this.getPhotoGridColumns())
-    .columnsGap(8)
-    .rowsGap(8)
     .width('100%')
-    .onAreaChange((oldValue: Area, newValue: Area) => {
-      const width = Number(newValue.width);
-      if (!Number.isNaN(width) && Math.abs(width - this.photoGridWidth) >= 1) {
-        this.photoGridWidth = width;
+    .padding(CloudThemeToken.spacingPanel)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
+  }
+
+  @Builder photoGrid(dataSource: LazyDataSource<PhotoBackupItem>, status: PhotoBackupStatus) {
+    PhotoBackupGrid({
+      dataSource: dataSource,
+      status: status,
+      columnsTemplate: this.getPhotoGridColumnsTemplate(),
+      maxCount: this.getPhotoGridColumns(),
+      gridHeight: this.getPhotoGridHeight(dataSource.totalCount()),
+      onItemVisible: (item: PhotoBackupItem) => {
+        this.loadPhotoThumbnail(item);
+      },
+      onWidthChange: (width: number) => {
+        if (Math.abs(width - this.photoGridWidth) >= CloudThemeToken.lineWidth) {
+          this.photoGridWidth = width;
+        }
       }
     })
   }
@@ -1133,6 +1980,19 @@ export struct TabPictures {
       templates.push('1fr');
     }
     return templates.join(' ');
+  }
+
+  getPhotoGridHeight(itemCount: number): number {
+    if (itemCount <= CloudThemeToken.zero) {
+      return CloudThemeToken.zero;
+    }
+    const columns = this.getPhotoGridColumns();
+    const rows = Math.ceil(itemCount / columns);
+    const width = this.photoGridWidth > CloudThemeToken.zero ? this.photoGridWidth :
+      CloudThemeToken.photoBackupGridFallbackWidth;
+    const totalGap = (columns - 1) * CloudThemeToken.spacingXl;
+    const itemWidth = Math.max((width - totalGap) / columns, CloudThemeToken.zero);
+    return rows * itemWidth + Math.max(rows - 1, CloudThemeToken.zero) * CloudThemeToken.spacingXl;
   }
 
   @Builder emptyState() {
@@ -1269,6 +2129,55 @@ export struct TabPictures {
       .borderRadius(CloudThemeToken.cardRadius)
       .backgroundColor(CloudThemeToken.surfaceSubtle)
 
+      Row() {
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text('同时上传')
+            .fontSize(CloudThemeToken.textSizeLarge)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('备份任务会按队列执行')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Row({ space: CloudThemeToken.spacingXl }) {
+          Button('-')
+            .width(CloudThemeToken.smallIconButtonSize)
+            .height(CloudThemeToken.smallIconButtonSize)
+            .enabled(this.getSettingsUploadConcurrent() > CloudThemeToken.photoBackupMinConcurrent)
+            .backgroundColor(CloudThemeToken.surface)
+            .fontColor(CloudThemeToken.textPrimary)
+            .onClick(() => {
+              this.updateUploadConcurrent(-1);
+            })
+
+          Text(`${this.getSettingsUploadConcurrent()}`)
+            .fontSize(CloudThemeToken.textSizeLarge)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+            .textAlign(TextAlign.Center)
+            .width(CloudThemeToken.iconBoxSm)
+
+          Button('+')
+            .width(CloudThemeToken.smallIconButtonSize)
+            .height(CloudThemeToken.smallIconButtonSize)
+            .enabled(this.getSettingsUploadConcurrent() < CloudThemeToken.photoBackupMaxConcurrent)
+            .backgroundColor(CloudThemeToken.surface)
+            .fontColor(CloudThemeToken.textPrimary)
+            .onClick(() => {
+              this.updateUploadConcurrent(1);
+            })
+        }
+        .alignItems(VerticalAlign.Center)
+      }
+      .width('100%')
+      .height(CloudThemeToken.rowHeight5xl)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+      .borderRadius(CloudThemeToken.cardRadius)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+
       Row({ space: CloudThemeToken.spacingCard }) {
         Button('重新扫描本地相册')
           .layoutWeight(1)
@@ -1356,5 +2265,121 @@ export struct TabPictures {
       return undefined
     }
     return hostContext as common.UIAbilityContext
+  }
+}
+
+@Component
+struct PhotoBackupGrid {
+  @Consume photoBackupThumbs: Map<string, PixelMap>
+  dataSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource()
+  status: PhotoBackupStatus = PhotoBackupStatus.WAITING
+  columnsTemplate: string = ''
+  maxCount: number = CloudThemeToken.zero
+  gridHeight: number = CloudThemeToken.zero
+  onItemVisible?: (item: PhotoBackupItem) => void
+  onWidthChange?: (width: number) => void
+
+  getBadgeText(): string {
+    switch (this.status) {
+      case PhotoBackupStatus.COMPLETED:
+        return '已备份';
+      case PhotoBackupStatus.FAILED:
+        return '失败';
+      default:
+        return '待传';
+    }
+  }
+
+  getBadgeColor(): ResourceColor {
+    switch (this.status) {
+      case PhotoBackupStatus.COMPLETED:
+        return CloudThemeToken.success;
+      case PhotoBackupStatus.FAILED:
+        return CloudThemeToken.danger;
+      default:
+        return CloudThemeToken.primary;
+    }
+  }
+
+  build() {
+    Grid() {
+      LazyForEach(this.dataSource, (item: PhotoBackupItem) => {
+        GridItem() {
+          Stack({ alignContent: Alignment.TopEnd }) {
+            if (this.photoBackupThumbs.has(item.id)) {
+              Image(this.photoBackupThumbs.get(item.id))
+                .width('100%')
+                .aspectRatio(CloudThemeToken.squareAspectRatio)
+                .objectFit(ImageFit.Cover)
+                .borderRadius(CloudThemeToken.controlRadiusLg)
+            } else {
+              this.uriThumbnail(item)
+            }
+
+            Text(this.getBadgeText())
+              .fontSize(CloudThemeToken.textSizeTiny)
+              .fontColor(CloudThemeToken.onPrimary)
+              .padding({
+                left: CloudThemeToken.spacingMd,
+                right: CloudThemeToken.spacingMd,
+                top: CloudThemeToken.spacingTiny,
+                bottom: CloudThemeToken.spacingTiny
+              })
+              .backgroundColor(this.getBadgeColor())
+              .borderRadius(CloudThemeToken.controlRadiusSm)
+              .margin(CloudThemeToken.spacingMd)
+          }
+          .width('100%')
+          .aspectRatio(CloudThemeToken.squareAspectRatio)
+          .clip(true)
+        }
+        .onAppear(() => {
+          this.onItemVisible?.(item);
+        })
+      }, (item: PhotoBackupItem) => item.id)
+    }
+    .cachedCount(CloudThemeToken.photoBackupGridCachedCount)
+    .columnsTemplate(this.columnsTemplate)
+    .maxCount(this.maxCount)
+    .columnsGap(CloudThemeToken.spacingXl)
+    .rowsGap(CloudThemeToken.spacingXl)
+    .width('100%')
+    .height(this.gridHeight)
+    .clip(true)
+    .onAreaChange((oldValue: Area, newValue: Area) => {
+      const width = Number(newValue.width);
+      if (!Number.isNaN(width)) {
+        this.onWidthChange?.(width);
+      }
+    })
+  }
+
+  @Builder uriThumbnail(item: PhotoBackupItem) {
+    Stack({ alignContent: Alignment.Center }) {
+      this.thumbnailPlaceholder()
+      Image(item.uri)
+        .width('100%')
+        .aspectRatio(CloudThemeToken.squareAspectRatio)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(CloudThemeToken.controlRadiusLg)
+        .draggable(false)
+    }
+    .width('100%')
+    .aspectRatio(CloudThemeToken.squareAspectRatio)
+    .clip(true)
+  }
+
+  @Builder thumbnailPlaceholder() {
+    Stack({ alignContent: Alignment.Center }) {
+      Image($r('app.media.ic_select_photos'))
+        .width(CloudThemeToken.iconBoxLg)
+        .height(CloudThemeToken.iconBoxLg)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
+    }
+    .width('100%')
+    .aspectRatio(CloudThemeToken.squareAspectRatio)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 }

@@ -30,6 +30,7 @@ import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
+import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 
 const TAG = 'TabFiles';
 
@@ -376,9 +377,9 @@ export struct TabFiles {
       CloudScaffold({
         scrollable: false,
         avoidTabBar: false,
-        topPadding: 20,
-        bottomPadding: 0,
-        horizontalPadding: 0
+        topPadding: CloudThemeToken.pageTopPadding,
+        bottomPadding: CloudThemeToken.zero,
+        horizontalPadding: CloudThemeToken.zero
       }) {
         Column({ space: CloudThemeToken.spacingCard }) {
           TabFilesHeader({
@@ -412,7 +413,7 @@ export struct TabFiles {
           }
           .width('100%')
           .height('100%')
-          .refreshOffset(77)
+          .refreshOffset(CloudThemeToken.refreshOffset)
           .pullToRefresh(true)
           .onRefreshing(async () => {
             await this.getFileList(true, this.currentPath);
@@ -513,7 +514,11 @@ export struct TabFiles {
       .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
       .borderRadius(CloudThemeToken.controlRadiusRoundMd)
       .backgroundColor(CloudThemeToken.surface)
-      .shadow({ radius: 12, color: CloudThemeToken.refreshShadow, offsetY: 4 })
+      .shadow({
+        radius: CloudThemeToken.refreshShadowRadius,
+        color: CloudThemeToken.refreshShadow,
+        offsetY: CloudThemeToken.refreshShadowOffsetY
+      })
     }
     .width('100%')
     .height('100%')
@@ -693,12 +698,12 @@ export struct TabFiles {
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard, bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
     .width('100%')
     .height('100%') //!!!使用lazyforeach必须设置高度才能有效
-    .rowsGap(7)
-    .columnsGap(7)
+    .rowsGap(CloudThemeToken.gridGap)
+    .columnsGap(CloudThemeToken.gridGap)
     .columnsTemplate(this.getGridColumnsTemplate())
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
-    .animation({duration: 300})
-    .scrollBarWidth(2)
+    .animation({duration: CloudThemeToken.defaultAnimationDuration})
+    .scrollBarWidth(CloudThemeToken.strongLineWidth)
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const width = Number(newValue.width)
       if (!Number.isNaN(width) && Math.abs(width - this.gridWidth) >= 1) {
@@ -772,11 +777,15 @@ export struct TabFiles {
       .width('100%')
       .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
       .backgroundColor(CloudThemeToken.background)
-      .shadow({ radius: 24, color: CloudThemeToken.sheetShadow, offsetY: -8 })
+      .shadow({
+        radius: CloudThemeToken.sheetShadowRadius,
+        color: CloudThemeToken.sheetShadow,
+        offsetY: CloudThemeToken.sheetShadowOffsetY
+      })
     }
     .width('100%')
     .height('100%')
-    .zIndex(100)
+    .zIndex(CloudThemeToken.overlayZIndex)
   }
 
   @Builder selectFileSheetBuilder() {
@@ -1014,32 +1023,26 @@ export struct TabFiles {
   }
 
   itemDelete(index: number, item: ObjectInfo) {
-    this.getUIContext().showAlertDialog({
+    showCloudConfirmDialog(this.getUIContext(), {
       title: $r('app.string.delete_confirm'),
       message: item.name,
-      primaryButton: {
-        value: $r('app.string.dialog_cancel'),
-        action: () => {}
-      },
-      secondaryButton: {
-        value: $r('app.string.dialog_delete'),
-        action: () => {
-          CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
-            onSuccess: (data) => {
-              if (item.type == Constant.OBJECT_DIR_TYPE) {
-                this.dirDataSource.deleteData(index)
-                this.isGridPadding = this.getFolderPaddingCount() > 0
-              } else {
-                this.fileDataSource.deleteData(index)
-              }
-              showToast($r('app.string.delete_success'))
-            },
-            onFailure: (msg) => {
-              console.error(TAG, '删除失败 msg: ' + msg)
-              showToast($r('app.string.delete_failed'))
+      confirmText: $r('app.string.dialog_delete'),
+      onConfirm: () => {
+        CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+          onSuccess: (data) => {
+            if (item.type == Constant.OBJECT_DIR_TYPE) {
+              this.dirDataSource.deleteData(index)
+              this.isGridPadding = this.getFolderPaddingCount() > 0
+            } else {
+              this.fileDataSource.deleteData(index)
             }
-          })
-        }
+            showToast($r('app.string.delete_success'))
+          },
+          onFailure: (msg) => {
+            console.error(TAG, '删除失败 msg: ' + msg)
+            showToast($r('app.string.delete_failed'))
+          }
+        })
       }
     })
   }
@@ -1116,28 +1119,28 @@ export struct TabFiles {
       return;
     }
 
-    this.getUIContext().showAlertDialog({
+    showCloudActionDialog(this.getUIContext(), {
       title: $r('app.string.upload_conflict_title'),
       message: conflictNames.join('\n'),
-      primaryButton: {
-        value: $r('app.string.upload_skip_existing'),
-        action: () => {
-          const conflictSet = new Set<string>(conflictNames);
-          const filteredUris = uris.filter(uri => {
-            try { return !conflictSet.has(uploadManager.extractFileName(uri)); } catch { return true; }
-          });
-          if (filteredUris.length > 0) {
-            this.uploadingCount += filteredUris.length;
-            uploadManager.enqueue(filteredUris, this.currentPath, false, context, this.uploadObjects, onDirChanged, onTaskEnd);
+      primaryText: $r('app.string.upload_skip_existing'),
+      secondaryText: $r('app.string.upload_overwrite_all'),
+      onPrimary: () => {
+        const conflictSet = new Set<string>(conflictNames);
+        const filteredUris = uris.filter(uri => {
+          try {
+            return !conflictSet.has(uploadManager.extractFileName(uri));
+          } catch {
+            return true;
           }
+        });
+        if (filteredUris.length > 0) {
+          this.uploadingCount += filteredUris.length;
+          uploadManager.enqueue(filteredUris, this.currentPath, false, context, this.uploadObjects, onDirChanged, onTaskEnd);
         }
       },
-      secondaryButton: {
-        value: $r('app.string.upload_overwrite_all'),
-        action: () => {
-          this.uploadingCount += uris.length;
-          uploadManager.enqueue(uris, this.currentPath, true, context, this.uploadObjects, onDirChanged, onTaskEnd);
-        }
+      onSecondary: () => {
+        this.uploadingCount += uris.length;
+        uploadManager.enqueue(uris, this.currentPath, true, context, this.uploadObjects, onDirChanged, onTaskEnd);
       }
     });
   }

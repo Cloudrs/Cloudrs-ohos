@@ -1,4 +1,5 @@
 import Constant from "../model/Constant";
+import { EmptyState } from "./EmptyState";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
@@ -12,6 +13,8 @@ export struct PathSelectSheet {
   @Prop filterDirId: string
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State currentPath: string = ''
+  @State isLoading: boolean = false
+  @State loadFailed: boolean = false
   onClose?: (isFinished: boolean, path?: string) => void
 
   private normalIcon: Resource = $r('app.media.ic_folder_fill');
@@ -33,9 +36,9 @@ export struct PathSelectSheet {
     this.allDirs.set(path, dirs)
   }
 
-  getDirs(path: string) {
+  getDirs(path: string): ObjectInfo[] {
     if (this.allDirs.has(path)) {
-      return this.allDirs.get(path)
+      return this.allDirs.get(path) ?? []
     }
     return []
   }
@@ -51,13 +54,18 @@ export struct PathSelectSheet {
 
   async getFileList(path: string) {
     this.currentPath = path
+    this.isLoading = true
+    this.loadFailed = false
     CloudApi.getFilesInfo(path, {
       onSuccess: (data: DirectoryInfo) => {
         let dirs = new DirFileInfo(data.parent, data.objects, data.policy).dirObjects
         this.putDirs(path, dirs.filter(item => item.id != this.filterDirId))
         this.putPathShow(this.currentPath, true)
+        this.isLoading = false
       },
       onFailure: (msg) => {
+        this.isLoading = false
+        this.loadFailed = true
         showToastTips($r('app.string.get_failed'), ToastType.Error)
       }
     })
@@ -76,6 +84,57 @@ export struct PathSelectSheet {
     Column({ space: CloudThemeToken.pathSheetGap }) {
       this.header()
 
+      this.pathContent()
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(CloudThemeToken.background)
+    .padding({ top: CloudThemeToken.pathSheetTopPadding, bottom: this.bottomRectHeight })
+    .justifyContent(FlexAlign.Start)
+  }
+
+  @Builder pathContent() {
+    if (this.isLoading) {
+      Column({ space: CloudThemeToken.spacingSection }) {
+        LoadingProgress()
+          .width(CloudThemeToken.iconBoxSm)
+          .height(CloudThemeToken.iconBoxSm)
+          .color(CloudThemeToken.primary)
+        Text('正在加载文件夹')
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+    } else if (this.loadFailed) {
+      Column() {
+        EmptyState({
+          icon: $r('app.media.ic_icloud_slash_fill'),
+          title: '文件夹加载失败',
+          description: '请检查网络后重试。',
+          actionText: '重新加载',
+          onAction: () => {
+            this.getFileList(this.currentPath.length > 0 ? this.currentPath : '/')
+          }
+        })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+    } else if (this.getDirs('/').length === 0) {
+      Column() {
+        EmptyState({
+          icon: $r('app.media.ic_empty_folder'),
+          title: '没有可选文件夹',
+          description: '当前空间暂时没有可展开的目录。'
+        })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+    } else {
       List() {
         ForEach(this.getDirs('/'), (item: ObjectInfo, index) => {
           this.dirItem(item)
@@ -86,11 +145,6 @@ export struct PathSelectSheet {
       .layoutWeight(1)
       .scrollBar(BarState.Off)
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(CloudThemeToken.background)
-    .padding({ top: CloudThemeToken.pathSheetTopPadding, bottom: this.bottomRectHeight })
-    .justifyContent(FlexAlign.Start)
   }
 
   @Builder header() {
@@ -168,7 +222,7 @@ export struct PathSelectSheet {
     .justifyContent(FlexAlign.SpaceBetween)
     .height(CloudThemeToken.sheetHeaderHeight)
     .width('100%')
-    .outline({width: {bottom: '2px'}})
+    .outline({width: {bottom: CloudThemeToken.strongLineWidth}})
     .outlineColor(CloudThemeToken.line)
   }
 
@@ -197,8 +251,8 @@ export struct PathSelectSheet {
             .width(CloudThemeToken.pathChevronWidth)
             .height(CloudThemeToken.pathChevronHeight)
             .padding({
-              left: this.getPathShow(item) ? 0 : CloudThemeToken.pathChevronCollapsedPadding,
-              right: this.getPathShow(item) ? 0 : CloudThemeToken.pathChevronCollapsedPadding
+              left: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding,
+              right: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding
             })
             .fillColor(CloudThemeToken.textSecondary)
             .draggable(false)
@@ -207,7 +261,7 @@ export struct PathSelectSheet {
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)
         .justifyContent(FlexAlign.Start)
-        .outline({ width: { bottom: '2px' } })
+        .outline({ width: { bottom: CloudThemeToken.strongLineWidth } })
         .outlineColor(CloudThemeToken.line)
       }
       .height(CloudThemeToken.pathRowHeight)

@@ -240,17 +240,17 @@ export struct TabFilesTitle {
     }
     .width(CloudThemeToken.menuWidth)
     .padding(CloudThemeToken.zero)
-    .margin(0)
+    .margin(CloudThemeToken.zero)
     .backgroundColor(CloudThemeToken.surface)
     .menuItemDivider({
       color: CloudThemeToken.line,
-      strokeWidth: { value: 2, unit: LengthUnit.PX }
+      strokeWidth: { value: CloudThemeToken.strongLineWidth, unit: LengthUnit.PX }
     })
     .menuItemGroupDivider({
       color: CloudThemeToken.surfaceSubtle,
-      strokeWidth: LengthMetrics.vp(5),
-      startMargin: LengthMetrics.vp(0),
-      endMargin: LengthMetrics.vp(0)
+      strokeWidth: LengthMetrics.vp(CloudThemeToken.spacingSm),
+      startMargin: LengthMetrics.vp(CloudThemeToken.zero),
+      endMargin: LengthMetrics.vp(CloudThemeToken.zero)
     })
   }
 

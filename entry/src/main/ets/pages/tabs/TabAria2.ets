@@ -16,6 +16,7 @@ import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
 import { CloudActionButton } from "../../components/CloudActionButton";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
+import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 
 const TAG: string = 'TabRemote'
 
@@ -161,8 +162,8 @@ export struct TabRemoteDown {
     CloudScaffold({
       scrollable: false,
       avoidTabBar: false,
-      topPadding: 20,
-      bottomPadding: 0,
+      topPadding: CloudThemeToken.pageTopPadding,
+      bottomPadding: CloudThemeToken.zero,
       horizontalPadding: CloudThemeToken.pagePadding
     }) {
       this.title()
@@ -177,34 +178,28 @@ export struct TabRemoteDown {
 
   deleteTaskConfirm(index: number, item: Aria2Finished) {
     const taskName = item.name && item.name.trim().length > 0 && item.name !== '.' ? item.name : item.gid
-    this.getUIContext().showAlertDialog({
+    showCloudConfirmDialog(this.getUIContext(), {
       title: $r('app.string.delete_task_confirm'),
       message: taskName,
-      primaryButton: {
-        value: $r('app.string.dialog_cancel'),
-        action: () => {}
-      },
-      secondaryButton: {
-        value: $r('app.string.dialog_delete'),
-        action: () => {
-          this.closeTaskDetailSheet()
-          this.currentFinishedDetail = undefined
-          this.currentFinishedIndex = -1
-          CloudApi.deleteAria2Task(item.gid, {
-            onSuccess: (data) => {
-              this.aria2FinishedSource.deleteData(index)
-              this.totalFinished = this.aria2FinishedSource.totalCount()
-              this.getAria2Downloading()
-              this.getAria2Finished(true)
-              this.getUserTasks(true)
-              showToast($r('app.string.delete_task_success'))
-            },
-            onFailure: (msg) => {
-              console.error(TAG, '删除任务失败 msg: ' + msg)
-              showToastTips(`删除任务失败：${msg}`, ToastType.Error)
-            }
-          })
-        }
+      confirmText: $r('app.string.dialog_delete'),
+      onConfirm: () => {
+        this.closeTaskDetailSheet()
+        this.currentFinishedDetail = undefined
+        this.currentFinishedIndex = -1
+        CloudApi.deleteAria2Task(item.gid, {
+          onSuccess: (data) => {
+            this.aria2FinishedSource.deleteData(index)
+            this.totalFinished = this.aria2FinishedSource.totalCount()
+            this.getAria2Downloading()
+            this.getAria2Finished(true)
+            this.getUserTasks(true)
+            showToast($r('app.string.delete_task_success'))
+          },
+          onFailure: (msg) => {
+            console.error(TAG, '删除任务失败 msg: ' + msg)
+            showToastTips(`删除任务失败：${msg}`, ToastType.Error)
+          }
+        })
       }
     })
   }
@@ -521,9 +516,9 @@ export struct TabRemoteDown {
       .columnsTemplate('1fr')
       .maxCount(1)
       .cachedCount(3)
-      .columnsGap(10)
-      .rowsGap(10)
-      .animation({duration: 300})
+      .columnsGap(CloudThemeToken.spacingCard)
+      .rowsGap(CloudThemeToken.spacingCard)
+      .animation({duration: CloudThemeToken.defaultAnimationDuration})
       .onReachEnd(() => {
         if (!this.isLastFinishedPage) {
           this.getAria2Finished(false)
@@ -540,7 +535,7 @@ export struct TabRemoteDown {
       })
     }
     .layoutWeight(1)
-    .refreshOffset(77)
+    .refreshOffset(CloudThemeToken.refreshOffset)
     .pullToRefresh(true)
     .onRefreshing(() => {
       this.getAria2Downloading();
@@ -571,9 +566,8 @@ export struct TabRemoteDown {
       .columnsTemplate('1fr')
       .maxCount(1)
       .cachedCount(3)
-      .columnsGap(10)
-      .rowsGap(10)
-      // .animation({duration: 300})
+      .columnsGap(CloudThemeToken.spacingCard)
+      .rowsGap(CloudThemeToken.spacingCard)
       .onReachEnd(() => {
         if (!this.isLastTasksQueuePage) {
           this.getUserTasks(false)
@@ -583,7 +577,7 @@ export struct TabRemoteDown {
       })
     }
     .layoutWeight(1)
-    .refreshOffset(77)
+    .refreshOffset(CloudThemeToken.refreshOffset)
     .pullToRefresh(true)
     .onRefreshing(() => {
       this.getUserTasks(true);
@@ -610,7 +604,7 @@ export struct TabRemoteDown {
           .maxLines(1)
           .textOverflow({overflow: TextOverflow.Ellipsis})
 
-        Progress({value: task.progress, total: 100, type: ProgressType.Capsule})
+        Progress({value: task.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Capsule})
           .width('100%')
           .height(CloudThemeToken.thinProgressHeight)
           .color(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
@@ -663,7 +657,7 @@ export struct TabRemoteDown {
         .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
     }
     .width('100%')
-    .constraintSize({ minHeight: 104 })
+    .constraintSize({ minHeight: CloudThemeToken.cardHeight3xl })
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     .borderRadius(CloudThemeToken.cardRadius)

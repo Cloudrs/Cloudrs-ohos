@@ -47,7 +47,7 @@ export struct TabFilesHeader {
               }
             })
             .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration })
-              .combine(TransitionEffect.scale({ x: 0, y: 0 })
+              .combine(TransitionEffect.scale({ x: CloudThemeToken.hiddenScale, y: CloudThemeToken.hiddenScale })
                 .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration })))
           }
 
@@ -86,9 +86,11 @@ export struct TabFilesHeader {
             }
           })
           .bindSheet($$this.showTransport, this.transportBuilder(), {
-            // detents: [SheetSize.FIT_CONTENT],
             backgroundColor: CloudThemeToken.surface,
-            title: this.transportTitle($r('app.string.transport_title'))
+            title: this.transportTitle($r('app.string.transport_title')),
+            onDisappear: () => {
+              this.showTransport = false
+            }
           })
 
           Button() {

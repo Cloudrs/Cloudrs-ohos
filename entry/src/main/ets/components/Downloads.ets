@@ -83,13 +83,11 @@ export struct Downloads {
             .height(CloudThemeToken.transferStateIconSize)
             .fillColor(this.getStateColor(object.state))
 
-          if (object.state == FileModelState.RUNNING) {
-            Text(CommonUtil.formatBytes(object.speed, 1) + '/s')
-              .fontSize(CloudThemeToken.transferMetaSize)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(CloudThemeToken.textSecondary)
-              .margin({ right: CloudThemeToken.transferSpeedRightMargin })
-          }
+          Text(this.getStateText(object))
+            .fontSize(CloudThemeToken.transferMetaSize)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.getStateColor(object.state))
+            .margin({ right: CloudThemeToken.transferSpeedRightMargin })
 
           Text(`${CommonUtil.formatBytes(object.trans, 1)}/${CommonUtil.formatBytes(object.total, 1)}`)
             .fontSize(CloudThemeToken.transferMetaSize)
@@ -102,12 +100,14 @@ export struct Downloads {
       .justifyContent(FlexAlign.Center)
       .layoutWeight(1)
 
-      Progress({value: object.progress, total: 100, type: ProgressType.Capsule})
+      Progress({value: object.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Capsule})
         .style({
           showDefaultPercentage: true
         })
         .width(CloudThemeToken.transferProgressWidth)
         .height(CloudThemeToken.transferProgressHeight)
+        .color(this.getStateColor(object.state))
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
     }
     .width('100%')
     .padding(CloudThemeToken.transferItemPadding)
@@ -115,5 +115,26 @@ export struct Downloads {
     .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
+  }
+
+  getStateText(object: TransportObject): string {
+    switch (object.state) {
+      case FileModelState.COMPLETED:
+        return '已完成'
+      case FileModelState.FAILED:
+        return '下载失败'
+      case FileModelState.WAITING:
+        return '等待中'
+      case FileModelState.RETRYING:
+        return '重试中'
+      case FileModelState.PAUSED:
+        return '已暂停'
+      case FileModelState.STOPPED:
+        return '已停止'
+      case FileModelState.REMOVED:
+        return '已移除'
+      default:
+        return CommonUtil.formatBytes(object.speed, 1) + '/s'
+    }
   }
 }

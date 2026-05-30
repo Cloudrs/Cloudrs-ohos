@@ -19,6 +19,14 @@ function rowCommonStyle() {
   .alignItems(VerticalAlign.Center)
 }
 
+function buildOtpIndexes(): number[] {
+  const indexes: number[] = []
+  for (let index = 0; index < CloudThemeToken.loginOtpLength; index++) {
+    indexes.push(index)
+  }
+  return indexes
+}
+
 @HMRouter({pageUrl: Constant.LOGIN_PAGE, singleton: true})
 @Component
 export struct LoginPage {
@@ -40,6 +48,22 @@ export struct LoginPage {
   @State private otpCode: string = ''
   scroller: Scroller = new Scroller();
   private nextPage: string|null = Constant.HOME_PAGE
+  private readonly otpIndexes: number[] = buildOtpIndexes()
+  private readonly otpInputId: string = 'loginOtpInput'
+
+  private requestOtpFocus(attempt: number = CloudThemeToken.zero): void {
+    setTimeout(() => {
+      try {
+        this.getUIContext().getFocusController().requestFocus(this.otpInputId)
+      } catch (err) {
+        if (attempt < CloudThemeToken.loginOtpFocusRetryCount) {
+          this.requestOtpFocus(attempt + CloudThemeToken.lineWidth)
+          return
+        }
+        console.error('LoginPage', `request OTP focus failed: ${(err as Error)?.message ?? err}`)
+      }
+    }, CloudThemeToken.loginOtpFocusDelayMs)
+  }
 
   aboutToAppear() {
     const uiContext = this.getUIContext();
@@ -147,7 +171,7 @@ export struct LoginPage {
       top: CloudThemeToken.loginPageVerticalPadding,
       left: CloudThemeToken.pagePadding,
       right: CloudThemeToken.pagePadding,
-      bottom: this.keyHeight ? 0 : CloudThemeToken.loginPageVerticalPadding
+      bottom: this.keyHeight ? CloudThemeToken.zero : CloudThemeToken.loginPageVerticalPadding
     })
     .backgroundColor(CloudThemeToken.background)
     .justifyContent(FlexAlign.SpaceBetween)
@@ -207,6 +231,7 @@ export struct LoginPage {
       onTwoFactorRequired: () => {
         this.needs2FA = true
         this.otpCode = ''
+        this.requestOtpFocus()
       }
     }
     CloudApi.login(this.username, this.password, {
@@ -221,8 +246,8 @@ export struct LoginPage {
   }
 
   private submitOtp() {
-    if (this.otpCode.length != 6) {
-      showToastTips('请输入6位验证码', ToastType.Error)
+    if (this.otpCode.length != CloudThemeToken.loginOtpLength) {
+      showToastTips(`请输入${CloudThemeToken.loginOtpLength}位验证码`, ToastType.Error)
       return
     }
     CloudApi.login2fa(this.otpCode, {
@@ -234,6 +259,7 @@ export struct LoginPage {
         console.debug('LoginPage', '2FA验证失败 错误信息:', msg)
         showToastTips('验证码错误，请重试', ToastType.Error);
         this.otpCode = ''
+        this.requestOtpFocus()
       }
     })
   }
@@ -336,7 +362,7 @@ export struct LoginPage {
 
       Stack() {
         Row({ space: CloudThemeToken.loginOtpCellGap }) {
-          ForEach([0, 1, 2, 3, 4, 5], (item: number) => {
+          ForEach(this.otpIndexes, (item: number) => {
             Column() {
               Text(item < this.otpCode.length ? this.otpCode[item] : '')
                 .fontSize(CloudThemeToken.loginOtpCellTextSize)
@@ -360,15 +386,16 @@ export struct LoginPage {
         .width('100%')
 
         TextInput()
+          .id(this.otpInputId)
           .type(InputType.Number)
-          .maxLength(6)
+          .maxLength(CloudThemeToken.loginOtpLength)
           .width('100%')
           .height(CloudThemeToken.loginOtpCellHeight)
-          .opacity(0.01)
+          .opacity(CloudThemeToken.invisibleOpacity)
           .defaultFocus(true)
           .onChange((value) => {
             this.otpCode = value
-            if (value.length === 6) {
+            if (value.length === CloudThemeToken.loginOtpLength) {
               this.submitOtp()
             }
           })

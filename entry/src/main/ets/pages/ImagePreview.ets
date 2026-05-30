@@ -198,17 +198,17 @@ export struct ImagePreviewPage {
 
   async shareImage() {
     if (this.fileParam && this.imageData) {
+      let tempPath: string = ''
       try {
         const context = this.getAbilityContext();
         if (!context) {
           showToast('分享失败')
           return
         }
-        let path = context.tempDir + '/' + this.fileParam.fileName
-        let uri = FileSystemUtil.getUriFromPath(path)
+        tempPath = context.tempDir + '/' + this.fileParam.fileName
+        let uri = FileSystemUtil.getUriFromPath(tempPath)
         console.debug(TAG, 'uri: ' + uri)
-        await FileSystemUtil.writeArrayBuffer(path, this.imageData)
-        // 保存到应用沙箱先，后续支持直接将arraybuffer发送就最好了
+        await FileSystemUtil.writeArrayBuffer(tempPath, this.imageData)
         let data: systemShare.SharedData = new systemShare.SharedData({
           utd: uniformTypeDescriptor.UniformDataType.IMAGE,
           title: this.fileParam.fileName,
@@ -221,10 +221,13 @@ export struct ImagePreviewPage {
         })
         controller.on('dismiss', () => {
           console.debug(TAG, 'share dismiss, unlink image file!')
-          FileSystemUtil.unlinkIfExists(path)
+          FileSystemUtil.unlinkIfExists(tempPath)
         })
       } catch(err) {
         console.error(TAG, `share image failed with error: ${err.code}, ${err.message}`);
+        if (tempPath.length > 0) {
+          FileSystemUtil.unlinkIfExists(tempPath)
+        }
         showToast('分享失败')
       }
     }

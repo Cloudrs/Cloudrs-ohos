@@ -108,7 +108,6 @@ export struct ObjectItem {
           .draggable(false)
 
         Column({ space: CloudThemeToken.objectMetaGap }) {
-          //TODO: 加入是否下载为本地的图标
           Text(this.getDisplayName(item.name, this.showType == ShowType.SHOW_LIST ? 42 : 26))
             .itemFileNameStyle()
 
@@ -138,7 +137,7 @@ export struct ObjectItem {
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {
-        hoverScale: [1.0, 0.95]
+        hoverScale: [CloudThemeToken.fullOpacity, CloudThemeToken.pressedScale]
       }
     })
   }
@@ -184,7 +183,7 @@ export struct ObjectItem {
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {
-        hoverScale: [1.0, 1.0]
+        hoverScale: [CloudThemeToken.fullOpacity, CloudThemeToken.fullOpacity]
       }
     })
     .height(CloudThemeToken.objectGridFileHeight)
@@ -202,7 +201,6 @@ export struct ObjectItem {
           .draggable(false)
 
         Column({ space: CloudThemeToken.objectMetaGap }) {
-          //TODO: 加入是否下载为本地的图标
           Text(this.getDisplayName(item.name, 42))
             .itemFileNameStyle()
 
@@ -223,7 +221,7 @@ export struct ObjectItem {
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {
-        hoverScale: [1.0, 0.95]
+        hoverScale: [CloudThemeToken.fullOpacity, CloudThemeToken.pressedScale]
       }
     })
   }
@@ -261,17 +259,17 @@ export struct ObjectItem {
     }
     .width(CloudThemeToken.menuWidth)
     .padding(CloudThemeToken.zero)
-    .margin(0)
+    .margin(CloudThemeToken.zero)
     .backgroundColor(CloudThemeToken.surface)
     .menuItemDivider({
       color: CloudThemeToken.line,
-      strokeWidth: {value: 2, unit: LengthUnit.PX}
+      strokeWidth: {value: CloudThemeToken.strongLineWidth, unit: LengthUnit.PX}
     })
     .menuItemGroupDivider({
       color: CloudThemeToken.surfaceSubtle,
-      strokeWidth: LengthMetrics.vp(5),
-      startMargin: LengthMetrics.vp(0),
-      endMargin: LengthMetrics.vp(0)
+      strokeWidth: LengthMetrics.vp(CloudThemeToken.spacingSm),
+      startMargin: LengthMetrics.vp(CloudThemeToken.zero),
+      endMargin: LengthMetrics.vp(CloudThemeToken.zero)
     })
   }
 

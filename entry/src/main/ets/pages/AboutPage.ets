@@ -52,7 +52,7 @@ export struct AboutPage {
   @Builder aboutInfo() {
     Column() {
       this.commonInfo($r('app.string.version'), this.appVersion)
-      Divider().strokeWidth('1px').color(CloudThemeToken.line)
+      Divider().strokeWidth(CloudThemeToken.lineWidth).color(CloudThemeToken.line)
       this.commonInfo($r('app.string.about_email'), EMAIL)
     }
     .width('100%')

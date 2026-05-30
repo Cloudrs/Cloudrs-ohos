@@ -37,7 +37,7 @@ export struct CloudActionButton {
 
   build() {
     Button({ type: ButtonType.Normal }) {
-      Row({ space: this.text === '' ? 0 : CloudThemeToken.actionButtonContentGap }) {
+      Row({ space: this.text === '' ? CloudThemeToken.zero : CloudThemeToken.actionButtonContentGap }) {
         Image(this.icon)
           .width(CloudThemeToken.actionButtonIconSize)
           .height(CloudThemeToken.actionButtonIconSize)
@@ -64,7 +64,7 @@ export struct CloudActionButton {
     .borderRadius(CloudThemeToken.controlRadius)
     .backgroundColor(this.getBackgroundColor())
     .enabled(this.isEnabled)
-    .opacity(this.isEnabled ? 1 : 0.45)
+    .opacity(this.isEnabled ? CloudThemeToken.fullOpacity : CloudThemeToken.disabledOpacity)
     .onClick(() => {
       if (this.isEnabled && this.onAction) {
         this.onAction()

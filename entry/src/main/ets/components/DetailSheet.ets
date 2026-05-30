@@ -143,6 +143,6 @@ export struct DetailSheet {
   @Builder commonDivider() {
     Divider()
       .color(CloudThemeToken.line)
-      .strokeWidth('1px')
+      .strokeWidth(CloudThemeToken.lineWidth)
   }
 }

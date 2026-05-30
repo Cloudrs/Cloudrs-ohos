@@ -11,6 +11,7 @@ import { CloudScaffold } from "../../components/CloudScaffold";
 import { SectionHeader } from "../../components/SectionHeader";
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
+import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 
 const TAG:string = 'TabMine'
 
@@ -114,8 +115,8 @@ export struct TabMine {
     Stack() {
       CloudScaffold({
         scroller: this.scroller,
-        topPadding: 20,
-        bottomPadding: 20
+        topPadding: CloudThemeToken.pageTopPadding,
+        bottomPadding: CloudThemeToken.pageBottomPadding
       }) {
         Column({ space: CloudThemeToken.sectionGap }) {
           this.userInfo()
@@ -135,6 +136,7 @@ export struct TabMine {
       backgroundColor: CloudThemeToken.background,
       onDisappear: () => {
         this.showSettingsSheet = false
+        this.activeSheetType = MineSheetType.NONE
       }
     })
   }
@@ -157,8 +159,8 @@ export struct TabMine {
         Image(this.userAvatar ?? $r("app.media.ic_default_avatar"))
           .width(this.avatarSize)
           .height(this.avatarSize)
-          .borderRadius(this.avatarSize / 2)
-          .borderWidth(1)
+          .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
+          .borderWidth(CloudThemeToken.lineWidth)
           .borderColor(CloudThemeToken.line)
           .draggable(false)
 
@@ -360,20 +362,13 @@ export struct TabMine {
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
     .onClick(() => {
-      this.getUIContext().showAlertDialog({
+      showCloudConfirmDialog(this.getUIContext(), {
         title: $r('app.string.logout_confim'),
-        message: '',
-        primaryButton: {
-          value: $r('app.string.dialog_cancel'),
-          action: () => {}
-        },
-        secondaryButton: {
-          value: $r('app.string.dialog_logout'),
-          action: () => {
-            UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
-            UserDatabase.deleteUserInfo(this.currentUser)
-            HMRouterMgr.push({ pageUrl: Constant.LOGIN_PAGE })
-          }
+        confirmText: $r('app.string.dialog_logout'),
+        onConfirm: () => {
+          UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
+          UserDatabase.deleteUserInfo(this.currentUser)
+          HMRouterMgr.push({ pageUrl: Constant.LOGIN_PAGE })
         }
       })
     })

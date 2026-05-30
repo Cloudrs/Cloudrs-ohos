@@ -120,7 +120,11 @@ export struct Aria2Create {
     .justifyContent(FlexAlign.Start)
     .backgroundColor(CloudThemeToken.background)
     .bindSheet($$this.isShowPathSelect, this.selectPathSheet(), {
-      showClose: false
+      showClose: false,
+      backgroundColor: CloudThemeToken.background,
+      onDisappear: () => {
+        this.isShowPathSelect = false
+      }
     })
   }
 

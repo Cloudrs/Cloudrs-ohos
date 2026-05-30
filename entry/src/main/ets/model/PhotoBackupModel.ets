@@ -16,10 +16,14 @@ export enum PhotoBackupState {
 }
 
 export class PhotoBackupSettings {
+  static readonly DEFAULT_UPLOAD_CONCURRENT: number = 5
+  static readonly MIN_UPLOAD_CONCURRENT: number = 1
+
   enabled: boolean = false
   remotePath: string = '/Photos/Camera'
   wifiOnly: boolean = true
   autoBackup: boolean = true
+  uploadConcurrent: number = PhotoBackupSettings.DEFAULT_UPLOAD_CONCURRENT
   lastScanAt: number = 0
 
   static fromJson(json: string): PhotoBackupSettings {
@@ -34,6 +38,8 @@ export class PhotoBackupSettings {
       settings.remotePath = (value.remotePath as string) ?? '/Photos/Camera'
       settings.wifiOnly = (value.wifiOnly as boolean) ?? true
       settings.autoBackup = (value.autoBackup as boolean) ?? true
+      settings.uploadConcurrent = Math.max((value.uploadConcurrent as number) ??
+        PhotoBackupSettings.DEFAULT_UPLOAD_CONCURRENT, PhotoBackupSettings.MIN_UPLOAD_CONCURRENT)
       settings.lastScanAt = (value.lastScanAt as number) ?? 0
     } catch (err) {
       console.error('PhotoBackupSettings', `parse failed: ${(err as Error)?.message ?? err}`)
@@ -47,6 +53,7 @@ export class PhotoBackupSettings {
       remotePath: this.remotePath,
       wifiOnly: this.wifiOnly,
       autoBackup: this.autoBackup,
+      uploadConcurrent: this.uploadConcurrent,
       lastScanAt: this.lastScanAt
     })
   }
@@ -57,6 +64,7 @@ interface PhotoBackupSettingsData {
   remotePath?: string
   wifiOnly?: boolean
   autoBackup?: boolean
+  uploadConcurrent?: number
   lastScanAt?: number
 }
 

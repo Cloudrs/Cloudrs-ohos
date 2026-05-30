@@ -424,6 +424,13 @@ export class CloudThemeToken {
   static readonly overlayScrim: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'
 
+  static getSafeTopInset(topRectHeight: number): number {
+    if (topRectHeight <= CloudThemeToken.zero) {
+      return CloudThemeToken.systemTopFallbackHeight
+    }
+    return Math.min(topRectHeight, CloudThemeToken.systemTopFallbackHeight)
+  }
+
   static getLayoutMode(width: number): CloudLayoutMode {
     if (width >= CloudThemeToken.wideBreakpoint) {
       return CloudLayoutMode.WIDE

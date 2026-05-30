@@ -17,10 +17,7 @@ export struct CloudScaffold {
   }
 
   private getTopInset(): number {
-    if (this.topRectHeight <= CloudThemeToken.zero) {
-      return CloudThemeToken.systemTopFallbackHeight
-    }
-    return Math.min(this.topRectHeight, CloudThemeToken.systemTopFallbackHeight)
+    return CloudThemeToken.getSafeTopInset(this.topRectHeight)
   }
 
   build() {

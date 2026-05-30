@@ -232,10 +232,7 @@ export struct TabFiles {
   }
 
   getTopInset(): number {
-    if (this.topRectHeight <= CloudThemeToken.zero) {
-      return CloudThemeToken.systemTopFallbackHeight
-    }
-    return Math.min(this.topRectHeight, CloudThemeToken.systemTopFallbackHeight)
+    return CloudThemeToken.getSafeTopInset(this.topRectHeight)
   }
 
   getHeaderContentHeight(): number {

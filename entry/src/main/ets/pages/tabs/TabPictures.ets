@@ -1209,6 +1209,10 @@ export struct TabPictures {
     }, CloudThemeToken.photoBackupPreviewDelayMs + index * CloudThemeToken.photoBackupPreviewDelayStepMs);
   }
 
+  getTopInset(): number {
+    return CloudThemeToken.getSafeTopInset(this.topRectHeight);
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column({ space: CloudThemeToken.sectionGap }) {
@@ -1261,7 +1265,7 @@ export struct TabPictures {
       .padding({
         left: CloudThemeToken.pagePadding,
         right: CloudThemeToken.pagePadding,
-        top: this.topRectHeight + CloudThemeToken.scaffoldTopPadding
+        top: this.getTopInset() + CloudThemeToken.scaffoldTopPadding
       })
       .backgroundColor(CloudThemeToken.background)
     }

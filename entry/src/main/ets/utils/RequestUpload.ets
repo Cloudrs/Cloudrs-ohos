@@ -16,7 +16,7 @@ class RequestUpload {
   constructor() {
     setInterval(() => {
       this.flushBackgroundTask()
-    }, 2000);
+    }, Constant.BACKGROUND_TASK_FLUSH_INTERVAL_MS);
   }
 
   setUploadTask(id: string, task: request.agent.Task) {
@@ -72,11 +72,11 @@ class RequestUpload {
       let uploadConfig: request.agent.Config = {
         action: request.agent.Action.UPLOAD,
         url: fileModel.url,
-        method: 'POST',
-        title: 'upload',
+        method: Constant.REQUEST_METHOD_POST,
+        title: Constant.REQUEST_TITLE_UPLOAD,
         mode: request.agent.Mode.BACKGROUND,
         network: request.agent.Network.ANY,
-        gauge: true
+        gauge: Constant.REQUEST_GAUGE_ENABLED
       }
 
       try {
@@ -85,10 +85,13 @@ class RequestUpload {
             Logger.info(TAG, `progress,  progress = ${progress.processed} ${progress.state}`);
 
             let processed = Number(progress.processed.toString()).valueOf();
-            let size = progress.sizes[0];
-            let process: number = Math.floor(processed / size * 100);
+            let size = progress.sizes[Constant.FIRST_ARRAY_INDEX];
+            if (size <= Constant.BACKGROUND_TASK_EMPTY_SIZE) {
+              return;
+            }
+            let process: number = Math.floor(processed / size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT);
 
-            if (process < 100) {
+            if (process < Constant.BACKGROUND_TASK_COMPLETE_PERCENT) {
               if (fileModel.callback) {
                 fileModel.callback(progress.processed, FileModelState.RUNNING);
               }
@@ -106,7 +109,7 @@ class RequestUpload {
           task.on('pause', async (progress: request.agent.Progress) => {
             const taskInfo = await this.showTask(task.tid);
             Logger.info(TAG, `pause, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
-            isNetPause = taskInfo?.faults === 0;
+            isNetPause = taskInfo?.faults === Constant.TASK_FAULTS_NONE;
             if (fileModel.callback) {
               if (isNetPause) {
                 fileModel.callback(progress.processed, FileModelState.PAUSED);

@@ -1,16 +1,13 @@
 import fs from '@ohos.file.fs';
 import taskpool from '@ohos.taskpool';
 import { fileUri } from '@kit.CoreFileKit';
-
-const COPY_CHUNK_SIZE = 128 * 1024;
-const COPY_YIELD_DELAY_MS = 1;
+import Constant from '../model/Constant';
 
 @Concurrent
-function copyUriToPathTask(uri: string, targetPath: string): number {
+function copyUriToPathTask(uri: string, targetPath: string, copyChunkSize: number): number {
   let source: fs.File | undefined = undefined;
   let target: fs.File | undefined = undefined;
   let copied = 0;
-  const copyChunkSize = 128 * 1024;
 
   try {
     source = fs.openSync(uri, fs.OpenMode.READ_ONLY);
@@ -81,7 +78,7 @@ export class FileSystemUtil {
     try {
       source = fs.openSync(uri, fs.OpenMode.READ_ONLY);
       target = fs.openSync(targetPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
-      const buffer = new ArrayBuffer(COPY_CHUNK_SIZE);
+      const buffer = new ArrayBuffer(Constant.FILE_COPY_CHUNK_SIZE);
       while (true) {
         const readLen = fs.readSync(source.fd, buffer);
         if (readLen <= 0) {
@@ -90,7 +87,7 @@ export class FileSystemUtil {
         fs.writeSync(target.fd, buffer, { length: readLen });
         copied += readLen;
         onProgress?.(copied, total);
-        await new Promise<void>((resolve) => setTimeout(resolve, COPY_YIELD_DELAY_MS));
+        await new Promise<void>((resolve) => setTimeout(resolve, Constant.FILE_COPY_YIELD_DELAY_MS));
       }
       return copied;
     } catch (err) {
@@ -112,8 +109,12 @@ export class FileSystemUtil {
   }
 
   static async copyUriToPathInBackground(uri: string, targetPath: string): Promise<number> {
-    const task = new taskpool.Task(copyUriToPathTask, uri, targetPath);
-    return await taskpool.execute(task, taskpool.Priority.LOW) as number;
+    try {
+      const task = new taskpool.Task(copyUriToPathTask, uri, targetPath, Constant.FILE_COPY_CHUNK_SIZE);
+      return await taskpool.execute(task, taskpool.Priority.LOW) as number;
+    } catch (err) {
+      throw new Error((err as Error)?.message ?? `${err}`);
+    }
   }
 
   static async unlinkIfExists(path: string): Promise<void> {

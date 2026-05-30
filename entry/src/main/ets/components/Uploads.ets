@@ -4,6 +4,7 @@ import { CloudThemeToken } from "../model/CloudTheme"
 import { TransportObject } from "../model/TransportObject"
 import { CommonUtil } from "../utils/CommonUtil"
 import LazyDataSource from "../utils/LazyDataSource"
+import { TransferStateUtil } from "../utils/TransferStateUtil"
 
 const TAG = 'Uploads'
 
@@ -13,7 +14,7 @@ export struct Uploads {
 
   build() {
     Column() {
-      if (this.uploadObjects.totalCount() == 0) {
+      if (this.uploadObjects.totalCount() == CloudThemeToken.zero) {
         this.noItem()
       } else {
         List({ space: CloudThemeToken.transferListGap }) {
@@ -21,6 +22,7 @@ export struct Uploads {
             this.uploadItem(item)
           }, (item: TransportObject, index) => item.path + index)
         }
+        .scrollBar(BarState.Off)
         .width('100%')
         .height('100%')
       }
@@ -39,25 +41,11 @@ export struct Uploads {
   }
 
   getUploadIcon(state: FileModelState) {
-    switch (state){
-      case FileModelState.COMPLETED:
-        return $r('app.media.ic_checkmark_circle')
-      case FileModelState.FAILED:
-        return $r('app.media.ic_xmark_circle_fill')
-      default :
-        return $r('app.media.ic_arrowshape_up')
-    }
+    return TransferStateUtil.getStateIcon(state, $r('app.media.ic_arrowshape_up'))
   }
 
   getStateColor(state: FileModelState): ResourceColor {
-    switch (state) {
-      case FileModelState.COMPLETED:
-        return CloudThemeToken.success
-      case FileModelState.FAILED:
-        return CloudThemeToken.danger
-      default:
-        return CloudThemeToken.primary
-    }
+    return TransferStateUtil.getStateColor(state)
   }
 
   @Builder uploadItem(object: TransportObject) {
@@ -117,33 +105,16 @@ export struct Uploads {
   }
 
   getStateText(object: TransportObject): string {
-    switch (object.state) {
-      case FileModelState.COMPLETED:
-        return '已完成'
-      case FileModelState.FAILED:
-        return '上传失败'
-      case FileModelState.WAITING:
-        return '等待中'
-      case FileModelState.RETRYING:
-        return '重试中'
-      case FileModelState.PAUSED:
-        return '已暂停'
-      case FileModelState.STOPPED:
-        return '已停止'
-      case FileModelState.REMOVED:
-        return '已移除'
-      default:
-        return this.getRunningText(object)
-    }
+    return TransferStateUtil.getCommonStateText(object.state, '上传失败') ?? this.getRunningText(object)
   }
 
   private getRunningText(object: TransportObject): string {
     if (object.statusText.length > 0) {
       return object.statusText
     }
-    if (object.progress >= 99 && object.trans >= object.total) {
+    if (TransferStateUtil.isServerProcessing(object)) {
       return '服务端处理中'
     }
-    return CommonUtil.formatBytes(object.speed, 1) + '/s'
+    return TransferStateUtil.getSpeedText(object)
   }
 }

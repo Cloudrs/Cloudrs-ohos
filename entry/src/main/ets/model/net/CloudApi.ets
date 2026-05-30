@@ -60,12 +60,12 @@ export class CloudApi {
     if (callback?.onStart) { callback.onStart(); }
     nativeLogin(username, password, {
       onSuccess: (result: string[]) => {
-        if (result[0] === '2fa_required') {
+        if (result[Constant.LOGIN_RESULT_USER_INDEX] === Constant.LOGIN_TWO_FACTOR_REQUIRED) {
           twoFactorCallback?.onTwoFactorRequired();
           return;
         }
         CloudApi.storeLoginResult(result);
-        callback?.onSuccess(JSON.parse(result[0]) as UserInfo);
+        callback?.onSuccess(JSON.parse(result[Constant.LOGIN_RESULT_USER_INDEX]) as UserInfo);
       },
       onFailure: (msg: string) => callback?.onFailure(msg),
     });
@@ -76,19 +76,20 @@ export class CloudApi {
     nativeLogin2fa(code, {
       onSuccess: (result: string[]) => {
         CloudApi.storeLoginResult(result);
-        callback?.onSuccess(JSON.parse(result[0]) as UserInfo);
+        callback?.onSuccess(JSON.parse(result[Constant.LOGIN_RESULT_USER_INDEX]) as UserInfo);
       },
       onFailure: (msg: string) => callback?.onFailure(msg),
     });
   }
 
   private static storeLoginResult(result: string[]): void {
-    const token: string = result[1];
-    const refreshToken: string = result[2];
-    const version: string = result[3];
-    const cookieToStore = version === 'v3' ? `cloudreve-session=${token}` : `v4:${token}`;
+    const token: string = result[Constant.LOGIN_RESULT_TOKEN_INDEX];
+    const refreshToken: string = result[Constant.LOGIN_RESULT_REFRESH_TOKEN_INDEX];
+    const version: string = result[Constant.LOGIN_RESULT_VERSION_INDEX];
+    const cookieToStore = version === Constant.CLOUD_VERSION_V3 ?
+      `${Constant.CLOUD_V3_COOKIE_PREFIX}${token}` : `${Constant.CLOUD_V4_COOKIE_PREFIX}${token}`;
     const expiresDate = new Date();
-    expiresDate.setDate(expiresDate.getDate() + 30);
+    expiresDate.setDate(expiresDate.getDate() + Constant.CLOUD_COOKIE_EXPIRE_DAYS);
     AppStorage.setOrCreate(Constant.CLOUD_COOKIE, cookieToStore);
     AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, expiresDate.toUTCString());
     AppStorage.setOrCreate(Constant.CLOUD_REFRESH_TOKEN, refreshToken);

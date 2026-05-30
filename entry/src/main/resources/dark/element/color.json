@@ -25,6 +25,10 @@
       "value": "#D9151B23"
     },
     {
+      "name": "cloud_header_glass",
+      "value": "#66151B23"
+    },
+    {
       "name": "cloud_line",
       "value": "#2D3746"
     },

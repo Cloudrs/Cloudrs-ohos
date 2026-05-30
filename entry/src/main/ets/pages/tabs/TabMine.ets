@@ -25,6 +25,7 @@ enum MineSheetType {
 export struct TabMine {
   @Link overLap: boolean
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
+  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
@@ -35,7 +36,7 @@ export struct TabMine {
   @State cachedUserId: string = ''
   @State cachedGroupName: string = ''
   @State cachedDiffDays: number = 0
-  private avatarSize: number = 64
+  private avatarSize: number = CloudThemeToken.avatarLargeSize
   @State webUrl: string = ''
   @State webShow: boolean = false
   @State showSettingsSheet: boolean = false
@@ -60,9 +61,9 @@ export struct TabMine {
     const raw = UserPreferences.getSync(
       Constant.USER_PREFERENCES,
       Constant.UPLOAD_MAX_CONCURRENT,
-      3
-    );
-    this.uploadMaxConcurrent = (typeof raw === 'number' && raw > 0) ? raw : 3;
+      Constant.UPLOAD_CONCURRENT_DEFAULT
+    ) as number;
+    this.uploadMaxConcurrent = this.normalizeUploadConcurrent(raw)
   }
 
   getUserSettings() {
@@ -333,7 +334,7 @@ export struct TabMine {
     if (!this.userStorage || this.userStorage.total <= 0) {
       return ''
     }
-    return `${(this.userStorage.used * 100 / this.userStorage.total).toFixed(1)}%`
+    return `${(this.userStorage.used * CloudThemeToken.percentageFull / this.userStorage.total).toFixed(1)}%`
   }
 
   @Builder logoutButton() {
@@ -515,7 +516,12 @@ export struct TabMine {
       )
     }
     .width('100%')
-    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, top: CloudThemeToken.spacingSheetTop, bottom: CloudThemeToken.spacingSheetBottom })
+    .padding({
+      left: CloudThemeToken.spacingSheetHorizontal,
+      right: CloudThemeToken.spacingSheetHorizontal,
+      top: CloudThemeToken.spacingSheetTop,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -531,21 +537,41 @@ export struct TabMine {
         CloudThemeToken.settingIconMoreBackground,
         $r('app.string.upload_max_concurrent'),
         this.uploadMaxConcurrent,
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => ({ value: n.toString() } as SelectOption)),
+        this.getUploadConcurrentOptions(),
         (val: number) => {
-          this.uploadMaxConcurrent = val;
+          this.uploadMaxConcurrent = this.normalizeUploadConcurrent(val);
           UserPreferences.putSync(
             Constant.USER_PREFERENCES,
             Constant.UPLOAD_MAX_CONCURRENT,
-            val
+            this.uploadMaxConcurrent
           );
         }
       )
     }
     .width('100%')
-    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, top: CloudThemeToken.spacingSheetTop, bottom: CloudThemeToken.spacingSheetBottom })
+    .padding({
+      left: CloudThemeToken.spacingSheetHorizontal,
+      right: CloudThemeToken.spacingSheetHorizontal,
+      top: CloudThemeToken.spacingSheetTop,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
+  }
+
+  private normalizeUploadConcurrent(raw: number): number {
+    if (typeof raw !== 'number') {
+      return Constant.UPLOAD_CONCURRENT_DEFAULT
+    }
+    return Math.max(Constant.UPLOAD_CONCURRENT_MIN, Math.min(Constant.UPLOAD_CONCURRENT_MAX, raw))
+  }
+
+  private getUploadConcurrentOptions(): SelectOption[] {
+    const options: SelectOption[] = []
+    for (let value = Constant.UPLOAD_CONCURRENT_MIN; value <= Constant.UPLOAD_CONCURRENT_MAX; value++) {
+      options.push({ value: value.toString() } as SelectOption)
+    }
+    return options
   }
 
   @Builder sheetHeader(title: ResourceStr, onClose: () => void) {

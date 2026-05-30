@@ -32,8 +32,8 @@ function buildOtpIndexes(): number[] {
 export struct LoginPage {
   @StorageProp(Constant.CLOUD_COOKIE) cookie: string = '';
   @StorageProp(Constant.CLOUD_COOKIE_EXPIRES) cookieExpires: string = '';
-  @State protocolIndex: number = 0
-  @State protocol: string = 'https://'
+  @State protocolIndex: number = Constant.PROTOCOL_HTTPS_INDEX
+  @State protocol: string = Constant.PROTOCOL_HTTPS_SCHEME
   @State scrollHeight: number = 0;
   @State keyHeight: number = 0;
   @State websiteInvalid: boolean = false;
@@ -178,7 +178,7 @@ export struct LoginPage {
   }
 
   private websiteTest() {
-    if (this.address.length == 0) {
+    if (this.address.length == CloudThemeToken.zero) {
       showToastTips('无效网站地址', ToastType.Error)
       return
     }
@@ -223,7 +223,7 @@ export struct LoginPage {
   }
 
   private login() {
-    if (this.username.length == 0 || this.password.length == 0) {
+    if (this.username.length == CloudThemeToken.zero || this.password.length == CloudThemeToken.zero) {
       showToastTips('无效用户名或密码', ToastType.Error)
       return
     }
@@ -299,19 +299,19 @@ export struct LoginPage {
 
   @Builder protocolMenu() {
     Menu() {
-      MenuItem({ content: 'https' })
+      MenuItem({ content: Constant.PROTOCOL_HTTPS_LABEL })
         .selectIcon(true)
-        .selected(this.protocolIndex === 0)
+        .selected(this.protocolIndex === Constant.PROTOCOL_HTTPS_INDEX)
         .onClick(() => {
-          this.protocolIndex = 0
-          this.protocol = 'https://'
+          this.protocolIndex = Constant.PROTOCOL_HTTPS_INDEX
+          this.protocol = Constant.PROTOCOL_HTTPS_SCHEME
         })
-      MenuItem({ content: 'http' })
+      MenuItem({ content: Constant.PROTOCOL_HTTP_LABEL })
         .selectIcon(true)
-        .selected(this.protocolIndex === 1)
+        .selected(this.protocolIndex === Constant.PROTOCOL_HTTP_INDEX)
         .onClick(() => {
-          this.protocolIndex = 1
-          this.protocol = 'http://'
+          this.protocolIndex = Constant.PROTOCOL_HTTP_INDEX
+          this.protocol = Constant.PROTOCOL_HTTP_SCHEME
         })
     }
     .width(CloudThemeToken.loginProtocolMenuWidth)

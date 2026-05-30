@@ -4,9 +4,11 @@ import LazyDataSource from "../utils/LazyDataSource";
 import { Downloads } from "./Downloads";
 import { Uploads } from "./Uploads";
 import { CloudThemeToken } from "../model/CloudTheme";
+import Constant from "../model/Constant";
 
 @Component
 export struct TabFilesHeader {
+  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @Prop isRoot: boolean;
   @Link searchKeyword: string;
   @State showTransport:boolean = false;
@@ -24,7 +26,7 @@ export struct TabFilesHeader {
     multiply: false,
     backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
   })
-  @State selectedIndexes: number[] = [0]
+  @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex]
 
 
   build() {
@@ -137,7 +139,7 @@ export struct TabFilesHeader {
     Column() {
       SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
       Column() {
-        if (this.selectedIndexes[0] == 0) {
+        if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
           Downloads({downloadObjects: this.downloadObjects})
         }
         else {
@@ -156,7 +158,7 @@ export struct TabFilesHeader {
       left: CloudThemeToken.filesHeaderPadding,
       right: CloudThemeToken.filesHeaderPadding,
       top: CloudThemeToken.filesHeaderPadding,
-      bottom: CloudThemeToken.filesTransportPaddingBottom
+      bottom: this.bottomRectHeight + CloudThemeToken.filesTransportPaddingBottom
     })
     .height('100%')
     .width('100%')

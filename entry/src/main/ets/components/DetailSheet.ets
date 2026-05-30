@@ -1,3 +1,4 @@
+import Constant from "../model/Constant"
 import { CloudThemeToken } from "../model/CloudTheme"
 import { DetailData } from "../model/DetailData"
 import { CommonUtil } from "../utils/CommonUtil"
@@ -6,6 +7,7 @@ import { DateFormatUtil } from "../utils/DateFormatUtil"
 @Component
 export struct DetailSheet {
   @Prop detailData: DetailData
+  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
 
   private getTypeText(): ResourceStr {
     return this.detailData.isDir ? $r('app.string.detail_dir_name') : $r('app.string.detail_filename')
@@ -28,20 +30,25 @@ export struct DetailSheet {
   }
 
   build() {
-    Column({ space: CloudThemeToken.detailSheetGap }) {
-      this.header()
-      this.summary()
-      this.detailList()
-      Blank().height(CloudThemeToken.detailSpacerHeight)
+    Scroll() {
+      Column({ space: CloudThemeToken.detailSheetGap }) {
+        this.header()
+        this.summary()
+        this.detailList()
+        Blank().height(CloudThemeToken.detailSpacerHeight)
+      }
+      .width('100%')
+      .padding({
+        left: CloudThemeToken.detailSheetHorizontalPadding,
+        right: CloudThemeToken.detailSheetHorizontalPadding,
+        bottom: this.bottomRectHeight + CloudThemeToken.detailSheetBottomPadding
+      })
     }
-    .padding({
-      left: CloudThemeToken.detailSheetHorizontalPadding,
-      right: CloudThemeToken.detailSheetHorizontalPadding,
-      bottom: CloudThemeToken.detailSheetBottomPadding
-    })
     .width('100%')
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .backgroundColor(CloudThemeToken.background)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
   }
 
   @Builder header() {

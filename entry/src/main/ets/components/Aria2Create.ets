@@ -114,7 +114,7 @@ export struct Aria2Create {
       left: CloudThemeToken.pagePadding,
       right: CloudThemeToken.pagePadding,
       top: CloudThemeToken.aria2SheetTopPadding,
-      bottom: this.bottomRectHeight
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)

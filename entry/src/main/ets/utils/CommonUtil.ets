@@ -1,5 +1,6 @@
 
 import { CloudThemeToken } from "../model/CloudTheme";
+import Constant from "../model/Constant";
 
 export enum FileType {
   IMAGE = 'image',
@@ -34,7 +35,7 @@ export class CommonUtil {
   static formatBytes(bytes: number, decimals = 2): string {
     if (bytes === 0) return '0 B';
 
-    const k = 1024;
+    const k = Constant.BYTE_UNIT_SIZE;
     const dm = decimals < 0 ? 0 : decimals;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 
@@ -189,7 +190,8 @@ export class CommonUtil {
 
   static getDaysDifference(date1: Date, date2: Date): number {
     const diffInMilliseconds = Math.abs(date2.getTime() - date1.getTime());
-    const diffInDays = diffInMilliseconds / (1000 * 60 * 60 * 24);
+    const diffInDays = diffInMilliseconds / (Constant.MILLISECONDS_PER_SECOND * Constant.SECONDS_PER_MINUTE *
+      Constant.MINUTES_PER_HOUR * Constant.HOURS_PER_DAY);
     return Math.floor(diffInDays); // 或者使用 Math.round 根据需要
   }
 }

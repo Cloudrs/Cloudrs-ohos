@@ -25,8 +25,8 @@ export class LoginInterceptor implements IHMInterceptor {
           let now = new Date()
           if (now < expiresDate) {
             const cookie = dbUserInfo.cookie;
-            const isV3 = !cookie.startsWith('v4:');
-            const token = isV3 ? cookie : cookie.slice(3);
+            const isV3 = !cookie.startsWith(Constant.CLOUD_V4_COOKIE_PREFIX);
+            const token = isV3 ? cookie : cookie.slice(Constant.CLOUD_V4_COOKIE_PREFIX.length);
             const refreshToken = dbUserInfo.refresh_token ?? '';
             CloudApi.restoreSession(dbUserInfo.url, token, refreshToken, isV3);
             return HMInterceptorAction.DO_NEXT;

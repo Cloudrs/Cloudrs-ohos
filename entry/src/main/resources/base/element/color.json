@@ -197,6 +197,10 @@
       "value": "#DFFFFFFF"
     },
     {
+      "name": "cloud_header_glass",
+      "value": "#66FFFFFF"
+    },
+    {
       "name": "cloud_line",
       "value": "#E4EAF0"
     },

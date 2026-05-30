@@ -42,9 +42,9 @@ export struct ImagePreviewPage {
           const resp = await req.request(url, {
             method: http.RequestMethod.GET,
             expectDataType: http.HttpDataType.ARRAY_BUFFER,
-            maxLimit: 100 * 1024 * 1024,
+            maxLimit: Constant.IMAGE_PREVIEW_MAX_DOWNLOAD_BYTES,
           });
-          if (resp.responseCode === 200) {
+          if (resp.responseCode === Constant.HTTP_STATUS_OK) {
             this.imageData = resp.result as ArrayBuffer;
             const imageSource = image.createImageSource(this.imageData);
             const pixMap = await imageSource.createPixelMap();
@@ -111,7 +111,10 @@ export struct ImagePreviewPage {
       .width('100%')
       .backgroundColor(CloudThemeToken.previewBackground)
       .alignItems(HorizontalAlign.Center)
-      .padding({ top: CloudThemeToken.imagePreviewSaveTopPadding, bottom: this.bottomRectHeight })
+      .padding({
+        top: CloudThemeToken.imagePreviewSaveTopPadding,
+        bottom: this.bottomRectHeight + CloudThemeToken.imagePreviewSaveBottomPadding
+      })
     }
     .width('100%')
     .height('100%')

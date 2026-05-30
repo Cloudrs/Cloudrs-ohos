@@ -26,7 +26,6 @@ import { requestDownload } from "../../utils/RequestDownload";
 import { FileModel, FileModelState } from "../../model/FileModel";
 import { SelectFileSheet } from '../../components/SelectFileSheet';
 import { uploadManager } from '../../utils/UploadManager';
-import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
@@ -81,7 +80,9 @@ class ObjectSelect {
 @Component
 export struct TabFiles {
   @Link overLap: boolean
+  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
+  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageProp(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
   @StorageProp(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
@@ -115,6 +116,7 @@ export struct TabFiles {
   @State inputPlaceholder: string|Resource = ''
   @State inputValue: string = ''
   @State gridWidth: number = 0
+  @State isHeaderGlassActive: boolean = false
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
   private inputNewPath: string = '/'
@@ -180,32 +182,32 @@ export struct TabFiles {
 
   getGridColumns(): number {
     if (this.showType !== ShowType.SHOW_ICON) {
-      return 1
+      return CloudThemeToken.singleColumnMaxCount
     }
     if (this.gridWidth >= CloudThemeToken.wideBreakpoint) {
-      return 5
+      return CloudThemeToken.fileGridWideColumns
     }
     if (this.gridWidth >= CloudThemeToken.tabletBreakpoint) {
-      return 4
+      return CloudThemeToken.fileGridTabletColumns
     }
     if (this.gridWidth >= CloudThemeToken.twoColumnBreakpoint) {
-      return 3
+      return CloudThemeToken.fileGridMediumColumns
     }
-    return 2
+    return CloudThemeToken.fileGridPhoneColumns
   }
 
   getGridColumnsTemplate(): string {
     const columns = this.getGridColumns()
     let templates: string[] = []
     for (let index = 0; index < columns; index++) {
-      templates.push('1fr')
+      templates.push(CloudThemeToken.singleColumnTemplate)
     }
     return templates.join(' ')
   }
 
   getFolderPaddingCount(): number {
     if (this.showType !== ShowType.SHOW_ICON) {
-      return 0
+      return CloudThemeToken.zero
     }
     const columns = this.getGridColumns()
     const remainder = this.dirDataSource.totalCount() % columns
@@ -219,6 +221,49 @@ export struct TabFiles {
       items.push(index)
     }
     return items
+  }
+
+  updateHeaderGlassState(): void {
+    const scrollOffset = this.scrollerForList.currentOffset().yOffset
+    const active = scrollOffset > CloudThemeToken.filesHeaderGlassThreshold
+    if (this.isHeaderGlassActive !== active) {
+      this.isHeaderGlassActive = active
+    }
+  }
+
+  getTopInset(): number {
+    if (this.topRectHeight <= CloudThemeToken.zero) {
+      return CloudThemeToken.systemTopFallbackHeight
+    }
+    return Math.min(this.topRectHeight, CloudThemeToken.systemTopFallbackHeight)
+  }
+
+  getHeaderContentHeight(): number {
+    return this.isHeaderGlassActive ? CloudThemeToken.iconButtonSize : CloudThemeToken.cardHeight2xl
+  }
+
+  getHeaderContainerHeight(): number {
+    return this.getTopInset() + CloudThemeToken.pageTopPadding + this.getHeaderContentHeight()
+  }
+
+  getExpandedHeaderContainerHeight(): number {
+    return this.getTopInset() + CloudThemeToken.pageTopPadding + CloudThemeToken.cardHeight2xl
+  }
+
+  getGridTopPadding(): number {
+    return this.getHeaderContainerHeight() + CloudThemeToken.pageTopPadding
+  }
+
+  getHeaderTopPadding(): number {
+    const baseTopPadding = this.getTopInset() + CloudThemeToken.pageTopPadding
+    if (!this.isHeaderGlassActive) {
+      return baseTopPadding
+    }
+    return Math.max(CloudThemeToken.zero, baseTopPadding - CloudThemeToken.filesHeaderCollapsedContentLift)
+  }
+
+  getHeaderBottomPadding(): number {
+    return this.isHeaderGlassActive ? CloudThemeToken.filesHeaderCollapsedContentLift : CloudThemeToken.zero
   }
 
   onBackPressedCallback(): boolean {
@@ -252,7 +297,7 @@ export struct TabFiles {
               method: http.RequestMethod.GET,
               expectDataType: http.HttpDataType.ARRAY_BUFFER,
             });
-            if (resp.responseCode === 200) {
+            if (resp.responseCode === Constant.HTTP_STATUS_OK) {
               const imageSource = image.createImageSource(resp.result as ArrayBuffer);
               const pixMap = await imageSource.createPixelMap();
               imageSource.release();
@@ -290,6 +335,7 @@ export struct TabFiles {
           this.dirDataSource.clear()
           this.fileDataSource.clear()
           this.thumbImage.clear()
+          this.isHeaderGlassActive = false
           this.scrollerForList.scrollEdge(Edge.Start)
         }
       },
@@ -325,7 +371,7 @@ export struct TabFiles {
         }
       })
     } else if (this.objectSelect.index !== -1) {
-      if (objects[0].type == Constant.OBJECT_DIR_TYPE) {
+      if (objects[Constant.FIRST_ARRAY_INDEX].type == Constant.OBJECT_DIR_TYPE) {
         this.dirDataSource.deleteData(this.objectSelect.index)
         this.isGridPadding = this.getFolderPaddingCount() > 0
       } else {
@@ -374,39 +420,7 @@ export struct TabFiles {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      CloudScaffold({
-        scrollable: false,
-        avoidTabBar: false,
-        topPadding: CloudThemeToken.pageTopPadding,
-        bottomPadding: CloudThemeToken.zero,
-        horizontalPadding: CloudThemeToken.zero
-      }) {
-        Column({ space: CloudThemeToken.spacingCard }) {
-          TabFilesHeader({
-            isRoot: this.isRoot,
-            searchKeyword: this.searchKeyword,
-            downloadObjects: this.downloadObjects,
-            downloadingCount: this.downloadingCount,
-            uploadObjects: this.uploadObjects,
-            uploadingCount: this.uploadingCount,
-            onBackClick: (async () => {
-              await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
-            }),
-            onSearchChange: () => {
-              this.applyVisibleObjects()
-            }
-          })
-          TabFilesTitle({
-            mainTitle: this.mainTitle,
-            subTitle: this.subTitle,
-            onMoreClick: (type: MoreMenuType, isReverse?: boolean) => {
-              this.onMoreClick(type, isReverse)
-            }
-          })
-        }
-        .height(CloudThemeToken.cardHeight2xl)
-        .justifyContent(FlexAlign.Center)
-
+      Stack({ alignContent: Alignment.Top }) {
         Stack({alignContent: Alignment.BottomEnd}) {
           Refresh({refreshing: $$this.isRefreshing}) {
             this.objectGrid()
@@ -452,9 +466,14 @@ export struct TabFiles {
           .margin({ right: CloudThemeToken.spacingPage, bottom: this.tabBarHeight + CloudThemeToken.spacingPage })
           .onClick(() => { this.openSelectFileSheet() })
         }
-        .margin({ top: CloudThemeToken.pageTopPadding })
-        .layoutWeight(1)
+        .width('100%')
+        .height('100%')
+
+        this.filesHeaderOverlay()
       }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.background)
 
       if (this.showObjectDetail) {
         this.detailOverlay()
@@ -471,6 +490,45 @@ export struct TabFiles {
         this.resetFileSheetState()
       }
     })
+  }
+
+  @Builder filesHeaderOverlay() {
+    Column({ space: CloudThemeToken.spacingCard }) {
+      TabFilesHeader({
+        isRoot: this.isRoot,
+        searchKeyword: this.searchKeyword,
+        downloadObjects: this.downloadObjects,
+        downloadingCount: this.downloadingCount,
+        uploadObjects: this.uploadObjects,
+        uploadingCount: this.uploadingCount,
+        onBackClick: (async () => {
+          await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+        }),
+        onSearchChange: () => {
+          this.applyVisibleObjects()
+        }
+      })
+      if (!this.isHeaderGlassActive) {
+        TabFilesTitle({
+          mainTitle: this.mainTitle,
+          subTitle: this.subTitle,
+          onMoreClick: (type: MoreMenuType, isReverse?: boolean) => {
+            this.onMoreClick(type, isReverse)
+          }
+        })
+      }
+    }
+    .width('100%')
+    .height(this.getHeaderContainerHeight())
+    .padding({
+      top: this.getHeaderTopPadding(),
+      bottom: this.getHeaderBottomPadding()
+    })
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(this.isHeaderGlassActive ? CloudThemeToken.headerGlass : CloudThemeToken.transparent)
+    .backgroundBlurStyle(this.isHeaderGlassActive ? CloudThemeToken.filesHeaderGlassBlurStyle : BlurStyle.NONE)
+    .zIndex(CloudThemeToken.filesHeaderZIndex)
+    .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration, curve: Curve.EaseOut })
   }
 
   @Builder fileSheetBuilder() {
@@ -619,7 +677,12 @@ export struct TabFiles {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingSheetHorizontal, top: CloudThemeToken.spacingSheetTop, bottom: CloudThemeToken.spacingSheetBottom })
+    .padding({
+      left: CloudThemeToken.spacingSheetHorizontal,
+      right: CloudThemeToken.spacingSheetHorizontal,
+      top: CloudThemeToken.spacingSheetTop,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -693,9 +756,14 @@ export struct TabFiles {
         })
       }, (item: ObjectInfo, index: number) => item.id)
     }
-    .cachedCount(5)
+    .cachedCount(CloudThemeToken.fileGridCachedCount)
     .maxCount(this.getGridColumns())
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard, bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
+    .padding({
+      left: CloudThemeToken.spacingCard,
+      right: CloudThemeToken.spacingCard,
+      top: this.getGridTopPadding(),
+      bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap
+    })
     .width('100%')
     .height('100%') //!!!使用lazyforeach必须设置高度才能有效
     .rowsGap(CloudThemeToken.gridGap)
@@ -704,9 +772,12 @@ export struct TabFiles {
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: CloudThemeToken.defaultAnimationDuration})
     .scrollBarWidth(CloudThemeToken.strongLineWidth)
+    .onDidScroll(() => {
+      this.updateHeaderGlassState()
+    })
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const width = Number(newValue.width)
-      if (!Number.isNaN(width) && Math.abs(width - this.gridWidth) >= 1) {
+      if (!Number.isNaN(width) && Math.abs(width - this.gridWidth) >= CloudThemeToken.layoutChangeThreshold) {
         this.gridWidth = width
         this.isGridPadding = this.getFolderPaddingCount() > 0
       }
@@ -1058,11 +1129,12 @@ export struct TabFiles {
       documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
       let documentPicker = new picker.DocumentViewPicker(context);
       documentPicker.save(documentSaveOptions).then((documentSaveResult: Array<string>) => {
-        let filePath = FileSystemUtil.getPathFromUri(documentSaveResult[0] + '/' + item.name);
+        let filePath = FileSystemUtil.getPathFromUri(documentSaveResult[Constant.FIRST_ARRAY_INDEX] + '/' + item.name);
         console.debug(TAG, 'documentViewPicker.save to file succeed and uris are:' + filePath);
         CloudApi.getDownloadUri(item.id, {
           onSuccess: (data) => {
-            let url = (data.startsWith('http://') || data.startsWith('https://')) ? data : CloudApi.getBaseURL() + data
+            let url = (data.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
+              data.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? data : CloudApi.getBaseURL() + data
             let object: TransportObject = new TransportObject(item, filePath, url)
             this.downloadObjects.pushData(object)
             this.downloadingCount++

@@ -4,6 +4,7 @@ import { CloudThemeToken } from "../model/CloudTheme"
 import { TransportObject } from "../model/TransportObject"
 import { CommonUtil } from "../utils/CommonUtil"
 import LazyDataSource from "../utils/LazyDataSource"
+import { TransferStateUtil } from "../utils/TransferStateUtil"
 
 const TAG = 'Downloads'
 
@@ -13,7 +14,7 @@ export struct Downloads {
 
   build() {
     Column() {
-      if (this.downloadObjects.totalCount() == 0) {
+      if (this.downloadObjects.totalCount() == CloudThemeToken.zero) {
         this.noItem()
       } else {
         List({ space: CloudThemeToken.transferListGap }) {
@@ -40,25 +41,11 @@ export struct Downloads {
   }
 
   getDownloadIcon(state: FileModelState) {
-    switch (state){
-      case FileModelState.COMPLETED:
-        return $r('app.media.ic_checkmark_circle')
-      case FileModelState.FAILED:
-        return $r('app.media.ic_xmark_circle_fill')
-      default :
-        return $r('app.media.ic_arrowshape_down')
-    }
+    return TransferStateUtil.getStateIcon(state, $r('app.media.ic_arrowshape_down'))
   }
 
   getStateColor(state: FileModelState): ResourceColor {
-    switch (state) {
-      case FileModelState.COMPLETED:
-        return CloudThemeToken.success
-      case FileModelState.FAILED:
-        return CloudThemeToken.danger
-      default:
-        return CloudThemeToken.primary
-    }
+    return TransferStateUtil.getStateColor(state)
   }
 
   @Builder downloadItem(object: TransportObject) {
@@ -118,23 +105,6 @@ export struct Downloads {
   }
 
   getStateText(object: TransportObject): string {
-    switch (object.state) {
-      case FileModelState.COMPLETED:
-        return '已完成'
-      case FileModelState.FAILED:
-        return '下载失败'
-      case FileModelState.WAITING:
-        return '等待中'
-      case FileModelState.RETRYING:
-        return '重试中'
-      case FileModelState.PAUSED:
-        return '已暂停'
-      case FileModelState.STOPPED:
-        return '已停止'
-      case FileModelState.REMOVED:
-        return '已移除'
-      default:
-        return CommonUtil.formatBytes(object.speed, 1) + '/s'
-    }
+    return TransferStateUtil.getCommonStateText(object.state, '下载失败') ?? TransferStateUtil.getSpeedText(object)
   }
 }

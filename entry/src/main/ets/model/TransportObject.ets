@@ -1,5 +1,6 @@
 import { FileModelState } from "./FileModel";
 import { ObjectInfo } from "./net/ApiTypes";
+import Constant from "./Constant";
 
 export enum TransportType {
   DOWNLOAD,
@@ -34,13 +35,15 @@ export class TransportObject {
     let biosTime = new Date().getTime() - this.lastTime;
     let biosBytes = trans - this.trans;
     if (biosTime > 0 && biosBytes >= 0) {
-      this.speed = biosBytes / biosTime * 1000;
+      this.speed = biosBytes / biosTime * Constant.MILLISECONDS_PER_SECOND;
     } else {
       this.speed = 0;
     }
     let newTrans = trans
     this.trans = newTrans;
-    this.progress = this.total > 0 ? Math.min(100, Math.floor(trans / this.total * 100)) : 0;
+    this.progress = this.total > 0 ?
+      Math.min(Constant.BACKGROUND_TASK_COMPLETE_PERCENT,
+        Math.floor(trans / this.total * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)) : 0;
     let newState = state;
     this.state = newState;
     this.lastTime = this.lastTime+biosTime;

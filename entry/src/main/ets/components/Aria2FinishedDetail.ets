@@ -43,19 +43,20 @@ export struct Aria2FinishedDetail {
   getDetailGridColumns(): number {
     let layoutMode = CloudThemeToken.getLayoutMode(this.detailGridWidth)
     if (layoutMode === CloudLayoutMode.WIDE) {
-      return 3
+      return CloudThemeToken.aria2DetailWideColumns
     }
     if (layoutMode === CloudLayoutMode.TABLET) {
-      return 2
+      return CloudThemeToken.aria2DetailTabletColumns
     }
-    return this.detailGridWidth >= CloudThemeToken.twoColumnBreakpoint ? 2 : 1
+    return this.detailGridWidth >= CloudThemeToken.twoColumnBreakpoint ?
+      CloudThemeToken.aria2DetailMediumColumns : CloudThemeToken.aria2DetailPhoneColumns
   }
 
   getDetailGridColumnsTemplate(): string {
     let columns = this.getDetailGridColumns()
     let templates: string[] = []
     for (let index = 0; index < columns; index++) {
-      templates.push('1fr')
+      templates.push(CloudThemeToken.singleColumnTemplate)
     }
     return templates.join(' ')
   }
@@ -123,7 +124,7 @@ export struct Aria2FinishedDetail {
       left: CloudThemeToken.pagePadding,
       right: CloudThemeToken.pagePadding,
       top: CloudThemeToken.aria2DetailSheetTopPadding,
-      bottom: this.bottomRectHeight
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
@@ -169,7 +170,7 @@ export struct Aria2FinishedDetail {
     .width('100%')
     .onAreaChange((oldArea: Area, newArea: Area) => {
       let width = Number(newArea.width)
-      if (!Number.isNaN(width) && Math.abs(width - this.detailGridWidth) >= 1) {
+      if (!Number.isNaN(width) && Math.abs(width - this.detailGridWidth) >= CloudThemeToken.layoutChangeThreshold) {
         this.detailGridWidth = width
       }
     })

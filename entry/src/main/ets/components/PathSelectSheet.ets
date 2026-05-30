@@ -89,7 +89,10 @@ export struct PathSelectSheet {
     .width('100%')
     .height('100%')
     .backgroundColor(CloudThemeToken.background)
-    .padding({ top: CloudThemeToken.pathSheetTopPadding, bottom: this.bottomRectHeight })
+    .padding({
+      top: CloudThemeToken.pathSheetTopPadding,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    })
     .justifyContent(FlexAlign.Start)
   }
 

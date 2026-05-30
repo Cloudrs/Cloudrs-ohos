@@ -69,9 +69,15 @@ class UploadManager {
     const raw = UserPreferences.getSync(
       Constant.USER_PREFERENCES,
       Constant.UPLOAD_MAX_CONCURRENT,
-      3
+      Constant.UPLOAD_CONCURRENT_DEFAULT
     );
-    const maxConcurrent = Math.max(1, Math.min(10, typeof (raw as number) === 'number' ? (raw as number) : 3));
+    const maxConcurrent = Math.max(
+      Constant.UPLOAD_CONCURRENT_MIN,
+      Math.min(
+        Constant.UPLOAD_CONCURRENT_MAX,
+        typeof (raw as number) === 'number' ? (raw as number) : Constant.UPLOAD_CONCURRENT_DEFAULT
+      )
+    );
     while (this._activeCount < maxConcurrent && this.pendingQueue.length > 0) {
       const task = this.pendingQueue.shift()!;
       this._runTask(task);
@@ -132,7 +138,7 @@ class UploadManager {
         await this._uploadLocalFileByChunks(cachePath, remotePath, fileName, overwrite, transportObject);
         transportObject.trans = transportObject.total;
         transportObject.state = FileModelState.COMPLETED;
-        transportObject.progress = 100;
+        transportObject.progress = Constant.BACKGROUND_TASK_COMPLETE_PERCENT;
         transportObject.speed = 0;
         FileSystemUtil.unlinkIfExists(cachePath);
         onDirChanged();
@@ -166,7 +172,8 @@ class UploadManager {
     const relay = session.storagePolicyRelay ?? false;
     console.info(TAG, `upload session: chunkSize=${session.chunkSize}, uploadUrls=${uploadUrls.length}, completeUrl=${completeUrl}, policy=${storagePolicyType}, relay=${relay}`);
 
-    if (completeUrl.length > 0 && !relay && storagePolicyType !== 'local' && storagePolicyType !== 'remote') {
+    if (completeUrl.length > 0 && !relay && storagePolicyType !== Constant.STORAGE_POLICY_LOCAL &&
+      storagePolicyType !== Constant.STORAGE_POLICY_REMOTE) {
       throw new Error(`当前存储策略(${storagePolicyType})需要云存储完成回调，暂不支持移动端分片上传`);
     }
 
@@ -176,7 +183,8 @@ class UploadManager {
     } else {
       transportObject.statusText = '';
     }
-    const useRemoteNode = uploadUrls.length === 1 && !relay && storagePolicyType === 'remote';
+    const useRemoteNode = uploadUrls.length === Constant.REMOTE_NODE_UPLOAD_URL_COUNT && !relay &&
+      storagePolicyType === Constant.STORAGE_POLICY_REMOTE;
     let offset = 0;
     let index = 0;
 
@@ -186,7 +194,7 @@ class UploadManager {
       const uploaded = useRemoteNode
         ? await CloudApi.uploadLocalFileChunkToUrlWithProgress(
           cachePath,
-          uploadUrls[0],
+          uploadUrls[Constant.FIRST_ARRAY_INDEX],
           session.credential ?? '',
           index,
           chunkOffset,

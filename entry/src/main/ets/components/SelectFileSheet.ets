@@ -3,12 +3,14 @@ import { BusinessError } from "@kit.BasicServicesKit"
 import { common } from "@kit.AbilityKit"
 import { picker } from "@kit.CoreFileKit"
 import { CloudThemeToken } from "../model/CloudTheme"
+import Constant from "../model/Constant"
 import { showToastTips, ToastType } from "../utils/ToastUtil"
 
 const TAG: string = 'SelectFileSheet'
 
 @Component
 export struct SelectFileSheet {
+  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @State showPhotoPicker: boolean = false
   @State isPicking: boolean = false
   @State pickingText: string = ''
@@ -97,7 +99,7 @@ export struct SelectFileSheet {
       left: CloudThemeToken.uploadSourceSheetHorizontalPadding,
       right: CloudThemeToken.uploadSourceSheetHorizontalPadding,
       top: CloudThemeToken.uploadSourceSheetTopPadding,
-      bottom: CloudThemeToken.uploadSourceSheetBottomPadding
+      bottom: this.bottomRectHeight + CloudThemeToken.uploadSourceSheetBottomPadding
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .alignItems(HorizontalAlign.Start)

@@ -1,15 +1,15 @@
 # Cloudrs HarmonyOS 6.1 UI Refactor Plan
 
 Date: 2026-05-26
-Last updated: 2026-05-29
+Last updated: 2026-05-30
 
 ## Status
 
-The modern cloud-drive UI refactor is in the late implementation stage. The main architecture, SDK upgrade, shared design system, primary page migration, photo backup center, upload/download fixes, and official HDS floating bottom navigation are implemented and build-verified.
+The modern cloud-drive UI refactor has completed the local code-side implementation pass. The main architecture, SDK upgrade, shared design system, primary page migration, photo backup center, upload/download fixes, official HDS floating bottom navigation, sheet consistency pass, and deep tokenization cleanup are implemented and build-verified.
 
-Estimated progress: about 80%.
+Estimated progress: about 90%.
 
-The remaining work is mainly device acceptance, visual polish, deep legacy surface cleanup, sheet consistency, and full regression testing.
+The remaining work is external acceptance: real-device layout validation, API behavior confirmation for server-dependent edge cases, and full manual regression testing.
 
 ## Completed
 
@@ -17,6 +17,7 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
 
 - Upgraded `targetSdkVersion` and `compatibleSdkVersion` to HarmonyOS `6.1.1(24)` after confirming local DevEco SDK support.
 - Verified `hvigor assembleApp --no-daemon` builds successfully on the upgraded SDK.
+- Cleaned the app-side ArkTS warnings found during refactor verification; current build is successful with only known non-blocking warnings recorded in Pending Acceptance.
 - Added modern cloud design tokens in `CloudThemeToken`.
 - Added light/dark appearance preference with persisted Harmony color mode and dark resource overrides.
 - Added runtime permissions for local photo backup:
@@ -61,6 +62,9 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
 - Tokenized string-based divider/outline widths and remaining visual zero branches in shared components and login layout.
 - Centralized login 2FA code length as a semantic token used by validation, input length, and OTP cell rendering.
 - Normalized sheet dismiss state cleanup for transport, offline download path selection, and Mine settings sheets.
+- Tokenized remaining grid width-change thresholds, single-column grid templates, and key lazy-list cached counts in file/offline-download surfaces.
+- Tokenized responsive column counts for file grids, offline-download detail metadata grids, and photo-backup thumbnail grids.
+- Completed a final local hardcoded-value scan across ArkTS pages/components and moved remaining numeric/semantic values into `CloudThemeToken` or `Constant`.
 
 ### Home And Navigation
 
@@ -226,13 +230,35 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
 - Extended `CloudDialogUtil` for two-action dialogs and migrated the upload conflict dialog to the shared dialog path.
 - Removed stale file-card TODO markers and tokenized file-card context-menu preview scale values.
 - Hardened image-share temp-file cleanup when share creation fails after writing the sandbox file.
+- Normalized bottom safe-area padding for path selection, offline download creation, and offline download detail sheets with shared sheet spacing tokens.
+- Added bottom safe-area padding and internal scrolling to the file detail sheet so long metadata stays usable on compact layouts.
+- Normalized bottom safe-area padding for upload source, file input, Mine appearance, and Mine more-settings sheets.
+- Normalized bottom safe-area padding for the file transfer progress sheet and aligned upload/download task list scroll behavior.
+- Centralized upload concurrency min/default/max values and reused them in both the Mine setting UI and upload scheduler.
+- Centralized image preview download size limit and added tokenized bottom padding for the image-preview save area.
+- Centralized shared UI/transport semantics for segment selected indexes, empty task counts, HTTP OK status, and upload server-processing progress threshold.
+- Centralized background upload/download polling interval, completion percentage, first-progress-size index, and empty progress-size guard.
+- Centralized background request-agent method, title, save-prefix, gauge, and overwrite config values used by upload/download tasks.
+- Centralized the exit double-back interval as a lifecycle behavior constant.
+- Centralized offline-download polling interval seconds-to-milliseconds conversion and minimum interval.
+- Centralized toast and toast-tip default durations.
+- Replaced native login-result array indexes, document-save result access, cookie version prefixes, cookie expiration days, and home tab indexes with semantic constants/enums.
+- Replaced transfer speed conversion, thumbnail HTTP status checks, permission result checks, first-item accesses, and upload storage-policy string checks with shared constants.
+- Centralized login HTTP/HTTPS protocol menu labels, protocol schemes, protocol indexes, and common time conversion factors.
+- Centralized file-name middle-truncation thresholds, byte-unit conversion, date zero-padding threshold, file-copy chunk/yield settings, and explicit upload completion progress.
+- Replaced remaining transfer/offline-download/storage percentage calculations with shared completion/percentage constants.
+- Replaced remaining login empty-field checks with shared zero token.
+- Added `TransferStateUtil` to share upload/download transfer status colors, icons, text, speed formatting, and server-processing detection.
+- Re-ran a final local scan for non-token colors, visual dimensions, radii, opacity, and large numeric values outside `CloudThemeToken` / `Constant`; no actionable local UI hardcodes remain.
 
 ## Pending Acceptance
 
 ### Build
 
 - Re-run `hvigor assembleApp --no-daemon` after each implementation batch.
-- Confirm no new ArkTS warnings beyond known project/tooling warnings.
+- Current build passes.
+- Current build reports the obfuscation-disabled tooling warning.
+- Current build does not report HMRouter custom decorator warnings.
 
 ### Device Layout
 
@@ -302,13 +328,12 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
   - 2FA
   - Failure prompt
 
-## Remaining Implementation
+## Remaining Work
 
-### Global Polish
+### Local Code
 
-- Continue periodic scans for deeper hardcoded colors, dimensions, radius values, and spacing in legacy surfaces.
-- Keep all new UI changes tokenized through `CloudThemeToken`; do not add new hardcoded visual values in page code.
-- Normalize remaining deep component typography and interaction states.
+- No known local code-side implementation item remains from this refactor plan.
+- Keep future UI changes tokenized through `CloudThemeToken`; do not add new hardcoded visual values in page code.
 
 ### Navigation
 
@@ -318,20 +343,18 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
 
 ### File Page
 
-- Continue visual polish of dense file cards and list rows after device testing.
 - Verify file detail overlay still fully covers or hides bottom navigation when expected.
 - Review copy/move/rename/delete dialog and sheet consistency after full regression.
 
 ### Photo Backup
 
-- Continue edge-state visual density checks after more real-device testing.
 - Verify path-scoped completed-state migration with more real albums and remote paths.
 - Validate compact backup-history preview with real multi-path albums.
 
 ### Offline Download
 
 - Confirm API behavior for deleting failed tasks; keep the current fallback if server returns `Task not found`.
-- Continue card density polish after real long task names and multi-file tasks are tested.
+- Validate card density with real long task names and multi-file tasks.
 
 ### Mine And Settings
 
@@ -340,7 +363,7 @@ The remaining work is mainly device acceptance, visual polish, deep legacy surfa
 
 ### Sheets
 
-- Finalize consistency across:
+- Validate final consistency across:
   - File detail sheet
   - Path select sheet
   - Upload source sheet

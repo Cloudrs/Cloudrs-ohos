@@ -40,7 +40,7 @@ export struct TabPictures {
   @State settingsLastScanAt: number = 0;
   @State backupState: PhotoBackupState = PhotoBackupState.IDLE;
   @State photos: PhotoBackupItem[] = [];
-  @State selectedIndexes: number[] = [0];
+  @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex];
   @State showSettings: boolean = false;
   @State showPathSelect: boolean = false;
   @State isScanning: boolean = false;
@@ -948,7 +948,7 @@ export struct TabPictures {
   }
 
   getNameFromUri(uri: string): string {
-    let path = uri.split('?')[0];
+    let path = uri.split('?')[Constant.FIRST_ARRAY_INDEX];
     let segments = path.split('/');
     let name = segments.length > 0 ? segments[segments.length - 1] : '';
     try {
@@ -962,7 +962,8 @@ export struct TabPictures {
     try {
       let atManager = abilityAccessCtrl.createAtManager();
       let result: PermissionRequestResult = await atManager.requestPermissionsFromUser(context, [permission]);
-      return (result.authResults ?? []).length > 0 && result.authResults[0] === 0;
+      return (result.authResults ?? []).length > 0 &&
+        result.authResults[Constant.FIRST_ARRAY_INDEX] === Constant.PERMISSION_AUTH_GRANTED;
     } catch (err) {
       let error = err as BusinessError;
       console.error(TAG, `request photo permission failed: ${error.code}, ${error.message}`);
@@ -1832,7 +1833,7 @@ export struct TabPictures {
     if (failed.length === 0) {
       return '请稍后重试备份。';
     }
-    let message = failed[0].error;
+    let message = failed[Constant.FIRST_ARRAY_INDEX].error;
     return message.length > 0 ? message : '请稍后重试备份。';
   }
 
@@ -1931,7 +1932,7 @@ export struct TabPictures {
         this.loadPhotoThumbnail(item);
       },
       onWidthChange: (width: number) => {
-        if (Math.abs(width - this.photoGridWidth) >= CloudThemeToken.lineWidth) {
+        if (Math.abs(width - this.photoGridWidth) >= CloudThemeToken.layoutChangeThreshold) {
           this.photoGridWidth = width;
         }
       }
@@ -1962,22 +1963,22 @@ export struct TabPictures {
 
   getPhotoGridColumns(): number {
     if (this.photoGridWidth >= CloudThemeToken.wideBreakpoint) {
-      return 6;
+      return CloudThemeToken.photoBackupGridWideColumns;
     }
     if (this.photoGridWidth >= CloudThemeToken.tabletBreakpoint) {
-      return 5;
+      return CloudThemeToken.photoBackupGridTabletColumns;
     }
     if (this.photoGridWidth >= CloudThemeToken.twoColumnBreakpoint) {
-      return 4;
+      return CloudThemeToken.photoBackupGridMediumColumns;
     }
-    return 3;
+    return CloudThemeToken.photoBackupGridPhoneColumns;
   }
 
   getPhotoGridColumnsTemplate(): string {
     const columns = this.getPhotoGridColumns();
     let templates: string[] = [];
     for (let index = 0; index < columns; index++) {
-      templates.push('1fr');
+      templates.push(CloudThemeToken.singleColumnTemplate);
     }
     return templates.join(' ');
   }

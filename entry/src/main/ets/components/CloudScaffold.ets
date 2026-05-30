@@ -16,6 +16,13 @@ export struct CloudScaffold {
   @Builder defaultContent() {
   }
 
+  private getTopInset(): number {
+    if (this.topRectHeight <= CloudThemeToken.zero) {
+      return CloudThemeToken.systemTopFallbackHeight
+    }
+    return Math.min(this.topRectHeight, CloudThemeToken.systemTopFallbackHeight)
+  }
+
   build() {
     if (this.scrollable) {
       Scroll(this.scroller) {
@@ -26,7 +33,7 @@ export struct CloudScaffold {
         .padding({
           left: this.horizontalPadding,
           right: this.horizontalPadding,
-          top: this.topRectHeight + this.topPadding,
+          top: this.getTopInset() + this.topPadding,
           bottom: (this.avoidTabBar ? this.tabBarHeight : 0) + this.bottomPadding
         })
       }
@@ -44,7 +51,7 @@ export struct CloudScaffold {
       .padding({
         left: this.horizontalPadding,
         right: this.horizontalPadding,
-        top: this.topRectHeight + this.topPadding,
+        top: this.getTopInset() + this.topPadding,
         bottom: (this.avoidTabBar ? this.tabBarHeight : 0) + this.bottomPadding
       })
       .backgroundColor(CloudThemeToken.background)

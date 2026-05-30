@@ -1,3 +1,5 @@
+import Constant from "../model/Constant";
+
 export class DateFormatUtil {
   static format(date: Date, pattern: string = 'yyyy-MM-dd HH:mm:ss'): string {
     if (Number.isNaN(date.getTime())) {
@@ -21,6 +23,6 @@ export class DateFormatUtil {
   }
 
   private static pad(value: number): string {
-    return value < 10 ? `0${value}` : value.toString()
+    return value < Constant.DATE_PAD_THRESHOLD ? `0${value}` : value.toString()
   }
 }

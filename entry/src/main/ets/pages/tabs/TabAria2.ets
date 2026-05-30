@@ -35,7 +35,7 @@ export struct TabRemoteDown {
   @State totalFinished: number = 0;
   @State totalTasks: number = 0;
   @State totalDownloading: number = 0;
-  @State selectedIndexes: number[] = [0]
+  @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex]
   @State downloadRefresh: boolean = false
   @State tasksQueueRefresh: boolean = false
   private finishedPage: number = 1
@@ -78,7 +78,9 @@ export struct TabRemoteDown {
         if (data.length > 0) {
           this.aria2Downloading = data
           this.totalDownloading = this.aria2Downloading.length
-          this.startDownloadUpdateTask(data[0].interval < 3 ? 3000 : data[0].interval*1000)
+          const intervalSeconds =
+            Math.max(data[Constant.FIRST_ARRAY_INDEX].interval, Constant.ARIA2_MIN_UPDATE_INTERVAL_SECONDS)
+          this.startDownloadUpdateTask(intervalSeconds * Constant.MILLISECONDS_PER_SECOND)
           console.debug(TAG, 'downloading number: ' + this.totalDownloading)
         } else {
           console.warn(TAG, 'no downloading task')
@@ -167,7 +169,7 @@ export struct TabRemoteDown {
       horizontalPadding: CloudThemeToken.pagePadding
     }) {
       this.title()
-      if (this.selectedIndexes[0] == 0) {
+      if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
         this.offlineDownload()
       }
       else {
@@ -269,7 +271,7 @@ export struct TabRemoteDown {
     if (total <= 0) {
       return '0%'
     }
-    return `${Math.floor(completed * 100 / total)}%`
+    return `${Math.floor(completed * CloudThemeToken.percentageFull / total)}%`
   }
 
   getFileCountText(count: number): string {
@@ -513,9 +515,9 @@ export struct TabRemoteDown {
       .padding({ bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
-      .columnsTemplate('1fr')
-      .maxCount(1)
-      .cachedCount(3)
+      .columnsTemplate(CloudThemeToken.singleColumnTemplate)
+      .maxCount(CloudThemeToken.singleColumnMaxCount)
+      .cachedCount(CloudThemeToken.compactListCachedCount)
       .columnsGap(CloudThemeToken.spacingCard)
       .rowsGap(CloudThemeToken.spacingCard)
       .animation({duration: CloudThemeToken.defaultAnimationDuration})
@@ -563,9 +565,9 @@ export struct TabRemoteDown {
       .padding({ bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
-      .columnsTemplate('1fr')
-      .maxCount(1)
-      .cachedCount(3)
+      .columnsTemplate(CloudThemeToken.singleColumnTemplate)
+      .maxCount(CloudThemeToken.singleColumnMaxCount)
+      .cachedCount(CloudThemeToken.compactListCachedCount)
       .columnsGap(CloudThemeToken.spacingCard)
       .rowsGap(CloudThemeToken.spacingCard)
       .onReachEnd(() => {

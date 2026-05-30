@@ -65,15 +65,16 @@ export struct ObjectItem {
     }
   }
 
-  getDisplayName(name: string, maxLength: number = 28): string {
+  getDisplayName(name: string, maxLength: number = CloudThemeToken.fileNameDisplayMaxLength): string {
     if (name.length <= maxLength) {
       return name
     }
     const dotIndex = name.lastIndexOf('.')
     const extension = dotIndex > 0 ? name.substring(dotIndex) : ''
     const baseName = dotIndex > 0 ? name.substring(0, dotIndex) : name
-    const suffixLength = Math.min(8, baseName.length)
-    const prefixLength = Math.max(8, maxLength - suffixLength - extension.length - 1)
+    const suffixLength = Math.min(CloudThemeToken.fileNameEdgeSegmentLength, baseName.length)
+    const prefixLength = Math.max(CloudThemeToken.fileNameEdgeSegmentLength,
+      maxLength - suffixLength - extension.length - CloudThemeToken.lineWidth)
     return `${baseName.substring(0, prefixLength)}…${baseName.substring(baseName.length - suffixLength)}${extension}`
   }
 
@@ -165,7 +166,7 @@ export struct ObjectItem {
         CommonUtil.getFileIconInfo(item.name).backgroundColor)
 
       Column({ space: CloudThemeToken.objectMetaGap }) {
-        Text(this.getDisplayName(item.name, 28))
+        Text(this.getDisplayName(item.name, CloudThemeToken.fileNameDisplayMaxLength))
           .itemFileNameStyle()
 
         Text(this.getDateText(item.date))

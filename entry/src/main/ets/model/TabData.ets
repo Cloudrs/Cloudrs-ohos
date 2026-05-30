@@ -8,7 +8,7 @@ export enum TabId {
 export interface TabItem {
   image: Resource
   text: Resource | string
-  tabId: number
+  tabId: TabId
 }
 
 export const TabList: TabItem[] = [

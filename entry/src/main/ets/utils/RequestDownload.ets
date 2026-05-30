@@ -17,7 +17,7 @@ class RequestDownload {
   constructor() {
     setInterval(() => {
       this.flushBackgroundTask()
-    }, 2000);
+    }, Constant.BACKGROUND_TASK_FLUSH_INTERVAL_MS);
   }
 
   setDownloadTask(id: string, task: request.agent.Task) {
@@ -73,13 +73,13 @@ class RequestDownload {
       let downloadConfig: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
         url: fileModel.url,
-        method: 'GET',
-        title: 'download',
+        method: Constant.REQUEST_METHOD_GET,
+        title: Constant.REQUEST_TITLE_DOWNLOAD,
         mode: request.agent.Mode.BACKGROUND,
         network: request.agent.Network.ANY,
-        saveas: './' + CommonUtil.getFileName(fileModel.path),
-        overwrite: true,
-        gauge: true
+        saveas: Constant.REQUEST_SAVE_AS_PREFIX + CommonUtil.getFileName(fileModel.path),
+        overwrite: Constant.REQUEST_OVERWRITE_ENABLED,
+        gauge: Constant.REQUEST_GAUGE_ENABLED
       }
 
       try {
@@ -88,10 +88,13 @@ class RequestDownload {
             Logger.info(TAG, `progress,  progress = ${progress.processed} ${progress.state}`);
 
             let processed = Number(progress.processed.toString()).valueOf();
-            let size = progress.sizes[0];
-            let process: number = Math.floor(processed / size * 100);
+            let size = progress.sizes[Constant.FIRST_ARRAY_INDEX];
+            if (size <= Constant.BACKGROUND_TASK_EMPTY_SIZE) {
+              return;
+            }
+            let process: number = Math.floor(processed / size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT);
 
-            if (process < 100) {
+            if (process < Constant.BACKGROUND_TASK_COMPLETE_PERCENT) {
               if (fileModel.callback) {
                 fileModel.callback(progress.processed, FileModelState.RUNNING);
               }
@@ -109,7 +112,7 @@ class RequestDownload {
           task.on('pause', async (progress: request.agent.Progress) => {
             const taskInfo = await this.showTask(task.tid);
             Logger.info(TAG, `pause, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
-            isNetPause = taskInfo?.faults === 0;
+            isNetPause = taskInfo?.faults === Constant.TASK_FAULTS_NONE;
             if (fileModel.callback) {
               if (isNetPause) {
                 fileModel.callback(progress.processed, FileModelState.PAUSED);

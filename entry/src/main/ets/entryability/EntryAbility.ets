@@ -20,11 +20,12 @@ export default class EntryAbility extends UIAbility {
   }
 
   async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
+    let windowClass: window.Window | undefined = undefined
+
     // 全屏及获取规避区域高度
     try {
-      let windowClass = windowStage.getMainWindowSync()
+      windowClass = windowStage.getMainWindowSync()
       const uiContext = windowClass.getUIContext()
-      windowClass.setWindowLayoutFullScreen(true)
       let bottomRectHeight = windowClass
         .getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
         .bottomRect.height
@@ -33,6 +34,7 @@ export default class EntryAbility extends UIAbility {
         .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
         .topRect.height
       AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, uiContext.px2vp(topRectHeight))
+      await this.applyImmersiveSystemBars(windowClass, Constant.APP_THEME_LIGHT)
     } catch (err) {
       hilog.error(0x0000, 'testTag', 'Failed to initialize window layout. Cause: %{public}s', JSON.stringify(err) ?? '');
       AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, 0)
@@ -45,7 +47,10 @@ export default class EntryAbility extends UIAbility {
 
     // 初始化用户加密首选项
     UserPreferences.init(this.context, Constant.USER_PREFERENCES)
-    this.applySavedThemeMode()
+    const themeMode = this.applySavedThemeMode()
+    if (windowClass) {
+      await this.applyImmersiveSystemBars(windowClass, themeMode)
+    }
 
     // 初始化用户信息数据库
     await UserDatabase.init(this.context)
@@ -74,12 +79,36 @@ export default class EntryAbility extends UIAbility {
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
   }
 
-  applySavedThemeMode(): void {
-    const themeMode = UserPreferences.getSync(
+  private async applyImmersiveSystemBars(windowClass: window.Window, themeMode: string): Promise<void> {
+    const useLightIcon = themeMode === Constant.APP_THEME_DARK
+    try {
+      windowClass.setWindowLayoutFullScreen(true)
+      await windowClass.setWindowSystemBarProperties({
+        statusBarColor: Constant.SYSTEM_BAR_TRANSPARENT_COLOR,
+        navigationBarColor: Constant.SYSTEM_BAR_TRANSPARENT_COLOR,
+        statusBarContentColor: useLightIcon ? Constant.SYSTEM_BAR_LIGHT_CONTENT_COLOR : Constant.SYSTEM_BAR_DARK_CONTENT_COLOR,
+        navigationBarContentColor: useLightIcon ? Constant.SYSTEM_BAR_LIGHT_CONTENT_COLOR : Constant.SYSTEM_BAR_DARK_CONTENT_COLOR,
+        isStatusBarLightIcon: useLightIcon,
+        isNavigationBarLightIcon: useLightIcon,
+        enableStatusBarAnimation: Constant.SYSTEM_BAR_ANIMATION_ENABLED,
+        enableNavigationBarAnimation: Constant.SYSTEM_BAR_ANIMATION_ENABLED
+      })
+    } catch (err) {
+      hilog.error(0x0000, 'testTag', 'Failed to apply immersive system bars. Cause: %{public}s',
+        JSON.stringify(err) ?? '');
+    }
+  }
+
+  private getSavedThemeMode(): string {
+    return UserPreferences.getSync(
       Constant.USER_PREFERENCES,
       Constant.APP_THEME_MODE,
       Constant.APP_THEME_LIGHT
     ) as string
+  }
+
+  applySavedThemeMode(): string {
+    const themeMode = this.getSavedThemeMode()
     try {
       this.context.setColorMode(themeMode === Constant.APP_THEME_DARK
         ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
@@ -87,5 +116,6 @@ export default class EntryAbility extends UIAbility {
     } catch (err) {
       hilog.error(0x0000, 'testTag', 'Failed to apply theme mode. Cause: %{public}s', JSON.stringify(err) ?? '');
     }
+    return themeMode
   }
 }

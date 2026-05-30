@@ -1,5 +1,6 @@
 import { HMLifecycle, HMLifecycleContext, IHMLifecycle } from '@hadss/hmrouter'
 import { common } from '@kit.AbilityKit'
+import Constant from '../model/Constant'
 import { showToast } from '../utils/ToastUtil'
 
 @HMLifecycle({ lifecycleName: 'ExitLifecycle' })
@@ -15,7 +16,7 @@ export class ExitLifecycle implements IHMLifecycle {
     }
 
     let now = Date.now()
-    if (now - this.backTimeStamp < 1000) {
+    if (now - this.backTimeStamp < Constant.EXIT_BACK_PRESS_INTERVAL_MS) {
       const abilityContext = ctx.uiContext.getHostContext() as common.UIAbilityContext | undefined
       if (!abilityContext) {
         showToast('退出失败')

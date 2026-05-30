@@ -5,7 +5,7 @@ import { TabPictures } from './tabs/TabPictures';
 import { TabRemoteDown } from './tabs/TabAria2';
 import { TabMine } from './tabs/TabMine';
 import { CloudThemeToken } from '../model/CloudTheme';
-import { TabItem, TabList } from '../model/TabData';
+import { TabId, TabItem, TabList } from '../model/TabData';
 import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
 
 @HMRouter({pageUrl: Constant.HOME_PAGE, interceptors: [Constant.ACCESS_INTERCEPTOR], lifecycle: 'ExitLifecycle'})
@@ -13,7 +13,7 @@ import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
 export struct HomePage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
-  @State currentIndex: number = 0;
+  @State currentIndex: number = TabId.FILES;
   @State overLap: boolean = true
 
   aboutToAppear(): void {
@@ -41,33 +41,33 @@ export struct HomePage {
       TabContent() {
         TabFiles({ overLap: this.overLap })
       }
-      .tabBar(this.getTabBarStyle(TabList[0]))
-      .tabIndex(0)
+      .tabBar(this.getTabBarStyle(TabList[TabId.FILES]))
+      .tabIndex(TabId.FILES)
 
       TabContent() {
         TabPictures({ overLap: this.overLap })
       }
-      .tabBar(this.getTabBarStyle(TabList[1]))
-      .tabIndex(1)
+      .tabBar(this.getTabBarStyle(TabList[TabId.PICTURES]))
+      .tabIndex(TabId.PICTURES)
 
       TabContent() {
         TabRemoteDown({ overLap: this.overLap })
       }
-      .tabBar(this.getTabBarStyle(TabList[2]))
-      .tabIndex(2)
+      .tabBar(this.getTabBarStyle(TabList[TabId.REMOTE_DOWN]))
+      .tabIndex(TabId.REMOTE_DOWN)
 
       TabContent() {
         TabMine({ overLap: this.overLap })
       }
-      .tabBar(this.getTabBarStyle(TabList[3]))
-      .tabIndex(3)
+      .tabBar(this.getTabBarStyle(TabList[TabId.MINE]))
+      .tabIndex(TabId.MINE)
     }
     .width('100%')
     .height('100%')
     .backgroundColor(CloudThemeToken.background)
     .barOverlap(true)
     .barBackgroundColor(CloudThemeToken.transparent)
-    .barBackgroundBlurStyle(BlurStyle.Regular)
+    .barBackgroundBlurStyle(CloudThemeToken.hdsTabBarBlurStyle)
     .barPosition(BarPosition.End)
     .barFloatingStyle({
       barBottomMargin: this.overLap ? this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin :

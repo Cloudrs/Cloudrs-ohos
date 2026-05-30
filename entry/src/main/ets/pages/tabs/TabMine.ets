@@ -1,4 +1,3 @@
-import { HMRouterMgr } from "@hadss/hmrouter";
 import { SiteConfig, UserSetting, UserStorage } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import UserDatabase from "../../model/UserDatabase";
@@ -12,6 +11,7 @@ import { SectionHeader } from "../../components/SectionHeader";
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
+import { CloudRouter } from "../../utils/CloudRouter";
 
 const TAG:string = 'TabMine'
 
@@ -369,7 +369,7 @@ export struct TabMine {
         onConfirm: () => {
           UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
           UserDatabase.deleteUserInfo(this.currentUser)
-          HMRouterMgr.push({ pageUrl: Constant.LOGIN_PAGE })
+          CloudRouter.resetToLogin()
         }
       })
     })
@@ -473,7 +473,7 @@ export struct TabMine {
         CloudThemeToken.settingIconAboutBackground,
         $r('app.string.about'),
         this.versionInfo,
-        () => { HMRouterMgr.push({pageUrl: Constant.ABOUT_PAGE}) }
+        () => { CloudRouter.push(Constant.ABOUT_PAGE) }
       )
     }
     .width('100%')

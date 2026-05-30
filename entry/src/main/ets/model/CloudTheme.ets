@@ -326,6 +326,7 @@ export class CloudThemeToken {
   static readonly imagePreviewErrorImageSize: number = 128
   static readonly imagePreviewSaveTopPadding: number = 10
   static readonly imagePreviewSaveBottomPadding: number = 10
+  static readonly imagePreviewSaveBottomLift: number = 24
   static readonly imagePreviewHeaderButtonPadding: number = 5
   static readonly imagePreviewTitleSize: number = 16
   static readonly imagePreviewShareTopMargin: number = 4

@@ -3,16 +3,12 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
-import { HMRouterMgr } from '@hadss/hmrouter';
 import UserPreferences from '../model/UserPreferences';
 import { VERSION_NAME } from 'BuildProfile';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
-
-    // HMRouter初始化
-    HMRouterMgr.init({context: this.context})
   }
 
   onDestroy(): void {

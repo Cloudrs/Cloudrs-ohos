@@ -1,6 +1,6 @@
-import { HMRouterMgr } from "@hadss/hmrouter";
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudRouter } from "../utils/CloudRouter";
 
 @Component
 export struct CommonTitle {
@@ -22,7 +22,7 @@ export struct CommonTitle {
         if (this.onBackClick) {
           this.onBackClick()
         } else {
-          HMRouterMgr.pop()
+          CloudRouter.pop()
         }
       })
 

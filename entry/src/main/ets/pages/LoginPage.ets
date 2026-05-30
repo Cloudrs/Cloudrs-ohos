@@ -4,11 +4,11 @@ import { showToastTips, ToastType } from '../utils/ToastUtil';
 import Constant from '../model/Constant';
 import UserPrivData from '../model/UserPreferences';
 import UserDatabase from '../model/UserDatabase';
-import { HMRouter, HMRouterMgr } from '@hadss/hmrouter';
 import { LoginParam } from '../model/net/LoginParam';
 import { CloudApi } from '../model/net/CloudApi';
 import { image } from '@kit.ImageKit';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudRouter } from '../utils/CloudRouter';
 
 @Extend(Row)
 function rowCommonStyle() {
@@ -27,9 +27,9 @@ function buildOtpIndexes(): number[] {
   return indexes
 }
 
-@HMRouter({pageUrl: Constant.LOGIN_PAGE, singleton: true})
 @Component
 export struct LoginPage {
+  routeParam?: LoginParam
   @StorageProp(Constant.CLOUD_COOKIE) cookie: string = '';
   @StorageProp(Constant.CLOUD_COOKIE_EXPIRES) cookieExpires: string = '';
   @State protocolIndex: number = Constant.PROTOCOL_HTTPS_INDEX
@@ -97,8 +97,8 @@ export struct LoginPage {
       console.error('LoginPage', `getLastWindow failed: ${err.message}`)
     })
 
-    if (HMRouterMgr.getCurrentParam()) {
-      this.nextPage = (HMRouterMgr.getCurrentParam() as LoginParam).nextPage
+    if (this.routeParam) {
+      this.nextPage = this.routeParam.nextPage
       console.debug('LoginPage', `NextPage: ${this.nextPage}`)
     }
   }
@@ -219,7 +219,7 @@ export struct LoginPage {
     }
     UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
     UserDatabase.insertUserInfo(dbUserInfo)
-    HMRouterMgr.push({pageUrl: this.nextPage ?? Constant.HOME_PAGE})
+    CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
   }
 
   private login() {

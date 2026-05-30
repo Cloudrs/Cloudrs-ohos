@@ -1,11 +1,9 @@
-import { HMRouter } from "@hadss/hmrouter";
 import { CommonTitle } from "../components/CommonTitle";
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 
 const EMAIL: string = 'wangxian@dreamflytech.com'
 
-@HMRouter({pageUrl: Constant.ABOUT_PAGE})
 @Component
 export struct AboutPage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;

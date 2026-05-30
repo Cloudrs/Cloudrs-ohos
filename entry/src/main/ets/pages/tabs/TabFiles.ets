@@ -8,9 +8,7 @@ import { image } from "@kit.ImageKit";
 import { http } from '@kit.NetworkKit';
 import { ObjectItem } from "../../components/ObjectItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
-import { HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../../model/Params";
-import { ExitLifecycle } from "../../lifecycle/ExitLifecycle";
 import { FileMenuType, MoreMenuType, ShowType, SortType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
@@ -30,6 +28,7 @@ import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
+import { CloudRouter } from "../../utils/CloudRouter";
 
 const TAG = 'TabFiles';
 
@@ -278,9 +277,9 @@ export struct TabFiles {
       //console.debug(TAG, `onDataGet: index:${index}`)
       this.getThumbFile(index, item)
     }
-    (HMRouterMgr.getCurrentLifecycleOwner()?.getLifecycle() as ExitLifecycle).onBackPressedCallback = () => {
+    CloudRouter.setHomeBackHandler(() => {
       return this.onBackPressedCallback()
-    }
+    })
     this.getFileList(true, '/')
   }
 
@@ -876,7 +875,7 @@ export struct TabFiles {
       let fileType = CommonUtil.getFileType(item.name)
       let fileExtension = CommonUtil.getFileExtention(item.name)
       if (fileType == FileType.IMAGE) {
-        HMRouterMgr.push({pageUrl: Constant.IAMGE_PREVIEW_PAGE, param: new ImagePreview(item.name, item.id, fileExtension)})
+        CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, new ImagePreview(item.name, item.id, fileExtension))
       } else {
         //filePreview.openPreview(getContext(), {title: item.name, uri: '', mimeType: ''})
         showToast('该类型不支持预览')

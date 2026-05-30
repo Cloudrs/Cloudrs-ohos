@@ -1,5 +1,4 @@
 import Constant from '../model/Constant';
-import { HMRouter } from '@hadss/hmrouter';
 import { TabFiles } from './tabs/TabFiles';
 import { TabPictures } from './tabs/TabPictures';
 import { TabRemoteDown } from './tabs/TabAria2';
@@ -7,8 +6,8 @@ import { TabMine } from './tabs/TabMine';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { TabId, TabItem, TabList } from '../model/TabData';
 import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
+import { CloudRouter } from '../utils/CloudRouter';
 
-@HMRouter({pageUrl: Constant.HOME_PAGE, interceptors: [Constant.ACCESS_INTERCEPTOR], lifecycle: 'ExitLifecycle'})
 @Component
 export struct HomePage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
@@ -18,6 +17,7 @@ export struct HomePage {
 
   aboutToAppear(): void {
     AppStorage.set(Constant.TAB_BAR_HEIGHT, CloudThemeToken.tabBarHeight)
+    CloudRouter.setHomeBackEnabled(this.currentIndex === TabId.FILES)
   }
 
   private getTabBarStyle(tab: TabItem): BottomTabBarStyle {
@@ -82,6 +82,7 @@ export struct HomePage {
     .animationDuration(CloudThemeToken.defaultAnimationDuration)
     .onChange((index: number) => {
       this.currentIndex = index
+      CloudRouter.setHomeBackEnabled(index === TabId.FILES)
       return true
     })
   }

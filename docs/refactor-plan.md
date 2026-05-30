@@ -1,11 +1,11 @@
 # Cloudrs HarmonyOS 6.1 UI Refactor Plan
 
 Date: 2026-05-26
-Last updated: 2026-05-30
+Last updated: 2026-05-31
 
 ## Status
 
-The modern cloud-drive UI refactor has completed the local code-side implementation pass. The main architecture, SDK upgrade, shared design system, primary page migration, photo backup center, upload/download fixes, official HDS floating bottom navigation, sheet consistency pass, and deep tokenization cleanup are implemented and build-verified.
+The modern cloud-drive UI refactor has completed the local code-side implementation pass. The main architecture, SDK upgrade, shared design system, primary page migration, photo backup center, upload/download fixes, official HDS floating bottom navigation, official Navigation routing migration, sheet consistency pass, and deep tokenization cleanup are implemented and build-verified.
 
 Estimated progress: about 90%.
 
@@ -69,6 +69,13 @@ The remaining work is external acceptance: real-device layout validation, API be
 ### Home And Navigation
 
 - Replaced the custom floating tab overlay with official `@kit.UIDesignKit` `HdsTabs`.
+- Replaced third-party `@hadss/hmrouter` routing with official ArkUI `Navigation`, `NavPathStack`, and `NavDestination`.
+- Added `CloudRouter` as the app routing compatibility layer for:
+  - Login guard/session restore
+  - Push/pop navigation
+  - Root route replacement after login/logout
+  - Home-page back handling and double-back exit
+- Removed HMRouter page decorators, interceptor, lifecycle, Hvigor plugin, and package dependency.
 - Bottom navigation now uses:
   - `HdsTabs`
   - `BottomTabBarStyle`

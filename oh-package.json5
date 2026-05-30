@@ -2,7 +2,6 @@
   "modelVersion": "5.0.0",
   "description": "Please describe the basic information.",
   "dependencies": {
-    "@hadss/hmrouter": "^1.2.3",
     "libcloudreve.so": "file:./entry/src/main/cpp/types/libcloudreve"
   },
   "devDependencies": {

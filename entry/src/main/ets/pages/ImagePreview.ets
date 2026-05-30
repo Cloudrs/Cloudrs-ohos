@@ -1,7 +1,6 @@
 import Constant from "../model/Constant";
 import { image } from "@kit.ImageKit";
 import { CloudApi } from "../model/net/CloudApi";
-import { HMRouter, HMRouterMgr } from "@hadss/hmrouter";
 import { ImagePreview } from "../model/Params";
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from "@kit.MediaLibraryKit";
@@ -11,12 +10,13 @@ import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
+import { CloudRouter } from "../utils/CloudRouter";
 
 const TAG: string = 'ImagePreview'
 
-@HMRouter({pageUrl: Constant.IAMGE_PREVIEW_PAGE})
 @Component
 export struct ImagePreviewPage {
+  routeParam?: ImagePreview
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State imagePixelMap:PixelMap | undefined | Resource = undefined;
@@ -33,6 +33,10 @@ export struct ImagePreviewPage {
 
   async getImageFile() {
     if (!this.fileParam) {
+      console.error(TAG, 'Missing image preview route param');
+      this.imagePixelMap = $r('app.media.ic_picture_damage');
+      this.imageWidth = CloudThemeToken.imagePreviewErrorImageSize;
+      this.isLoading = false;
       return;
     }
     CloudApi.getDownloadUri(this.fileParam.fileId, {
@@ -74,16 +78,16 @@ export struct ImagePreviewPage {
   }
 
   aboutToAppear(): void {
-    if (HMRouterMgr.getCurrentParam()) {
-      let param = HMRouterMgr.getCurrentParam() as ImagePreview
-      this.fileParam = param
+    if (this.routeParam) {
+      this.fileParam = this.routeParam
     }
+    console.info(TAG, `preview param: ${this.fileParam?.fileName ?? ''}, ${this.fileParam?.fileId ?? ''}`)
     this.getImageFile()
   }
 
   build() {
     Column(){
-      Blank().height(this.sysTopRectHeight)
+      Blank().height(CloudThemeToken.getSafeTopInset(this.sysTopRectHeight))
       this.previewHeader()
 
       Column() {
@@ -113,7 +117,8 @@ export struct ImagePreviewPage {
       .alignItems(HorizontalAlign.Center)
       .padding({
         top: CloudThemeToken.imagePreviewSaveTopPadding,
-        bottom: this.bottomRectHeight + CloudThemeToken.imagePreviewSaveBottomPadding
+        bottom: this.bottomRectHeight + CloudThemeToken.imagePreviewSaveBottomPadding +
+        CloudThemeToken.imagePreviewSaveBottomLift
       })
     }
     .width('100%')
@@ -135,7 +140,7 @@ export struct ImagePreviewPage {
         .borderRadius(CloudThemeToken.controlRadius)
         .backgroundColor(CloudThemeToken.surface)
         .onClick(() => {
-          HMRouterMgr.pop()
+          CloudRouter.pop()
         })
 
         Text(this.fileParam ? this.fileParam.fileName : '')

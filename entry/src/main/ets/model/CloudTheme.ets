@@ -84,6 +84,7 @@ export class CloudThemeToken {
   static readonly overlayZIndex: number = 100
   static readonly gridGap: number = 7
   static readonly layoutChangeThreshold: number = 1
+  static readonly scrollProgressUpdateThreshold: number = 0.01
   static readonly singleColumnTemplate: string = '1fr'
   static readonly singleColumnMaxCount: number = 1
   static readonly fileGridPhoneColumns: number = 2
@@ -286,6 +287,7 @@ export class CloudThemeToken {
   static readonly filesTitleActionIconSize: number = 18
   static readonly filesTitleHorizontalPadding: number = 20
   static readonly filesTitleHeight: number = 56
+  static readonly filesGridTopGap: number = 24
   static readonly filesSortIconGroupGap: number = 10
   static readonly filesSortIconGroupWidthPercent: string = '50%'
   static readonly aria2CreateGap: number = 15
@@ -383,6 +385,8 @@ export class CloudThemeToken {
   static readonly photoBackupDefaultConcurrent: number = 5
   static readonly photoBackupMinConcurrent: number = 1
   static readonly photoBackupMaxConcurrent: number = 10
+  static readonly photoBackupAutoScanDelayMs: number = 800
+  static readonly photoBackupAutoScanMinIntervalMs: number = 60000
   static readonly photoBackupSaveDebounceMs: number = 800
   static readonly photoBackupStartProgress: number = 8
   static readonly photoBackupCopyProgress: number = 45
@@ -395,6 +399,7 @@ export class CloudThemeToken {
   static readonly surface: ResourceColor = $r('app.color.cloud_surface')
   static readonly surfaceSubtle: ResourceColor = $r('app.color.cloud_surface_subtle')
   static readonly surfaceTranslucent: ResourceColor = $r('app.color.cloud_surface_translucent')
+  static readonly surfaceGlassStrong: ResourceColor = $r('app.color.cloud_surface_glass_strong')
   static readonly headerGlass: ResourceColor = $r('app.color.cloud_header_glass')
   static readonly line: ResourceColor = $r('app.color.cloud_line')
   static readonly primary: ResourceColor = $r('app.color.cloud_primary')

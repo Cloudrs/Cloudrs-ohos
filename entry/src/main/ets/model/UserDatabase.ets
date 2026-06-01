@@ -37,6 +37,11 @@ class UserDatabase {
       try {
         this.rdbStore.executeSync(`ALTER TABLE ${this.usersTable} ADD COLUMN refresh_token TEXT DEFAULT ''`)
       } catch (_) {}
+      try {
+        this.rdbStore.executeSync(`UPDATE ${this.usersTable} SET password = '' WHERE password != ''`)
+      } catch (err) {
+        console.error('UserDatabase', `清理历史密码失败, 错误：${JSON.stringify(err)}`)
+      }
     } catch (e) {
       console.error('UserDatabase', `数据库${this.dbName}初始化失败, 错误：${e}`)
     }
@@ -53,7 +58,7 @@ class UserDatabase {
       id = this.rdbStore.insertSync(this.usersTable, {
         url: dbUserInfo.url,
         username: dbUserInfo.username,
-        password: dbUserInfo.password,
+        password: '',
         cookie: dbUserInfo.cookie,
         expires: dbUserInfo.expires,
         refresh_token: dbUserInfo.refresh_token ?? '',
@@ -72,7 +77,7 @@ class UserDatabase {
     return id
   }
 
-  checkUserValid(username: string): boolean {
+  checkUserValid(username: string, url?: string): boolean {
     if (!this.rdbStore) {
       console.error('UserDatabase', '获取cookie失败，数据库未初始化')
       return false
@@ -80,6 +85,9 @@ class UserDatabase {
 
     let predicates = new relationalStore.RdbPredicates(this.usersTable)
     predicates.equalTo('username', username)
+    if (url && url.length > 0) {
+      predicates.equalTo('url', url)
+    }
 
     let result: relationalStore.ResultSet | undefined = undefined
     try {
@@ -99,7 +107,7 @@ class UserDatabase {
     return false
   }
 
-  getUserInfo(username: string): DbUserInfo|null {
+  getUserInfo(username: string, url?: string): DbUserInfo|null {
     if (!this.rdbStore) {
       console.error('UserDatabase', '获取cookie失败，数据库未初始化')
       return null
@@ -107,6 +115,9 @@ class UserDatabase {
 
     let predicates = new relationalStore.RdbPredicates(this.usersTable)
     predicates.equalTo('username', username)
+    if (url && url.length > 0) {
+      predicates.equalTo('url', url)
+    }
 
     let result: relationalStore.ResultSet | undefined = undefined
     try {
@@ -141,6 +152,54 @@ class UserDatabase {
     }
 
     return null
+  }
+
+  listUserInfo(): DbUserInfo[] {
+    let users: DbUserInfo[] = []
+    if (!this.rdbStore) {
+      console.error('UserDatabase', '获取用户列表失败，数据库未初始化')
+      return users
+    }
+
+    let predicates = new relationalStore.RdbPredicates(this.usersTable)
+    try {
+      predicates.orderByDesc('id')
+    } catch (_) {}
+
+    let result: relationalStore.ResultSet | undefined = undefined
+    try {
+      result = this.rdbStore.querySync(predicates, [
+        'url',
+        'username',
+        'password',
+        'cookie',
+        'expires',
+        'refresh_token',
+        'userinfo'
+      ])
+      if (!result.goToFirstRow()) {
+        return users
+      }
+
+      do {
+        let username = result.getString(result.getColumnIndex('username'))
+        users.push({
+          url: result.getString(result.getColumnIndex('url')),
+          username,
+          password: result.getString(result.getColumnIndex('password')),
+          cookie: result.getString(result.getColumnIndex('cookie')),
+          expires: result.getString(result.getColumnIndex('expires')),
+          refresh_token: result.getString(result.getColumnIndex('refresh_token')),
+          userinfo: this.parseUserInfo(result.getString(result.getColumnIndex('userinfo')))
+        })
+      } while (result.goToNextRow())
+    } catch (err) {
+      console.error('UserDatabase', `获取用户列表失败，错误：${JSON.stringify(err)}`)
+    } finally {
+      this.closeResult(result)
+    }
+
+    return users
   }
 
   deleteUserInfo(username: string, url?: string): void {

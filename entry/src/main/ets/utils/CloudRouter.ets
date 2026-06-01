@@ -33,7 +33,7 @@ export class CloudRouter {
   static showStartPage(): void {
     let hasSession = false;
     try {
-      hasSession = CloudRouter.restoreSession(false);
+      hasSession = CloudRouter.restoreCurrentSession(false);
     } catch (err) {
       console.error(TAG, `restore session failed: ${(err as Error)?.message ?? err}`);
     }
@@ -86,6 +86,22 @@ export class CloudRouter {
     CloudRouter.replaceRoot(Constant.LOGIN_PAGE, new LoginParam(false, nextPage));
   }
 
+  static switchToUser(username: string, url?: string, showExpiredTip: boolean = true): boolean {
+    const dbUserInfo: DbUserInfo | null = UserDatabase.getUserInfo(username, url);
+    if (!dbUserInfo) {
+      showToastTips('未找到该账号的登录信息', ToastType.Warn);
+      return false;
+    }
+
+    if (!CloudRouter.restoreUserSession(dbUserInfo, showExpiredTip)) {
+      return false;
+    }
+
+    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, dbUserInfo.username);
+    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, dbUserInfo.url);
+    return true;
+  }
+
   static pop(): void {
     if (CloudRouter.overlayPage.length > CloudThemeToken.zero) {
       CloudRouter.clearOverlay();
@@ -136,7 +152,7 @@ export class CloudRouter {
     if (pageUrl === Constant.LOGIN_PAGE) {
       return true;
     }
-    if (CloudRouter.restoreSession(true)) {
+    if (CloudRouter.restoreCurrentSession(true)) {
       return true;
     }
     CloudRouter.resetToLogin(pageUrl);
@@ -159,17 +175,22 @@ export class CloudRouter {
     CloudRouter.overlayUpdater?.('', new EmptyRouteParam());
   }
 
-  private static restoreSession(showExpiredTip: boolean): boolean {
+  private static restoreCurrentSession(showExpiredTip: boolean): boolean {
     const currentUser = (UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string) ?? '';
     if (currentUser.length <= CloudThemeToken.zero) {
       return false;
     }
+    const currentUrl = (UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string) ?? '';
 
-    const dbUserInfo: DbUserInfo | null = UserDatabase.getUserInfo(currentUser);
+    const dbUserInfo: DbUserInfo | null = UserDatabase.getUserInfo(currentUser, currentUrl);
     if (!dbUserInfo) {
       return false;
     }
 
+    return CloudRouter.restoreUserSession(dbUserInfo, showExpiredTip);
+  }
+
+  private static restoreUserSession(dbUserInfo: DbUserInfo, showExpiredTip: boolean): boolean {
     const expiresDate = new Date(dbUserInfo.expires);
     if (Date.now() >= expiresDate.getTime()) {
       if (showExpiredTip) {

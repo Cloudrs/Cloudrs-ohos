@@ -1,7 +1,8 @@
 import {
   nativeInit, nativeRestoreSession,
-  nativeGetSiteConfig, nativeLogin, nativeLogin2fa,
+  nativeGetSiteConfig, nativeLogin, nativeLogin2fa, nativeLoginWithRefreshToken,
   nativeGetUserStorage, nativeGetUserSetting,
+  nativeGetUserAvatar,
   nativeGetDirectory, nativeGetObjectDetail,
   nativeDeleteObjects, nativeMoveObjects, nativeCopyObjects,
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
@@ -82,14 +83,29 @@ export class CloudApi {
     });
   }
 
+  static loginWithRefreshToken(baseUrl: string, refreshToken: string, callback?: HttpCallback<UserInfo>): void {
+    if (callback?.onStart) { callback.onStart(); }
+    nativeLoginWithRefreshToken(baseUrl, refreshToken, {
+      onSuccess: (result: string[]) => {
+        CloudApi.storeLoginResult(result);
+        callback?.onSuccess(JSON.parse(result[Constant.LOGIN_RESULT_USER_INDEX]) as UserInfo);
+      },
+      onFailure: (msg: string) => callback?.onFailure(msg),
+    });
+  }
+
   private static storeLoginResult(result: string[]): void {
     const token: string = result[Constant.LOGIN_RESULT_TOKEN_INDEX];
     const refreshToken: string = result[Constant.LOGIN_RESULT_REFRESH_TOKEN_INDEX];
     const version: string = result[Constant.LOGIN_RESULT_VERSION_INDEX];
+    const refreshExpires: string = result[Constant.LOGIN_RESULT_REFRESH_EXPIRES_INDEX] ?? '';
     const cookieToStore = version === Constant.CLOUD_VERSION_V3 ?
       `${Constant.CLOUD_V3_COOKIE_PREFIX}${token}` : `${Constant.CLOUD_V4_COOKIE_PREFIX}${token}`;
-    const expiresDate = new Date();
-    expiresDate.setDate(expiresDate.getDate() + Constant.CLOUD_COOKIE_EXPIRE_DAYS);
+    let expiresDate = refreshExpires.length > 0 ? new Date(refreshExpires) : new Date();
+    if (refreshExpires.length === 0 || Number.isNaN(expiresDate.getTime())) {
+      expiresDate = new Date();
+      expiresDate.setDate(expiresDate.getDate() + Constant.CLOUD_COOKIE_EXPIRE_DAYS);
+    }
     AppStorage.setOrCreate(Constant.CLOUD_COOKIE, cookieToStore);
     AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, expiresDate.toUTCString());
     AppStorage.setOrCreate(Constant.CLOUD_REFRESH_TOKEN, refreshToken);
@@ -116,7 +132,7 @@ export class CloudApi {
   }
 
   static getUserAvatar(_userId: string, _callback?: HttpCallback<ArrayBuffer>): void {
-    // Avatar fetch not supported via native layer
+    nativeGetUserAvatar(_userId, _callback);
   }
 
   static getObjectDetail(id: string, isFolder: boolean, callback?: HttpCallback<ObjectDetail>): void {

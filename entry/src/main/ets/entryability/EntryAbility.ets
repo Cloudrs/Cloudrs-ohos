@@ -4,6 +4,8 @@ import { window } from '@kit.ArkUI';
 import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
 import UserPreferences from '../model/UserPreferences';
+import { AvatarUtil } from '../utils/AvatarUtil';
+import { AppLockUtil } from '../utils/AppLockUtil';
 import { VERSION_NAME } from 'BuildProfile';
 
 export default class EntryAbility extends UIAbility {
@@ -43,6 +45,7 @@ export default class EntryAbility extends UIAbility {
 
     // 初始化用户加密首选项
     UserPreferences.init(this.context, Constant.USER_PREFERENCES)
+    AvatarUtil.init(this.context)
     const themeMode = this.applySavedThemeMode()
     if (windowClass) {
       await this.applyImmersiveSystemBars(windowClass, themeMode)
@@ -67,11 +70,14 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     // Ability has brought to foreground
+    const tick = AppStorage.get<number>(Constant.APP_FOREGROUND_TICK) ?? 0;
+    AppStorage.setOrCreate(Constant.APP_FOREGROUND_TICK, tick + 1);
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onForeground');
   }
 
   onBackground(): void {
     // Ability has back to background
+    AppLockUtil.resetSession();
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
   }
 

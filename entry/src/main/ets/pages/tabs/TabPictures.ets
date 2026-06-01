@@ -29,6 +29,8 @@ const TAG: string = 'TabPictures';
 @Component
 export struct TabPictures {
   @Link overLap: boolean
+  @Watch('onActiveStateChanged')
+  @Prop isActive: boolean = false
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
   @Provide photoBackupThumbs: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -78,21 +80,29 @@ export struct TabPictures {
   private photoCopyQueue: Promise<void> = Promise.resolve();
   private photoAssetCache: Map<string, photoAccessHelper.PhotoAsset> = new Map<string, photoAccessHelper.PhotoAsset>();
   private thumbnailLoadingIds: Set<string> = new Set<string>();
+  private autoScanTimer: number = -1;
 
   aboutToAppear(): void {
     this.bindPreviewDataSources();
     this.loadSettings();
     this.loadDoneIds();
     this.loadPhotoRecords();
-    if (this.getSettingsEnabled()) {
-      this.scanLocalPhotos();
-    }
+    this.scheduleActiveAutoScan();
   }
 
   aboutToDisappear(): void {
+    this.clearAutoScanTimer();
     this.stopCompletedPreviewFlush();
     this.flushDoneIdsSave();
     this.flushPhotoRecordsSave();
+  }
+
+  onActiveStateChanged(): void {
+    if (!this.isActive) {
+      this.clearAutoScanTimer();
+      return;
+    }
+    this.scheduleActiveAutoScan();
   }
 
   bindPreviewDataSources(): void {
@@ -670,7 +680,36 @@ export struct TabPictures {
     showToast('已切换备份路径，状态已重新同步');
   }
 
-  async scanLocalPhotos(): Promise<void> {
+  scheduleActiveAutoScan(): void {
+    if (!this.shouldRunActiveAutoScan() || this.autoScanTimer >= CloudThemeToken.zero) {
+      return;
+    }
+    this.autoScanTimer = setTimeout(() => {
+      this.autoScanTimer = -1;
+      if (this.shouldRunActiveAutoScan()) {
+        this.scanLocalPhotos(false, true);
+      }
+    }, CloudThemeToken.photoBackupAutoScanDelayMs);
+  }
+
+  clearAutoScanTimer(): void {
+    if (this.autoScanTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.autoScanTimer);
+      this.autoScanTimer = -1;
+    }
+  }
+
+  shouldRunActiveAutoScan(): boolean {
+    if (!this.isActive || !this.getSettingsEnabled() || this.isScanning || this.isBackupRunning()) {
+      return false;
+    }
+    if (this.getPhotos().length === 0 || this.settingsLastScanAt <= CloudThemeToken.zero) {
+      return true;
+    }
+    return new Date().getTime() - this.settingsLastScanAt >= CloudThemeToken.photoBackupAutoScanMinIntervalMs;
+  }
+
+  async scanLocalPhotos(forceFull: boolean = true, silent: boolean = false): Promise<void> {
     if (this.isScanning) {
       return;
     }
@@ -694,6 +733,12 @@ export struct TabPictures {
       const previousCount = this.getPhotos().length;
       let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
       let predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
+      const modifiedFloor = forceFull ? CloudThemeToken.zero : this.getIncrementalModifiedFloor();
+      if (modifiedFloor > CloudThemeToken.zero) {
+        predicates.greaterThan(photoAccessHelper.PhotoKeys.DATE_MODIFIED, modifiedFloor);
+      }
+      predicates.equalTo(photoAccessHelper.PhotoKeys.PHOTO_TYPE, photoAccessHelper.PhotoType.IMAGE);
+      predicates.orderByDesc(photoAccessHelper.PhotoKeys.DATE_MODIFIED);
       let fetchOptions: photoAccessHelper.FetchOptions = {
         fetchColumns: [
           photoAccessHelper.PhotoKeys.URI,
@@ -706,6 +751,42 @@ export struct TabPictures {
       };
       let fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> =
         await phAccessHelper.getAssets(fetchOptions);
+      let nextPhotos: PhotoBackupItem[] = await this.readPhotoFetchResult(fetchResult);
+      if (nextPhotos.length === 0 && forceFull) {
+        this.permissionHint = '未扫描到本地图片。如果相册中已有图片，请检查相册读取权限，或手动选择图片加入备份。';
+      } else if (forceFull && previousCount > 0 && nextPhotos.length < previousCount) {
+        this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
+      }
+      this.photos = this.mergePhotoList(nextPhotos, true);
+      this.refreshPhotoStats();
+      this.updateSettings((settings: PhotoBackupSettings) => {
+        settings.lastScanAt = new Date().getTime();
+      });
+      if (nextPhotos.length > 0) {
+        this.savePhotoRecords();
+      }
+      if (!silent) {
+        const addedCount = Math.max(this.getPhotos().length - previousCount, CloudThemeToken.zero);
+        showToast(forceFull ? `已扫描到 ${this.localPhotoCount} 张本地图片` :
+          (addedCount > 0 ? `已发现 ${addedCount} 张新图片` : '没有发现新图片'));
+      }
+      this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
+    } catch (err) {
+      let error = err as BusinessError;
+      console.error(TAG, `scan failed: ${error.code}, ${error.message}`);
+      if (!silent) {
+        this.permissionHint = '相册扫描失败，请检查系统相册权限。也可以先使用“选择图片加入备份”继续备份指定图片。';
+        showToast('扫描本地相册失败，请检查相册读取权限');
+      }
+      this.backupState = PhotoBackupState.FAILED;
+    } finally {
+      this.isScanning = false;
+    }
+  }
+
+  async readPhotoFetchResult(fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset>):
+    Promise<PhotoBackupItem[]> {
+    try {
       let assets: photoAccessHelper.PhotoAsset[] = await fetchResult.getAllObjects();
       let nextPhotos: PhotoBackupItem[] = [];
       assets.forEach((asset: photoAccessHelper.PhotoAsset) => {
@@ -718,29 +799,18 @@ export struct TabPictures {
         this.photoAssetCache.set(item.id, asset);
         nextPhotos.push(item);
       });
-      fetchResult.close();
-      if (nextPhotos.length === 0) {
-        this.permissionHint = '未扫描到本地图片。如果相册中已有图片，请检查相册读取权限，或手动选择图片加入备份。';
-      } else if (previousCount > 0 && nextPhotos.length < previousCount) {
-        this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
-      }
-      this.photos = this.mergePhotoList(nextPhotos, true);
-      this.refreshPhotoStats();
-      this.updateSettings((settings: PhotoBackupSettings) => {
-        settings.lastScanAt = new Date().getTime();
-      });
-      this.savePhotoRecords();
-      showToast(`已扫描到 ${this.localPhotoCount} 张本地图片`);
-      this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
-    } catch (err) {
-      let error = err as BusinessError;
-      console.error(TAG, `scan failed: ${error.code}, ${error.message}`);
-      this.permissionHint = '相册扫描失败，请检查系统相册权限。也可以先使用“选择图片加入备份”继续备份指定图片。';
-      showToast('扫描本地相册失败，请检查相册读取权限');
-      this.backupState = PhotoBackupState.FAILED;
+      return nextPhotos;
     } finally {
-      this.isScanning = false;
+      fetchResult.close();
     }
+  }
+
+  getIncrementalModifiedFloor(): number {
+    let modifiedAt = CloudThemeToken.zero;
+    this.getPhotos().forEach((item: PhotoBackupItem) => {
+      modifiedAt = Math.max(modifiedAt, item.modifiedAt);
+    });
+    return modifiedAt;
   }
 
   async pickPhotosForBackup(): Promise<void> {

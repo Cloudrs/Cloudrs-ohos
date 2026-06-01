@@ -16,6 +16,7 @@ use cloudreve_api::{
             TaskStatus, TaskType, TaskListResponse,
             CreateShareLinkRequest, PermissionSetting,
             CreateArchiveRequest, ExtractArchiveRequest,
+            RefreshTokenRequest,
         },
         uri::path_to_uri as v4_path_to_uri,
     },
@@ -522,6 +523,54 @@ fn extract_v4_tokens(response: &LoginResponse) -> (String, String) {
     }
 }
 
+/// Login with a v4 refresh token. Returns [userJson, access_token, refresh_token, "v4", refresh_expires].
+#[napi(js_name = "loginWithRefreshToken")]
+pub async fn login_with_refresh_token(base_url: String, refresh_token: String) -> napi::Result<Vec<String>> {
+    let mut api = CloudreveAPI::with_version(&base_url, ApiVersion::V4)
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+    let token = api
+        .inner()
+        .as_v4()
+        .ok_or_else(|| napi::Error::from_reason("Not a v4 client"))?
+        .refresh_token(&RefreshTokenRequest {
+            refresh_token: &refresh_token,
+        })
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("Token refresh failed: {}", e)))?;
+
+    let access_token = token.access_token.clone();
+    let next_refresh_token = token.refresh_token.clone();
+    let refresh_expires = token.refresh_expires.clone();
+
+    if let Some(v4) = api.inner_mut().as_v4_mut() {
+        v4.set_token(access_token.clone());
+        v4.set_refresh_token(next_refresh_token.clone());
+    }
+    set_v4_refresh(Some(next_refresh_token.clone()));
+
+    let user_json = match api.get_site_config(None).await {
+        Ok(SiteConfigValue::V4(cfg)) => match cfg.user {
+            Some(user) => serde_json::to_string(&user).unwrap_or_else(|_| json!({}).to_string()),
+            None => json!({}).to_string(),
+        },
+        Ok(_) => json!({}).to_string(),
+        Err(err) => {
+            log::warn!("load user info after refresh login failed: {}", err);
+            json!({}).to_string()
+        }
+    };
+
+    set_client(api);
+    Ok(vec![
+        user_json,
+        access_token,
+        next_refresh_token,
+        "v4".to_string(),
+        refresh_expires,
+    ])
+}
+
 /// Login. Returns [userJson, access_token, refresh_token, "v3"/"v4"].
 /// When 2FA is required, returns ["2fa_required", "", "", "v3"/"v4"].
 #[napi]
@@ -634,6 +683,61 @@ pub async fn get_user_setting() -> napi::Result<String> {
         };
         serde_json::to_string(&mapped).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
+}
+
+#[napi]
+pub async fn get_user_avatar(user_id: String) -> napi::Result<Vec<u8>> {
+    let api = get_client()?;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .build()
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+    let request = if let Some(v3) = api.inner().as_v3() {
+        let url = format!(
+            "{}/api/v3/user/avatar/{}/l",
+            v3.base_url.trim_end_matches('/'),
+            user_id
+        );
+        let cookie = api.get_session_cookie().unwrap_or_default();
+        let cookie_header = if cookie.starts_with("cloudreve-session=") {
+            cookie
+        } else {
+            format!("cloudreve-session={}", cookie)
+        };
+        client.get(url).header(reqwest::header::COOKIE, cookie_header)
+    } else {
+        let v4 = api.inner().as_v4()
+            .ok_or_else(|| napi::Error::from_reason("not a v4 client"))?;
+        let url = format!(
+            "{}/api/v4/user/avatar/{}?nocache=true",
+            v4.base_url.trim_end_matches('/'),
+            user_id
+        );
+        let mut request = client.get(url);
+        if let Some(token) = &v4.token {
+            request = request.bearer_auth(token);
+        }
+        request
+    };
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(napi::Error::from_reason(format!(
+            "avatar request failed: {}",
+            status
+        )));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    Ok(bytes.to_vec())
 }
 
 // ---- Directory / Files ----

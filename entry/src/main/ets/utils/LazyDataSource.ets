@@ -104,6 +104,7 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
   public deleteDataByItem(data: T): void {
     let index = this.dataArray.indexOf(data)
     if (index != -1) {
+      this.dataArray.splice(index, 1)
       this.notifyDataDelete(index);
     }
   }

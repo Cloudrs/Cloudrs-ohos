@@ -3,8 +3,10 @@ export const restoreSession: (baseUrl: string, accessToken: string, refreshToken
 export const getSiteConfig: () => Promise<string>;
 export const login: (username: string, password: string) => Promise<string[]>;
 export const login2fa: (code: string) => Promise<string[]>;
+export const loginWithRefreshToken: (baseUrl: string, refreshToken: string) => Promise<string[]>;
 export const getUserStorage: () => Promise<string>;
 export const getUserSetting: () => Promise<string>;
+export const getUserAvatar: (userId: string) => Promise<ArrayBuffer>;
 export const getDirectory: (path: string) => Promise<string>;
 export const getObjectDetail: (id: string, isFolder: boolean) => Promise<string>;
 export const deleteObjects: (items: string[], dirs: string[]) => Promise<void>;

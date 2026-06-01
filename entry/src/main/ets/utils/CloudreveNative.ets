@@ -1,7 +1,8 @@
 import {
   init, restoreSession,
-  getSiteConfig, login, login2fa,
+  getSiteConfig, login, login2fa, loginWithRefreshToken,
   getUserStorage, getUserSetting,
+  getUserAvatar,
   getDirectory, getObjectDetail,
   deleteObjects, moveObjects, copyObjects,
   renameObject, newDirectory, newFile,
@@ -57,12 +58,24 @@ export function nativeLogin2fa(
   wrap(login2fa(code), callback);
 }
 
+export function nativeLoginWithRefreshToken(
+  baseUrl: string,
+  refreshToken: string,
+  callback?: HttpCallback<string[]>
+): void {
+  wrap(loginWithRefreshToken(baseUrl, refreshToken), callback);
+}
+
 export function nativeGetUserStorage<T>(callback?: HttpCallback<T>): void {
   wrapJson(getUserStorage(), callback);
 }
 
 export function nativeGetUserSetting<T>(callback?: HttpCallback<T>): void {
   wrapJson(getUserSetting(), callback);
+}
+
+export function nativeGetUserAvatar(userId: string, callback?: HttpCallback<ArrayBuffer>): void {
+  wrap(getUserAvatar(userId), callback);
 }
 
 export function nativeGetDirectory<T>(path: string, callback?: HttpCallback<T>): void {

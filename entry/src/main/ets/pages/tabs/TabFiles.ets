@@ -1,4 +1,4 @@
-import { DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy } from "../../model/net/ApiTypes";
+import { DbUserInfo, DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { TabFilesTitle } from "../../components/TabFilesTitle";
@@ -8,7 +8,7 @@ import { image } from "@kit.ImageKit";
 import { http } from '@kit.NetworkKit';
 import { ObjectItem } from "../../components/ObjectItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
-import { ImagePreview } from "../../model/Params";
+import { ImagePreview, PreviewFile, VideoPreview } from "../../model/Params";
 import { FileMenuType, MoreMenuType, ShowType, SortType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
@@ -29,6 +29,8 @@ import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
+import UserPreferences from "../../model/UserPreferences";
+import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 
 const TAG = 'TabFiles';
 
@@ -42,12 +44,6 @@ enum FileInputMode {
   NONE = 'none',
   RENAME = 'rename',
   NEW_OBJECT = 'newObject'
-}
-
-enum FileSheetMode {
-  NONE = 'none',
-  SELECT_FILE = 'selectFile',
-  INPUT = 'input'
 }
 
 class ObjectSelect {
@@ -106,8 +102,8 @@ export struct TabFiles {
   @State uploadingCount: number = 0;
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
-  @State showFileSheet: boolean = false
-  @State fileSheetMode: FileSheetMode = FileSheetMode.NONE
+  @State showSelectFileSheet: boolean = false
+  @State showInputSheet: boolean = false
   @State filePageState: FilePageState = FilePageState.IDLE
   @State searchKeyword: string = ''
   @State inputMode: FileInputMode = FileInputMode.NONE
@@ -116,6 +112,12 @@ export struct TabFiles {
   @State inputValue: string = ''
   @State gridWidth: number = 0
   @State isHeaderGlassActive: boolean = false
+  @State headerCollapseProgress: number = 0
+  @State showUserSwitchSheet: boolean = false
+  @State currentUser: string = ''
+  @State currentUrl: string = ''
+  @State isMultiSelectMode: boolean = false
+  @State selectedObjects: ObjectInfo[] = []
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
   private inputNewPath: string = '/'
@@ -223,7 +225,12 @@ export struct TabFiles {
   }
 
   updateHeaderGlassState(): void {
-    const scrollOffset = this.scrollerForList.currentOffset().yOffset
+    const scrollOffset = Math.max(CloudThemeToken.zero, this.scrollerForList.currentOffset().yOffset)
+    const collapseDistance = this.getHeaderCollapseDistance()
+    const nextProgress = Math.min(CloudThemeToken.fullOpacity, scrollOffset / collapseDistance)
+    if (Math.abs(this.headerCollapseProgress - nextProgress) >= CloudThemeToken.scrollProgressUpdateThreshold) {
+      this.headerCollapseProgress = nextProgress
+    }
     const active = scrollOffset > CloudThemeToken.filesHeaderGlassThreshold
     if (this.isHeaderGlassActive !== active) {
       this.isHeaderGlassActive = active
@@ -234,8 +241,33 @@ export struct TabFiles {
     return CloudThemeToken.getSafeTopInset(this.topRectHeight)
   }
 
+  getHeaderCollapseDistance(): number {
+    return CloudThemeToken.pageTopPadding + CloudThemeToken.iconButtonSize
+  }
+
+  getSearchHeaderVisibleProgress(): number {
+    return CloudThemeToken.fullOpacity - this.headerCollapseProgress
+  }
+
+  getHeaderCollapsedOffset(): number {
+    return (CloudThemeToken.iconButtonSize + CloudThemeToken.spacingCard) * this.headerCollapseProgress
+  }
+
+  getSearchHeaderBottomGap(): number {
+    return CloudThemeToken.spacingCard
+  }
+
+  getSearchHeaderTranslateY(): number {
+    return -(CloudThemeToken.pageTopPadding + CloudThemeToken.iconButtonSize) * this.headerCollapseProgress
+  }
+
+  getTitleHeaderTranslateY(): number {
+    return -this.getHeaderCollapsedOffset()
+  }
+
   getHeaderContentHeight(): number {
-    return this.isHeaderGlassActive ? CloudThemeToken.iconButtonSize : CloudThemeToken.cardHeight2xl
+    return CloudThemeToken.iconButtonSize + CloudThemeToken.spacingCard + CloudThemeToken.filesTitleHeight -
+      this.getHeaderCollapsedOffset()
   }
 
   getHeaderContainerHeight(): number {
@@ -243,23 +275,20 @@ export struct TabFiles {
   }
 
   getExpandedHeaderContainerHeight(): number {
-    return this.getTopInset() + CloudThemeToken.pageTopPadding + CloudThemeToken.cardHeight2xl
+    return this.getTopInset() + CloudThemeToken.pageTopPadding + CloudThemeToken.iconButtonSize +
+      CloudThemeToken.spacingCard + CloudThemeToken.filesTitleHeight
   }
 
   getGridTopPadding(): number {
-    return this.getHeaderContainerHeight() + CloudThemeToken.pageTopPadding
+    return this.getHeaderContainerHeight() + CloudThemeToken.filesGridTopGap
   }
 
   getHeaderTopPadding(): number {
-    const baseTopPadding = this.getTopInset() + CloudThemeToken.pageTopPadding
-    if (!this.isHeaderGlassActive) {
-      return baseTopPadding
-    }
-    return Math.max(CloudThemeToken.zero, baseTopPadding - CloudThemeToken.filesHeaderCollapsedContentLift)
+    return this.getTopInset() + CloudThemeToken.pageTopPadding
   }
 
   getHeaderBottomPadding(): number {
-    return this.isHeaderGlassActive ? CloudThemeToken.filesHeaderCollapsedContentLift : CloudThemeToken.zero
+    return CloudThemeToken.zero
   }
 
   onBackPressedCallback(): boolean {
@@ -273,6 +302,7 @@ export struct TabFiles {
   }
 
   aboutToAppear() {
+    this.loadCurrentUser()
     this.fileDataSource.onDataGet = (index: number, item: ObjectInfo) => {
       //console.debug(TAG, `onDataGet: index:${index}`)
       this.getThumbFile(index, item)
@@ -281,6 +311,43 @@ export struct TabFiles {
       return this.onBackPressedCallback()
     })
     this.getFileList(true, '/')
+  }
+
+  private loadCurrentUser(): void {
+    this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
+    this.currentUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
+  }
+
+  private enterMultiSelectMode(): void {
+    this.isMultiSelectMode = true
+    this.selectedObjects = []
+    this.overLap = false
+  }
+
+  private exitMultiSelectMode(): void {
+    this.isMultiSelectMode = false
+    this.selectedObjects = []
+    this.overLap = true
+  }
+
+  private isObjectSelected(item: ObjectInfo): boolean {
+    return this.selectedObjects.some((selected: ObjectInfo) => selected.id === item.id)
+  }
+
+  private toggleObjectSelection(item: ObjectInfo): void {
+    if (this.isObjectSelected(item)) {
+      this.selectedObjects = this.selectedObjects.filter((selected: ObjectInfo) => selected.id !== item.id)
+    } else {
+      this.selectedObjects = this.selectedObjects.concat([item])
+    }
+  }
+
+  private selectAllVisibleObjects(): void {
+    this.selectedObjects = this.dirDataSource.dataArray.concat(this.fileDataSource.dataArray)
+  }
+
+  private getSelectedCountText(): string {
+    return `已选 ${this.selectedObjects.length} 项`
   }
 
   async getThumbFile(index: number, item: ObjectInfo) {
@@ -314,6 +381,9 @@ export struct TabFiles {
 
   async getFileList(isRefresh: boolean, path: string) {
     const isSamePath = path === this.currentPath
+    if (!isSamePath) {
+      this.exitMultiSelectMode()
+    }
     const hasVisibleData = this.dirDataSource.totalCount() > 0 || this.fileDataSource.totalCount() > 0
     const shouldKeepContent = isRefresh && isSamePath && hasVisibleData
     if (path === '/') {
@@ -332,6 +402,7 @@ export struct TabFiles {
           this.fileDataSource.clear()
           this.thumbImage.clear()
           this.isHeaderGlassActive = false
+          this.headerCollapseProgress = 0
           this.scrollerForList.scrollEdge(Edge.Start)
         }
       },
@@ -392,6 +463,7 @@ export struct TabFiles {
         CloudApi.copyObjects(param, {
           onSuccess: (data) => {
             showToast($r('app.string.copy_success'))
+            this.exitMultiSelectMode()
           },
           onFailure: (msg) => {
             console.error(TAG, 'copy failed, msg: ' + msg)
@@ -403,6 +475,7 @@ export struct TabFiles {
         CloudApi.moveObjects(param, {
           onSuccess: (data) => {
             this.dataSourceDelete()
+            this.exitMultiSelectMode()
             showToast($r('app.string.move_success'))
           },
           onFailure: (msg) => {
@@ -474,45 +547,255 @@ export struct TabFiles {
       if (this.showObjectDetail) {
         this.detailOverlay()
       }
+
+      if (this.isMultiSelectMode) {
+        this.multiSelectActionBar()
+      }
+
+      if (this.showSelectFileSheet) {
+        this.selectFileOverlay()
+      }
+
+      if (this.showInputSheet) {
+        this.inputSheetOverlay()
+      }
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.showFileSheet, this.fileSheetBuilder(), {
+    .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
       detents: [SheetSize.FIT_CONTENT],
       showClose: false,
       backgroundColor: CloudThemeToken.background,
       onDisappear: () => {
-        this.showFileSheet = false
-        this.resetFileSheetState()
+        this.showUserSwitchSheet = false
       }
     })
   }
 
-  @Builder filesHeaderOverlay() {
-    Column({ space: CloudThemeToken.spacingCard }) {
-      TabFilesHeader({
-        isRoot: this.isRoot,
-        searchKeyword: this.searchKeyword,
-        downloadObjects: this.downloadObjects,
-        downloadingCount: this.downloadingCount,
-        uploadObjects: this.uploadObjects,
-        uploadingCount: this.uploadingCount,
-        onBackClick: (async () => {
-          await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
-        }),
-        onSearchChange: () => {
-          this.applyVisibleObjects()
+  @Builder userSwitchSheet() {
+    UserSwitchSheet({
+      currentUser: this.currentUser,
+      currentUrl: this.currentUrl,
+      onSelect: (user: DbUserInfo) => {
+        if (CloudRouter.switchToUser(user.username, user.url, true)) {
+          this.showUserSwitchSheet = false
+          this.loadCurrentUser()
+          this.getFileList(true, '/')
         }
+      },
+      onClose: () => {
+        this.showUserSwitchSheet = false
+      }
+    })
+  }
+
+  @Builder multiSelectTitle() {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      Button({ type: ButtonType.Normal }) {
+        Text('取消')
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
+          .fontColor(CloudThemeToken.textPrimary)
+      }
+      .height(CloudThemeToken.iconButtonSize)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+      .borderRadius(CloudThemeToken.controlRadius)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+      .onClick(() => {
+        this.exitMultiSelectMode()
       })
-      if (!this.isHeaderGlassActive) {
-        TabFilesTitle({
-          mainTitle: this.mainTitle,
-          subTitle: this.subTitle,
-          onMoreClick: (type: MoreMenuType, isReverse?: boolean) => {
-            this.onMoreClick(type, isReverse)
+
+      Text(this.getSelectedCountText())
+        .fontSize(CloudThemeToken.filesTitleMainSize)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Button({ type: ButtonType.Normal }) {
+        Text('全选')
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
+          .fontColor(CloudThemeToken.primary)
+      }
+      .height(CloudThemeToken.iconButtonSize)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+      .borderRadius(CloudThemeToken.controlRadius)
+      .backgroundColor(CloudThemeToken.primarySoft)
+      .onClick(() => {
+        this.selectAllVisibleObjects()
+      })
+    }
+    .width('100%')
+    .height(CloudThemeToken.filesTitleHeight)
+    .padding({ left: CloudThemeToken.filesTitleHorizontalPadding, right: CloudThemeToken.filesTitleHorizontalPadding })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder multiSelectActionBar() {
+    Column({ space: CloudThemeToken.spacingCard }) {
+      Row() {
+        Text(this.selectedObjects.length > 0 ? this.getSelectedCountText() : '选择文件后操作')
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Button({ type: ButtonType.Normal }) {
+          Text('取消')
+            .fontSize(CloudThemeToken.textSizeSmallPlus)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+        }
+        .height(CloudThemeToken.rowHeightSm)
+        .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
+        .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .onClick(() => {
+          this.exitMultiSelectMode()
+        })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Row({ space: CloudThemeToken.spacingSection }) {
+        this.multiActionButton($r('app.media.ic_copy'), '复制', () => {
+          this.startSelectedCopyMove(FileMenuType.COPY)
+        })
+        this.multiActionButton($r('app.media.ic_move_to'), '移动', () => {
+          this.startSelectedCopyMove(FileMenuType.MOVE)
+        })
+        this.multiActionButton($r('app.media.ic_delete_fill'), '删除', () => {
+          this.deleteSelectedObjects()
+        }, true)
+      }
+      .width('100%')
+      .height(CloudThemeToken.cardHeightSm)
+      .justifyContent(FlexAlign.SpaceAround)
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .padding({
+      left: CloudThemeToken.spacingPage,
+      right: CloudThemeToken.spacingPage,
+      top: CloudThemeToken.spacingSection,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom + CloudThemeToken.spacingSection
+    })
+    .margin({
+      left: CloudThemeToken.zero,
+      right: CloudThemeToken.zero,
+      bottom: CloudThemeToken.zero
+    })
+    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
+    .backgroundColor(CloudThemeToken.surfaceGlassStrong)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+    .shadow({
+      radius: CloudThemeToken.sheetShadowRadius,
+      color: CloudThemeToken.sheetShadow,
+      offsetY: CloudThemeToken.sheetShadowOffsetY
+    })
+    .zIndex(CloudThemeToken.overlayZIndex)
+  }
+
+  @Builder multiActionButton(icon: ResourceStr, title: string, action: () => void, danger: boolean = false) {
+    Button({ type: ButtonType.Normal }) {
+      Column({ space: CloudThemeToken.spacingXs }) {
+        Stack() {
+          Image(icon)
+            .width(CloudThemeToken.iconXl)
+            .height(CloudThemeToken.iconXl)
+            .fillColor(this.getMultiActionContentColor(danger))
+            .draggable(false)
+        }
+        .width(CloudThemeToken.iconBoxXl)
+        .height(CloudThemeToken.iconBoxXl)
+        .borderRadius(CloudThemeToken.controlRadiusRoundXl)
+        .backgroundColor(this.getMultiActionBackground(danger))
+        .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+        .shadow({
+          radius: CloudThemeToken.refreshShadowRadius,
+          color: danger ? 'rgba(255, 77, 79, 0.10)' : 'rgba(17, 93, 252, 0.10)',
+          offsetY: CloudThemeToken.refreshShadowOffsetY
+        })
+
+        Text(title)
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(this.getMultiActionContentColor(danger))
+          .fontWeight(FontWeight.Medium)
+          .textAlign(TextAlign.Center)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .height('100%')
+      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Center)
+    }
+    .layoutWeight(1)
+    .height(CloudThemeToken.cardHeightSm)
+    .borderRadius(CloudThemeToken.controlRadiusRoundXl)
+    .backgroundColor('rgba(0, 0, 0, 0)')
+    .enabled(this.selectedObjects.length > 0)
+    .onClick(action)
+    .opacity(this.selectedObjects.length > 0 ? CloudThemeToken.fullOpacity : CloudThemeToken.disabledOpacity)
+  }
+
+  private getMultiActionBackground(danger: boolean): ResourceColor {
+    return danger ? 'rgba(255, 77, 79, 0.12)' : 'rgba(17, 93, 252, 0.12)'
+  }
+
+  private getMultiActionContentColor(danger: boolean): ResourceColor {
+    return danger ? CloudThemeToken.danger : CloudThemeToken.primary
+  }
+
+  @Builder filesHeaderOverlay() {
+    Column() {
+      Column() {
+        TabFilesHeader({
+          isRoot: this.isRoot,
+          searchKeyword: this.searchKeyword,
+          downloadObjects: this.downloadObjects,
+          downloadingCount: this.downloadingCount,
+          uploadObjects: this.uploadObjects,
+          uploadingCount: this.uploadingCount,
+          onBackClick: (async () => {
+            await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+          }),
+          onSearchChange: () => {
+            if (this.isMultiSelectMode) {
+              this.selectedObjects = []
+            }
+            this.applyVisibleObjects()
+          },
+          onPersonClick: () => {
+            this.loadCurrentUser()
+            this.showUserSwitchSheet = true
           }
         })
       }
+      .width('100%')
+      .height(CloudThemeToken.iconButtonSize)
+      .opacity(this.getSearchHeaderVisibleProgress())
+      .translate({ y: this.getSearchHeaderTranslateY() })
+      .margin({ bottom: this.getSearchHeaderBottomGap() })
+
+      Column() {
+        if (this.isMultiSelectMode) {
+          this.multiSelectTitle()
+        } else {
+          TabFilesTitle({
+            mainTitle: this.mainTitle,
+            subTitle: this.subTitle,
+            onMoreClick: (type: MoreMenuType, isReverse?: boolean) => {
+              this.onMoreClick(type, isReverse)
+            }
+          })
+        }
+      }
+      .width('100%')
+      .height(CloudThemeToken.filesTitleHeight)
+      .translate({ y: this.getTitleHeaderTranslateY() })
     }
     .width('100%')
     .height(this.getHeaderContainerHeight())
@@ -520,19 +803,11 @@ export struct TabFiles {
       top: this.getHeaderTopPadding(),
       bottom: this.getHeaderBottomPadding()
     })
-    .justifyContent(FlexAlign.Center)
+    .justifyContent(FlexAlign.Start)
     .backgroundColor(this.isHeaderGlassActive ? CloudThemeToken.headerGlass : CloudThemeToken.transparent)
     .backgroundBlurStyle(this.isHeaderGlassActive ? CloudThemeToken.filesHeaderGlassBlurStyle : BlurStyle.NONE)
     .zIndex(CloudThemeToken.filesHeaderZIndex)
     .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration, curve: Curve.EaseOut })
-  }
-
-  @Builder fileSheetBuilder() {
-    if (this.fileSheetMode === FileSheetMode.SELECT_FILE) {
-      this.selectFileSheetBuilder()
-    } else if (this.fileSheetMode === FileSheetMode.INPUT) {
-      this.inputSheetBuilder()
-    }
   }
 
   @Builder loadingState() {
@@ -677,10 +952,11 @@ export struct TabFiles {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin + CloudThemeToken.spacingSheetBottom
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
+    .zIndex(1)
   }
 
   @Builder emptyDirectoryState() {
@@ -725,6 +1001,8 @@ export struct TabFiles {
       LazyForEach(this.dirDataSource, (item: ObjectInfo, index: number) => {
         GridItem() {
           ObjectItem({ index, item, showType: this.showType,
+            multiSelectMode: this.isMultiSelectMode,
+            selected: this.isObjectSelected(item),
             onMenuClick : (async (item, type) => {
               await this.onMenuClick(index, item, type)
             })
@@ -742,6 +1020,8 @@ export struct TabFiles {
       LazyForEach(this.fileDataSource, (item: ObjectInfo, index: number) => {
         GridItem() {
           ObjectItem({ index, item, showType: this.showType,
+            multiSelectMode: this.isMultiSelectMode,
+            selected: this.isObjectSelected(item),
             onMenuClick : (async (item, type) => {
               await this.onMenuClick(index, item, type)
             })
@@ -855,8 +1135,45 @@ export struct TabFiles {
     .zIndex(CloudThemeToken.overlayZIndex)
   }
 
+  @Builder selectFileOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.overlayScrim)
+        .zIndex(0)
+        .onClick(() => {
+          this.closeFileSheet()
+        })
+
+      this.selectFileSheetBuilder()
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(CloudThemeToken.overlayZIndex)
+  }
+
+  @Builder inputSheetOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.overlayScrim)
+        .zIndex(0)
+        .onClick(() => {
+          this.closeInputSheet()
+        })
+
+      this.inputSheetBuilder()
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(CloudThemeToken.overlayZIndex)
+  }
+
   @Builder selectFileSheetBuilder() {
     SelectFileSheet({
+      extraBottomPadding: CloudThemeToken.hdsTabBarBottomMargin,
       onClose: () => {
         this.closeFileSheet()
       },
@@ -868,6 +1185,11 @@ export struct TabFiles {
   }
 
   async onItemClick(item: ObjectInfo) {
+    if (this.isMultiSelectMode) {
+      this.toggleObjectSelection(item)
+      return
+    }
+
     if (item.type == Constant.OBJECT_DIR_TYPE) {
       await this.getFileList(true, CloudApi.getTotalPath(item))
     }
@@ -875,12 +1197,22 @@ export struct TabFiles {
       let fileType = CommonUtil.getFileType(item.name)
       let fileExtension = CommonUtil.getFileExtention(item.name)
       if (fileType == FileType.IMAGE) {
-        CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, new ImagePreview(item.name, item.id, fileExtension))
+        CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, this.buildImagePreviewParam(item, fileExtension))
+      } else if (fileType == FileType.VIDEO) {
+        CloudRouter.push(Constant.VIDEO_PREVIEW_PAGE, new VideoPreview(item.name, item.id, fileExtension))
       } else {
         //filePreview.openPreview(getContext(), {title: item.name, uri: '', mimeType: ''})
         showToast('该类型不支持预览')
       }
     }
+  }
+
+  private buildImagePreviewParam(item: ObjectInfo, fileExtension: string): ImagePreview {
+    const images = this.fileDataSource.dataArray
+      .filter((file: ObjectInfo) => CommonUtil.getFileType(file.name) === FileType.IMAGE)
+      .map((file: ObjectInfo) => new PreviewFile(file.name, file.id, CommonUtil.getFileExtention(file.name)))
+    const currentIndex = images.findIndex((file: PreviewFile) => file.fileId === item.id)
+    return new ImagePreview(item.name, item.id, fileExtension, images, currentIndex >= 0 ? currentIndex : 0)
   }
 
   async onMenuClick(index: number, item: ObjectInfo, type: FileMenuType) {
@@ -905,7 +1237,7 @@ export struct TabFiles {
           this.objectSelect.selectPathTitle = $r('app.string.move_to')
         }
         this.objectSelect.type = type
-        this.objectSelect.copyMoveObjects.splice(0, this.copyMoveObjects.length)
+        this.objectSelect.copyMoveObjects.splice(0, this.objectSelect.copyMoveObjects.length)
         this.objectSelect.copyMoveObjects.push(item)
         if (item.type == Constant.OBJECT_DIR_TYPE) {
           this.objectSelect.selectPathId = item.id
@@ -928,7 +1260,7 @@ export struct TabFiles {
     console.debug(TAG, 'onMoreClick type: ' + type)
     switch (type){
       case MoreMenuType.MULTI_SELECT:
-
+        this.enterMultiSelectMode()
         break;
       case MoreMenuType.SHOW_ICON:
         break
@@ -951,6 +1283,55 @@ export struct TabFiles {
         this.openSelectFileSheet()
         break
     }
+  }
+
+  private startSelectedCopyMove(type: FileMenuType): void {
+    if (this.selectedObjects.length === 0) {
+      return
+    }
+
+    this.objectSelect.index = -1
+    this.objectSelect.type = type
+    this.objectSelect.selectPathTitle = type === FileMenuType.COPY ? $r('app.string.copy_to') : $r('app.string.move_to')
+    this.objectSelect.copyMoveObjects = this.selectedObjects.slice()
+    const onlySelected = this.selectedObjects.length === 1 ? this.selectedObjects[0] : undefined
+    this.objectSelect.selectPathId = onlySelected?.type === Constant.OBJECT_DIR_TYPE ? onlySelected.id : ''
+    this.openPathSelectSheet()
+  }
+
+  private deleteSelectedObjects(): void {
+    if (this.selectedObjects.length === 0) {
+      return
+    }
+
+    const selected = this.selectedObjects.slice()
+    showCloudConfirmDialog(this.getUIContext(), {
+      title: $r('app.string.delete_confirm'),
+      message: selected.map((item: ObjectInfo) => item.name).join('\n'),
+      confirmText: $r('app.string.dialog_delete'),
+      onConfirm: () => {
+        const src = new ObjectSrc()
+        selected.forEach((item: ObjectInfo) => {
+          if (item.type === Constant.OBJECT_DIR_TYPE) {
+            src.dirs.push(item.id)
+          } else {
+            src.items.push(item.id)
+          }
+        })
+        CloudApi.deleteObjects(src, {
+          onSuccess: () => {
+            this.objectSelect.copyMoveObjects = selected
+            this.dataSourceDelete()
+            this.exitMultiSelectMode()
+            showToast($r('app.string.delete_success'))
+          },
+          onFailure: (msg) => {
+            console.error(TAG, '批量删除失败 msg: ' + msg)
+            showToast($r('app.string.delete_failed'))
+          }
+        })
+      }
+    })
   }
 
   itemDetail(item: ObjectInfo) {
@@ -988,21 +1369,24 @@ export struct TabFiles {
   }
 
   private openSelectFileSheet(): void {
-    this.fileSheetMode = FileSheetMode.SELECT_FILE
-    this.showFileSheet = true
+    this.overLap = false
+    this.showSelectFileSheet = true
   }
 
   private openInputSheet(): void {
-    this.fileSheetMode = FileSheetMode.INPUT
-    this.showFileSheet = true
+    this.overLap = false
+    this.showInputSheet = true
   }
 
   private closeFileSheet(): void {
-    this.showFileSheet = false
+    this.showSelectFileSheet = false
+    this.overLap = true
   }
 
   private closeInputSheet(): void {
-    this.closeFileSheet()
+    this.showInputSheet = false
+    this.resetInputSheetState()
+    this.overLap = true
   }
 
   private openPathSelectSheet(): void {
@@ -1013,8 +1397,7 @@ export struct TabFiles {
     this.showPathSelect = false
   }
 
-  private resetFileSheetState(): void {
-    this.fileSheetMode = FileSheetMode.NONE
+  private resetInputSheetState(): void {
     this.inputMode = FileInputMode.NONE
     this.inputValue = ''
     this.inputRenameIndex = -1

@@ -1,11 +1,12 @@
 import Constant from '../model/Constant';
 import { LoginParam } from '../model/net/LoginParam';
-import { ImagePreview } from '../model/Params';
+import { ImagePreview, VideoPreview } from '../model/Params';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudRouter } from '../utils/CloudRouter';
 import { HomePage } from './HomePage';
 import { LoginPage } from './LoginPage';
 import { ImagePreviewPage } from './ImagePreview';
+import { VideoPreviewPage } from './VideoPreview';
 import { AboutPage } from './AboutPage';
 
 @Entry
@@ -16,6 +17,7 @@ struct Index {
   @State rootLoginParam: LoginParam = new LoginParam(false, Constant.HOME_PAGE);
   @State overlayPage: string = '';
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
+  @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
 
   aboutToAppear(): void {
     CloudRouter.init(
@@ -29,6 +31,8 @@ struct Index {
       (pageUrl: string, param: Object) => {
         if (pageUrl === Constant.IAMGE_PREVIEW_PAGE) {
           this.imagePreviewParam = param as ImagePreview;
+        } else if (pageUrl === Constant.VIDEO_PREVIEW_PAGE) {
+          this.videoPreviewParam = param as VideoPreview;
         }
         this.overlayPage = pageUrl;
       }
@@ -86,8 +90,17 @@ struct Index {
     if (this.overlayPage === Constant.IAMGE_PREVIEW_PAGE) {
       ImagePreviewPage({ routeParam: this.imagePreviewParam })
         .zIndex(CloudThemeToken.overlayZIndex)
+    } else if (this.overlayPage === Constant.VIDEO_PREVIEW_PAGE) {
+      VideoPreviewPage({ routeParam: this.videoPreviewParam })
+        .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.ABOUT_PAGE) {
       AboutPage()
+        .width('100%')
+        .height('100%')
+        .transition(TransitionEffect.OPACITY
+          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
+            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
         .zIndex(CloudThemeToken.overlayZIndex)
     }
   }
@@ -97,6 +110,19 @@ struct Index {
       NavDestination() {
         Stack() {
           ImagePreviewPage({ routeParam: param as ImagePreview })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.previewBackground)
+      }
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.previewBackground)
+    } else if (name === Constant.VIDEO_PREVIEW_PAGE) {
+      NavDestination() {
+        Stack() {
+          VideoPreviewPage({ routeParam: param as VideoPreview })
         }
         .width('100%')
         .height('100%')

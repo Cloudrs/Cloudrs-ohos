@@ -9,6 +9,10 @@ import { CloudApi } from '../model/net/CloudApi';
 import { image } from '@kit.ImageKit';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudRouter } from '../utils/CloudRouter';
+import { AvatarUtil } from '../utils/AvatarUtil';
+import { UserSwitchSheet } from '../components/UserSwitchSheet';
+import scanBarcode from '@hms.core.scan.scanBarcode';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 @Extend(Row)
 function rowCommonStyle() {
@@ -27,6 +31,40 @@ function buildOtpIndexes(): number[] {
   return indexes
 }
 
+class ScannedLoginData {
+  address: string = ''
+  username: string = ''
+  password: string = ''
+  refreshToken: string = ''
+}
+
+interface ScanGroupLike {
+  id?: string
+  name?: string
+  allowShare?: boolean
+  allowRemoteDownload?: boolean
+  allowArchiveDownload?: boolean
+  shareDownload?: boolean
+  compress?: boolean
+  webdav?: boolean
+  sourceBatch?: number
+  advanceDelete?: boolean
+  allowWebDAVProxy?: boolean
+}
+
+interface ScanUserLike {
+  id?: string
+  user_name?: string
+  email?: string
+  nickname?: string
+  status?: number|string
+  avatar?: string|Object
+  created_at?: string
+  preferred_theme?: string
+  anonymous?: boolean
+  group?: ScanGroupLike
+}
+
 @Component
 export struct LoginPage {
   routeParam?: LoginParam
@@ -41,15 +79,19 @@ export struct LoginPage {
   @State needs2FA: boolean = false;
   @State loginTitle: string|Resource = $r('app.string.website_title');
   @State websiteLogo: Resource|PixelMap = $r('app.media.cloudrs')
+  @State showUserSwitchSheet: boolean = false
+  @State activeUserName: string = ''
+  @State activeUserUrl: string = ''
 
-  private address: string = ''
-  private username: string = ''
-  private password: string = ''
+  @State private address: string = ''
+  @State private username: string = ''
+  @State private password: string = ''
   @State private otpCode: string = ''
   scroller: Scroller = new Scroller();
   private nextPage: string|null = Constant.HOME_PAGE
   private readonly otpIndexes: number[] = buildOtpIndexes()
   private readonly otpInputId: string = 'loginOtpInput'
+  private scanShouldAutoLogin: boolean = false
 
   private requestOtpFocus(attempt: number = CloudThemeToken.zero): void {
     setTimeout(() => {
@@ -99,8 +141,58 @@ export struct LoginPage {
 
     if (this.routeParam) {
       this.nextPage = this.routeParam.nextPage
+      this.applyRouteLoginParam(this.routeParam)
       console.debug('LoginPage', `NextPage: ${this.nextPage}`)
     }
+    this.refreshActiveUser()
+    this.prefillActiveUserForRelogin()
+  }
+
+  private refreshActiveUser(): void {
+    this.activeUserName = UserPrivData.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
+    this.activeUserUrl = UserPrivData.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
+  }
+
+  private applyRouteLoginParam(param: LoginParam): void {
+    if (param.url && param.url.length > 0) {
+      this.applyStoredUrl(param.url)
+    }
+    if (param.username && param.username.length > 0) {
+      this.username = param.username
+    }
+    this.password = ''
+  }
+
+  private prefillActiveUserForRelogin(): void {
+    if (this.routeParam?.isAdd || this.address.length > 0 || this.username.length > 0 ||
+      this.activeUserName.length === 0) {
+      return
+    }
+    const user = UserDatabase.getUserInfo(this.activeUserName, this.activeUserUrl)
+    if (!user) {
+      return
+    }
+    this.applyStoredUrl(user.url)
+    this.username = user.username
+    this.password = ''
+    this.websiteTest(false)
+  }
+
+  private applyStoredUrl(url: string): void {
+    const normalized = this.trimTrailingSlash(url)
+    if (normalized.startsWith(Constant.PROTOCOL_HTTP_SCHEME)) {
+      this.protocolIndex = Constant.PROTOCOL_HTTP_INDEX
+      this.protocol = Constant.PROTOCOL_HTTP_SCHEME
+      this.address = this.trimTrailingSlash(normalized.substring(Constant.PROTOCOL_HTTP_SCHEME.length))
+      return
+    }
+    if (normalized.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) {
+      this.protocolIndex = Constant.PROTOCOL_HTTPS_INDEX
+      this.protocol = Constant.PROTOCOL_HTTPS_SCHEME
+      this.address = this.trimTrailingSlash(normalized.substring(Constant.PROTOCOL_HTTPS_SCHEME.length))
+      return
+    }
+    this.address = normalized
   }
 
   build() {
@@ -175,9 +267,17 @@ export struct LoginPage {
     })
     .backgroundColor(CloudThemeToken.background)
     .justifyContent(FlexAlign.SpaceBetween)
+    .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
+      detents: [SheetSize.FIT_CONTENT],
+      showClose: false,
+      backgroundColor: CloudThemeToken.background,
+      onDisappear: () => {
+        this.showUserSwitchSheet = false
+      }
+    })
   }
 
-  private websiteTest() {
+  private websiteTest(allowHttpFallback: boolean = false) {
     if (this.address.length == CloudThemeToken.zero) {
       showToastTips('无效网站地址', ToastType.Error)
       return
@@ -188,18 +288,39 @@ export struct LoginPage {
           onSuccess: (data: SiteConfig) => {
             this.loginTitle = data.title
             this.websiteInvalid = true
+            if (this.scanShouldAutoLogin && this.username.length > 0 && this.password.length > 0) {
+              this.scanShouldAutoLogin = false
+              showToastTips('已识别账号密码，正在登录', ToastType.Info)
+              this.login()
+            }
           },
           onFailure: (msg) => {
             console.debug('LoginPage', '站点获取配置失败 错误信息:', msg)
+            if (this.retryWebsiteTestWithHttp(allowHttpFallback)) {
+              return
+            }
             showToastTips('站点获取配置失败', ToastType.Error)
           }
         })
       },
       onFailure: (msg) => {
         console.debug('LoginPage', '站点请求失败 错误信息:', msg)
+        if (this.retryWebsiteTestWithHttp(allowHttpFallback)) {
+          return
+        }
         showToastTips('站点请求失败', ToastType.Error)
       }
     })
+  }
+
+  private retryWebsiteTestWithHttp(allowHttpFallback: boolean): boolean {
+    if (!allowHttpFallback || this.protocol !== Constant.PROTOCOL_HTTPS_SCHEME) {
+      return false
+    }
+    this.protocolIndex = Constant.PROTOCOL_HTTP_INDEX
+    this.protocol = Constant.PROTOCOL_HTTP_SCHEME
+    this.websiteTest(false)
+    return true
   }
 
   private saveUserAndNavigate(data: UserInfo): void {
@@ -211,15 +332,434 @@ export struct LoginPage {
     let dbUserInfo: DbUserInfo = {
       url: this.protocol + this.address,
       username: this.username,
-      password: this.password,
+      password: '',
       cookie: cookie,
       expires: cookieExpires,
       refresh_token: refreshToken,
       userinfo: data
     }
     UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
+    UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, dbUserInfo.url)
     UserDatabase.insertUserInfo(dbUserInfo)
+    AvatarUtil.refreshDbUserAvatar(dbUserInfo).catch((err: Error) => {
+      console.warn('LoginPage', `refresh avatar cache failed: ${err.message}`)
+    })
     CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
+  }
+
+  private async startScanLogin(): Promise<void> {
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      showToastTips('扫码失败，无法获取上下文', ToastType.Error)
+      return
+    }
+
+    try {
+      const result = await scanBarcode.startScanForResult(hostContext, {
+        enableAlbum: true,
+        enableMultiMode: false
+      })
+      this.applyScannedAddress(result.originalValue)
+    } catch (err) {
+      const error = err as BusinessError
+      if (error.code === Constant.SCAN_CANCEL_CODE) {
+        return
+      }
+      console.error('LoginPage', `scan failed: ${error.code}, ${error.message}`)
+      showToastTips('扫码失败', ToastType.Error)
+    }
+  }
+
+  private applyScannedAddress(value: string): void {
+    const scanData = this.parseScannedLoginData(value)
+    const address = scanData.address
+    if (address.length === 0) {
+      showToastTips(`未识别到有效站点地址：${this.buildScanSummary(value)}`, ToastType.Warn,
+        Constant.TOAST_TIPS_DEFAULT_DURATION_MS)
+      return
+    }
+
+    const hasProtocol = this.applyScannedSiteAddress(address)
+    this.websiteInvalid = false
+    this.needs2FA = false
+    this.loginTitle = $r('app.string.website_title')
+
+    if (scanData.refreshToken.length > 0) {
+      this.loginWithRefreshToken(this.protocol + this.address, scanData.refreshToken)
+      return
+    }
+
+    if (scanData.username.length > 0) {
+      this.username = scanData.username
+    }
+    if (scanData.password.length > 0) {
+      this.password = scanData.password
+    }
+    this.scanShouldAutoLogin = this.username.length > 0 && this.password.length > 0
+    if (!this.scanShouldAutoLogin) {
+      showToastTips(`已识别站点，二维码${this.buildMissingCredentialText(scanData)}`, ToastType.Info,
+        Constant.TOAST_TIPS_DEFAULT_DURATION_MS)
+    }
+
+    this.websiteTest(!hasProtocol)
+  }
+
+  private applyScannedSiteAddress(address: string): boolean {
+    const hasProtocol = address.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
+      address.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)
+    if (address.startsWith(Constant.PROTOCOL_HTTP_SCHEME)) {
+      this.protocolIndex = Constant.PROTOCOL_HTTP_INDEX
+      this.protocol = Constant.PROTOCOL_HTTP_SCHEME
+      this.address = this.trimTrailingSlash(address.substring(Constant.PROTOCOL_HTTP_SCHEME.length))
+    } else if (address.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) {
+      this.protocolIndex = Constant.PROTOCOL_HTTPS_INDEX
+      this.protocol = Constant.PROTOCOL_HTTPS_SCHEME
+      this.address = this.trimTrailingSlash(address.substring(Constant.PROTOCOL_HTTPS_SCHEME.length))
+    } else {
+      this.address = this.trimTrailingSlash(address)
+    }
+    return hasProtocol
+  }
+
+  private parseScannedLoginData(value: string): ScannedLoginData {
+    const scanned = value.trim()
+    const data = new ScannedLoginData()
+    if (scanned.length === 0) {
+      return data
+    }
+
+    this.applyJsonLoginData(scanned, data)
+    this.applyQueryLoginData(scanned, data)
+    this.applyKeyValueLoginData(scanned, data)
+    const addressWithoutUserInfo = this.applyUrlUserInfoLoginData(scanned, data)
+    if (data.address.length === 0) {
+      data.address = this.normalizeScannedAddress(addressWithoutUserInfo.length > 0 ? addressWithoutUserInfo : scanned)
+    } else {
+      data.address = this.normalizeScannedAddress(data.address)
+    }
+    return data
+  }
+
+  private normalizeScannedAddress(value: string): string {
+    const scanned = value.trim()
+    if (scanned.length === 0) {
+      return ''
+    }
+
+    const jsonUrl = this.extractUrlFromJson(scanned)
+    if (jsonUrl.length > 0) {
+      return this.normalizeScannedAddress(jsonUrl)
+    }
+
+    const queryUrl = this.extractUrlFromQuery(scanned)
+    if (queryUrl.length > 0) {
+      return this.normalizeScannedAddress(queryUrl)
+    }
+
+    const match = scanned.match(/https?:\/\/[^\s"'<>]+/)
+    if (match && match.length > 0) {
+      return this.normalizeBaseAddress(match[0])
+    }
+
+    const domainMatch = scanned.match(/([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/[^\s"'<>]*)?/)
+    if (domainMatch && domainMatch.length > 0) {
+      return this.normalizeBaseAddress(domainMatch[0])
+    }
+    return ''
+  }
+
+  private applyJsonLoginData(value: string, data: ScannedLoginData): void {
+    if (!value.startsWith('{') || !value.endsWith('}')) {
+      return
+    }
+    try {
+      const json = JSON.parse(value) as Record<string, Object>
+      this.applyJsonFields(json, data)
+      const nested = json.data as Record<string, Object>
+      if (nested) {
+        this.applyJsonFields(nested, data)
+      }
+    } catch (_) {
+    }
+  }
+
+  private applyJsonFields(json: Record<string, Object>, data: ScannedLoginData): void {
+    const address = this.readJsonString(json, ['url', 'site', 'server', 'baseUrl', 'base_url', 'endpoint', 'host', 'address'])
+    const username = this.readJsonString(json, ['username', 'user', 'account', 'email', 'mail', 'login'])
+    const password = this.readJsonString(json, ['password', 'pass', 'pwd'])
+    const refreshToken = this.readJsonString(json, ['refresh_token', 'refreshToken'])
+    if (address.length > 0 && data.address.length === 0) {
+      data.address = address
+    }
+    if (username.length > 0 && data.username.length === 0) {
+      data.username = username
+    }
+    if (password.length > 0 && data.password.length === 0) {
+      data.password = password
+    }
+    if (refreshToken.length > 0 && data.refreshToken.length === 0) {
+      data.refreshToken = refreshToken
+    }
+  }
+
+  private readJsonString(json: Record<string, Object>, keys: string[]): string {
+    for (let index = 0; index < keys.length; index++) {
+      const value = json[keys[index]]
+      if (typeof value === 'string' && value.length > 0) {
+        return value
+      }
+      if (typeof value === 'number') {
+        return `${value}`
+      }
+    }
+    return ''
+  }
+
+  private applyQueryLoginData(value: string, data: ScannedLoginData): void {
+    const queryIndex = value.indexOf('?')
+    if (queryIndex < 0 || queryIndex >= value.length - 1) {
+      return
+    }
+    const query = value.substring(queryIndex + 1)
+    const params = query.split('&')
+    params.forEach((item: string) => {
+      const pair = item.split('=')
+      if (pair.length < 2) {
+        return
+      }
+      const key = pair[0].toLowerCase()
+      const val = this.safeDecode(pair.slice(1).join('='))
+      if (['url', 'site', 'server', 'baseurl', 'base_url', 'endpoint', 'host', 'address'].includes(key) &&
+        data.address.length === 0) {
+        data.address = val
+      } else if (['username', 'user', 'account', 'email', 'mail', 'login', 'loginname'].includes(key) &&
+        data.username.length === 0) {
+        data.username = val
+      } else if (['password', 'pass', 'pwd', 'passwd'].includes(key) && data.password.length === 0) {
+        data.password = val
+      } else if (['refresh_token', 'refreshtoken'].includes(key) && data.refreshToken.length === 0) {
+        data.refreshToken = val
+      }
+    })
+  }
+
+  private applyKeyValueLoginData(value: string, data: ScannedLoginData): void {
+    if (data.username.length === 0) {
+      data.username = this.extractKeyValue(value, '(username|user|account|email|mail|login)')
+    }
+    if (data.password.length === 0) {
+      data.password = this.extractKeyValue(value, '(password|pass|pwd)')
+    }
+    if (data.refreshToken.length === 0) {
+      data.refreshToken = this.extractKeyValue(value, '(refresh_token|refreshToken)')
+    }
+    if (data.address.length === 0) {
+      data.address = this.extractKeyValue(value, '(url|site|server|baseUrl|base_url|endpoint|host|address)')
+    }
+  }
+
+  private extractKeyValue(value: string, keyPattern: string): string {
+    const regex = new RegExp(`(?:^|[\\s,;])${keyPattern}\\s*[:=：]\\s*([^\\s,;]+)`, 'i')
+    const match = value.match(regex)
+    if (!match || match.length < 3) {
+      return ''
+    }
+    return this.safeDecode(match[2])
+  }
+
+  private applyUrlUserInfoLoginData(value: string, data: ScannedLoginData): string {
+    const match = value.match(/^(https?:\/\/)([^\/:@?#\s]+):([^\/@?#\s]+)@([^\/?#\s]+)([\/?#].*)?$/)
+    if (!match || match.length < 5) {
+      return ''
+    }
+    if (data.username.length === 0) {
+      data.username = this.safeDecode(match[2])
+    }
+    if (data.password.length === 0) {
+      data.password = this.safeDecode(match[3])
+    }
+    return `${match[1]}${match[4]}`
+  }
+
+  private safeDecode(value: string): string {
+    try {
+      return decodeURIComponent(value.replace(/\+/g, ' '))
+    } catch (_) {
+      return value
+    }
+  }
+
+  private extractUrlFromJson(value: string): string {
+    if (!value.startsWith('{') || !value.endsWith('}')) {
+      return ''
+    }
+    try {
+      const data = JSON.parse(value) as Record<string, string>
+      return data.url ?? data.site ?? data.server ?? data.baseUrl ?? data.base_url ?? data.endpoint ?? data.host ?? ''
+    } catch (_) {
+      return ''
+    }
+  }
+
+  private extractUrlFromQuery(value: string): string {
+    const match = value.match(/[?&](url|site|server|baseUrl|base_url|endpoint|host)=([^&\s]+)/)
+    if (!match || match.length < 3) {
+      return ''
+    }
+    try {
+      return decodeURIComponent(match[2])
+    } catch (_) {
+      return match[2]
+    }
+  }
+
+  private normalizeBaseAddress(value: string): string {
+    let result = value.trim()
+    while (result.endsWith('/') || result.endsWith(',') || result.endsWith(')')) {
+      result = result.substring(0, result.length - 1)
+    }
+
+    const protocolMatch = result.match(/^(https?:\/\/[^\/?#]+)/)
+    if (protocolMatch && protocolMatch.length > 0) {
+      return protocolMatch[0]
+    }
+
+    const hostMatch = result.match(/^([^\/?#]+)/)
+    return hostMatch && hostMatch.length > 0 ? hostMatch[0] : ''
+  }
+
+  private buildMissingCredentialText(data: ScannedLoginData): string {
+    if (data.username.length > 0 && data.password.length === 0) {
+      return '未包含密码'
+    }
+    if (data.username.length === 0 && data.password.length > 0) {
+      return '未包含账号'
+    }
+    return '未包含账号密码'
+  }
+
+  private buildScanSummary(value: string): string {
+    const redacted = this.redactScanText(value.trim())
+    if (redacted.length === 0) {
+      return '空内容'
+    }
+    const previewLength = 80
+    const preview = redacted.length > previewLength ? `${redacted.substring(0, previewLength)}...` : redacted
+    return `${this.detectScanPayloadType(value)} ${preview}`
+  }
+
+  private detectScanPayloadType(value: string): string {
+    const scanned = value.trim()
+    if (scanned.startsWith('{') && scanned.endsWith('}')) {
+      return 'JSON'
+    }
+    if (scanned.startsWith(Constant.PROTOCOL_HTTP_SCHEME) || scanned.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) {
+      return 'URL'
+    }
+    if (scanned.indexOf('://') > 0) {
+      return 'URI'
+    }
+    return 'TEXT'
+  }
+
+  private redactScanText(value: string): string {
+    let result = value
+    result = result.replace(/([?&](password|pass|pwd|passwd|token|access_token|refresh_token|code)=)[^&\s]+/ig, '$1***')
+    result = result.replace(/((password|pass|pwd|passwd|token|access_token|refresh_token|code)\s*[:=：]\s*)[^\s,;&"}]+/ig,
+      '$1***')
+    result = result.replace(/(https?:\/\/)([^\/:@?#\s]+):([^\/@?#\s]+)@/ig, '$1$2:***@')
+    return result
+  }
+
+  private loginWithRefreshToken(baseUrl: string, refreshToken: string): void {
+    showToastTips('已识别扫码登录令牌，正在登录', ToastType.Info)
+    CloudApi.loginWithRefreshToken(baseUrl, refreshToken, {
+      onSuccess: (data: UserInfo) => {
+        const userInfo = this.normalizeScannedUserInfo(data)
+        this.username = this.getScannedUserName(userInfo)
+        this.password = ''
+        if (this.username.length === 0) {
+          this.username = 'scan-login'
+        }
+        this.saveUserAndNavigate(userInfo)
+      },
+      onFailure: (msg: string) => {
+        console.error('LoginPage', `scan refresh login failed: ${msg}`)
+        showToastTips('扫码登录失败，请重新扫码或使用账号密码登录', ToastType.Error)
+      }
+    })
+  }
+
+  private normalizeScannedUserInfo(raw?: UserInfo): UserInfo {
+    if (!raw) {
+      return this.createScannedUserInfo()
+    }
+    const source = raw as ScanUserLike
+    const group = source.group ?? {}
+    const userName = source.user_name ?? source.email ?? source.nickname ?? source.id ?? ''
+    const nickname = source.nickname ?? source.user_name ?? source.email ?? source.id ?? ''
+    return {
+      id: source.id ?? '',
+      user_name: userName,
+      nickname: nickname,
+      status: typeof source.status === 'number' ? source.status : 0,
+      avatar: typeof source.avatar === 'string' ? source.avatar : '',
+      created_at: source.created_at ?? '',
+      preferred_theme: source.preferred_theme ?? '',
+      anonymous: source.anonymous ?? false,
+      group: {
+        id: group.id ?? '',
+        name: group.name ?? '',
+        allowShare: group.allowShare ?? false,
+        allowRemoteDownload: group.allowRemoteDownload ?? false,
+        allowArchiveDownload: group.allowArchiveDownload ?? false,
+        shareDownload: group.shareDownload ?? false,
+        compress: group.compress ?? false,
+        webdav: group.webdav ?? false,
+        sourceBatch: group.sourceBatch ?? 0,
+        advanceDelete: group.advanceDelete ?? false,
+        allowWebDAVProxy: group.allowWebDAVProxy ?? false
+      }
+    }
+  }
+
+  private getScannedUserName(userInfo: UserInfo): string {
+    return userInfo.user_name.length > 0 ? userInfo.user_name :
+      (userInfo.nickname.length > 0 ? userInfo.nickname : userInfo.id)
+  }
+
+  private createScannedUserInfo(): UserInfo {
+    return {
+      id: '',
+      user_name: '',
+      nickname: '',
+      status: 0,
+      avatar: '',
+      created_at: '',
+      preferred_theme: '',
+      anonymous: false,
+      group: {
+        id: '',
+        name: '',
+        allowShare: false,
+        allowRemoteDownload: false,
+        allowArchiveDownload: false,
+        shareDownload: false,
+        compress: false,
+        webdav: false,
+        sourceBatch: 0,
+        advanceDelete: false,
+        allowWebDAVProxy: false
+      }
+    }
+  }
+
+  private trimTrailingSlash(value: string): string {
+    let result = value
+    while (result.endsWith('/')) {
+      result = result.substring(0, result.length - 1)
+    }
+    return result
   }
 
   private login() {
@@ -472,6 +1012,9 @@ export struct LoginPage {
           .fillColor(CloudThemeToken.primary)
       }
       .scanAndUsersCommon()
+      .onClick(() => {
+        this.startScanLogin()
+      })
 
       Button() {
         Image($r("app.media.ic_person_2"))
@@ -479,7 +1022,27 @@ export struct LoginPage {
           .fillColor(CloudThemeToken.textSecondary)
       }
       .scanAndUsersCommon()
+      .onClick(() => {
+        this.refreshActiveUser()
+        this.showUserSwitchSheet = true
+      })
     }
+  }
+
+  @Builder userSwitchSheet() {
+    UserSwitchSheet({
+      currentUser: this.activeUserName,
+      currentUrl: this.activeUserUrl,
+      onSelect: (user: DbUserInfo) => {
+        if (CloudRouter.switchToUser(user.username, user.url, true)) {
+          this.showUserSwitchSheet = false
+          CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
+        }
+      },
+      onClose: () => {
+        this.showUserSwitchSheet = false
+      }
+    })
   }
 
   @Builder privacyText() {

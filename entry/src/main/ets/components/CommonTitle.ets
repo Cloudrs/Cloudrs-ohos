@@ -9,34 +9,39 @@ export struct CommonTitle {
   onBackClick?: ()=>void
 
   build() {
-    Row({ space: CloudThemeToken.commonTitleGap }) {
-      Button({type: ButtonType.Circle}) {
-        Image($r('app.media.ic_back'))
-          .padding(CloudThemeToken.commonTitleIconPadding)
-          .fillColor(CloudThemeToken.textPrimary)
-      }
-      .width(CloudThemeToken.iconButtonSize)
-      .height(CloudThemeToken.iconButtonSize)
-      .backgroundColor(CloudThemeToken.surface)
-      .onClick(() => {
-        if (this.onBackClick) {
-          this.onBackClick()
-        } else {
-          CloudRouter.pop()
-        }
-      })
+    Column() {
+      Blank()
+        .height(CloudThemeToken.getSafeTopInset(this.topRectHeight))
 
-      Text(this.title)
-        .fontColor(CloudThemeToken.textPrimary)
-        .fontSize(CloudThemeToken.commonTitleTextSize)
-        .fontWeight(FontWeight.Bold)
+      Row({ space: CloudThemeToken.spacingPage }) {
+        Button({type: ButtonType.Circle}) {
+          Image($r('app.media.ic_back'))
+            .padding(CloudThemeToken.commonTitleIconPadding)
+            .fillColor(CloudThemeToken.textPrimary)
+        }
+        .width(CloudThemeToken.iconButtonSize)
+        .height(CloudThemeToken.iconButtonSize)
+        .backgroundColor(CloudThemeToken.surface)
+        .onClick(() => {
+          if (this.onBackClick) {
+            this.onBackClick()
+          } else {
+            CloudRouter.pop()
+          }
+        })
+
+        Text(this.title)
+          .fontColor(CloudThemeToken.textPrimary)
+          .fontSize(CloudThemeToken.commonTitleTextSize)
+          .fontWeight(FontWeight.Bold)
+      }
+      .height(CloudThemeToken.titleBarHeight)
+      .width('100%')
+      .padding({ left: CloudThemeToken.spacingXs, right: CloudThemeToken.pagePadding })
+      .alignItems(VerticalAlign.Center)
+      .justifyContent(FlexAlign.Start)
     }
-    .height(CloudThemeToken.titleBarHeight)
     .width('100%')
-    .margin({top: this.topRectHeight})
-    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })
     .backgroundColor(CloudThemeToken.background)
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.Start)
   }
 }

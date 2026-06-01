@@ -7,9 +7,13 @@ class Constant {
 
   ACTIVE_USER_KEY = 'ActiveUser'
 
+  ACTIVE_USER_URL_KEY = 'ActiveUserUrl'
+
   REQUEST_TIMEOUT: number = 5000
 
   HTTP_STATUS_OK: number = 200
+
+  SCAN_CANCEL_CODE: number = 1000500002
 
   IMAGE_PREVIEW_MAX_DOWNLOAD_BYTES: number = 100 * 1024 * 1024
 
@@ -60,6 +64,8 @@ class Constant {
   LOGIN_RESULT_REFRESH_TOKEN_INDEX: number = 2
 
   LOGIN_RESULT_VERSION_INDEX: number = 3
+
+  LOGIN_RESULT_REFRESH_EXPIRES_INDEX: number = 4
 
   LOGIN_TWO_FACTOR_REQUIRED: string = '2fa_required'
 
@@ -121,6 +127,8 @@ class Constant {
 
   IAMGE_PREVIEW_PAGE = 'ImagePreviewPage'
 
+  VIDEO_PREVIEW_PAGE = 'VideoPreviewPage'
+
   ABOUT_PAGE = 'AboutPage'
 
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
@@ -170,6 +178,10 @@ class Constant {
   APP_THEME_LIGHT: string = 'light';
 
   APP_THEME_DARK: string = 'dark';
+
+  PRIVACY_SYSTEM_AUTH_ENABLED: string = 'privacy_system_auth_enabled';
+
+  APP_FOREGROUND_TICK: string = 'appForegroundTick';
 
   SYSTEM_BAR_TRANSPARENT_COLOR: string = '#00000000';
 

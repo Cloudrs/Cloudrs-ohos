@@ -7,17 +7,53 @@ import { CloudThemeToken } from '../model/CloudTheme';
 import { TabId, TabItem, TabList } from '../model/TabData';
 import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
 import { CloudRouter } from '../utils/CloudRouter';
+import { common } from '@kit.AbilityKit';
+import { AppLockUtil } from '../utils/AppLockUtil';
+import { showToast } from '../utils/ToastUtil';
 
 @Component
 export struct HomePage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
+  @Watch('onForegroundTickChanged')
+  @StorageProp(Constant.APP_FOREGROUND_TICK) foregroundTick: number = 0;
   @State currentIndex: number = TabId.FILES;
   @State overLap: boolean = true
+  @State appLockChecking: boolean = false
 
   aboutToAppear(): void {
     AppStorage.set(Constant.TAB_BAR_HEIGHT, CloudThemeToken.tabBarHeight)
     CloudRouter.setHomeBackEnabled(this.currentIndex === TabId.FILES)
+    this.verifyAppLock()
+  }
+
+  private onForegroundTickChanged(): void {
+    this.verifyAppLock()
+  }
+
+  private verifyAppLock(): void {
+    if (this.appLockChecking) {
+      return
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
+    if (!context) {
+      return
+    }
+    this.appLockChecking = true
+    AppLockUtil.unlockIfNeeded(context)
+      .then((result) => {
+        this.appLockChecking = false
+        if (!result.success) {
+          showToast(result.message.length > 0 ? result.message : '身份验证失败')
+          CloudRouter.resetToLogin()
+        }
+      })
+      .catch((err: Error) => {
+        this.appLockChecking = false
+        console.error(`App lock failed: ${err.message}`)
+        showToast('身份验证失败')
+        CloudRouter.resetToLogin()
+      })
   }
 
   private getTabBarStyle(tab: TabItem): BottomTabBarStyle {
@@ -45,7 +81,7 @@ export struct HomePage {
       .tabIndex(TabId.FILES)
 
       TabContent() {
-        TabPictures({ overLap: this.overLap })
+        TabPictures({ overLap: this.overLap, isActive: this.currentIndex === TabId.PICTURES })
       }
       .tabBar(this.getTabBarStyle(TabList[TabId.PICTURES]))
       .tabIndex(TabId.PICTURES)

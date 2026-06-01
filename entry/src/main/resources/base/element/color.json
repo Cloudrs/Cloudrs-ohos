@@ -197,6 +197,10 @@
       "value": "#DFFFFFFF"
     },
     {
+      "name": "cloud_surface_glass_strong",
+      "value": "#CCFFFFFF"
+    },
+    {
       "name": "cloud_header_glass",
       "value": "#66FFFFFF"
     },

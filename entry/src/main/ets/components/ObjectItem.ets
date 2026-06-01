@@ -9,13 +9,17 @@ import { DateFormatUtil } from "../utils/DateFormatUtil";
 const TAG = 'ObjectItem';
 
 @Extend(Column)
-function itemStyle() {
+function itemStyle(selected: boolean = false) {
   .width('100%')
   .borderRadius(CloudThemeToken.cardRadius)
   .clip(true)
   .alignItems(HorizontalAlign.Start)
   .justifyContent(FlexAlign.Center)
-  .backgroundColor(CloudThemeToken.surface)
+  .backgroundColor(selected ? CloudThemeToken.primarySoft : CloudThemeToken.surface)
+  .border({
+    width: CloudThemeToken.lineWidth,
+    color: selected ? CloudThemeToken.primary : CloudThemeToken.transparent
+  })
 }
 
 @Extend(Text)
@@ -44,6 +48,8 @@ export struct ObjectItem {
   @Consume thumbImage: Map<string, PixelMap>
   onMenuClick?: (item: ObjectInfo, type: FileMenuType) => void
   @Prop showType: ShowType
+  @Prop multiSelectMode: boolean = false
+  @Prop selected: boolean = false
 
   aboutToAppear(): void {
     console.debug(TAG, 'aboutToAppear')
@@ -134,7 +140,7 @@ export struct ObjectItem {
     .height(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListRowHeight :
     CloudThemeToken.objectGridFolderHeight)
     .padding({ left: CloudThemeToken.objectHorizontalPadding, right: CloudThemeToken.objectHorizontalPadding })
-    .itemStyle()
+    .itemStyle(this.selected)
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {
@@ -190,7 +196,7 @@ export struct ObjectItem {
     .height(CloudThemeToken.objectGridFileHeight)
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
-    .itemStyle()
+    .itemStyle(this.selected)
   }
 
   @Builder fileListItem(item: ObjectInfo) {
@@ -218,7 +224,7 @@ export struct ObjectItem {
     }
     .height(CloudThemeToken.objectListRowHeight)
     .padding({ left: CloudThemeToken.objectHorizontalPadding, right: CloudThemeToken.objectHorizontalPadding })
-    .itemStyle()
+    .itemStyle(this.selected)
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
       previewAnimationOptions: {

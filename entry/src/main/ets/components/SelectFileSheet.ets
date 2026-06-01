@@ -11,6 +11,7 @@ const TAG: string = 'SelectFileSheet'
 @Component
 export struct SelectFileSheet {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @Prop extraBottomPadding: number = 0
   @State showPhotoPicker: boolean = false
   @State isPicking: boolean = false
   @State pickingText: string = ''
@@ -99,12 +100,13 @@ export struct SelectFileSheet {
       left: CloudThemeToken.uploadSourceSheetHorizontalPadding,
       right: CloudThemeToken.uploadSourceSheetHorizontalPadding,
       top: CloudThemeToken.uploadSourceSheetTopPadding,
-      bottom: this.bottomRectHeight + CloudThemeToken.uploadSourceSheetBottomPadding
+      bottom: this.bottomRectHeight + this.extraBottomPadding + CloudThemeToken.uploadSourceSheetBottomPadding
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
     .backgroundColor(CloudThemeToken.background)
+    .zIndex(1)
   }
 
   @Builder uploadSourceItem(icon: Resource, title: ResourceStr, description: ResourceStr,

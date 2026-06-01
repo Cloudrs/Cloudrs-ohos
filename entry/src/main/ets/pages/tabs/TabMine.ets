@@ -1,9 +1,8 @@
-import { SiteConfig, UserSetting, UserStorage } from "../../model/net/ApiTypes";
+import { DbUserInfo, SiteConfig, UserInfo, UserSetting, UserStorage } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import UserDatabase from "../../model/UserDatabase";
 import UserPreferences from "../../model/UserPreferences";
 import { CloudApi } from "../../model/net/CloudApi";
-import { image } from "@kit.ImageKit";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { CloudScaffold } from "../../components/CloudScaffold";
@@ -12,13 +11,18 @@ import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
+import { AvatarUtil } from "../../utils/AvatarUtil";
+import { showToast } from "../../utils/ToastUtil";
+import { AppLockUtil } from "../../utils/AppLockUtil";
+import { SystemAuthResult } from "../../utils/SystemAuthUtil";
 
 const TAG:string = 'TabMine'
 
 enum MineSheetType {
   NONE = 'none',
   MORE = 'more',
-  THEME = 'theme'
+  THEME = 'theme',
+  PRIVACY = 'privacy'
 }
 
 @Component
@@ -30,6 +34,7 @@ export struct TabMine {
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
   @State currentUser: string = ''
+  @State currentUrl: string = ''
   @State updateDate?: Date = undefined
   @State userAvatar?: PixelMap = undefined
   @State diffDays: number = 0
@@ -45,9 +50,12 @@ export struct TabMine {
   private scroller: Scroller = new Scroller;
   @State versionInfo: string = ''
   @State uploadMaxConcurrent: number = 3
+  @State systemAuthEnabled: boolean = false
+  @State systemAuthBusy: boolean = false
 
   aboutToAppear() {
     this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string
+    this.currentUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
     this.loadCachedUserInfo()
     this.getUserSettings()
     this.themeMode = UserPreferences.getSync(
@@ -55,6 +63,7 @@ export struct TabMine {
       Constant.APP_THEME_MODE,
       Constant.APP_THEME_LIGHT
     ) as string
+    this.systemAuthEnabled = AppLockUtil.isEnabled()
 
     this.versionInfo = this.appVersion
 
@@ -72,18 +81,7 @@ export struct TabMine {
       onSuccess: (data: SiteConfig) => {
         this.siteConfig = data
         this.diffDays = CommonUtil.getDaysDifference(new Date(this.siteConfig.user.created_at), new Date())
-        // 获取用户头像
-        CloudApi.getUserAvatar(this.siteConfig.user.id, {
-          onSuccess: (data) => {
-            let imageSource: image.ImageSource = image.createImageSource(data)
-            imageSource.createPixelMap().then((pixMap: PixelMap) => {
-              this.userAvatar = pixMap
-            })
-          },
-          onFailure: (msg) => {
-            console.error(TAG, `User avatar get failed, ${msg}`)
-          }
-        })
+        this.refreshCachedUserInfo(data.user)
       },
       onFailure: (msg) => {
         console.error(TAG, `SiteConfig get failed, ${msg}`)
@@ -143,7 +141,7 @@ export struct TabMine {
   }
 
   loadCachedUserInfo(): void {
-    const dbUserInfo = UserDatabase.getUserInfo(this.currentUser)
+    const dbUserInfo = UserDatabase.getUserInfo(this.currentUser, this.currentUrl)
     if (!dbUserInfo || !dbUserInfo.userinfo) {
       return
     }
@@ -152,18 +150,60 @@ export struct TabMine {
     if (dbUserInfo.userinfo.created_at && dbUserInfo.userinfo.created_at.length > 0) {
       this.cachedDiffDays = CommonUtil.getDaysDifference(new Date(dbUserInfo.userinfo.created_at), new Date())
     }
+    this.loadAvatar(dbUserInfo, false)
+  }
+
+  refreshCachedUserInfo(userInfo: UserInfo): void {
+    const dbUserInfo = UserDatabase.getUserInfo(this.currentUser, this.currentUrl)
+    if (!dbUserInfo) {
+      return
+    }
+    dbUserInfo.userinfo = userInfo
+    UserDatabase.insertUserInfo(dbUserInfo)
+    this.cachedUserId = userInfo.id ?? ''
+    this.cachedGroupName = userInfo.group?.name ?? ''
+    if (userInfo.created_at && userInfo.created_at.length > 0) {
+      this.cachedDiffDays = CommonUtil.getDaysDifference(new Date(userInfo.created_at), new Date())
+    }
+    this.loadAvatar(dbUserInfo, true)
+  }
+
+  private loadAvatar(dbUserInfo: DbUserInfo, forceRefresh: boolean): void {
+    AvatarUtil.loadDbUserAvatar(dbUserInfo, forceRefresh)
+      .then((pixMap?: PixelMap) => {
+        if (pixMap) {
+          this.userAvatar = pixMap
+        }
+      })
+      .catch((err: Error) => {
+        console.error(TAG, `User avatar get failed, ${err.message}`)
+      })
   }
 
   @Builder userInfo() {
     Column({ space: CloudThemeToken.spacingPage }) {
       Row({ space: CloudThemeToken.spacingPanel }) {
-        Image(this.userAvatar ?? $r("app.media.ic_default_avatar"))
+        Stack() {
+          if (this.userAvatar) {
+            Image(this.userAvatar)
+              .width(this.avatarSize)
+              .height(this.avatarSize)
+              .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
+              .draggable(false)
+          } else {
+            Image($r("app.media.ic_default_avatar"))
+              .width(this.avatarSize * 0.58)
+              .height(this.avatarSize * 0.58)
+              .fillColor(CloudThemeToken.primary)
+              .draggable(false)
+          }
+        }
           .width(this.avatarSize)
           .height(this.avatarSize)
           .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
           .borderWidth(CloudThemeToken.lineWidth)
           .borderColor(CloudThemeToken.line)
-          .draggable(false)
+          .backgroundColor(CloudThemeToken.primarySoft)
 
         Column({ space: CloudThemeToken.spacingMd }) {
           Text(this.siteConfig ? this.siteConfig.user.nickname : '')
@@ -368,7 +408,7 @@ export struct TabMine {
         confirmText: $r('app.string.dialog_logout'),
         onConfirm: () => {
           UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
-          UserDatabase.deleteUserInfo(this.currentUser)
+          UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY)
           CloudRouter.resetToLogin()
         }
       })
@@ -454,7 +494,11 @@ export struct TabMine {
     Column({ space: CloudThemeToken.spacingCard }) {
       this.rowWithNext($r('app.media.ic_privacy_secure'),
         CloudThemeToken.settingIconPrivacyBackground,
-        $r('app.string.user_privacy_secure'))
+        $r('app.string.user_privacy_secure'),
+        undefined,
+        () => {
+          this.openSettingsSheet(MineSheetType.PRIVACY)
+        })
       this.rowWithNext($r('app.media.ic_theme_setting'),
         CloudThemeToken.settingIconThemeBackground,
         $r("app.string.user_theme_setting"),
@@ -493,9 +537,107 @@ export struct TabMine {
   @Builder settingsSheet() {
     if (this.activeSheetType === MineSheetType.THEME) {
       this.themeSettingsSheet()
+    } else if (this.activeSheetType === MineSheetType.PRIVACY) {
+      this.privacySettingsSheet()
     } else {
       this.moreSettingsSheet()
     }
+  }
+
+  @Builder privacySettingsSheet() {
+    Column({ space: CloudThemeToken.spacingPage }) {
+      this.sheetHeader($r('app.string.user_privacy_secure'), () => {
+        this.closeSettingsSheet()
+      })
+
+      Column({ space: CloudThemeToken.spacingXs }) {
+        Text(this.currentUser)
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.currentUrl)
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.getCredentialStatusText())
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.primary)
+      }
+      .width('100%')
+      .padding(CloudThemeToken.spacingPanel)
+      .alignItems(HorizontalAlign.Start)
+      .borderRadius(CloudThemeToken.cardRadius)
+      .backgroundColor(CloudThemeToken.surface)
+      .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+
+      this.privacyActionRow('刷新头像缓存', '重新获取当前账号头像', false, () => {
+        this.refreshCurrentAvatarCache()
+      })
+      this.privacyActionRow(
+        '系统认证保护',
+        this.getSystemAuthDescription(),
+        false,
+        () => {
+          this.toggleSystemAuth()
+        })
+      if (this.systemAuthEnabled) {
+        this.privacyActionRow('立即验证', '测试当前人脸或指纹认证是否可用', false, () => {
+          this.verifySystemAuth()
+        })
+      }
+      this.privacyActionRow('清除头像缓存', '下次进入时重新加载头像', false, () => {
+        this.clearCurrentAvatarCache()
+      })
+      this.privacyActionRow('删除当前登录凭证', '清除本机保存的 token 并重新登录', true, () => {
+        this.deleteCurrentCredential()
+      })
+    }
+    .width('100%')
+    .padding({
+      left: CloudThemeToken.spacingSheetHorizontal,
+      right: CloudThemeToken.spacingSheetHorizontal,
+      top: CloudThemeToken.spacingSheetTop,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    })
+    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
+    .backgroundColor(CloudThemeToken.background)
+  }
+
+  @Builder privacyActionRow(title: string, description: string, danger: boolean, onClick: () => void) {
+    Button({ type: ButtonType.Normal }) {
+      Row({ space: CloudThemeToken.spacingSection }) {
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text(title)
+            .fontSize(CloudThemeToken.textSizeLarge)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(danger ? CloudThemeToken.danger : CloudThemeToken.textPrimary)
+          Text(description)
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Image($r('app.media.ic_chevron_right'))
+          .width(CloudThemeToken.iconXs)
+          .height(CloudThemeToken.iconXs)
+          .fillColor(CloudThemeToken.textSecondary)
+          .draggable(false)
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .height(CloudThemeToken.rowHeight4xl)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(danger ? CloudThemeToken.dangerSoft : CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: danger ? CloudThemeToken.danger : CloudThemeToken.line })
+    .onClick(onClick)
   }
 
   @Builder themeSettingsSheet() {
@@ -649,6 +791,133 @@ export struct TabMine {
     } catch (err) {
       console.error(TAG, `set theme mode failed: ${(err as Error)?.message ?? err}`)
     }
+  }
+
+  private getCurrentDbUserInfo(): DbUserInfo | null {
+    return UserDatabase.getUserInfo(this.currentUser, this.currentUrl)
+  }
+
+  private getCredentialStatusText(): string {
+    const dbUserInfo = this.getCurrentDbUserInfo()
+    if (!dbUserInfo) {
+      return '未找到本机登录凭证'
+    }
+    const expires = new Date(dbUserInfo.expires)
+    if (expires.getTime() <= Date.now()) {
+      return '登录凭证已过期'
+    }
+    return `登录凭证有效至 ${DateFormatUtil.format(expires, 'yyyy/MM/dd')}`
+  }
+
+  private refreshCurrentAvatarCache(): void {
+    const dbUserInfo = this.getCurrentDbUserInfo()
+    if (!dbUserInfo) {
+      showToast('未找到当前账号')
+      return
+    }
+    AvatarUtil.refreshDbUserAvatar(dbUserInfo)
+      .then((pixMap?: PixelMap) => {
+        if (pixMap) {
+          this.userAvatar = pixMap
+          showToast('头像缓存已刷新')
+        } else {
+          showToast('头像刷新失败')
+        }
+      })
+      .catch((err: Error) => {
+        console.error(TAG, `refresh avatar cache failed: ${err.message}`)
+        showToast('头像刷新失败')
+      })
+  }
+
+  private clearCurrentAvatarCache(): void {
+    const dbUserInfo = this.getCurrentDbUserInfo()
+    if (!dbUserInfo) {
+      showToast('未找到当前账号')
+      return
+    }
+    AvatarUtil.clearDbUserAvatar(dbUserInfo)
+    this.userAvatar = undefined
+    showToast('头像缓存已清除')
+  }
+
+  private getSystemAuthDescription(): string {
+    if (this.systemAuthBusy) {
+      return '正在等待系统认证'
+    }
+    return this.systemAuthEnabled ? '已开启，回到应用时需要人脸或指纹' : '未开启，可使用系统人脸或指纹保护应用'
+  }
+
+  private toggleSystemAuth(): void {
+    if (this.systemAuthBusy) {
+      return
+    }
+    if (this.systemAuthEnabled) {
+      this.systemAuthEnabled = false
+      AppLockUtil.setEnabled(false)
+      showToast('已关闭系统认证保护')
+      return
+    }
+
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
+    if (!context) {
+      showToast('无法唤起系统认证')
+      return
+    }
+    this.systemAuthBusy = true
+    AppLockUtil.authenticateForSettings(context, '开启系统认证保护')
+      .then((result: SystemAuthResult) => {
+        this.systemAuthBusy = false
+        if (result.success) {
+          this.systemAuthEnabled = true
+          AppLockUtil.setEnabled(true)
+          showToast('已开启系统认证保护')
+        } else {
+          showToast(result.message.length > 0 ? result.message : '系统认证失败')
+        }
+      })
+      .catch((err: Error) => {
+        this.systemAuthBusy = false
+        console.error(TAG, `enable system auth failed: ${err.message}`)
+        showToast('系统认证失败')
+      })
+  }
+
+  private verifySystemAuth(): void {
+    if (this.systemAuthBusy) {
+      return
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
+    if (!context) {
+      showToast('无法唤起系统认证')
+      return
+    }
+    this.systemAuthBusy = true
+    AppLockUtil.authenticateForSettings(context, '验证系统认证')
+      .then((result: SystemAuthResult) => {
+        this.systemAuthBusy = false
+        showToast(result.success ? '系统认证可用' : (result.message.length > 0 ? result.message : '系统认证失败'))
+      })
+      .catch((err: Error) => {
+        this.systemAuthBusy = false
+        console.error(TAG, `verify system auth failed: ${err.message}`)
+        showToast('系统认证失败')
+      })
+  }
+
+  private deleteCurrentCredential(): void {
+    showCloudConfirmDialog(this.getUIContext(), {
+      title: '删除当前登录凭证',
+      message: `${this.currentUser}\n${this.currentUrl}`,
+      confirmText: $r('app.string.dialog_delete'),
+      onConfirm: () => {
+        UserDatabase.deleteUserInfo(this.currentUser, this.currentUrl)
+        UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
+        UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY)
+        this.closeSettingsSheet()
+        CloudRouter.resetToLogin()
+      }
+    })
   }
 
   @Builder rowWithJump(icon: ResourceStr, backgroundColor: ResourceColor, title: ResourceStr, url: string) {

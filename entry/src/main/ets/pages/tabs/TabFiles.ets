@@ -123,6 +123,7 @@ export struct TabFiles {
   @State gridWidth: number = 0
   @State isHeaderGlassActive: boolean = false
   @State headerCollapseProgress: number = 0
+  @State refreshPullOffset: number = 0
   @State showUserSwitchSheet: boolean = false
   @State currentUser: string = ''
   @State currentUrl: string = ''
@@ -314,6 +315,29 @@ export struct TabFiles {
 
   getGridTopPadding(): number {
     return this.getHeaderContainerHeight() + CloudThemeToken.filesGridTopGap
+  }
+
+  getRefreshPullDistance(): number {
+    return this.isRefreshing ? CloudThemeToken.refreshOffset : Math.max(CloudThemeToken.zero, this.refreshPullOffset)
+  }
+
+  getRefreshHintTop(): number {
+    const hintHeight = CloudThemeToken.iconBoxSm
+    const centeredOffset = Math.max(CloudThemeToken.zero, this.getRefreshPullDistance() - hintHeight) / 2
+    return this.getGridTopPadding() + centeredOffset
+  }
+
+  getRefreshHintOpacity(): number {
+    if (this.isRefreshing) {
+      return CloudThemeToken.fullOpacity
+    }
+    return Math.min(CloudThemeToken.fullOpacity,
+      Math.max(CloudThemeToken.zero, this.refreshPullOffset / CloudThemeToken.refreshOffset))
+  }
+
+  shouldShowRefreshHint(): boolean {
+    return !this.isFilePageLoading() &&
+      (this.isRefreshing || this.refreshPullOffset > CloudThemeToken.spacingSm)
   }
 
   getHeaderTopPadding(): number {
@@ -636,6 +660,7 @@ export struct TabFiles {
         this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
         this.applyVisibleObjects()
         this.isRefreshing = false
+        this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = FilePageState.IDLE
         this.refreshShareLinks()
       },
@@ -643,6 +668,7 @@ export struct TabFiles {
         showToastTips($r('app.string.get_failed'), ToastType.Error)
         //决定是否重新登录
         this.isRefreshing = false
+        this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = shouldKeepContent ? FilePageState.IDLE : FilePageState.FAILED
       }
     })
@@ -713,23 +739,29 @@ export struct TabFiles {
     Stack({ alignContent: Alignment.Bottom }) {
       Stack({ alignContent: Alignment.Top }) {
         Stack({alignContent: Alignment.BottomEnd}) {
-          Refresh({refreshing: $$this.isRefreshing}) {
+          Refresh({
+            refreshing: $$this.isRefreshing,
+            builder: this.hiddenRefreshHint
+          }) {
             this.objectGrid()
           }
           .width('100%')
           .height('100%')
           .refreshOffset(CloudThemeToken.refreshOffset)
           .pullToRefresh(true)
+          .onOffsetChange((offset: number) => {
+            this.refreshPullOffset = Math.max(CloudThemeToken.zero, offset)
+          })
           .onRefreshing(async () => {
             await this.getFileList(true, this.currentPath);
           })
 
-          if (this.isFilePageLoading()) {
-            this.loadingState()
+          if (this.shouldShowRefreshHint()) {
+            this.refreshingHintOverlay()
           }
 
-          if (this.isRefreshing && !this.isFilePageLoading()) {
-            this.refreshingHint()
+          if (this.isFilePageLoading()) {
+            this.loadingState()
           }
 
           if (this.isFilePageFailed()) {
@@ -1056,32 +1088,46 @@ export struct TabFiles {
     .backgroundColor(CloudThemeToken.background)
   }
 
-  @Builder refreshingHint() {
+  @Builder hiddenRefreshHint() {
+    Column()
+      .width(CloudThemeToken.zero)
+      .height(CloudThemeToken.zero)
+      .opacity(CloudThemeToken.zero)
+  }
+
+  @Builder refreshingHintOverlay() {
     Column() {
-      Row({ space: CloudThemeToken.spacingXl }) {
-        LoadingProgress()
-          .width(CloudThemeToken.iconLg)
-          .height(CloudThemeToken.iconLg)
-          .color(CloudThemeToken.primary)
-        Text('正在刷新')
-          .fontSize(CloudThemeToken.textSizeSmallPlus)
-          .fontColor(CloudThemeToken.textPrimary)
-      }
-      .height(CloudThemeToken.iconBoxSm)
-      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
-      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-      .backgroundColor(CloudThemeToken.surface)
-      .shadow({
-        radius: CloudThemeToken.refreshShadowRadius,
-        color: CloudThemeToken.refreshShadow,
-        offsetY: CloudThemeToken.refreshShadowOffsetY
-      })
+      this.refreshingHint()
     }
     .width('100%')
     .height('100%')
-    .padding({ top: CloudThemeToken.spacingXl })
+    .padding({ top: this.getRefreshHintTop() })
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.Start)
+    .opacity(this.getRefreshHintOpacity())
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  @Builder refreshingHint() {
+    Row({ space: CloudThemeToken.spacingXl }) {
+      LoadingProgress()
+        .width(CloudThemeToken.iconLg)
+        .height(CloudThemeToken.iconLg)
+        .color(CloudThemeToken.primary)
+      Text('正在刷新')
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.textPrimary)
+    }
+    .height(CloudThemeToken.iconBoxSm)
+    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
+    .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+    .backgroundColor(CloudThemeToken.surface)
+    .shadow({
+      radius: CloudThemeToken.refreshShadowRadius,
+      color: CloudThemeToken.refreshShadow,
+      offsetY: CloudThemeToken.refreshShadowOffsetY
+    })
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder failedState() {

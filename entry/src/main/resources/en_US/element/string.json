@@ -67,6 +67,10 @@
     {
       "name": "get_context_failed",
       "value": "Page context is unavailable. Try again later."
+    },
+    {
+      "name": "cloud_share",
+      "value": "Share"
     }
   ]
 }

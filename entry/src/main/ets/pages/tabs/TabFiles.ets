@@ -1,4 +1,6 @@
-import { DbUserInfo, DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy } from "../../model/net/ApiTypes";
+import {
+  DbUserInfo, DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy, ShareLinkInfo
+} from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { TabFilesTitle } from "../../components/TabFilesTitle";
@@ -17,7 +19,7 @@ import { CommonUtil, FileType } from "../../utils/CommonUtil";
 import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 import { common } from "@kit.AbilityKit";
-import { BusinessError } from "@kit.BasicServicesKit";
+import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
 import { picker } from '@kit.CoreFileKit';
 import { TransportObject } from "../../model/TransportObject";
 import { requestDownload } from "../../utils/RequestDownload";
@@ -31,6 +33,7 @@ import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/Cloud
 import { CloudRouter } from "../../utils/CloudRouter";
 import UserPreferences from "../../model/UserPreferences";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
+import { DateFormatUtil } from "../../utils/DateFormatUtil";
 
 const TAG = 'TabFiles';
 
@@ -44,6 +47,13 @@ enum FileInputMode {
   NONE = 'none',
   RENAME = 'rename',
   NEW_OBJECT = 'newObject'
+}
+
+enum ShareExpireDays {
+  NEVER = 0,
+  ONE_DAY = 1,
+  SEVEN_DAYS = 7,
+  THIRTY_DAYS = 30
 }
 
 class ObjectSelect {
@@ -118,6 +128,15 @@ export struct TabFiles {
   @State currentUrl: string = ''
   @State isMultiSelectMode: boolean = false
   @State selectedObjects: ObjectInfo[] = []
+  @State shareLinks: ShareLinkInfo[] = []
+  @State sharedPaths: string[] = []
+  @State showShareSheet: boolean = false
+  @State shareTarget: ObjectInfo | null = null
+  @State shareLinkText: string = ''
+  @State sharePassword: string = ''
+  @State shareExpireDays: number = ShareExpireDays.SEVEN_DAYS
+  @State shareBusy: boolean = false
+  private lastHeaderScrollOffset: number = 0
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
   private inputNewPath: string = '/'
@@ -227,7 +246,15 @@ export struct TabFiles {
   updateHeaderGlassState(): void {
     const scrollOffset = Math.max(CloudThemeToken.zero, this.scrollerForList.currentOffset().yOffset)
     const collapseDistance = this.getHeaderCollapseDistance()
-    const nextProgress = Math.min(CloudThemeToken.fullOpacity, scrollOffset / collapseDistance)
+    const scrollDelta = scrollOffset - this.lastHeaderScrollOffset
+    let nextProgress = this.headerCollapseProgress
+    if (scrollOffset <= CloudThemeToken.zero) {
+      nextProgress = CloudThemeToken.zero
+    } else if (scrollDelta !== CloudThemeToken.zero) {
+      nextProgress = Math.min(CloudThemeToken.fullOpacity,
+        Math.max(CloudThemeToken.zero, this.headerCollapseProgress + scrollDelta / collapseDistance))
+    }
+    this.lastHeaderScrollOffset = scrollOffset
     if (Math.abs(this.headerCollapseProgress - nextProgress) >= CloudThemeToken.scrollProgressUpdateThreshold) {
       this.headerCollapseProgress = nextProgress
     }
@@ -235,6 +262,12 @@ export struct TabFiles {
     if (this.isHeaderGlassActive !== active) {
       this.isHeaderGlassActive = active
     }
+  }
+
+  resetHeaderScrollState(): void {
+    this.isHeaderGlassActive = false
+    this.headerCollapseProgress = 0
+    this.lastHeaderScrollOffset = 0
   }
 
   getTopInset(): number {
@@ -350,6 +383,195 @@ export struct TabFiles {
     return `已选 ${this.selectedObjects.length} 项`
   }
 
+  private decodeSharePath(value: string): string {
+    let result = value
+    for (let index = 0; index < 2; index++) {
+      try {
+        const decoded = decodeURIComponent(result)
+        if (decoded === result) {
+          break
+        }
+        result = decoded
+      } catch (err) {
+        break
+      }
+    }
+    return result
+  }
+
+  private normalizeSharePath(value: string): string {
+    let path = (value ?? '').trim()
+    if (path.length === 0) {
+      return ''
+    }
+    const queryIndex = path.indexOf('?')
+    if (queryIndex >= 0) {
+      path = path.substring(0, queryIndex)
+    }
+    const hashIndex = path.indexOf('#')
+    if (hashIndex >= 0) {
+      path = path.substring(0, hashIndex)
+    }
+    if (path.startsWith('cloudreve://')) {
+      const rest = path.substring('cloudreve://'.length)
+      const myIndex = rest.indexOf('@my')
+      if (myIndex >= 0) {
+        path = rest.substring(myIndex + 3)
+      } else if (rest.startsWith('my')) {
+        path = rest.substring(2)
+      } else {
+        path = rest
+      }
+    }
+    path = this.decodeSharePath(path).split('\\').join('/')
+    while (path.startsWith('//')) {
+      path = path.substring(1)
+    }
+    if (!path.startsWith('/')) {
+      path = `/${path}`
+    }
+    while (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1)
+    }
+    return path
+  }
+
+  private getObjectSharePath(item: ObjectInfo): string {
+    const rawPath = this.isObjectIdPath(item) ? item.id : CloudApi.getTotalPath(item)
+    return this.normalizeSharePath(rawPath)
+  }
+
+  private isObjectIdPath(item: ObjectInfo): boolean {
+    return item.id.startsWith('/') || item.id.startsWith('cloudreve://')
+  }
+
+  private addObjectSharePath(paths: string[], value: string): void {
+    const path = this.normalizeSharePath(value)
+    if (path.length > 0 && !paths.includes(path)) {
+      paths.push(path)
+    }
+  }
+
+  private getObjectSharePaths(item: ObjectInfo): string[] {
+    const paths: string[] = []
+    const hasPathId = this.isObjectIdPath(item)
+    if (hasPathId) {
+      this.addObjectSharePath(paths, item.id)
+    }
+    if (item.type === Constant.OBJECT_DIR_TYPE || !hasPathId) {
+      this.addObjectSharePath(paths, CloudApi.getTotalPath(item))
+    }
+    return paths
+  }
+
+  private getSharePath(link: ShareLinkInfo): string {
+    const candidates: string[] = [
+      link.source_uri ?? '',
+      link.uri ?? '',
+      link.path ?? '',
+      link.source?.source_uri ?? '',
+      link.source?.uri ?? '',
+      link.source?.path ?? '',
+      link.file?.source_uri ?? '',
+      link.file?.uri ?? '',
+      link.file?.path ?? '',
+      link.object?.source_uri ?? '',
+      link.object?.uri ?? '',
+      link.object?.path ?? ''
+    ]
+    for (let index = 0; index < candidates.length; index++) {
+      const path = this.normalizeSharePath(candidates[index])
+      if (path.length > 0) {
+        return this.getShareObjectPath(link, path)
+      }
+    }
+    return ''
+  }
+
+  private getShareObjectPath(link: ShareLinkInfo, path: string): string {
+    if (!this.isShareFileType(link) || !link.name || link.name.length === 0) {
+      return path
+    }
+    const lastSeparator = path.lastIndexOf('/')
+    const lastSegment = lastSeparator >= 0 ? path.substring(lastSeparator + 1) : path
+    if (lastSegment === link.name) {
+      return path
+    }
+    return path === '/' ? `/${link.name}` : `${path}/${link.name}`
+  }
+
+  private isShareFileType(link: ShareLinkInfo): boolean {
+    if (link.source_type === undefined) {
+      return false
+    }
+    const sourceType = `${link.source_type}`.toLowerCase()
+    return sourceType === '0' || sourceType === 'file'
+  }
+
+  private isShareTypeMatched(link: ShareLinkInfo, item: ObjectInfo): boolean {
+    const isDir = item.type === Constant.OBJECT_DIR_TYPE
+    if (link.source_type === undefined) {
+      return true
+    }
+    const sourceType = `${link.source_type}`
+    return isDir ? sourceType === '1' || sourceType.toLowerCase() === 'folder' :
+      sourceType === '0' || sourceType.toLowerCase() === 'file'
+  }
+
+  private isShareNameMatched(link: ShareLinkInfo, item: ObjectInfo): boolean {
+    return this.getSharePath(link).length === 0 &&
+      link.name === item.name &&
+      this.isShareTypeMatched(link, item)
+  }
+
+  private getShareForObject(item: ObjectInfo): ShareLinkInfo | undefined {
+    const objectPaths = this.getObjectSharePaths(item)
+    return this.shareLinks.find((link: ShareLinkInfo) => {
+      if (link.expired === true) {
+        return false
+      }
+      const sharePath = this.getSharePath(link)
+      return sharePath.length > 0 ? objectPaths.includes(sharePath) : this.isShareNameMatched(link, item)
+    })
+  }
+
+  private rebuildSharedPaths(links: ShareLinkInfo[]): string[] {
+    const paths: string[] = []
+    links.forEach((link: ShareLinkInfo) => {
+      const path = this.getSharePath(link)
+      if (path.length > 0 && !paths.includes(path) && link.expired !== true) {
+        paths.push(path)
+      }
+    })
+    return paths
+  }
+
+  private isSharedObject(item: ObjectInfo): boolean {
+    return this.getShareForObject(item) !== undefined
+  }
+
+  private refreshShareLinks(): void {
+    CloudApi.listShareLinks<ShareLinkInfo[]>({
+      onSuccess: (data: ShareLinkInfo[]) => {
+        const links = data ? data.filter((link: ShareLinkInfo) => link.expired !== true) : []
+        this.shareLinks = links
+        this.sharedPaths = this.rebuildSharedPaths(links)
+        console.debug(TAG, `share links loaded=${links.length}, mapped=${this.sharedPaths.join(',')}`)
+        if (this.showShareSheet && this.shareTarget) {
+          const existing = this.getShareForObject(this.shareTarget)
+          if (existing) {
+            this.shareLinkText = existing.url ?? ''
+          }
+        }
+      },
+      onFailure: (msg: string) => {
+        console.debug(TAG, 'share list unavailable: ' + msg)
+        this.shareLinks = []
+        this.sharedPaths = []
+      }
+    })
+  }
+
   async getThumbFile(index: number, item: ObjectInfo) {
     if (item.thumb && !this.getThumbData(item.id)) {
       CloudApi.getThumb(item.id, {
@@ -401,8 +623,7 @@ export struct TabFiles {
           this.dirDataSource.clear()
           this.fileDataSource.clear()
           this.thumbImage.clear()
-          this.isHeaderGlassActive = false
-          this.headerCollapseProgress = 0
+          this.resetHeaderScrollState()
           this.scrollerForList.scrollEdge(Edge.Start)
         }
       },
@@ -416,6 +637,7 @@ export struct TabFiles {
         this.applyVisibleObjects()
         this.isRefreshing = false
         this.filePageState = FilePageState.IDLE
+        this.refreshShareLinks()
       },
       onFailure: (msg) => {
         showToastTips($r('app.string.get_failed'), ToastType.Error)
@@ -559,6 +781,10 @@ export struct TabFiles {
       if (this.showInputSheet) {
         this.inputSheetOverlay()
       }
+
+      if (this.showShareSheet) {
+        this.shareSheetOverlay()
+      }
     }
     .width('100%')
     .height('100%')
@@ -579,6 +805,8 @@ export struct TabFiles {
       onSelect: (user: DbUserInfo) => {
         if (CloudRouter.switchToUser(user.username, user.url, true)) {
           this.showUserSwitchSheet = false
+          this.shareLinks = []
+          this.sharedPaths = []
           this.loadCurrentUser()
           this.getFileList(true, '/')
         }
@@ -959,6 +1187,286 @@ export struct TabFiles {
     .zIndex(1)
   }
 
+  @Builder shareSheetBuilder() {
+    Column({ space: CloudThemeToken.spacingSheetTop }) {
+      this.shareSheetHeader()
+      this.shareTargetSummary()
+
+      if (this.shareLinkText.length > 0) {
+        this.shareLinkCard()
+        this.shareDetailCard()
+        Row({ space: CloudThemeToken.spacingSection }) {
+          this.shareActionButton($r('app.media.ic_copy'), '复制链接', () => {
+            this.copyShareLink()
+          })
+          this.shareActionButton($r('app.media.ic_delete_fill'), '取消分享', () => {
+            this.deleteShareForTarget()
+          }, true, this.getCurrentShareId().length > 0 && !this.shareBusy)
+        }
+        .width('100%')
+      } else {
+        this.shareCreateOptions()
+        Button({ type: ButtonType.Normal }) {
+          Row({ space: CloudThemeToken.spacingXl }) {
+            if (this.shareBusy) {
+              LoadingProgress()
+                .width(CloudThemeToken.iconLg)
+                .height(CloudThemeToken.iconLg)
+                .color(CloudThemeToken.onPrimary)
+            } else {
+              Image($r('app.media.ic_share'))
+                .width(CloudThemeToken.iconLg)
+                .height(CloudThemeToken.iconLg)
+                .fillColor(CloudThemeToken.onPrimary)
+                .draggable(false)
+            }
+            Text(this.shareBusy ? '正在创建' : '创建分享链接')
+              .fontSize(CloudThemeToken.textSizeBodyPlus)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(CloudThemeToken.onPrimary)
+          }
+          .width('100%')
+          .height('100%')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+        }
+        .width('100%')
+        .height(CloudThemeToken.rowHeightXl)
+        .borderRadius(CloudThemeToken.controlRadiusLg)
+        .backgroundColor(CloudThemeToken.primary)
+        .enabled(!this.shareBusy)
+        .opacity(this.shareBusy ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
+        .onClick(() => {
+          this.createShareForTarget()
+        })
+      }
+    }
+    .width('100%')
+    .padding({
+      left: CloudThemeToken.spacingSheetHorizontal,
+      right: CloudThemeToken.spacingSheetHorizontal,
+      top: CloudThemeToken.spacingSheetTop,
+      bottom: this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin + CloudThemeToken.spacingSheetBottom
+    })
+    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
+    .backgroundColor(CloudThemeToken.background)
+    .zIndex(1)
+  }
+
+  @Builder shareSheetHeader() {
+    Row() {
+      Text(this.shareLinkText.length > 0 ? '分享链接' : '创建分享')
+        .fontSize(CloudThemeToken.textSizeTitle)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+
+      Button({ type: ButtonType.Normal }) {
+        Image($r('app.media.ic_xmark'))
+          .width(CloudThemeToken.iconMd)
+          .height(CloudThemeToken.iconMd)
+          .fillColor(CloudThemeToken.textSecondary)
+          .draggable(false)
+      }
+      .width(CloudThemeToken.iconBoxSm)
+      .height(CloudThemeToken.iconBoxSm)
+      .borderRadius(CloudThemeToken.controlRadius)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+      .onClick(() => {
+        this.closeShareSheet()
+      })
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder shareTargetSummary() {
+    Row({ space: CloudThemeToken.detailSheetSummaryGap }) {
+      Stack() {
+        Image(this.shareTarget?.type === Constant.OBJECT_DIR_TYPE ? $r('app.media.folder_fill') :
+        CommonUtil.getFileIconInfo(this.shareTarget?.name ?? '').icon)
+          .width(CloudThemeToken.detailSheetIconSize)
+          .height(CloudThemeToken.detailSheetIconSize)
+          .objectFit(ImageFit.Contain)
+          .draggable(false)
+      }
+      .width(CloudThemeToken.detailSheetIconBoxSize)
+      .height(CloudThemeToken.detailSheetIconBoxSize)
+      .borderRadius(CloudThemeToken.cardRadius)
+      .backgroundColor(CloudThemeToken.primarySoft)
+
+      Column({ space: CloudThemeToken.detailSheetTextGap }) {
+        Text(this.shareTarget?.name ?? '')
+          .fontSize(CloudThemeToken.textSizeLargePlus)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(2)
+          .wordBreak(WordBreak.BREAK_ALL)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        Text(this.shareTarget ? this.getObjectSharePath(this.shareTarget) : '')
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(CloudThemeToken.textSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('100%')
+    .padding(CloudThemeToken.detailSheetSummaryPadding)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder shareLinkCard() {
+    Column({ space: CloudThemeToken.spacingXl }) {
+      Text('当前分享链接')
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.textSecondary)
+      Text(this.shareLinkText)
+        .fontSize(CloudThemeToken.textSizeBody)
+        .fontColor(CloudThemeToken.textPrimary)
+        .wordBreak(WordBreak.BREAK_ALL)
+        .maxLines(4)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      if (this.getCurrentSharePasswordText().length > 0) {
+        Text(`提取码：${this.getCurrentSharePasswordText()}`)
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+    }
+    .width('100%')
+    .padding(CloudThemeToken.spacingSection)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder shareDetailCard() {
+    Column({ space: CloudThemeToken.spacingXl }) {
+      Text('分享详情')
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.textSecondary)
+
+      this.shareDetailRow('状态', this.getCurrentShareStatusText())
+      this.shareDetailRow('有效期', this.getCurrentShareExpireText())
+      this.shareDetailRow('创建时间', this.getCurrentShareCreatedText())
+      this.shareDetailRow('访问次数', this.getCurrentShareVisitedText())
+      this.shareDetailRow('下载次数', this.getCurrentShareDownloadedText())
+    }
+    .width('100%')
+    .padding(CloudThemeToken.spacingSection)
+    .borderRadius(CloudThemeToken.cardRadius)
+    .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder shareDetailRow(label: string, value: string) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Text(label)
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.textSecondary)
+        .width(CloudThemeToken.rowHeight5xl)
+
+      Text(value)
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.textPrimary)
+        .maxLines(2)
+        .wordBreak(WordBreak.BREAK_ALL)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder shareCreateOptions() {
+    Column({ space: CloudThemeToken.spacingSection }) {
+      Column({ space: CloudThemeToken.spacingXs }) {
+        Text('有效期')
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(CloudThemeToken.textSecondary)
+        Row({ space: CloudThemeToken.spacingXl }) {
+          this.shareExpireChip('永久', ShareExpireDays.NEVER)
+          this.shareExpireChip('1天', ShareExpireDays.ONE_DAY)
+          this.shareExpireChip('7天', ShareExpireDays.SEVEN_DAYS)
+          this.shareExpireChip('30天', ShareExpireDays.THIRTY_DAYS)
+        }
+        .width('100%')
+      }
+      .width('100%')
+
+      TextInput({ text: this.sharePassword, placeholder: '提取码（可选）' })
+        .width('100%')
+        .height(CloudThemeToken.rowHeight2xl)
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontColor(CloudThemeToken.textPrimary)
+        .placeholderColor(CloudThemeToken.textSecondary)
+        .backgroundColor(CloudThemeToken.surface)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+        .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
+        .type(InputType.Password)
+        .onChange((value: string) => {
+          this.sharePassword = value
+        })
+    }
+    .width('100%')
+  }
+
+  @Builder shareExpireChip(title: string, days: number) {
+    Button({ type: ButtonType.Normal }) {
+      Text(title)
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.shareExpireDays === days ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
+        .textAlign(TextAlign.Center)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .height(CloudThemeToken.rowHeightMd)
+    .layoutWeight(1)
+    .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+    .backgroundColor(this.shareExpireDays === days ? CloudThemeToken.primary : CloudThemeToken.surface)
+    .border({
+      width: CloudThemeToken.lineWidth,
+      color: this.shareExpireDays === days ? CloudThemeToken.primary : CloudThemeToken.line
+    })
+    .onClick(() => {
+      this.shareExpireDays = days
+    })
+  }
+
+  @Builder shareActionButton(icon: Resource, title: string, action: () => void, danger: boolean = false,
+    isEnabled: boolean = true) {
+    Button({ type: ButtonType.Normal }) {
+      Row({ space: CloudThemeToken.spacingXl }) {
+        Image(icon)
+          .width(CloudThemeToken.iconLg)
+          .height(CloudThemeToken.iconLg)
+          .fillColor(danger ? CloudThemeToken.danger : CloudThemeToken.primary)
+          .draggable(false)
+        Text(title)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(danger ? CloudThemeToken.danger : CloudThemeToken.primary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+    }
+    .height(CloudThemeToken.rowHeightXl)
+    .layoutWeight(1)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .backgroundColor(danger ? CloudThemeToken.dangerSoft : CloudThemeToken.primarySoft)
+    .enabled(isEnabled)
+    .opacity(isEnabled ? CloudThemeToken.fullOpacity : CloudThemeToken.disabledOpacity)
+    .onClick(action)
+  }
+
   @Builder emptyDirectoryState() {
     Column() {
       EmptyState({
@@ -1003,6 +1511,7 @@ export struct TabFiles {
           ObjectItem({ index, item, showType: this.showType,
             multiSelectMode: this.isMultiSelectMode,
             selected: this.isObjectSelected(item),
+            shared: this.isSharedObject(item),
             onMenuClick : (async (item, type) => {
               await this.onMenuClick(index, item, type)
             })
@@ -1022,6 +1531,7 @@ export struct TabFiles {
           ObjectItem({ index, item, showType: this.showType,
             multiSelectMode: this.isMultiSelectMode,
             selected: this.isObjectSelected(item),
+            shared: this.isSharedObject(item),
             onMenuClick : (async (item, type) => {
               await this.onMenuClick(index, item, type)
             })
@@ -1171,6 +1681,24 @@ export struct TabFiles {
     .zIndex(CloudThemeToken.overlayZIndex)
   }
 
+  @Builder shareSheetOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.overlayScrim)
+        .zIndex(0)
+        .onClick(() => {
+          this.closeShareSheet()
+        })
+
+      this.shareSheetBuilder()
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(CloudThemeToken.overlayZIndex)
+  }
+
   @Builder selectFileSheetBuilder() {
     SelectFileSheet({
       extraBottomPadding: CloudThemeToken.hdsTabBarBottomMargin,
@@ -1246,6 +1774,9 @@ export struct TabFiles {
           this.objectSelect.selectPathId = ''
         }
         this.openPathSelectSheet()
+        break
+      case FileMenuType.CREATE_SHARE:
+        this.openShareSheet(item)
         break
       case FileMenuType.DOWNLOAD:
         this.itemDownload(index, item)
@@ -1378,6 +1909,18 @@ export struct TabFiles {
     this.showInputSheet = true
   }
 
+  private openShareSheet(item: ObjectInfo): void {
+    const share = this.getShareForObject(item)
+    this.shareTarget = item
+    this.shareLinkText = share?.url ?? ''
+    this.sharePassword = ''
+    this.shareExpireDays = ShareExpireDays.SEVEN_DAYS
+    this.shareBusy = false
+    this.overLap = false
+    this.showShareSheet = true
+    this.refreshShareLinks()
+  }
+
   private closeFileSheet(): void {
     this.showSelectFileSheet = false
     this.overLap = true
@@ -1389,12 +1932,182 @@ export struct TabFiles {
     this.overLap = true
   }
 
+  private closeShareSheet(): void {
+    this.showShareSheet = false
+    this.shareTarget = null
+    this.shareLinkText = ''
+    this.sharePassword = ''
+    this.shareBusy = false
+    this.overLap = true
+  }
+
   private openPathSelectSheet(): void {
     this.showPathSelect = true
   }
 
   private closePathSelectSheet(): void {
     this.showPathSelect = false
+  }
+
+  private getCurrentShare(): ShareLinkInfo | undefined {
+    if (!this.shareTarget) {
+      return undefined
+    }
+    return this.getShareForObject(this.shareTarget)
+  }
+
+  private getCurrentShareId(): string {
+    return this.getCurrentShare()?.id ?? ''
+  }
+
+  private getCurrentSharePasswordText(): string {
+    const share = this.getCurrentShare()
+    return share?.password ?? ''
+  }
+
+  private formatShareDate(value: string | undefined): string {
+    if (!value || value.length === 0) {
+      return '-'
+    }
+    const date = new Date(value)
+    const formatted = DateFormatUtil.format(date, 'yyyy-MM-dd HH:mm')
+    return formatted === '-' ? value : formatted
+  }
+
+  private getCurrentShareStatusText(): string {
+    const share = this.getCurrentShare()
+    if (!share) {
+      return '-'
+    }
+    if (share.expired === true) {
+      return '已过期'
+    }
+    const expireText = share.expires ?? share.expired_at ?? ''
+    if (expireText.length > 0 && new Date(expireText).getTime() <= Date.now()) {
+      return '已过期'
+    }
+    return share.password_protected === true || (share.password?.length ?? 0) > 0 ? '私密分享' : '公开分享'
+  }
+
+  private getCurrentShareExpireText(): string {
+    const share = this.getCurrentShare()
+    if (!share) {
+      return '-'
+    }
+    const expireText = share.expires ?? share.expired_at ?? ''
+    if (expireText.length === 0) {
+      return '永久有效'
+    }
+    return this.formatShareDate(expireText)
+  }
+
+  private getCurrentShareCreatedText(): string {
+    return this.formatShareDate(this.getCurrentShare()?.created_at)
+  }
+
+  private getCurrentShareVisitedText(): string {
+    const visited = this.getCurrentShare()?.visited
+    return visited === undefined ? '-' : `${visited} 次`
+  }
+
+  private getCurrentShareDownloadedText(): string {
+    const downloaded = this.getCurrentShare()?.downloaded
+    return downloaded === undefined ? '-' : `${downloaded} 次`
+  }
+
+  private buildGeneratedShareExpires(expireDays: number): string | undefined {
+    if (expireDays <= 0) {
+      return undefined
+    }
+    const date = new Date()
+    date.setDate(date.getDate() + expireDays)
+    return date.toISOString()
+  }
+
+  private createShareForTarget(): void {
+    if (!this.shareTarget || this.shareBusy) {
+      return
+    }
+    const target = this.shareTarget
+    const path = this.getObjectSharePath(target)
+    this.shareBusy = true
+    CloudApi.createShareLink(path, this.shareExpireDays, this.sharePassword.trim(), {
+      onSuccess: (url: string) => {
+        const generatedShare: ShareLinkInfo = {
+          id: '',
+          name: target.name,
+          url: url,
+          source_uri: path,
+          expired: false,
+          source_type: target.type === Constant.OBJECT_DIR_TYPE ? 1 : 0,
+          expires: this.buildGeneratedShareExpires(this.shareExpireDays),
+          created_at: new Date().toISOString(),
+          password: this.sharePassword.trim().length > 0 ? this.sharePassword.trim() : undefined
+        }
+        const targetPaths = this.getObjectSharePaths(target)
+        this.shareLinks = this.shareLinks
+          .filter((link: ShareLinkInfo) => {
+            const linkPath = this.getSharePath(link)
+            return linkPath.length > 0 ? !targetPaths.includes(linkPath) : !this.isShareNameMatched(link, target)
+          })
+          .concat([generatedShare])
+        this.sharedPaths = this.rebuildSharedPaths(this.shareLinks)
+        this.shareLinkText = url
+        this.shareBusy = false
+        this.refreshShareLinks()
+        showToast('分享链接已创建')
+      },
+      onFailure: (msg: string) => {
+        console.error(TAG, '创建分享失败 msg: ' + msg)
+        this.shareBusy = false
+        showToast(msg.includes('require V4') ? '当前站点暂不支持分享链接' : '创建分享失败')
+      }
+    })
+  }
+
+  private deleteShareForTarget(): void {
+    const share = this.getCurrentShare()
+    if (!share || share.id.length === 0 || this.shareBusy) {
+      return
+    }
+    const sharePath = this.getSharePath(share)
+    this.shareBusy = true
+    CloudApi.deleteShareLink(share.id, {
+      onSuccess: () => {
+        this.shareLinks = this.shareLinks.filter((link: ShareLinkInfo) => link.id !== share.id)
+        this.sharedPaths = this.rebuildSharedPaths(this.shareLinks)
+        this.shareLinkText = ''
+        this.shareBusy = false
+        if (sharePath.length > 0) {
+          this.sharedPaths = this.sharedPaths.filter((path: string) => path !== sharePath)
+        }
+        this.refreshShareLinks()
+        showToast('已取消分享')
+      },
+      onFailure: (msg: string) => {
+        console.error(TAG, '取消分享失败 msg: ' + msg)
+        this.shareBusy = false
+        showToast('取消分享失败')
+      }
+    })
+  }
+
+  private copyShareLink(): void {
+    if (this.shareLinkText.length === 0) {
+      return
+    }
+    try {
+      const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.shareLinkText)
+      pasteboard.getSystemPasteboard().setData(pasteData).then(() => {
+        showToast($r('app.string.copy_success'))
+      }).catch((err: Error) => {
+        console.error(TAG, 'copy share link failed: ' + err.message)
+        showToast($r('app.string.copy_failed'))
+      })
+    } catch (err) {
+      console.error(TAG, 'copy share link failed: ' + JSON.stringify(err))
+      showToast($r('app.string.copy_failed'))
+    }
   }
 
   private resetInputSheetState(): void {

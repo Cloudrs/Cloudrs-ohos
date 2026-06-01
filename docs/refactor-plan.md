@@ -1,15 +1,15 @@
 # Cloudrs HarmonyOS 6.1 UI Refactor Plan
 
 Date: 2026-05-26
-Last updated: 2026-05-31
+Last updated: 2026-06-01
 
 ## Status
 
 The modern cloud-drive UI refactor has completed the local code-side implementation pass. The main architecture, SDK upgrade, shared design system, primary page migration, photo backup center, upload/download fixes, official HDS floating bottom navigation, official Navigation routing migration, sheet consistency pass, and deep tokenization cleanup are implemented and build-verified.
 
-Estimated progress: about 90%.
+Estimated progress: about 100% for the current refactor implementation pass.
 
-The remaining work is external acceptance: real-device layout validation, API behavior confirmation for server-dependent edge cases, and full manual regression testing.
+The current refactor implementation pass is complete. Multi-device layout polish is deferred to the pre-release validation phase.
 
 ## Completed
 
@@ -186,6 +186,11 @@ The remaining work is external acceptance: real-device layout validation, API be
 - Kept create task as the top action.
 - Added responsive metric grid for finished task detail.
 - Hardened failed-task detail parsing so plain text errors do not crash JSON parsing.
+- Confirmed failed queue cleanup is an admin-side server operation:
+  - Ordinary users may not have permission to delete failed queue records.
+  - Admin queue query endpoint: `api/v4/admin/queue`.
+  - Admin batch delete endpoint: `api/v4/admin/queue/batch/delete`.
+  - App-side ordinary-user UI keeps the current unsupported/fallback behavior.
 
 ### Mine Page
 
@@ -258,6 +263,40 @@ The remaining work is external acceptance: real-device layout validation, API be
 - Added `TransferStateUtil` to share upload/download transfer status colors, icons, text, speed formatting, and server-processing detection.
 - Re-ran a final local scan for non-token colors, visual dimensions, radii, opacity, and large numeric values outside `CloudThemeToken` / `Constant`; no actionable local UI hardcodes remain.
 
+### Functional Regression
+
+- User verified the core full-device regression flow on real hardware:
+  - File operations
+  - Upload/download
+  - Image preview
+  - Photo backup
+  - Offline download
+  - Mine/settings
+  - Login/2FA
+
+### Visual Consistency
+
+- User verified final visual consistency for:
+  - Sheets
+  - HDS floating bottom navigation
+  - Full-screen overlays such as image preview
+
+### File Sharing
+
+- Added create-share entry for files and folders from the file item context menu.
+- Added current-user remote share-list loading after directory refresh and account switch.
+- Normalized Cloudreve V4 `source_uri` values and matched them to visible object paths.
+- Added shared-state badges on files/folders that already have remote share links.
+- Added share sheet for existing shares:
+  - Display current share link.
+  - Copy link to clipboard.
+  - Cancel/delete share when a remote share id is available.
+- Added create-share sheet:
+  - Optional password.
+  - Expiration presets.
+  - Create link and immediately show/copy-ready generated link.
+- Updated native V4 create-share permissions to grant read access on generated links.
+
 ## Pending Acceptance
 
 ### Build
@@ -267,8 +306,9 @@ The remaining work is external acceptance: real-device layout validation, API be
 - Current build reports the obfuscation-disabled tooling warning.
 - Current build does not report HMRouter custom decorator warnings.
 
-### Device Layout
+### Pre-Release Device Layout
 
+- Defer final multi-device layout polish until the app is closer to release.
 - Validate on phone portrait:
   - Safe area
   - HDS floating bottom navigation
@@ -286,65 +326,16 @@ The remaining work is external acceptance: real-device layout validation, API be
   - Navigation placement
   - Sheet width and content density
 
-### Functional Regression
-
-- File page:
-  - Directory enter/back
-  - Refresh
-  - Sort
-  - Grid/list toggle
-  - Detail
-  - Rename
-  - Copy
-  - Move
-  - Delete
-  - Download
-  - Upload progress for small, large, direct, and chunked uploads
-- Photo backup:
-  - Unauthorized
-  - Authorized
-  - Partial authorization
-  - Scan
-  - Picker add
-  - Enable/disable
-  - Remote path switch
-  - Wi-Fi-only
-  - Any-network
-  - Auto backup
-  - Manual backup
-  - Pause/resume
-  - Failure retry
-- Offline download:
-  - Create
-  - Refresh
-  - Pagination
-  - Queue loading
-  - Detail
-  - Delete where supported by API
-- Mine:
-  - User info
-  - Storage
-  - Appearance preference
-  - More settings
-  - Upload concurrency
-  - About
-  - Logout
-- Login:
-  - Site binding
-  - Account login
-  - 2FA
-  - Failure prompt
-
 ## Remaining Work
 
 ### Local Code
 
-- No known local code-side implementation item remains from this refactor plan.
+- No known local code-side implementation item remains from the current share batch.
 - Keep future UI changes tokenized through `CloudThemeToken`; do not add new hardcoded visual values in page code.
 
 ### Navigation
 
-- Validate official HDS floating bottom navigation on real phone, tablet, and wide layouts.
+- Validate official HDS floating bottom navigation on real phone, tablet, and wide layouts during pre-release layout verification.
 - Tune only token values if bottom margin, tab height, or page avoidance feels off.
 - Keep using official `HdsTabs.barFloatingStyle`; do not restore app-side custom light effects.
 
@@ -353,6 +344,13 @@ The remaining work is external acceptance: real-device layout validation, API be
 - Verify file detail overlay still fully covers or hides bottom navigation when expected.
 - Review copy/move/rename/delete dialog and sheet consistency after full regression.
 
+### File Sharing
+
+- Validate create/list/delete share behavior on the real V4 server.
+- Confirm the server returns `source_uri`, `url`, password, and expiration fields consistently across files and folders.
+- Consider adding system share handoff for generated text links after the core flow is verified.
+- For V3 or servers without share API support, the current flow shows an unsupported prompt when creation fails.
+
 ### Photo Backup
 
 - Verify path-scoped completed-state migration with more real albums and remote paths.
@@ -360,24 +358,13 @@ The remaining work is external acceptance: real-device layout validation, API be
 
 ### Offline Download
 
-- Confirm API behavior for deleting failed tasks; keep the current fallback if server returns `Task not found`.
+- Keep ordinary-user failed-task delete behavior as fallback-only; admin cleanup belongs to the server/admin queue APIs.
 - Validate card density with real long task names and multi-file tasks.
 
 ### Mine And Settings
 
 - Review More Settings hierarchy after device testing.
 - Polish appearance preference and setting rows if system/HDS components expose better API 24 styles.
-
-### Sheets
-
-- Validate final consistency across:
-  - File detail sheet
-  - Path select sheet
-  - Upload source sheet
-  - Transfer progress sheets
-  - Photo backup settings sheet
-  - Offline download detail sheet
-- Confirm all sheets avoid bottom navigation correctly and have no delayed navigation restoration.
 
 ## Notes
 

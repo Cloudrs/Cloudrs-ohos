@@ -9,6 +9,7 @@ use cloudreve_api::{
         UploadFileRequest, CreateFileRequest,
     },
     api::v4::{
+        ApiV4Client,
         models::{
             FileType as V4FileType,
             ApiResponse as V4ApiResponse,
@@ -126,6 +127,72 @@ fn v4_uri_to_unix(uri: &str) -> String {
 fn is_image_file(name: &str) -> bool {
     let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
     matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "heic" | "heif" | "tiff" | "tif" | "avif")
+}
+
+fn encode_query_component(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char);
+            }
+            _ => {
+                encoded.push_str(&format!("%{:02X}", byte));
+            }
+        }
+    }
+    encoded
+}
+
+fn share_next_page_token(data: &serde_json::Value) -> Option<String> {
+    data.get("pagination")
+        .and_then(|pagination| {
+            pagination.get("next_token")
+                .or_else(|| pagination.get("next_page_token"))
+        })
+        .and_then(|token| token.as_str())
+        .filter(|token| !token.is_empty())
+        .map(|token| token.to_string())
+}
+
+async fn enrich_share_source_uri(v4: &ApiV4Client, share: &mut serde_json::Value) {
+    let has_source_uri = share
+        .get("source_uri")
+        .and_then(|value| value.as_str())
+        .map(|value| !value.is_empty())
+        .unwrap_or(false);
+    if has_source_uri {
+        return;
+    }
+
+    let share_id = match share.get("id").and_then(|value| value.as_str()) {
+        Some(id) if !id.is_empty() => id,
+        _ => return,
+    };
+    let password = share
+        .get("password")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty());
+
+    let mut endpoint = format!(
+        "/share/info/{}?owner_extended=true&count_views=false",
+        encode_query_component(share_id)
+    );
+    if let Some(password) = password {
+        endpoint.push_str("&password=");
+        endpoint.push_str(&encode_query_component(password));
+    }
+
+    let detail: Result<V4ApiResponse<serde_json::Value>, _> = v4.get(&endpoint).await;
+    if let Ok(resp) = detail {
+        if let Some(detail_data) = resp.data {
+            if let (Some(share_obj), Some(detail_obj)) = (share.as_object_mut(), detail_data.as_object()) {
+                for (key, value) in detail_obj {
+                    share_obj.insert(key.clone(), value.clone());
+                }
+            }
+        }
+    }
 }
 
 // Get parent directory from a unix-style path (e.g. "/videos" → "/").
@@ -1796,17 +1863,17 @@ pub async fn create_share_link(path: String, expire_days: i32, password: String)
     let permissions = PermissionSetting {
         user_explicit: serde_json::json!({}),
         group_explicit: serde_json::json!({}),
-        same_group: String::new(),
-        other: String::new(),
-        anonymous: String::new(),
-        everyone: String::new(),
+        same_group: "read".to_string(),
+        other: "read".to_string(),
+        anonymous: "read".to_string(),
+        everyone: "read".to_string(),
     };
     let req = CreateShareLinkRequest {
         permissions,
         uri: path,
         is_private: if password.is_empty() { None } else { Some(true) },
         share_view: None,
-        expire: if expire_days > 0 { Some(expire_days as u32) } else { None },
+        expire: if expire_days > 0 { Some(expire_days as u32 * 24 * 60 * 60) } else { None },
         price: None,
         password: if password.is_empty() { None } else { Some(password) },
         show_readme: None,
@@ -1822,11 +1889,47 @@ pub async fn list_share_links() -> napi::Result<String> {
     let api = get_client()?;
     let v4 = api.inner().as_v4()
         .ok_or_else(|| napi::Error::from_reason("share links require V4"))?;
-    let links = v4
-        .list_my_share_links()
-        .await
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-    serde_json::to_string(&links).map_err(|e| napi::Error::from_reason(e.to_string()))
+
+    let mut all_shares: Vec<serde_json::Value> = Vec::new();
+    let mut next_page_token: Option<String> = None;
+    let mut page_count = 0;
+
+    loop {
+        let current_token = next_page_token.clone();
+        let mut endpoint = "/share?page_size=100".to_string();
+        if let Some(token) = &current_token {
+            endpoint.push_str("&next_page_token=");
+            endpoint.push_str(&encode_query_component(token));
+        }
+
+        let resp: V4ApiResponse<serde_json::Value> = v4
+            .get(&endpoint)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let data = resp
+            .data
+            .ok_or_else(|| napi::Error::from_reason(resp.msg))?;
+
+        let mut shares = data
+            .get("shares")
+            .and_then(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        for share in &mut shares {
+            enrich_share_source_uri(v4, share).await;
+        }
+        all_shares.extend(shares);
+
+        page_count += 1;
+        let next = share_next_page_token(&data);
+        if next.is_none() || next == current_token || page_count >= 100 {
+            break;
+        }
+        next_page_token = next;
+    }
+
+    serde_json::to_string(&all_shares).map_err(|e| napi::Error::from_reason(e.to_string()))
 }
 
 /// Delete a share link by ID.

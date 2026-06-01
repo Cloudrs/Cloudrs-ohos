@@ -172,6 +172,35 @@ export interface ObjectInfo {
   source_enabled: boolean;
 }
 
+export interface ShareSourceInfo {
+  id?: string;
+  uri?: string;
+  path?: string;
+  source_uri?: string;
+  name?: string;
+}
+
+export interface ShareLinkInfo {
+  id: string;
+  name: string;
+  visited?: number;
+  downloaded?: number;
+  expired?: boolean;
+  url: string;
+  password?: string;
+  password_protected?: boolean;
+  source_uri?: string;
+  uri?: string;
+  path?: string;
+  source?: ShareSourceInfo;
+  file?: ShareSourceInfo;
+  object?: ShareSourceInfo;
+  source_type?: number | string;
+  expires?: string;
+  expired_at?: string;
+  created_at?: string;
+}
+
 export interface Policy {
   id: string;
   name: string;

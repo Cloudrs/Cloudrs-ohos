@@ -50,6 +50,7 @@ export struct ObjectItem {
   @Prop showType: ShowType
   @Prop multiSelectMode: boolean = false
   @Prop selected: boolean = false
+  @Prop shared: boolean = false
 
   aboutToAppear(): void {
     console.debug(TAG, 'aboutToAppear')
@@ -107,12 +108,25 @@ export struct ObjectItem {
   @Builder dirItem(item: ObjectInfo) {
     Column() {
       Row({ space: CloudThemeToken.objectItemGap }) {
-        Image(this.getItemIcon(item.name, true))
-          .width(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
-          CloudThemeToken.objectGridFolderIconSize)
-          .height(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
-          CloudThemeToken.objectGridFolderIconSize)
-          .draggable(false)
+        Stack({ alignContent: Alignment.BottomEnd }) {
+          Image(this.getItemIcon(item.name, true))
+            .width(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
+            CloudThemeToken.objectGridFolderIconSize)
+            .height(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
+            CloudThemeToken.objectGridFolderIconSize)
+            .draggable(false)
+
+          if (this.shared) {
+            Column() {
+              this.sharedBadge()
+            }
+            .translate({ x: -CloudThemeToken.spacingMd, y: -CloudThemeToken.spacingMd })
+          }
+        }
+        .width(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
+        CloudThemeToken.objectGridFolderIconSize)
+        .height(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListIconSize :
+        CloudThemeToken.objectGridFolderIconSize)
 
         Column({ space: CloudThemeToken.objectMetaGap }) {
           Text(this.getDisplayName(item.name, this.showType == ShowType.SHOW_LIST ? 42 : 26))
@@ -134,6 +148,8 @@ export struct ObjectItem {
             .draggable(false)
         }
       }
+      .width('100%')
+      .height('100%')
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
@@ -159,10 +175,32 @@ export struct ObjectItem {
             .objectFit(ImageFit.Cover)
             .draggable(false)
         } else {
-          Image(CommonUtil.getFileIconInfo(item.name).icon)
-            .width(CloudThemeToken.objectGridFileIconSize)
-            .height(CloudThemeToken.objectGridFileIconSize)
-            .draggable(false)
+          Stack({ alignContent: Alignment.BottomEnd }) {
+            Image(CommonUtil.getFileIconInfo(item.name).icon)
+              .width(CloudThemeToken.objectGridFileIconSize)
+              .height(CloudThemeToken.objectGridFileIconSize)
+              .draggable(false)
+
+            if (this.shared) {
+              Column() {
+                this.sharedBadge()
+              }
+              .translate({ x: -CloudThemeToken.spacingMd, y: -CloudThemeToken.spacingMd })
+            }
+          }
+          .width(CloudThemeToken.objectGridFileIconSize)
+          .height(CloudThemeToken.objectGridFileIconSize)
+        }
+
+        if (this.shared && this.getThumbData(item.id)) {
+          Column() {
+            this.sharedBadge()
+          }
+          .width('100%')
+          .height('100%')
+          .padding({ top: CloudThemeToken.spacingSm, right: CloudThemeToken.spacingSm })
+          .alignItems(HorizontalAlign.End)
+          .justifyContent(FlexAlign.Start)
         }
       }
       .width('100%')
@@ -202,10 +240,21 @@ export struct ObjectItem {
   @Builder fileListItem(item: ObjectInfo) {
     Column() {
       Row({ space: CloudThemeToken.objectItemGap }) {
-        Image(this.getItemIcon(item.name, false))
-          .width(CloudThemeToken.objectListIconSize)
-          .height(CloudThemeToken.objectListIconSize)
-          .draggable(false)
+        Stack({ alignContent: Alignment.BottomEnd }) {
+          Image(this.getItemIcon(item.name, false))
+            .width(CloudThemeToken.objectListIconSize)
+            .height(CloudThemeToken.objectListIconSize)
+            .draggable(false)
+
+          if (this.shared) {
+            Column() {
+              this.sharedBadge()
+            }
+            .translate({ x: -CloudThemeToken.spacingMd, y: -CloudThemeToken.spacingMd })
+          }
+        }
+        .width(CloudThemeToken.objectListIconSize)
+        .height(CloudThemeToken.objectListIconSize)
 
         Column({ space: CloudThemeToken.objectMetaGap }) {
           Text(this.getDisplayName(item.name, 42))
@@ -219,6 +268,8 @@ export struct ObjectItem {
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
       }
+      .width('100%')
+      .height('100%')
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }
@@ -310,5 +361,17 @@ export struct ObjectItem {
     .height(CloudThemeToken.menuItemLabelHeight)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
+  }
+
+  @Builder sharedBadge() {
+    Stack() {
+      Image($r('app.media.ic_link_badge'))
+        .width(CloudThemeToken.iconSm)
+        .height(CloudThemeToken.iconSm)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.iconSm)
+    .height(CloudThemeToken.iconSm)
+    .backgroundColor(CloudThemeToken.transparent)
   }
 }

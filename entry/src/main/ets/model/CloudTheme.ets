@@ -382,10 +382,12 @@ export class CloudThemeToken {
   static readonly photoBackupGridFallbackWidth: number = 360
   static readonly photoBackupThumbnailSize: number = 180
   static readonly photoBackupThumbnailCacheLimit: number = 80
+  static readonly photoBackupDateMatchToleranceMs: number = 1000
   static readonly photoBackupDefaultConcurrent: number = 5
   static readonly photoBackupMinConcurrent: number = 1
   static readonly photoBackupMaxConcurrent: number = 10
   static readonly photoBackupAutoScanDelayMs: number = 800
+  static readonly photoBackupStaleRefreshDelayMs: number = 600
   static readonly photoBackupAutoScanMinIntervalMs: number = 60000
   static readonly photoBackupSaveDebounceMs: number = 800
   static readonly photoBackupStartProgress: number = 8

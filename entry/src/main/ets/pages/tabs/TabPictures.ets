@@ -26,6 +26,27 @@ import LazyDataSource from '../../utils/LazyDataSource';
 
 const TAG: string = 'TabPictures';
 
+class PhotoBackupThumbnailCache {
+  static data: Map<string, PixelMap> = new Map<string, PixelMap>();
+
+  static snapshot(): Map<string, PixelMap> {
+    return new Map<string, PixelMap>(PhotoBackupThumbnailCache.data);
+  }
+
+  static set(id: string, pixelMap: PixelMap): void {
+    const next = new Map<string, PixelMap>(PhotoBackupThumbnailCache.data);
+    next.set(id, pixelMap);
+    while (next.size > CloudThemeToken.photoBackupThumbnailCacheLimit) {
+      const firstKey = next.keys().next().value as string | undefined;
+      if (!firstKey) {
+        break;
+      }
+      next.delete(firstKey);
+    }
+    PhotoBackupThumbnailCache.data = next;
+  }
+}
+
 @Component
 export struct TabPictures {
   @Link overLap: boolean
@@ -81,8 +102,10 @@ export struct TabPictures {
   private photoAssetCache: Map<string, photoAccessHelper.PhotoAsset> = new Map<string, photoAccessHelper.PhotoAsset>();
   private thumbnailLoadingIds: Set<string> = new Set<string>();
   private autoScanTimer: number = -1;
+  private stalePhotoRefreshTimer: number = -1;
 
   aboutToAppear(): void {
+    this.photoBackupThumbs = PhotoBackupThumbnailCache.snapshot();
     this.bindPreviewDataSources();
     this.loadSettings();
     this.loadDoneIds();
@@ -92,6 +115,7 @@ export struct TabPictures {
 
   aboutToDisappear(): void {
     this.clearAutoScanTimer();
+    this.clearStalePhotoRefreshTimer();
     this.stopCompletedPreviewFlush();
     this.flushDoneIdsSave();
     this.flushPhotoRecordsSave();
@@ -245,41 +269,185 @@ export struct TabPictures {
   }
 
   setPhotoThumbnail(item: PhotoBackupItem, pixelMap: PixelMap): void {
-    const next = new Map<string, PixelMap>(this.photoBackupThumbs);
-    next.set(item.id, pixelMap);
-    while (next.size > CloudThemeToken.photoBackupThumbnailCacheLimit) {
-      const firstKey = next.keys().next().value as string | undefined;
-      if (!firstKey) {
-        break;
-      }
-      next.delete(firstKey);
-    }
-    this.photoBackupThumbs = next;
+    PhotoBackupThumbnailCache.set(item.id, pixelMap);
+    this.photoBackupThumbs = PhotoBackupThumbnailCache.snapshot();
   }
 
   async loadPhotoThumbnail(item: PhotoBackupItem): Promise<void> {
-    if (this.hasPhotoThumbnail(item) || this.thumbnailLoadingIds.has(item.id)) {
+    const loadingId = item.id;
+    if (this.hasPhotoThumbnail(item) || this.thumbnailLoadingIds.has(loadingId)) {
       return;
     }
-    const asset = this.photoAssetCache.get(item.id);
-    if (!asset) {
-      return;
-    }
-    this.thumbnailLoadingIds.add(item.id);
+    this.thumbnailLoadingIds.add(loadingId);
     try {
       const size: image.Size = {
         width: CloudThemeToken.photoBackupThumbnailSize,
         height: CloudThemeToken.photoBackupThumbnailSize
       };
-      const pixelMap = await asset.getThumbnail(size);
+      const asset = await this.getPhotoAssetForThumbnail(item);
+      if (!asset) {
+        console.warn(TAG, `photo thumbnail asset not found: name=${item.name}, uri=${item.uri}`);
+        this.scheduleStalePhotoRefresh();
+        return;
+      }
+      let loadedPixelMap: PixelMap;
+      try {
+        loadedPixelMap = await asset.getThumbnail(size);
+      } catch (err) {
+        console.warn(TAG, `load photo asset thumbnail failed: name=${item.name}, uri=${item.uri}, error=${(err as Error)?.message ?? err}`);
+        return;
+      }
       this.runInUiScope(() => {
-        this.setPhotoThumbnail(item, pixelMap);
+        this.setPhotoThumbnail(item, loadedPixelMap);
       });
     } catch (err) {
       console.warn(TAG, `load photo thumbnail failed: ${(err as Error)?.message ?? err}`);
     } finally {
+      this.thumbnailLoadingIds.delete(loadingId);
       this.thumbnailLoadingIds.delete(item.id);
     }
+  }
+
+  private async getPhotoAssetForThumbnail(item: PhotoBackupItem): Promise<photoAccessHelper.PhotoAsset | undefined> {
+    const cachedAsset = this.photoAssetCache.get(item.id);
+    if (cachedAsset) {
+      this.updatePhotoItemFromAsset(item, cachedAsset);
+      this.photoAssetCache.set(item.id, cachedAsset);
+      return cachedAsset;
+    }
+    let asset = await this.findPhotoAssetByUri(item.uri);
+    if (!asset) {
+      asset = await this.findPhotoAssetBySignature(item);
+    }
+    if (asset) {
+      this.updatePhotoItemFromAsset(item, asset);
+      this.photoAssetCache.set(item.id, asset);
+    }
+    return asset;
+  }
+
+  private async findPhotoAssetByUri(uri: string): Promise<photoAccessHelper.PhotoAsset | undefined> {
+    if (!uri || uri.length === 0) {
+      return undefined;
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (!context) {
+      return undefined;
+    }
+    let fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> | undefined = undefined;
+    try {
+      const phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
+      const predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
+      predicates.equalTo(photoAccessHelper.PhotoKeys.URI, uri);
+      const fetchOptions: photoAccessHelper.FetchOptions = {
+        fetchColumns: [
+          photoAccessHelper.PhotoKeys.URI,
+          photoAccessHelper.PhotoKeys.PHOTO_TYPE,
+          photoAccessHelper.PhotoKeys.DISPLAY_NAME,
+          photoAccessHelper.PhotoKeys.SIZE,
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED
+        ],
+        predicates: predicates
+      };
+      fetchResult = await phAccessHelper.getAssets(fetchOptions);
+      const assets: photoAccessHelper.PhotoAsset[] = await fetchResult.getAllObjects();
+      if (assets.length === 0) {
+        return undefined;
+      }
+      return assets[Constant.FIRST_ARRAY_INDEX];
+    } catch (err) {
+      console.warn(TAG, `find photo asset by uri failed: ${(err as Error)?.message ?? err}`);
+      return undefined;
+    } finally {
+      if (fetchResult) {
+        fetchResult.close();
+      }
+    }
+  }
+
+  private async findPhotoAssetBySignature(item: PhotoBackupItem): Promise<photoAccessHelper.PhotoAsset | undefined> {
+    if (!item.name || item.name.length === 0) {
+      return undefined;
+    }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (!context) {
+      return undefined;
+    }
+    let fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> | undefined = undefined;
+    try {
+      const phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
+      const predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
+      predicates.equalTo(photoAccessHelper.PhotoKeys.PHOTO_TYPE, photoAccessHelper.PhotoType.IMAGE);
+      predicates.equalTo(photoAccessHelper.PhotoKeys.DISPLAY_NAME, item.name);
+      predicates.orderByDesc(photoAccessHelper.PhotoKeys.DATE_MODIFIED);
+      const fetchOptions: photoAccessHelper.FetchOptions = {
+        fetchColumns: [
+          photoAccessHelper.PhotoKeys.URI,
+          photoAccessHelper.PhotoKeys.PHOTO_TYPE,
+          photoAccessHelper.PhotoKeys.DISPLAY_NAME,
+          photoAccessHelper.PhotoKeys.SIZE,
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED
+        ],
+        predicates: predicates
+      };
+      fetchResult = await phAccessHelper.getAssets(fetchOptions);
+      const assets: photoAccessHelper.PhotoAsset[] = await fetchResult.getAllObjects();
+      if (assets.length === 0) {
+        return undefined;
+      }
+      return this.pickBestPhotoAssetMatch(item, assets);
+    } catch (err) {
+      console.warn(TAG, `find photo asset by signature failed: ${(err as Error)?.message ?? err}`);
+      return undefined;
+    } finally {
+      if (fetchResult) {
+        fetchResult.close();
+      }
+    }
+  }
+
+  private pickBestPhotoAssetMatch(item: PhotoBackupItem,
+    assets: photoAccessHelper.PhotoAsset[]): photoAccessHelper.PhotoAsset | undefined {
+    let bestAsset: photoAccessHelper.PhotoAsset | undefined = undefined;
+    let bestScore = -1;
+    assets.forEach((asset: photoAccessHelper.PhotoAsset) => {
+      const score = this.getPhotoAssetMatchScore(item, asset);
+      if (score > bestScore) {
+        bestScore = score;
+        bestAsset = asset;
+      }
+    });
+    return bestAsset;
+  }
+
+  private getPhotoAssetMatchScore(item: PhotoBackupItem, asset: photoAccessHelper.PhotoAsset): number {
+    let score = 0;
+    if (asset.displayName === item.name) {
+      score += 4;
+    }
+    const assetSize = this.getPhotoAssetSize(asset);
+    if (item.size > 0 && assetSize === item.size) {
+      score += 5;
+    }
+    const assetModifiedAt = this.getPhotoAssetModifiedAt(asset);
+    if (item.modifiedAt > 0 && Math.abs(assetModifiedAt - item.modifiedAt) <= CloudThemeToken.photoBackupDateMatchToleranceMs) {
+      score += 3;
+    }
+    return score;
+  }
+
+  private updatePhotoItemFromAsset(item: PhotoBackupItem, asset: photoAccessHelper.PhotoAsset): void {
+    const resolved = this.createBackupItem(asset.uri, asset.displayName,
+      this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset));
+    this.updatePhotoItemFromResolved(item, resolved);
+  }
+
+  private getPhotoAssetSize(asset: photoAccessHelper.PhotoAsset): number {
+    return (asset.get(photoAccessHelper.PhotoKeys.SIZE) as number) ?? 0;
+  }
+
+  private getPhotoAssetModifiedAt(asset: photoAccessHelper.PhotoAsset): number {
+    return (asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0;
   }
 
   refreshPhotoStats(): void {
@@ -327,6 +495,16 @@ export struct TabPictures {
       this.completedPreviewItems = completedPreview;
       this.syncAllPreviewDataSources();
       this.refreshPhotoCountText();
+    });
+    this.preloadPreviewThumbnails(uploadingPreview);
+    this.preloadPreviewThumbnails(waitingPreview);
+    this.preloadPreviewThumbnails(failedPreview);
+    this.preloadPreviewThumbnails(completedPreview);
+  }
+
+  preloadPreviewThumbnails(items: PhotoBackupItem[]): void {
+    items.forEach((item: PhotoBackupItem) => {
+      this.loadPhotoThumbnail(item);
     });
   }
 
@@ -699,6 +877,25 @@ export struct TabPictures {
     }
   }
 
+  scheduleStalePhotoRefresh(): void {
+    if (!this.isActive || !this.getSettingsEnabled() || this.stalePhotoRefreshTimer >= CloudThemeToken.zero) {
+      return;
+    }
+    this.stalePhotoRefreshTimer = setTimeout(() => {
+      this.stalePhotoRefreshTimer = -1;
+      if (this.isActive && this.getSettingsEnabled() && !this.isScanning) {
+        this.scanLocalPhotos(true, true);
+      }
+    }, CloudThemeToken.photoBackupStaleRefreshDelayMs);
+  }
+
+  clearStalePhotoRefreshTimer(): void {
+    if (this.stalePhotoRefreshTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.stalePhotoRefreshTimer);
+      this.stalePhotoRefreshTimer = -1;
+    }
+  }
+
   shouldRunActiveAutoScan(): boolean {
     if (!this.isActive || !this.getSettingsEnabled() || this.isScanning || this.isBackupRunning()) {
       return false;
@@ -757,7 +954,7 @@ export struct TabPictures {
       } else if (forceFull && previousCount > 0 && nextPhotos.length < previousCount) {
         this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
       }
-      this.photos = this.mergePhotoList(nextPhotos, true);
+      this.photos = this.mergePhotoList(nextPhotos, !forceFull);
       this.refreshPhotoStats();
       this.updateSettings((settings: PhotoBackupSettings) => {
         settings.lastScanAt = new Date().getTime();
@@ -794,8 +991,7 @@ export struct TabPictures {
           return;
         }
         const item = this.createBackupItem(asset.uri, asset.displayName,
-          (asset.get(photoAccessHelper.PhotoKeys.SIZE) as number) ?? 0,
-          (asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0);
+          this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset));
         this.photoAssetCache.set(item.id, asset);
         nextPhotos.push(item);
       });
@@ -855,18 +1051,83 @@ export struct TabPictures {
   }
 
   mergePhotoList(incoming: PhotoBackupItem[], keepExisting: boolean): PhotoBackupItem[] {
-    let merged: PhotoBackupItem[] = keepExisting ? this.getPhotos().slice() : [];
+    const previousItems = this.getPhotos().slice();
+    const usedPreviousIds: Set<string> = new Set<string>();
+    let merged: PhotoBackupItem[] = keepExisting ? previousItems.slice() : [];
     incoming.forEach((item: PhotoBackupItem) => {
-      let exists = merged.some((current: PhotoBackupItem) => current.uri === item.uri);
-      if (!exists) {
-        merged.push(item);
+      const existingIndex = this.findExistingPhotoIndex(merged, item);
+      if (existingIndex >= 0) {
+        this.updatePhotoItemFromResolved(merged[existingIndex], item);
+        return;
       }
+      if (!keepExisting) {
+        const previousIndex = this.findExistingPhotoIndex(previousItems, item);
+        if (previousIndex >= 0 && !usedPreviousIds.has(previousItems[previousIndex].id)) {
+          usedPreviousIds.add(previousItems[previousIndex].id);
+          const previousItem = previousItems[previousIndex];
+          this.updatePhotoItemFromResolved(previousItem, item);
+          merged.push(previousItem);
+          return;
+        }
+      }
+      merged.push(item);
     });
     merged.forEach((item: PhotoBackupItem) => {
       this.applyDoneStatus(item, true);
     });
     merged.sort((left: PhotoBackupItem, right: PhotoBackupItem) => right.modifiedAt - left.modifiedAt);
     return merged;
+  }
+
+  private findExistingPhotoIndex(items: PhotoBackupItem[], incoming: PhotoBackupItem): number {
+    let index = items.findIndex((current: PhotoBackupItem) => current.uri === incoming.uri || current.id === incoming.id);
+    if (index >= 0) {
+      return index;
+    }
+    return items.findIndex((current: PhotoBackupItem) => this.isSamePhotoBySignature(current, incoming));
+  }
+
+  private isSamePhotoBySignature(left: PhotoBackupItem, right: PhotoBackupItem): boolean {
+    if (!left.name || !right.name || left.name !== right.name) {
+      return false;
+    }
+    if (left.size > 0 && right.size > 0 && left.size !== right.size) {
+      return false;
+    }
+    if (left.modifiedAt > 0 && right.modifiedAt > 0 &&
+      Math.abs(left.modifiedAt - right.modifiedAt) > CloudThemeToken.photoBackupDateMatchToleranceMs) {
+      return false;
+    }
+    return (left.size > 0 && right.size > 0) || (left.modifiedAt > 0 && right.modifiedAt > 0);
+  }
+
+  private updatePhotoItemFromResolved(target: PhotoBackupItem, resolved: PhotoBackupItem): void {
+    const oldId = target.id;
+    const oldDoneKey = this.getDoneKey(target);
+    const wasDone = target.status === PhotoBackupStatus.COMPLETED || this.doneIds.has(oldDoneKey);
+    const previousStatus = target.status;
+    const previousProgress = target.progress;
+    const previousError = target.error;
+    target.uri = resolved.uri;
+    target.name = resolved.name;
+    target.size = resolved.size;
+    target.modifiedAt = resolved.modifiedAt;
+    target.id = resolved.id;
+    if (wasDone || resolved.status === PhotoBackupStatus.COMPLETED) {
+      target.status = PhotoBackupStatus.COMPLETED;
+      target.progress = CloudThemeToken.percentageFull;
+      target.error = '';
+      this.doneIds.add(this.getDoneKey(target));
+    } else {
+      target.status = previousStatus;
+      target.progress = previousProgress;
+      target.error = previousError;
+    }
+    if (oldId !== target.id) {
+      this.photoAssetCache.delete(oldId);
+      this.scheduleDoneIdsSave();
+      this.schedulePhotoRecordsSave();
+    }
   }
 
   refreshDoneStatus(): void {
@@ -1629,12 +1890,6 @@ export struct TabPictures {
   @Builder uploadingUriThumbnail(item: PhotoBackupItem) {
     Stack({ alignContent: Alignment.Center }) {
       this.uploadingThumbnailPlaceholder();
-      Image(item.uri)
-        .width(CloudThemeToken.iconBox3xl)
-        .height(CloudThemeToken.rowHeight4xl)
-        .objectFit(ImageFit.Cover)
-        .borderRadius(CloudThemeToken.controlRadiusMd)
-        .draggable(false)
     }
     .width(CloudThemeToken.iconBox3xl)
     .height(CloudThemeToken.rowHeight4xl)
@@ -1792,11 +2047,15 @@ export struct TabPictures {
 
   @Builder legacyUploadingItem(item: PhotoBackupItem) {
     Row({ space: CloudThemeToken.spacingSection }) {
-      Image(item.uri)
-        .width(CloudThemeToken.iconBox3xl)
-        .height(CloudThemeToken.rowHeight4xl)
-        .objectFit(ImageFit.Cover)
-        .borderRadius(CloudThemeToken.controlRadiusMd)
+      if (this.photoBackupThumbs.has(item.id)) {
+        Image(this.photoBackupThumbs.get(item.id))
+          .width(CloudThemeToken.iconBox3xl)
+          .height(CloudThemeToken.rowHeight4xl)
+          .objectFit(ImageFit.Cover)
+          .borderRadius(CloudThemeToken.controlRadiusMd)
+      } else {
+        this.uploadingUriThumbnail(item);
+      }
 
       Column({ space: CloudThemeToken.spacingXl }) {
         Text(item.name)
@@ -2432,12 +2691,6 @@ struct PhotoBackupGrid {
   @Builder uriThumbnail(item: PhotoBackupItem) {
     Stack({ alignContent: Alignment.Center }) {
       this.thumbnailPlaceholder()
-      Image(item.uri)
-        .width('100%')
-        .aspectRatio(CloudThemeToken.squareAspectRatio)
-        .objectFit(ImageFit.Cover)
-        .borderRadius(CloudThemeToken.controlRadiusLg)
-        .draggable(false)
     }
     .width('100%')
     .aspectRatio(CloudThemeToken.squareAspectRatio)

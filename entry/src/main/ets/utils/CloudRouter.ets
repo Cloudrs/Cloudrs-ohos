@@ -7,6 +7,7 @@ import { DbUserInfo } from '../model/net/ApiTypes';
 import { LoginParam } from '../model/net/LoginParam';
 import { CloudApi } from '../model/net/CloudApi';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { AppLockUtil } from './AppLockUtil';
 import { showToast, showToastTips, ToastType } from './ToastUtil';
 
 const TAG: string = 'CloudRouter'
@@ -63,12 +64,12 @@ export class CloudRouter {
 
   static replaceRoot(pageUrl: string, param?: Object): void {
     CloudRouter.clearOverlay();
-    CloudRouter.pathStack?.clear(false);
     const routeParam = CloudRouter.getRouteParam(param);
     if (CloudRouter.homeUpdater) {
       CloudRouter.homeUpdater(pageUrl, routeParam);
       return;
     }
+    CloudRouter.pathStack?.clear(false);
     CloudRouter.pathStack?.pushPath(new NavPathInfo(pageUrl, routeParam, undefined, true), false);
   }
 
@@ -76,6 +77,7 @@ export class CloudRouter {
     const targetPage = nextPage && nextPage.length > CloudThemeToken.zero && nextPage !== Constant.LOGIN_PAGE
       ? nextPage
       : Constant.HOME_PAGE;
+    AppLockUtil.markSessionUnlocked();
     CloudRouter.replaceRoot(Constant.HOME_PAGE);
     if (targetPage !== Constant.HOME_PAGE) {
       CloudRouter.push(targetPage);

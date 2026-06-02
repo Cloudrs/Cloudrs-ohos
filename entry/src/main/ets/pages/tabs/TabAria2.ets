@@ -23,6 +23,8 @@ const TAG: string = 'TabRemote'
 @Component
 export struct TabRemoteDown {
   @Link overLap: boolean
+  @Watch('onActiveStateChanged')
+  @Prop isActive: boolean = false
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.download_offline') }, { text: $r('app.string.task_queue') }] as SegmentButtonItemTuple,
@@ -47,16 +49,40 @@ export struct TabRemoteDown {
   @State currentFinishedDetail: Aria2Finished|undefined = undefined
   @State currentFinishedIndex: number = -1
   @State showTaskDetailSheet: boolean = false
-  private timerId?: number = 0
+  private timerId?: number = undefined
   @State showCreateSheet: boolean = false
+  private initialDataRequested: boolean = false
 
   aboutToAppear(): void {
+    this.loadInitialDataIfActive()
+  }
+
+  aboutToDisappear(): void {
+    this.clearDownloadUpdateTask()
+  }
+
+  onActiveStateChanged(): void {
+    if (!this.isActive) {
+      this.clearDownloadUpdateTask()
+      return
+    }
+    this.loadInitialDataIfActive()
+  }
+
+  private loadInitialDataIfActive(): void {
+    if (!this.isActive || this.initialDataRequested) {
+      return
+    }
+    this.initialDataRequested = true
     this.getAria2Downloading()
     this.getAria2Finished(true)
     this.getUserTasks(true)
   }
 
   startDownloadUpdateTask(interval: number) {
+    if (!this.isActive) {
+      return
+    }
     if (this.timerId === undefined) {
       this.timerId = setInterval(() => {
         this.getAria2Downloading()
@@ -73,8 +99,14 @@ export struct TabRemoteDown {
   }
 
   getAria2Downloading() {
+    if (!this.isActive) {
+      return
+    }
     CloudApi.aria2Downloading({
       onSuccess: (data) => {
+        if (!this.isActive) {
+          return
+        }
         if (data.length > 0) {
           this.aria2Downloading = data
           this.totalDownloading = this.aria2Downloading.length
@@ -99,6 +131,9 @@ export struct TabRemoteDown {
   }
 
   getAria2Finished(isFresh: boolean, softRefresh: boolean = false) {
+    if (!this.isActive) {
+      return
+    }
     if (isFresh && !softRefresh) {
       this.aria2FinishedSource.clear()
       this.finishedPage = 1
@@ -108,6 +143,9 @@ export struct TabRemoteDown {
     const targetPage = isFresh ? 1 : this.finishedPage
     CloudApi.aria2Finished(targetPage, {
       onSuccess: (data) => {
+        if (!this.isActive) {
+          return
+        }
         if (isFresh && softRefresh) {
           this.aria2FinishedSource.replaceAll(data)
           this.finishedPage = data.length > 0 ? 2 : 1
@@ -131,6 +169,9 @@ export struct TabRemoteDown {
   }
 
   getUserTasks(isFresh: boolean) {
+    if (!this.isActive) {
+      return
+    }
     if (isFresh) {
       this.tasksQueueSource.clear()
       this.tasksQueuePage = 1
@@ -139,6 +180,9 @@ export struct TabRemoteDown {
 
     CloudApi.userTasks(this.tasksQueuePage, {
       onSuccess: (data: UserTasks) => {
+        if (!this.isActive) {
+          return
+        }
         if (data.tasks.length > 0) {
           this.tasksQueueSource.pushArrayData(data.tasks)
           this.tasksQueuePage++

@@ -16,6 +16,8 @@
     }, {
       "name": "ohos.permission.ACCESS_BIOMETRIC",
     }, {
+      "name": "ohos.permission.PRIVACY_WINDOW",
+    }, {
       "name": "ohos.permission.WRITE_IMAGEVIDEO",
       "reason": "$string:image_video_write_permission",
       "usedScene" : {

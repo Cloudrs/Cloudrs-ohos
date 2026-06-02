@@ -6,8 +6,6 @@ import LazyDataSource from "../../utils/LazyDataSource";
 import { TabFilesTitle } from "../../components/TabFilesTitle";
 import { CloudApi } from "../../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
-import { image } from "@kit.ImageKit";
-import { http } from '@kit.NetworkKit';
 import { ObjectItem } from "../../components/ObjectItem";
 import { TabFilesHeader } from "../../components/TabFilesHeader";
 import { ImagePreview, PreviewFile, VideoPreview } from "../../model/Params";
@@ -36,6 +34,31 @@ import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 
 const TAG = 'TabFiles';
+const FILE_THUMB_MAX_CONCURRENT: number = 2
+const FILE_THUMB_QUEUE_DELAY_MS: number = 500
+const FILE_SHARE_REFRESH_DELAY_MS: number = 650
+
+class FileThumbSourceCache {
+  static data: Map<string, string> = new Map<string, string>()
+
+  static get(key: string): string {
+    return FileThumbSourceCache.data.get(key) ?? ''
+  }
+
+  static set(key: string, source: string): void {
+    FileThumbSourceCache.data.set(key, source)
+  }
+
+  static snapshot(scope: string): Map<string, string> {
+    const result = new Map<string, string>()
+    FileThumbSourceCache.data.forEach((source: string, key: string) => {
+      if (key.startsWith(scope)) {
+        result.set(key.substring(scope.length), source)
+      }
+    })
+    return result
+  }
+}
 
 enum FilePageState {
   IDLE = 'idle',
@@ -85,6 +108,8 @@ class ObjectSelect {
 @Component
 export struct TabFiles {
   @Link overLap: boolean
+  @Watch('onActiveChanged')
+  @Prop isActive: boolean = true
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
@@ -96,6 +121,7 @@ export struct TabFiles {
   @State mainTitle: string|Resource = $r('app.string.files_main_title')
   @State subTitle: string|Resource = $r('app.string.files_sub_title')
   @Provide thumbImage: Map<string, PixelMap> = new Map()
+  @Provide thumbSource: Map<string, string> = new Map()
   @State isRefreshing:boolean = false
   @State showObjectDetail: boolean = false
   @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
@@ -142,6 +168,31 @@ export struct TabFiles {
   private inputRenameItem?: ObjectInfo = undefined
   private inputNewPath: string = '/'
   private inputNewIsDir: boolean = true
+  private thumbLoadingIds: Set<string> = new Set<string>()
+  private thumbFailedIds: Set<string> = new Set<string>()
+  private thumbQueue: ObjectInfo[] = []
+  private activeThumbLoads: number = 0
+  private thumbQueueTimer: number = -1
+  private shareRefreshTimer: number = -1
+  private initialFileListRequested: boolean = false
+  private loadingFilePath: string = ''
+
+  private onActiveChanged(): void {
+    if (!this.isActive) {
+      if (this.thumbQueueTimer >= 0) {
+        clearTimeout(this.thumbQueueTimer)
+        this.thumbQueueTimer = -1
+      }
+      this.cancelScheduledShareRefresh()
+      return
+    }
+    if (this.thumbQueue.length > 0) {
+      this.scheduleThumbQueue()
+    }
+    if (this.dirDataSource.totalCount() > 0 || this.fileDataSource.totalCount() > 0) {
+      this.scheduleShareLinksRefresh()
+    }
+  }
 
   setThumbData(id: string, pixMap: PixelMap) {
     const updated: Map<string, PixelMap> = new Map(this.thumbImage);
@@ -149,11 +200,25 @@ export struct TabFiles {
     this.thumbImage = updated;
   }
 
+  setThumbSourceData(item: ObjectInfo, source: string) {
+    if (source.length === 0) {
+      return
+    }
+    FileThumbSourceCache.set(this.getThumbCacheKey(item), source)
+    const updated: Map<string, string> = new Map(this.thumbSource)
+    updated.set(item.id, source)
+    this.thumbSource = updated
+  }
+
   getThumbData(id: string): PixelMap|undefined {
     if (this.thumbImage.has(id)) {
       return this.thumbImage.get(id)
     }
     return undefined
+  }
+
+  getThumbSourceData(id: string): string {
+    return this.thumbSource.get(id) ?? ''
   }
 
   isSortTypeReverse(type: SortType): boolean {
@@ -367,12 +432,42 @@ export struct TabFiles {
     CloudRouter.setHomeBackHandler(() => {
       return this.onBackPressedCallback()
     })
-    this.getFileList(true, '/')
+    if (!this.initialFileListRequested) {
+      this.initialFileListRequested = true
+      this.getFileList(true, '/')
+    }
   }
 
   private loadCurrentUser(): void {
     this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
     this.currentUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
+    this.thumbSource = FileThumbSourceCache.snapshot(this.getThumbScopeKey())
+  }
+
+  private getThumbScopeKey(): string {
+    return `${this.currentUrl}|${this.currentUser}|`
+  }
+
+  private getThumbCacheKey(item: ObjectInfo): string {
+    return `${this.getThumbScopeKey()}${item.id}`
+  }
+
+  private resetThumbQueue(): void {
+    if (this.thumbQueueTimer >= 0) {
+      clearTimeout(this.thumbQueueTimer)
+      this.thumbQueueTimer = -1
+    }
+    this.thumbQueue = []
+    this.thumbLoadingIds.clear()
+    this.thumbFailedIds.clear()
+    this.activeThumbLoads = 0
+  }
+
+  private cancelScheduledShareRefresh(): void {
+    if (this.shareRefreshTimer >= 0) {
+      clearTimeout(this.shareRefreshTimer)
+      this.shareRefreshTimer = -1
+    }
   }
 
   private enterMultiSelectMode(): void {
@@ -575,6 +670,9 @@ export struct TabFiles {
   }
 
   private refreshShareLinks(): void {
+    if (!this.isActive && !this.showShareSheet) {
+      return
+    }
     CloudApi.listShareLinks<ShareLinkInfo[]>({
       onSuccess: (data: ShareLinkInfo[]) => {
         const links = data ? data.filter((link: ShareLinkInfo) => link.expired !== true) : []
@@ -596,36 +694,106 @@ export struct TabFiles {
     })
   }
 
+  private scheduleShareLinksRefresh(): void {
+    if (!this.isActive && !this.showShareSheet) {
+      return
+    }
+    this.cancelScheduledShareRefresh()
+    this.shareRefreshTimer = setTimeout(() => {
+      this.shareRefreshTimer = -1
+      this.refreshShareLinks()
+    }, this.showShareSheet ? 0 : FILE_SHARE_REFRESH_DELAY_MS)
+  }
+
   async getThumbFile(index: number, item: ObjectInfo) {
-    if (item.thumb && !this.getThumbData(item.id)) {
-      CloudApi.getThumb(item.id, {
-        onSuccess: async (url: string) => {
-          const req = http.createHttp();
-          try {
-            const resp = await req.request(url, {
-              method: http.RequestMethod.GET,
-              expectDataType: http.HttpDataType.ARRAY_BUFFER,
-            });
-            if (resp.responseCode === Constant.HTTP_STATUS_OK) {
-              const imageSource = image.createImageSource(resp.result as ArrayBuffer);
-              const pixMap = await imageSource.createPixelMap();
-              imageSource.release();
-              this.setThumbData(item.id, pixMap);
-            }
-          } catch (err) {
-            console.error(TAG, `Get thumb failed: ${(err as Error)?.message ?? err}`)
-          } finally {
-            req.destroy();
+    if (!this.isActive) {
+      return
+    }
+    if (!item.thumb || this.getThumbData(item.id) || this.getThumbSourceData(item.id).length > 0) {
+      return
+    }
+    const cachedSource = FileThumbSourceCache.get(this.getThumbCacheKey(item))
+    if (cachedSource.length > 0) {
+      this.setThumbSourceData(item, cachedSource)
+      return
+    }
+    if (this.thumbLoadingIds.has(item.id) || this.thumbFailedIds.has(item.id)) {
+      return
+    }
+    if (this.thumbQueue.find((queued: ObjectInfo) => queued.id === item.id)) {
+      return
+    }
+    this.thumbQueue.push(item)
+    this.scheduleThumbQueue()
+  }
+
+  private scheduleThumbQueue(): void {
+    if (!this.isActive) {
+      return
+    }
+    if (this.thumbQueueTimer >= 0) {
+      return
+    }
+    this.thumbQueueTimer = setTimeout(() => {
+      this.thumbQueueTimer = -1
+      this.processThumbQueue()
+    }, FILE_THUMB_QUEUE_DELAY_MS)
+  }
+
+  private processThumbQueue(): void {
+    if (!this.isActive) {
+      return
+    }
+    while (this.activeThumbLoads < FILE_THUMB_MAX_CONCURRENT && this.thumbQueue.length > 0) {
+      const item = this.thumbQueue.shift()
+      if (!item) {
+        continue
+      }
+      if (this.getThumbSourceData(item.id).length > 0 || this.thumbLoadingIds.has(item.id)) {
+        continue
+      }
+      this.activeThumbLoads++
+      this.thumbLoadingIds.add(item.id)
+      this.loadThumbSource(item)
+        .then((source: string) => {
+          if (source.length > 0) {
+            this.setThumbSourceData(item, source)
           }
-        },
-        onFailure: (msg) => {
-          console.error(TAG, `Get thumb failed: ${msg}`)
-        }
-      })
+          this.finishThumbLoad(item)
+        }, (err: Error) => {
+          this.thumbFailedIds.add(item.id)
+          console.error(TAG, `Get thumb failed: ${err.message}`)
+          this.finishThumbLoad(item)
+        })
     }
   }
 
+  private finishThumbLoad(item: ObjectInfo): void {
+    this.thumbLoadingIds.delete(item.id)
+    this.activeThumbLoads = Math.max(0, this.activeThumbLoads - 1)
+    if (this.isActive) {
+      this.processThumbQueue()
+    }
+  }
+
+  private loadThumbSource(item: ObjectInfo): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      CloudApi.getThumb(item.id, {
+        onSuccess: (url: string) => {
+          resolve(url)
+        },
+        onFailure: (msg: string) => {
+          reject(new Error(msg))
+        }
+      })
+    })
+  }
+
   async getFileList(isRefresh: boolean, path: string) {
+    if (this.loadingFilePath === path) {
+      return
+    }
+    this.loadingFilePath = path
     const isSamePath = path === this.currentPath
     if (!isSamePath) {
       this.exitMultiSelectMode()
@@ -646,12 +814,15 @@ export struct TabFiles {
         if (isRefresh && !shouldKeepContent) {
           this.dirDataSource.clear()
           this.fileDataSource.clear()
-          this.thumbImage.clear()
+          this.thumbImage = new Map()
+          this.thumbSource = FileThumbSourceCache.snapshot(this.getThumbScopeKey())
+          this.resetThumbQueue()
           this.resetHeaderScrollState()
           this.scrollerForList.scrollEdge(Edge.Start)
         }
       },
       onSuccess: (data: DirectoryInfo) => {
+        this.loadingFilePath = ''
         if (!shouldKeepContent) {
           this.searchKeyword = ''
         }
@@ -662,9 +833,10 @@ export struct TabFiles {
         this.isRefreshing = false
         this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = FilePageState.IDLE
-        this.refreshShareLinks()
+        this.scheduleShareLinksRefresh()
       },
       onFailure: (msg) => {
+        this.loadingFilePath = ''
         showToastTips($r('app.string.get_failed'), ToastType.Error)
         //决定是否重新登录
         this.isRefreshing = false
@@ -869,6 +1041,7 @@ export struct TabFiles {
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
+        .textAlign(TextAlign.Center)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -900,20 +1073,6 @@ export struct TabFiles {
           .layoutWeight(1)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Button({ type: ButtonType.Normal }) {
-          Text('取消')
-            .fontSize(CloudThemeToken.textSizeSmallPlus)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-        }
-        .height(CloudThemeToken.rowHeightSm)
-        .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
-        .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          this.exitMultiSelectMode()
-        })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)

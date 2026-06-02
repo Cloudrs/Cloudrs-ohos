@@ -45,6 +45,8 @@ export default class EntryAbility extends UIAbility {
 
     // 初始化用户加密首选项
     UserPreferences.init(this.context, Constant.USER_PREFERENCES)
+    AppLockUtil.setMainWindow(windowClass)
+    AppLockUtil.resetSession()
     AvatarUtil.init(this.context)
     const themeMode = this.applySavedThemeMode()
     if (windowClass) {
@@ -53,6 +55,7 @@ export default class EntryAbility extends UIAbility {
 
     // 初始化用户信息数据库
     await UserDatabase.init(this.context)
+    this.prepareActiveAvatarCache()
 
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
@@ -65,11 +68,13 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     // Main window is destroyed, release UI related resources
+    AppLockUtil.setMainWindow(undefined)
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
   }
 
   onForeground(): void {
     // Ability has brought to foreground
+    AppLockUtil.syncLockPresentation();
     const tick = AppStorage.get<number>(Constant.APP_FOREGROUND_TICK) ?? 0;
     AppStorage.setOrCreate(Constant.APP_FOREGROUND_TICK, tick + 1);
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onForeground');
@@ -79,6 +84,24 @@ export default class EntryAbility extends UIAbility {
     // Ability has back to background
     AppLockUtil.resetSession();
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
+  }
+
+  private prepareActiveAvatarCache(): void {
+    const activeUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
+    if (!activeUser || activeUser.length === 0) {
+      return
+    }
+    const activeUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
+    const dbUserInfo = UserDatabase.getUserInfo(activeUser, activeUrl)
+    if (!dbUserInfo) {
+      return
+    }
+    try {
+      AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
+    } catch (err) {
+      hilog.warn(0x0000, 'testTag', 'Prepare active avatar cache failed. Cause: %{public}s',
+        (err as Error)?.message ?? '');
+    }
   }
 
   private async applyImmersiveSystemBars(windowClass: window.Window, themeMode: string): Promise<void> {

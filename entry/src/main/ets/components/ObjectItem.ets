@@ -46,21 +46,26 @@ export struct ObjectItem {
   @Prop index: number
   @Prop item: ObjectInfo
   @Consume thumbImage: Map<string, PixelMap>
+  @Consume thumbSource: Map<string, string>
   onMenuClick?: (item: ObjectInfo, type: FileMenuType) => void
   @Prop showType: ShowType
   @Prop multiSelectMode: boolean = false
   @Prop selected: boolean = false
   @Prop shared: boolean = false
 
-  aboutToAppear(): void {
-    console.debug(TAG, 'aboutToAppear')
-  }
-
   getThumbData(id: string): PixelMap|undefined {
     if (this.thumbImage.has(id)) {
       return this.thumbImage.get(id)
     }
     return undefined
+  }
+
+  getThumbSource(id: string): string {
+    return this.thumbSource.get(id) ?? ''
+  }
+
+  hasThumb(id: string): boolean {
+    return this.getThumbSource(id).length > 0 || this.getThumbData(id) !== undefined
   }
 
   getItemIcon(name: string, isDir: boolean) {
@@ -168,7 +173,13 @@ export struct ObjectItem {
   @Builder fileIconItem(item: ObjectInfo) {
     Column({ space: CloudThemeToken.objectGridGap }) {
       Stack({ alignContent: Alignment.Center }) {
-        if (this.getThumbData(item.id)) {
+        if (this.getThumbSource(item.id).length > 0) {
+          Image(this.getThumbSource(item.id))
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Cover)
+            .draggable(false)
+        } else if (this.getThumbData(item.id)) {
           Image(this.getThumbData(item.id))
             .width('100%')
             .height('100%')
@@ -192,7 +203,7 @@ export struct ObjectItem {
           .height(CloudThemeToken.objectGridFileIconSize)
         }
 
-        if (this.shared && this.getThumbData(item.id)) {
+        if (this.shared && this.hasThumb(item.id)) {
           Column() {
             this.sharedBadge()
           }
@@ -206,7 +217,7 @@ export struct ObjectItem {
       .width('100%')
       .layoutWeight(1)
       .borderRadius({ topLeft: CloudThemeToken.cardRadius, topRight: CloudThemeToken.cardRadius })
-      .backgroundColor(this.getThumbData(item.id) ? CloudThemeToken.surfaceSubtle :
+      .backgroundColor(this.hasThumb(item.id) ? CloudThemeToken.surfaceSubtle :
         CommonUtil.getFileIconInfo(item.name).backgroundColor)
 
       Column({ space: CloudThemeToken.objectMetaGap }) {

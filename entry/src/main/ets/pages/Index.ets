@@ -12,12 +12,13 @@ import { AboutPage } from './AboutPage';
 @Entry
 @Component
 struct Index {
-  @State pathStack: NavPathStack = new NavPathStack();
-  @State rootPage: string = Constant.LOGIN_PAGE;
+  private pathStack: NavPathStack = new NavPathStack();
+  @State rootPage: string = '';
   @State rootLoginParam: LoginParam = new LoginParam(false, Constant.HOME_PAGE);
   @State overlayPage: string = '';
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
+  private startPageScheduled: boolean = false;
 
   aboutToAppear(): void {
     CloudRouter.init(
@@ -37,8 +38,13 @@ struct Index {
         this.overlayPage = pageUrl;
       }
     );
-    if (this.pathStack.size() === 0) {
-      CloudRouter.showStartPage();
+    if (!this.startPageScheduled) {
+      this.startPageScheduled = true;
+      setTimeout(() => {
+        if (this.pathStack.size() === 0) {
+          CloudRouter.showStartPage();
+        }
+      }, 0);
     }
   }
 
@@ -81,8 +87,13 @@ struct Index {
   @Builder rootBuilder() {
     if (this.rootPage === Constant.LOGIN_PAGE) {
       LoginPage({ routeParam: this.rootLoginParam })
-    } else {
+    } else if (this.rootPage === Constant.HOME_PAGE) {
       HomePage()
+    } else {
+      Stack()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.background)
     }
   }
 

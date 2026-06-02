@@ -183,6 +183,8 @@ class Constant {
 
   APP_FOREGROUND_TICK: string = 'appForegroundTick';
 
+  APP_LOCKED: string = 'appLocked';
+
   SYSTEM_BAR_TRANSPARENT_COLOR: string = '#00000000';
 
   SYSTEM_BAR_DARK_CONTENT_COLOR: string = '#FF182030';

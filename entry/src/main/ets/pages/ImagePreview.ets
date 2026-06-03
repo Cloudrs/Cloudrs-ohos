@@ -11,6 +11,7 @@ import { common } from "@kit.AbilityKit";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
+import { CloudIconButton } from "../components/CloudIconButton";
 
 const TAG: string = 'ImagePreview'
 
@@ -156,18 +157,16 @@ export struct ImagePreviewPage {
   @Builder previewHeader() {
     Column() {
       Row() {
-        Button() {
-          Image($r('app.media.ic_xmark_circle_fill'))
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-            .padding(CloudThemeToken.imagePreviewHeaderButtonPadding)
-        }
-        .width(CloudThemeToken.smallIconButtonSize)
-        .height(CloudThemeToken.smallIconButtonSize)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surface)
-        .onClick(() => {
-          CloudRouter.pop()
+        CloudIconButton({
+          icon: $r('app.media.ic_xmark_circle_fill'),
+          buttonSize: CloudThemeToken.smallIconButtonSize,
+          iconSize: CloudThemeToken.smallIconButtonSize,
+          iconPadding: CloudThemeToken.imagePreviewHeaderButtonPadding,
+          buttonBackground: CloudThemeToken.surface,
+          iconColor: CloudThemeToken.textSecondary,
+          onAction: () => {
+            CloudRouter.pop()
+          }
         })
 
         Text(this.getHeaderTitle())
@@ -180,20 +179,18 @@ export struct ImagePreviewPage {
           .textOverflow({ overflow: TextOverflow.MARQUEE })
           .layoutWeight(1)
 
-        Button() {
-          Image($r('app.media.ic_share'))
-            .draggable(false)
-            .fillColor(CloudThemeToken.textPrimary)
-            .padding(CloudThemeToken.imagePreviewHeaderButtonPadding)
-        }
-        .margin({ top: CloudThemeToken.imagePreviewShareTopMargin })
-        .width(CloudThemeToken.smallIconButtonSize)
-        .height(CloudThemeToken.smallIconButtonSize)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surface)
-        .onClick(() => {
-          this.shareImage()
+        CloudIconButton({
+          icon: $r('app.media.ic_share'),
+          buttonSize: CloudThemeToken.smallIconButtonSize,
+          iconSize: CloudThemeToken.smallIconButtonSize,
+          iconPadding: CloudThemeToken.imagePreviewHeaderButtonPadding,
+          buttonBackground: CloudThemeToken.surface,
+          iconColor: CloudThemeToken.textPrimary,
+          onAction: () => {
+            this.shareImage()
+          }
         })
+        .margin({ top: CloudThemeToken.imagePreviewShareTopMargin })
       }
       .alignItems(VerticalAlign.Center)
       .width('100%')

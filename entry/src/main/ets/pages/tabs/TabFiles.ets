@@ -32,6 +32,7 @@ import { CloudRouter } from "../../utils/CloudRouter";
 import UserPreferences from "../../model/UserPreferences";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
+import { CloudIconButton } from "../../components/CloudIconButton";
 
 const TAG = 'TabFiles';
 const FILE_THUMB_MAX_CONCURRENT: number = 2
@@ -1316,19 +1317,15 @@ export struct TabFiles {
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
 
-        Button({ type: ButtonType.Normal }) {
-          Image($r('app.media.ic_xmark'))
-            .width(CloudThemeToken.iconMd)
-            .height(CloudThemeToken.iconMd)
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.iconBoxSm)
-        .height(CloudThemeToken.iconBoxSm)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          this.closeInputSheet()
+        CloudIconButton({
+          icon: $r('app.media.ic_xmark'),
+          buttonSize: CloudThemeToken.iconBoxSm,
+          iconSize: CloudThemeToken.iconMd,
+          buttonBackground: CloudThemeToken.surfaceSubtle,
+          iconColor: CloudThemeToken.textSecondary,
+          onAction: () => {
+            this.closeInputSheet()
+          }
         })
       }
       .width('100%')
@@ -1466,19 +1463,15 @@ export struct TabFiles {
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
 
-      Button({ type: ButtonType.Normal }) {
-        Image($r('app.media.ic_xmark'))
-          .width(CloudThemeToken.iconMd)
-          .height(CloudThemeToken.iconMd)
-          .fillColor(CloudThemeToken.textSecondary)
-          .draggable(false)
-      }
-      .width(CloudThemeToken.iconBoxSm)
-      .height(CloudThemeToken.iconBoxSm)
-      .borderRadius(CloudThemeToken.controlRadius)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-      .onClick(() => {
-        this.closeShareSheet()
+      CloudIconButton({
+        icon: $r('app.media.ic_xmark'),
+        buttonSize: CloudThemeToken.iconBoxSm,
+        iconSize: CloudThemeToken.iconMd,
+        buttonBackground: CloudThemeToken.surfaceSubtle,
+        iconColor: CloudThemeToken.textSecondary,
+        onAction: () => {
+          this.closeShareSheet()
+        }
       })
     }
     .width('100%')
@@ -1815,20 +1808,18 @@ export struct TabFiles {
         Row() {
           Blank()
             .layoutWeight(1)
-          Button() {
-            Image($r('app.media.ic_xmark'))
-              .width(CloudThemeToken.iconLg)
-              .height(CloudThemeToken.iconLg)
-              .fillColor(CloudThemeToken.textSecondary)
-          }
-            .width(CloudThemeToken.iconBoxMd)
-            .height(CloudThemeToken.iconBoxMd)
-            .borderRadius(CloudThemeToken.controlRadiusRoundLg)
-            .backgroundColor(CloudThemeToken.surfaceSubtle)
-            .onClick(() => {
+          CloudIconButton({
+            icon: $r('app.media.ic_xmark'),
+            buttonSize: CloudThemeToken.iconBoxMd,
+            iconSize: CloudThemeToken.iconLg,
+            buttonRadius: CloudThemeToken.controlRadiusRoundLg,
+            buttonBackground: CloudThemeToken.surfaceSubtle,
+            iconColor: CloudThemeToken.textSecondary,
+            onAction: () => {
               this.showObjectDetail = false
               this.overLap = true
-            })
+            }
+          })
         }
         .height(CloudThemeToken.rowHeight2xl)
         .width('100%')

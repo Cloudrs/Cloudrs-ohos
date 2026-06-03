@@ -19,6 +19,7 @@ import { showToast } from '../../utils/ToastUtil';
 import { CloudThemeToken } from '../../model/CloudTheme';
 import { EmptyState } from '../../components/EmptyState';
 import { CloudTopBar } from '../../components/CloudTopBar';
+import { CloudIconButton } from '../../components/CloudIconButton';
 import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
 import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
@@ -2357,19 +2358,16 @@ export struct TabPictures {
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
-        Button({ type: ButtonType.Normal }) {
-          Image($r('app.media.ic_xmark'))
-            .width(CloudThemeToken.iconLg)
-            .height(CloudThemeToken.iconLg)
-            .fillColor(CloudThemeToken.textSecondary)
-        }
-          .width(CloudThemeToken.smallIconButtonSize)
-          .height(CloudThemeToken.smallIconButtonSize)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .onClick(() => {
+        CloudIconButton({
+          icon: $r('app.media.ic_xmark'),
+          buttonSize: CloudThemeToken.smallIconButtonSize,
+          iconSize: CloudThemeToken.iconLg,
+          buttonBackground: CloudThemeToken.surfaceSubtle,
+          iconColor: CloudThemeToken.textSecondary,
+          onAction: () => {
             this.showSettings = false;
-          })
+          }
+        })
       }
       .width('100%')
 

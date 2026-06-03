@@ -13,6 +13,7 @@ import { AvatarUtil } from '../utils/AvatarUtil';
 import { UserSwitchSheet } from '../components/UserSwitchSheet';
 import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { CloudIconButton } from '../components/CloudIconButton';
 
 @Extend(Row)
 function rowCommonStyle() {
@@ -199,20 +200,19 @@ export struct LoginPage {
     Column({ space: CloudThemeToken.loginPageGap }) {
       Column() {
         Row() {
-          Button() {
-            Image($r('app.media.ic_arrow_left_circle'))
-              .fillColor(CloudThemeToken.textSecondary)
-          }
-          .width(CloudThemeToken.smallIconButtonSize)
-          .height(CloudThemeToken.smallIconButtonSize)
-          .backgroundColor(CloudThemeToken.surface)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .onClick(() => {
-            if (this.needs2FA) {
-              this.needs2FA = false
-            } else {
-              this.loginTitle = $r('app.string.website_title')
-              this.websiteInvalid = false
+          CloudIconButton({
+            icon: $r('app.media.ic_arrow_left_circle'),
+            buttonSize: CloudThemeToken.smallIconButtonSize,
+            iconSize: CloudThemeToken.smallIconButtonSize,
+            buttonBackground: CloudThemeToken.surface,
+            iconColor: CloudThemeToken.textSecondary,
+            onAction: () => {
+              if (this.needs2FA) {
+                this.needs2FA = false
+              } else {
+                this.loginTitle = $r('app.string.website_title')
+                this.websiteInvalid = false
+              }
             }
           })
         }
@@ -997,34 +997,31 @@ export struct LoginPage {
       TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginInputDisappearDuration })))
   }
 
-  @Styles scanAndUsersCommon() {
-    .height(CloudThemeToken.smallIconButtonSize)
-    .width(CloudThemeToken.smallIconButtonSize)
-    .borderRadius(CloudThemeToken.controlRadius)
-    .backgroundColor(CloudThemeToken.surface)
-  }
-
   @Builder buttonScanAndUsers() {
     Row({ space: CloudThemeToken.loginFooterButtonGap }) {
-      Button() {
-        Image($r("app.media.ic_line_viewfinder"))
-          .padding(CloudThemeToken.loginFooterIconPadding)
-          .fillColor(CloudThemeToken.primary)
-      }
-      .scanAndUsersCommon()
-      .onClick(() => {
-        this.startScanLogin()
+      CloudIconButton({
+        icon: $r("app.media.ic_line_viewfinder"),
+        buttonSize: CloudThemeToken.smallIconButtonSize,
+        iconSize: CloudThemeToken.smallIconButtonSize,
+        iconPadding: CloudThemeToken.loginFooterIconPadding,
+        buttonBackground: CloudThemeToken.surface,
+        iconColor: CloudThemeToken.primary,
+        onAction: () => {
+          this.startScanLogin()
+        }
       })
 
-      Button() {
-        Image($r("app.media.ic_person_2"))
-          .padding(CloudThemeToken.loginFooterIconPadding)
-          .fillColor(CloudThemeToken.textSecondary)
-      }
-      .scanAndUsersCommon()
-      .onClick(() => {
-        this.refreshActiveUser()
-        this.showUserSwitchSheet = true
+      CloudIconButton({
+        icon: $r("app.media.ic_person_2"),
+        buttonSize: CloudThemeToken.smallIconButtonSize,
+        iconSize: CloudThemeToken.smallIconButtonSize,
+        iconPadding: CloudThemeToken.loginFooterIconPadding,
+        buttonBackground: CloudThemeToken.surface,
+        iconColor: CloudThemeToken.textSecondary,
+        onAction: () => {
+          this.refreshActiveUser()
+          this.showUserSwitchSheet = true
+        }
       })
     }
   }

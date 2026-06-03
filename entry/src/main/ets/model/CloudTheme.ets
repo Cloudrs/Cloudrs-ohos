@@ -136,6 +136,9 @@ export class CloudThemeToken {
   static readonly wideBreakpoint: number = 920
   static readonly smallIconButtonSize: number = 36
   static readonly iconButtonSize: number = 40
+  static readonly hdsIconButtonLightHeight: number = 12
+  static readonly hdsIconButtonLightIntensity: number = 0.32
+  static readonly hdsIconButtonLightBloom: number = 0.24
   static readonly actionIconSize: number = 22
   static readonly compactIconSize: number = 20
   static readonly titleBarHeight: number = 50

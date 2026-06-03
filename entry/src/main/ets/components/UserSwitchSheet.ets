@@ -5,6 +5,7 @@ import UserPreferences from "../model/UserPreferences";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { showCloudConfirmDialog } from "../utils/CloudDialogUtil";
 import { AccountAvatar } from "./AccountAvatar";
+import { CloudIconButton } from "./CloudIconButton";
 
 @Component
 export struct UserSwitchSheet {
@@ -54,19 +55,15 @@ export struct UserSwitchSheet {
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
 
-        Button({ type: ButtonType.Normal }) {
-          Image($r('app.media.ic_xmark_circle_fill'))
-            .width(CloudThemeToken.icon2xl)
-            .height(CloudThemeToken.icon2xl)
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.iconBoxSm)
-        .height(CloudThemeToken.iconBoxSm)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          this.onClose?.()
+        CloudIconButton({
+          icon: $r('app.media.ic_xmark_circle_fill'),
+          buttonSize: CloudThemeToken.iconBoxSm,
+          iconSize: CloudThemeToken.icon2xl,
+          buttonBackground: CloudThemeToken.surfaceSubtle,
+          iconColor: CloudThemeToken.textSecondary,
+          onAction: () => {
+            this.onClose?.()
+          }
         })
       }
       .width('100%')
@@ -167,19 +164,14 @@ export struct UserSwitchSheet {
           .draggable(false)
       }
 
-      Button({ type: ButtonType.Normal }) {
-        Image($r('app.media.ic_delete_fill'))
-          .width(CloudThemeToken.iconLg)
-          .height(CloudThemeToken.iconLg)
-          .fillColor(CloudThemeToken.danger)
-          .draggable(false)
-      }
-      .width(CloudThemeToken.iconButtonSize)
-      .height(CloudThemeToken.iconButtonSize)
-      .borderRadius(CloudThemeToken.controlRadius)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-      .onClick(() => {
-        this.deleteUser(user)
+      CloudIconButton({
+        icon: $r('app.media.ic_delete_fill'),
+        iconSize: CloudThemeToken.iconLg,
+        buttonBackground: CloudThemeToken.surfaceSubtle,
+        iconColor: CloudThemeToken.danger,
+        onAction: () => {
+          this.deleteUser(user)
+        }
       })
     }
     .width('100%')

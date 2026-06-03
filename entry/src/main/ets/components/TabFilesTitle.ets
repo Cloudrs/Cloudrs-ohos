@@ -2,6 +2,7 @@ import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import Constant from "../model/Constant";
 import { MoreMenuType, ShowType, SortType } from "../model/MenuModel";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudIconButton } from "./CloudIconButton";
 
 PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
 PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_NAME)
@@ -74,46 +75,34 @@ export struct TabFilesTitle {
         .justifyContent(FlexAlign.SpaceBetween)
 
         Row({ space: CloudThemeToken.filesTitleActionGap }) {
-          Button({ type: ButtonType.Normal }) {
-            Image($r('app.media.ic_folder_badge_plus'))
-              .width(CloudThemeToken.filesTitleActionIconSize)
-              .height(CloudThemeToken.filesTitleActionIconSize)
-              .fillColor(CloudThemeToken.textPrimary)
-          }
-          .width(CloudThemeToken.iconButtonSize)
-          .height(CloudThemeToken.iconButtonSize)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .onClick(() => {
-            if (this.onMoreClick) {
-              this.onMoreClick(MoreMenuType.NEW_DIR)
+          CloudIconButton({
+            icon: $r('app.media.ic_folder_badge_plus'),
+            iconSize: CloudThemeToken.filesTitleActionIconSize,
+            buttonBackground: CloudThemeToken.surfaceSubtle,
+            iconColor: CloudThemeToken.textPrimary,
+            onAction: () => {
+              if (this.onMoreClick) {
+                this.onMoreClick(MoreMenuType.NEW_DIR)
+              }
             }
           })
 
-          Button({ type: ButtonType.Normal }) {
-            Image(this.showType === ShowType.SHOW_ICON ? $r('app.media.ic_list_bullet_circle') : $r('app.media.ic_grid'))
-              .width(CloudThemeToken.filesTitleActionIconSize)
-              .height(CloudThemeToken.filesTitleActionIconSize)
-              .fillColor(CloudThemeToken.textPrimary)
-          }
-          .width(CloudThemeToken.iconButtonSize)
-          .height(CloudThemeToken.iconButtonSize)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .onClick(() => {
-            this.toggleShowType()
+          CloudIconButton({
+            icon: this.showType === ShowType.SHOW_ICON ? $r('app.media.ic_list_bullet_circle') : $r('app.media.ic_grid'),
+            iconSize: CloudThemeToken.filesTitleActionIconSize,
+            buttonBackground: CloudThemeToken.surfaceSubtle,
+            iconColor: CloudThemeToken.textPrimary,
+            onAction: () => {
+              this.toggleShowType()
+            }
           })
 
-          Button({ type: ButtonType.Normal }) {
-            Image($r('app.media.ic_square_more'))
-              .width(CloudThemeToken.filesTitleActionIconSize)
-              .height(CloudThemeToken.filesTitleActionIconSize)
-              .fillColor(this.showMenu ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
-          }
-          .width(CloudThemeToken.iconButtonSize)
-          .height(CloudThemeToken.iconButtonSize)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          CloudIconButton({
+            icon: $r('app.media.ic_square_more'),
+            iconSize: CloudThemeToken.filesTitleActionIconSize,
+            buttonBackground: CloudThemeToken.surfaceSubtle,
+            iconColor: this.showMenu ? CloudThemeToken.primary : CloudThemeToken.textPrimary
+          })
           .bindMenu(this.moreMenu(), {onAppear: () => {
             this.showMenu = true
           }, onDisappear: () => {

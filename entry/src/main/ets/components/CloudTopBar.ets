@@ -1,4 +1,5 @@
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudIconButton } from './CloudIconButton';
 
 @Component
 export struct CloudTopBar {
@@ -43,18 +44,13 @@ export struct CloudTopBar {
   }
 
   @Builder iconButton(icon: ResourceStr, onClick: () => void) {
-    Button() {
-      Image(icon)
-        .width(CloudThemeToken.actionIconSize)
-        .height(CloudThemeToken.actionIconSize)
-        .fillColor(CloudThemeToken.textPrimary)
-        .draggable(false)
-    }
-    .width(CloudThemeToken.iconButtonSize)
-    .height(CloudThemeToken.iconButtonSize)
-    .borderRadius(CloudThemeToken.controlRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    CloudIconButton({
+      icon: icon,
+      iconSize: CloudThemeToken.actionIconSize,
+      buttonBackground: CloudThemeToken.surface,
+      iconColor: CloudThemeToken.textPrimary,
+      onAction: onClick
+    })
     .margin({ left: CloudThemeToken.topBarActionGap })
-    .onClick(onClick)
   }
 }

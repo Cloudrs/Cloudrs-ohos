@@ -4,6 +4,7 @@ import { CloudThemeToken } from "../model/CloudTheme";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
+import { CloudIconButton } from "./CloudIconButton";
 
 const TAG: string = 'PathSelectSheet'
 
@@ -172,18 +173,16 @@ export struct PathSelectSheet {
       .justifyContent(FlexAlign.Center)
 
       Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
-        Button() {
-          Image($r('app.media.ic_xmark_circle_fill'))
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.smallIconButtonSize)
-        .height(CloudThemeToken.smallIconButtonSize)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          if (this.onClose) {
-            this.onClose(false)
+        CloudIconButton({
+          icon: $r('app.media.ic_xmark_circle_fill'),
+          buttonSize: CloudThemeToken.smallIconButtonSize,
+          iconSize: CloudThemeToken.icon2xl,
+          buttonBackground: CloudThemeToken.surfaceSubtle,
+          iconColor: CloudThemeToken.textSecondary,
+          onAction: () => {
+            if (this.onClose) {
+              this.onClose(false)
+            }
           }
         })
 

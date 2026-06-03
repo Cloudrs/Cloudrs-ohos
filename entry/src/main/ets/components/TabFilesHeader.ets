@@ -5,6 +5,7 @@ import { Downloads } from "./Downloads";
 import { Uploads } from "./Uploads";
 import { CloudThemeToken } from "../model/CloudTheme";
 import Constant from "../model/Constant";
+import { CloudIconButton } from "./CloudIconButton";
 
 @Component
 export struct TabFilesHeader {
@@ -34,18 +35,16 @@ export struct TabFilesHeader {
       Row() {
         Row({ space: CloudThemeToken.filesHeaderGap }) {
           if (!this.isRoot) {
-            Button() {
-              Image($r('app.media.ic_back'))
-                .padding(CloudThemeToken.filesHeaderBackIconPadding)
-                .fillColor(CloudThemeToken.textPrimary)
-            }
-            .width(CloudThemeToken.iconButtonSize)
-            .height(CloudThemeToken.iconButtonSize)
-            .borderRadius(CloudThemeToken.controlRadius)
-            .backgroundColor(CloudThemeToken.surface)
-            .onClick(() => {
-              if (this.onBackClick) {
-                this.onBackClick()
+            CloudIconButton({
+              icon: $r('app.media.ic_back'),
+              iconSize: CloudThemeToken.iconButtonSize,
+              iconPadding: CloudThemeToken.filesHeaderBackIconPadding,
+              buttonBackground: CloudThemeToken.surface,
+              iconColor: CloudThemeToken.textPrimary,
+              onAction: () => {
+                if (this.onBackClick) {
+                  this.onBackClick()
+                }
               }
             })
             .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration })
@@ -66,25 +65,18 @@ export struct TabFilesHeader {
         .width('50%')
 
         Row({ space: CloudThemeToken.filesHeaderGap }) {
-          Button() {
-            Badge({
-              count: this.downloadingCount+this.uploadingCount,
-              style: { badgeSize: CloudThemeToken.filesHeaderBadgeSize },
-              position: BadgePosition.RightTop
-            }) {
-              Image($r('app.media.ic_transport'))
-                .padding(CloudThemeToken.filesHeaderIconPadding)
-                .fillColor(CloudThemeToken.textPrimary)
-            }
-          }
-          .width(CloudThemeToken.iconButtonSize)
-          .height(CloudThemeToken.iconButtonSize)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .onClick(() => {
-            this.showTransport = true
-            if (this.onTransportClick) {
-              this.onTransportClick()
+          CloudIconButton({
+            icon: $r('app.media.ic_transport'),
+            iconSize: CloudThemeToken.iconButtonSize,
+            iconPadding: CloudThemeToken.filesHeaderIconPadding,
+            buttonBackground: CloudThemeToken.surfaceSubtle,
+            iconColor: CloudThemeToken.textPrimary,
+            badgeCount: this.downloadingCount + this.uploadingCount,
+            onAction: () => {
+              this.showTransport = true
+              if (this.onTransportClick) {
+                this.onTransportClick()
+              }
             }
           })
           .bindSheet($$this.showTransport, this.transportBuilder(), {
@@ -95,18 +87,16 @@ export struct TabFilesHeader {
             }
           })
 
-          Button() {
-            Image($r('app.media.ic_person'))
-              .padding(CloudThemeToken.filesHeaderIconPadding)
-              .fillColor(CloudThemeToken.textPrimary)
-          }
-          .width(CloudThemeToken.iconButtonSize)
-          .height(CloudThemeToken.iconButtonSize)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .backgroundColor(CloudThemeToken.surface)
-          .onClick(() => {
-            if (this.onPersonClick) {
-              this.onPersonClick()
+          CloudIconButton({
+            icon: $r('app.media.ic_person'),
+            iconSize: CloudThemeToken.iconButtonSize,
+            iconPadding: CloudThemeToken.filesHeaderIconPadding,
+            buttonBackground: CloudThemeToken.surface,
+            iconColor: CloudThemeToken.textPrimary,
+            onAction: () => {
+              if (this.onPersonClick) {
+                this.onPersonClick()
+              }
             }
           })
         }

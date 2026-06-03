@@ -334,9 +334,16 @@ export class CloudThemeToken {
   static readonly imagePreviewSaveBottomLift: number = 24
   static readonly imagePreviewHeaderButtonPadding: number = 5
   static readonly imagePreviewTitleSize: number = 16
-  static readonly imagePreviewShareTopMargin: number = 4
   static readonly imagePreviewHeaderPadding: number = 10
   static readonly imagePreviewDividerWidth: number = 1
+  static readonly imagePreviewCounterTextSize: number = 13
+  static readonly imagePreviewCounterHeight: number = 28
+  static readonly imagePreviewCounterAreaHeight: number = 36
+  static readonly videoPreviewControlBorderWidth: number = 1
+  static readonly videoPreviewControlSize: number = 42
+  static readonly videoPreviewControlIconSize: number = 18
+  static readonly videoPreviewCloseIconSize: number = 18
+  static readonly videoPreviewControlsPanelRadius: number = 20
   static readonly loginPageGap: number = 10
   static readonly loginPageVerticalPadding: number = 20
   static readonly loginBackRowHeight: number = 30
@@ -406,6 +413,8 @@ export class CloudThemeToken {
   static readonly surfaceTranslucent: ResourceColor = $r('app.color.cloud_surface_translucent')
   static readonly surfaceGlassStrong: ResourceColor = $r('app.color.cloud_surface_glass_strong')
   static readonly headerGlass: ResourceColor = $r('app.color.cloud_header_glass')
+  static readonly previewCloseButtonBackground: ResourceColor = $r('app.color.cloud_preview_close_background')
+  static readonly previewCloseIcon: ResourceColor = $r('app.color.cloud_preview_close_icon')
   static readonly line: ResourceColor = $r('app.color.cloud_line')
   static readonly primary: ResourceColor = $r('app.color.cloud_primary')
   static readonly primarySoft: ResourceColor = $r('app.color.cloud_primary_soft')
@@ -431,6 +440,10 @@ export class CloudThemeToken {
   static readonly floatingShadow: ResourceColor = '#260A59F7'
   static readonly selectedGlow: ResourceColor = '#33115DFC'
   static readonly selectedHighlight: ResourceColor = '#66FFFFFF'
+  static readonly imagePreviewCounterBackground: ResourceColor = 'rgba(255, 255, 255, 0.14)'
+  static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
+  static readonly videoPreviewControlBorder: ResourceColor = 'rgba(255, 255, 255, 0.18)'
+  static readonly videoPreviewControlsBackground: ResourceColor = 'rgba(0, 0, 0, 0.54)'
   static readonly refreshShadow: ResourceColor = 'rgba(24, 36, 56, 0.12)'
   static readonly overlayScrim: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'

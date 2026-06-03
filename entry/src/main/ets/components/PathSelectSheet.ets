@@ -174,9 +174,9 @@ export struct PathSelectSheet {
 
       Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
         CloudIconButton({
-          icon: $r('app.media.ic_xmark_circle_fill'),
+          icon: $r('app.media.ic_xmark_bold'),
           buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.icon2xl,
+          iconSize: CloudThemeToken.sheetActionIconSize,
           buttonBackground: CloudThemeToken.surfaceSubtle,
           iconColor: CloudThemeToken.textSecondary,
           onAction: () => {

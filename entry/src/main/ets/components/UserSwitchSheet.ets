@@ -56,9 +56,9 @@ export struct UserSwitchSheet {
           .layoutWeight(1)
 
         CloudIconButton({
-          icon: $r('app.media.ic_xmark_circle_fill'),
+          icon: $r('app.media.ic_xmark_bold'),
           buttonSize: CloudThemeToken.iconBoxSm,
-          iconSize: CloudThemeToken.icon2xl,
+          iconSize: CloudThemeToken.sheetActionIconSize,
           buttonBackground: CloudThemeToken.surfaceSubtle,
           iconColor: CloudThemeToken.textSecondary,
           onAction: () => {

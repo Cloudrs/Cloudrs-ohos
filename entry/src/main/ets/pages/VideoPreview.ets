@@ -136,12 +136,11 @@ export struct VideoPreviewPage {
     Column() {
       Row() {
         CloudIconButton({
-          icon: $r('app.media.ic_xmark_circle_fill'),
+          icon: $r('app.media.ic_xmark_bold'),
           buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.smallIconButtonSize,
-          iconPadding: CloudThemeToken.imagePreviewHeaderButtonPadding,
-          buttonBackground: CloudThemeToken.surface,
-          iconColor: CloudThemeToken.textSecondary,
+          iconSize: CloudThemeToken.sheetActionIconSize,
+          buttonBackground: CloudThemeToken.previewCloseButtonBackground,
+          iconColor: CloudThemeToken.previewCloseIcon,
           onAction: () => {
             CloudRouter.pop()
           }
@@ -204,7 +203,7 @@ export struct VideoPreviewPage {
   }
 
   @Builder videoControls() {
-    Column({ space: CloudThemeToken.spacingSm }) {
+    Column({ space: CloudThemeToken.spacingXs }) {
       Slider({
         value: this.currentTime,
         min: CloudThemeToken.zero,
@@ -213,7 +212,7 @@ export struct VideoPreviewPage {
         style: SliderStyle.OutSet
       })
         .width('100%')
-        .height(CloudThemeToken.rowHeightMd)
+        .height(CloudThemeToken.rowHeightSm)
         .selectedColor(CloudThemeToken.primary)
         .trackColor('rgba(255, 255, 255, 0.28)')
         .blockColor(CloudThemeToken.onPrimary)
@@ -226,12 +225,13 @@ export struct VideoPreviewPage {
           this.onSeek(value, mode)
         })
 
-      Row({ space: CloudThemeToken.spacingSection }) {
+      Row({ space: CloudThemeToken.spacingCard }) {
         this.playbackButton()
 
         Text(`${this.formatTime(this.currentTime)} / ${this.formatTime(this.duration)}`)
-          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontSize(CloudThemeToken.textSizeBody)
           .fontColor(CloudThemeToken.onPrimary)
+          .textAlign(TextAlign.Start)
           .layoutWeight(1)
 
         this.fullscreenButton()
@@ -241,62 +241,119 @@ export struct VideoPreviewPage {
     }
     .width('100%')
     .padding({
+      left: CloudThemeToken.spacingSection,
+      right: CloudThemeToken.spacingSection,
+      top: CloudThemeToken.spacingXl,
+      bottom: CloudThemeToken.spacingSection
+    })
+    .margin({
       left: CloudThemeToken.spacingPage,
       right: CloudThemeToken.spacingPage,
-      top: CloudThemeToken.spacingCard,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSection
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingPage
     })
-    .backgroundColor('rgba(0, 0, 0, 0.62)')
+    .borderRadius(CloudThemeToken.videoPreviewControlsPanelRadius)
+    .backgroundColor(CloudThemeToken.videoPreviewControlsBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
   }
 
   @Builder fullscreenCloseButton() {
     Stack({ alignContent: Alignment.TopStart }) {
-      CloudIconButton({
-        icon: $r('app.media.ic_xmark_circle_fill'),
-        buttonSize: CloudThemeToken.iconBoxXl,
-        iconSize: CloudThemeToken.iconBoxXl,
-        iconPadding: CloudThemeToken.imagePreviewHeaderButtonPadding,
-        buttonRadius: CloudThemeToken.controlRadiusRoundXl,
-        buttonBackground: 'rgba(0, 0, 0, 0.42)',
-        iconColor: CloudThemeToken.onPrimary,
-        onAction: () => {
+      Stack() {
+        this.videoControlButton($r('app.media.ic_xmark_bold'), CloudThemeToken.videoPreviewCloseIconSize, () => {
           CloudRouter.pop()
-        }
-      })
-      .margin({
-        left: CloudThemeToken.spacingPage,
-        top: CloudThemeToken.getSafeTopInset(this.sysTopRectHeight) + CloudThemeToken.spacingCard
-      })
+        })
+      }
+        .margin({
+          left: CloudThemeToken.spacingPage,
+          top: CloudThemeToken.getSafeTopInset(this.sysTopRectHeight) + CloudThemeToken.spacingCard
+        })
     }
     .width('100%')
     .height('100%')
   }
 
   @Builder playbackButton() {
-    CloudIconButton({
-      icon: this.isPlaying ? $r('app.media.ic_pause_fill') : $r('app.media.ic_play_fill'),
-      buttonSize: CloudThemeToken.iconBoxXl,
-      iconSize: CloudThemeToken.iconXl,
-      buttonRadius: CloudThemeToken.controlRadiusRoundXl,
-      buttonBackground: 'rgba(255, 255, 255, 0.16)',
-      iconColor: CloudThemeToken.onPrimary,
-      onAction: () => {
-        this.togglePlayback()
+    Stack() {
+      if (this.isPlaying) {
+        Image($r('app.media.ic_pause_fill'))
+          .width(CloudThemeToken.videoPreviewControlIconSize)
+          .height(CloudThemeToken.videoPreviewControlIconSize)
+          .fillColor(CloudThemeToken.onPrimary)
+          .draggable(false)
+      } else {
+        Image($r('app.media.ic_play_fill'))
+          .width(CloudThemeToken.videoPreviewControlIconSize)
+          .height(CloudThemeToken.videoPreviewControlIconSize)
+          .fillColor(CloudThemeToken.onPrimary)
+          .draggable(false)
       }
+    }
+    .width(CloudThemeToken.videoPreviewControlSize)
+    .height(CloudThemeToken.videoPreviewControlSize)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .border({
+      width: CloudThemeToken.videoPreviewControlBorderWidth,
+      color: CloudThemeToken.videoPreviewControlBorder
+    })
+    .clip(true)
+    .onClick(() => {
+      this.togglePlayback()
+    })
+  }
+
+  @Builder videoControlButton(icon: ResourceStr, iconSize: number, onAction: () => void) {
+    Stack() {
+      Image(icon)
+        .width(iconSize)
+        .height(iconSize)
+        .fillColor(CloudThemeToken.onPrimary)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.videoPreviewControlSize)
+    .height(CloudThemeToken.videoPreviewControlSize)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .border({
+      width: CloudThemeToken.videoPreviewControlBorderWidth,
+      color: CloudThemeToken.videoPreviewControlBorder
+    })
+    .clip(true)
+    .onClick(() => {
+      onAction()
     })
   }
 
   @Builder fullscreenButton() {
-    CloudIconButton({
-      icon: this.isFullscreen ? $r('app.media.ic_fullscreen_exit') : $r('app.media.ic_fullscreen'),
-      buttonSize: CloudThemeToken.iconBoxXl,
-      iconSize: CloudThemeToken.iconXl,
-      buttonRadius: CloudThemeToken.controlRadiusRoundXl,
-      buttonBackground: 'rgba(255, 255, 255, 0.16)',
-      iconColor: CloudThemeToken.onPrimary,
-      onAction: () => {
-        this.toggleFullscreen()
+    Stack() {
+      if (this.isFullscreen) {
+        Image($r('app.media.ic_fullscreen_exit'))
+          .width(CloudThemeToken.videoPreviewControlIconSize)
+          .height(CloudThemeToken.videoPreviewControlIconSize)
+          .fillColor(CloudThemeToken.onPrimary)
+          .draggable(false)
+      } else {
+        Image($r('app.media.ic_fullscreen'))
+          .width(CloudThemeToken.videoPreviewControlIconSize)
+          .height(CloudThemeToken.videoPreviewControlIconSize)
+          .fillColor(CloudThemeToken.onPrimary)
+          .draggable(false)
       }
+    }
+    .width(CloudThemeToken.videoPreviewControlSize)
+    .height(CloudThemeToken.videoPreviewControlSize)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .border({
+      width: CloudThemeToken.videoPreviewControlBorderWidth,
+      color: CloudThemeToken.videoPreviewControlBorder
+    })
+    .clip(true)
+    .onClick(() => {
+      this.toggleFullscreen()
     })
   }
 

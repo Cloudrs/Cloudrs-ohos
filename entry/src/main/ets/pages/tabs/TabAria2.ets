@@ -255,6 +255,8 @@ export struct TabRemoteDown {
       Aria2FinishedDetail({
         detailData: item, onDeleteClick: () => {
           this.deleteTaskConfirm(index, item)
+        }, onClose: () => {
+          this.closeTaskDetailSheet()
         }
       })
     }
@@ -574,6 +576,7 @@ export struct TabRemoteDown {
       })
       .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
         detents: [SheetSize.FIT_CONTENT],
+        showClose: false,
         backgroundColor: CloudThemeToken.background,
         onDisappear: () => {
           this.showTaskDetailSheet = false

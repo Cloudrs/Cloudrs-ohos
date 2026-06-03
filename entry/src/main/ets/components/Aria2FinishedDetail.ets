@@ -3,6 +3,7 @@ import { CloudLayoutMode, CloudThemeToken } from "../model/CloudTheme"
 import { Aria2Files, Aria2Finished, Aria2Status, TaskError } from "../model/net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
 import { DateFormatUtil } from "../utils/DateFormatUtil"
+import { CloudIconButton } from "./CloudIconButton"
 
 @Component
 export struct Aria2FinishedDetail {
@@ -10,6 +11,7 @@ export struct Aria2FinishedDetail {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State detailGridWidth: number = 0
   onDeleteClick?: () => void
+  onClose?: () => void
 
   getTaskName(): string {
     if (!this.detailData.name || this.detailData.name.trim().length === 0 || this.detailData.name === '.') {
@@ -63,12 +65,29 @@ export struct Aria2FinishedDetail {
 
   build() {
     Column({ space: CloudThemeToken.aria2DetailGap }){
-      Text(this.getTaskName())
-        .fontSize(CloudThemeToken.aria2DetailTitleSize)
-        .wordBreak(WordBreak.BREAK_ALL)
-        .fontWeight(FontWeight.Bolder)
-        .fontColor(CloudThemeToken.textPrimary)
-        .padding({ right: CloudThemeToken.aria2DetailTitleRightPadding })
+      Row({ space: CloudThemeToken.spacingCard }) {
+        Text(this.getTaskName())
+          .fontSize(CloudThemeToken.aria2DetailTitleSize)
+          .wordBreak(WordBreak.BREAK_ALL)
+          .fontWeight(FontWeight.Bolder)
+          .fontColor(CloudThemeToken.textPrimary)
+          .layoutWeight(1)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        CloudIconButton({
+          icon: $r('app.media.ic_xmark_bold'),
+          buttonSize: CloudThemeToken.iconBoxSm,
+          iconSize: CloudThemeToken.sheetActionIconSize,
+          buttonBackground: CloudThemeToken.surfaceSubtle,
+          iconColor: CloudThemeToken.textSecondary,
+          onAction: () => {
+            this.onClose?.()
+          }
+        })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
 
       Row({ space: CloudThemeToken.aria2DetailStatusGap }) {
         Image($r('app.media.ic_bell_fill'))

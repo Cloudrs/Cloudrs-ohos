@@ -1318,7 +1318,7 @@ export struct TabFiles {
           .layoutWeight(1)
 
         CloudIconButton({
-          icon: $r('app.media.ic_xmark'),
+          icon: $r('app.media.ic_xmark_bold'),
           buttonSize: CloudThemeToken.iconBoxSm,
           iconSize: CloudThemeToken.iconMd,
           buttonBackground: CloudThemeToken.surfaceSubtle,
@@ -1464,7 +1464,7 @@ export struct TabFiles {
         .layoutWeight(1)
 
       CloudIconButton({
-        icon: $r('app.media.ic_xmark'),
+        icon: $r('app.media.ic_xmark_bold'),
         buttonSize: CloudThemeToken.iconBoxSm,
         iconSize: CloudThemeToken.iconMd,
         buttonBackground: CloudThemeToken.surfaceSubtle,
@@ -1809,7 +1809,7 @@ export struct TabFiles {
           Blank()
             .layoutWeight(1)
           CloudIconButton({
-            icon: $r('app.media.ic_xmark'),
+            icon: $r('app.media.ic_xmark_bold'),
             buttonSize: CloudThemeToken.iconBoxMd,
             iconSize: CloudThemeToken.iconLg,
             buttonRadius: CloudThemeToken.controlRadiusRoundLg,

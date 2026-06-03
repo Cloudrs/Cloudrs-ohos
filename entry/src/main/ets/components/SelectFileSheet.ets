@@ -29,7 +29,7 @@ export struct SelectFileSheet {
           .layoutWeight(1)
 
         CloudIconButton({
-          icon: $r('app.media.ic_xmark'),
+          icon: $r('app.media.ic_xmark_bold'),
           buttonSize: CloudThemeToken.smallIconButtonSize,
           iconSize: CloudThemeToken.sheetActionIconSize,
           buttonBackground: CloudThemeToken.surfaceSubtle,

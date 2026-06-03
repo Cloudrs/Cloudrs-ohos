@@ -2359,7 +2359,7 @@ export struct TabPictures {
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
         CloudIconButton({
-          icon: $r('app.media.ic_xmark'),
+          icon: $r('app.media.ic_xmark_bold'),
           buttonSize: CloudThemeToken.smallIconButtonSize,
           iconSize: CloudThemeToken.iconLg,
           buttonBackground: CloudThemeToken.surfaceSubtle,

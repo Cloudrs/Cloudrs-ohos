@@ -239,6 +239,14 @@
     {
       "name": "cloud_success_soft",
       "value": "#EAF8EF"
+    },
+    {
+      "name": "cloud_preview_close_background",
+      "value": "#EEF3F8"
+    },
+    {
+      "name": "cloud_preview_close_icon",
+      "value": "#6B7280"
     }
   ]
 }

@@ -91,6 +91,14 @@
     {
       "name": "tab_bar_default",
       "value": "#A7B1C2"
+    },
+    {
+      "name": "cloud_preview_close_background",
+      "value": "#33FFFFFF"
+    },
+    {
+      "name": "cloud_preview_close_icon",
+      "value": "#F3F7FB"
     }
   ]
 }

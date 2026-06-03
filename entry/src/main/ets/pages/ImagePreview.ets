@@ -134,6 +134,8 @@ export struct ImagePreviewPage {
       .backgroundColor(CloudThemeToken.previewBackground)
       .layoutWeight(1)
 
+      this.previewCounter()
+
       Column() {
         SaveButton(this.saveButtonOptions)
           .onClick(() => {
@@ -158,12 +160,11 @@ export struct ImagePreviewPage {
     Column() {
       Row() {
         CloudIconButton({
-          icon: $r('app.media.ic_xmark_circle_fill'),
+          icon: $r('app.media.ic_xmark_bold'),
           buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.smallIconButtonSize,
-          iconPadding: CloudThemeToken.imagePreviewHeaderButtonPadding,
-          buttonBackground: CloudThemeToken.surface,
-          iconColor: CloudThemeToken.textSecondary,
+          iconSize: CloudThemeToken.sheetActionIconSize,
+          buttonBackground: CloudThemeToken.previewCloseButtonBackground,
+          iconColor: CloudThemeToken.previewCloseIcon,
           onAction: () => {
             CloudRouter.pop()
           }
@@ -190,7 +191,6 @@ export struct ImagePreviewPage {
             this.shareImage()
           }
         })
-        .margin({ top: CloudThemeToken.imagePreviewShareTopMargin })
       }
       .alignItems(VerticalAlign.Center)
       .width('100%')
@@ -203,6 +203,29 @@ export struct ImagePreviewPage {
     .justifyContent(FlexAlign.Center)
     .height(CloudThemeToken.titleBarHeight)
     .width('100%')
+  }
+
+  @Builder previewCounter() {
+    if (this.previewFiles.length > 1) {
+      Row() {
+        Text(this.getPreviewCounterText())
+          .fontSize(CloudThemeToken.imagePreviewCounterTextSize)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.onPrimary)
+          .height(CloudThemeToken.imagePreviewCounterHeight)
+          .padding({
+            left: CloudThemeToken.spacingPanel,
+            right: CloudThemeToken.spacingPanel
+          })
+          .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+          .backgroundColor(CloudThemeToken.imagePreviewCounterBackground)
+      }
+      .width('100%')
+      .height(CloudThemeToken.imagePreviewCounterAreaHeight)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .backgroundColor(CloudThemeToken.previewBackground)
+    }
   }
 
   @Builder previewItem(item: PreviewFile, index: number) {
@@ -326,10 +349,11 @@ export struct ImagePreviewPage {
     if (!previewItem) {
       return ''
     }
-    if (this.previewFiles.length <= 1) {
-      return previewItem.fileName
-    }
-    return `${previewItem.fileName}  ${this.currentIndex + 1}/${this.previewFiles.length}`
+    return previewItem.fileName
+  }
+
+  private getPreviewCounterText(): string {
+    return `${this.currentIndex + 1}/${this.previewFiles.length}`
   }
 
   private prefetchAround(index: number): void {

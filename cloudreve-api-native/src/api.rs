@@ -23,7 +23,7 @@ use cloudreve_api::{
     },
     cloudreve_api::{SiteConfigValue, FileList},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
@@ -80,6 +80,41 @@ struct ApiObjectDetail {
     child_file_num: i64,
     path: String,
     query_date: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct V4ObjectFolderSummary {
+    #[serde(default)]
+    size: i64,
+    #[serde(default)]
+    files: i64,
+    #[serde(default)]
+    folders: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct V4ObjectStoragePolicy {
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct V4ObjectExtendedInfo {
+    #[serde(default)]
+    storage_policy: Option<V4ObjectStoragePolicy>,
+}
+
+#[derive(Debug, Deserialize)]
+struct V4ObjectDetailResponse {
+    created_at: String,
+    updated_at: String,
+    #[serde(default)]
+    size: i64,
+    path: String,
+    #[serde(default)]
+    folder_summary: Option<V4ObjectFolderSummary>,
+    #[serde(default)]
+    extended_info: Option<V4ObjectExtendedInfo>,
 }
 
 // Decode percent-encoded URI path and strip the cloudreve URI prefix.
@@ -878,20 +913,40 @@ pub async fn get_object_detail(id: String, is_folder: bool) -> napi::Result<Stri
         let file = run_api_with_v4_refresh(|api| {
             let id = id.clone();
             async move {
-                api.inner()
+                let uri = encode_query_component(&v4_path_to_uri(&id));
+                let endpoint = if is_folder {
+                    format!("/file/info?uri={}&extended=true&folder_summary=true", uri)
+                } else {
+                    format!("/file/info?uri={}&extended=true", uri)
+                };
+                let response: V4ApiResponse<V4ObjectDetailResponse> = api.inner()
                     .as_v4()
                     .expect("v4 client")
-                    .get_file_info(&id)
-                    .await
+                    .get(&endpoint)
+                    .await?;
+                let response_debug = format!("{:?}", response);
+                response.data.ok_or_else(|| {
+                    ApiError::InvalidResponse(format!(
+                        "API returned no data for get_object_detail request: {}",
+                        response_debug
+                    ))
+                })
             }
         }).await?;
+        let folder_summary = file.folder_summary.as_ref();
+        let policy = file
+            .extended_info
+            .as_ref()
+            .and_then(|info| info.storage_policy.as_ref())
+            .map(|policy| policy.name.clone())
+            .unwrap_or_default();
         let detail = ApiObjectDetail {
             created_at: file.created_at.clone(),
             updated_at: file.updated_at.clone(),
-            policy: String::new(),
-            size: file.size,
-            child_folder_num: 0,
-            child_file_num: 0,
+            policy,
+            size: folder_summary.map(|summary| summary.size).unwrap_or(file.size),
+            child_folder_num: folder_summary.map(|summary| summary.folders).unwrap_or(0),
+            child_file_num: folder_summary.map(|summary| summary.files).unwrap_or(0),
             path: v4_uri_to_unix(&file.path),
             query_date: file.updated_at.clone(),
         };

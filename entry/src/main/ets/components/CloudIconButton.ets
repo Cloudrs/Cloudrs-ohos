@@ -43,7 +43,7 @@ export struct CloudIconButton {
       .pressShadow(hdsEffect.PressShadowType.BLEND_GRADIENT)
       .pointLight({
         sourceType: hdsEffect.PointLightSourceType.SOFT,
-        illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER,
+        illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT,
         options: {
           color: CloudThemeToken.onPrimary,
           intensity: CloudThemeToken.hdsIconButtonLightIntensity,
@@ -56,7 +56,7 @@ export struct CloudIconButton {
 
   build() {
     if (this.onAction) {
-      Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Button({ type: ButtonType.Normal }) {
         this.defaultContent()
       }
       .width(this.buttonSize)
@@ -72,7 +72,7 @@ export struct CloudIconButton {
         }
       })
     } else {
-      Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Button({ type: ButtonType.Normal }) {
         this.defaultContent()
       }
       .width(this.buttonSize)

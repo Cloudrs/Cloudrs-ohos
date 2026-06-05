@@ -201,6 +201,10 @@
       "value": "#CCFFFFFF"
     },
     {
+      "name": "cloud_search_field_background",
+      "value": "#FFFFFFFF"
+    },
+    {
       "name": "cloud_header_glass",
       "value": "#66FFFFFF"
     },

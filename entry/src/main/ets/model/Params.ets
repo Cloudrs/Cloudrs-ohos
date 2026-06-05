@@ -1,4 +1,5 @@
 
+import { ObjectInfo } from "./net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
 
 export class PreviewFile {
@@ -38,5 +39,15 @@ export class VideoPreview {
     this.fileName = fileName
     this.fileId = fileId
     this.fileExtension = fileExtension
+  }
+}
+
+export class FileSearchParam {
+  currentPath: string = '/'
+  objects: ObjectInfo[] = []
+
+  constructor(currentPath?: string, objects?: ObjectInfo[]) {
+    this.currentPath = currentPath ?? '/'
+    this.objects = objects ?? []
   }
 }

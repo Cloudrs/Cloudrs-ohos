@@ -140,8 +140,9 @@ export struct HomePage {
       .barFloatingStyle({
         barBottomMargin: this.overLap ? this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin :
         CloudThemeToken.hiddenTabBarBottomMargin,
+        lightColor: CloudThemeToken.hdsTabBarLightColor,
         systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
         }
       })

@@ -129,6 +129,8 @@ class Constant {
 
   VIDEO_PREVIEW_PAGE = 'VideoPreviewPage'
 
+  FILE_SEARCH_PAGE = 'FileSearchPage'
+
   ABOUT_PAGE = 'AboutPage'
 
   ACCESS_INTERCEPTOR = 'AccessInterceptor'

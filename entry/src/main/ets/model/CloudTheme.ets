@@ -126,6 +126,7 @@ export class CloudThemeToken {
   static readonly tabBarRadius: number = 32
   static readonly hdsTabBarBottomMargin: number = 22
   static readonly hdsTabBarBlurStyle: BlurStyle = BlurStyle.BACKGROUND_THIN
+  static readonly hdsTabBarLightColor: ResourceColor = '#66FFFFFF'
   static readonly hiddenTabBarBottomMargin: number = -120
   static readonly bottomTabBarItemPadding: number = 2
   static readonly twoColumnBreakpoint: number = 520
@@ -136,9 +137,9 @@ export class CloudThemeToken {
   static readonly wideBreakpoint: number = 920
   static readonly smallIconButtonSize: number = 36
   static readonly iconButtonSize: number = 40
-  static readonly hdsIconButtonLightHeight: number = 12
-  static readonly hdsIconButtonLightIntensity: number = 0.32
-  static readonly hdsIconButtonLightBloom: number = 0.24
+  static readonly hdsIconButtonLightHeight: number = 18
+  static readonly hdsIconButtonLightIntensity: number = 0.42
+  static readonly hdsIconButtonLightBloom: number = 0.36
   static readonly actionIconSize: number = 22
   static readonly compactIconSize: number = 20
   static readonly titleBarHeight: number = 50
@@ -276,6 +277,7 @@ export class CloudThemeToken {
   static readonly filesHeaderBadgeSize: number = 12
   static readonly filesHeaderGlassThreshold: number = 8
   static readonly filesHeaderGlassBlurStyle: BlurStyle = BlurStyle.BACKGROUND_THIN
+  static readonly filesHeaderGlassMaxOpacity: number = 0.28
   static readonly filesHeaderCollapsedContentLift: number = 10
   static readonly filesHeaderZIndex: number = 5
   static readonly filesHeaderTransitionDuration: number = 200
@@ -289,8 +291,9 @@ export class CloudThemeToken {
   static readonly filesTitleActionGap: number = 8
   static readonly filesTitleActionIconSize: number = 18
   static readonly filesTitleHorizontalPadding: number = 20
+  static readonly filesTitleBarContentOffsetY: number = 2
   static readonly filesTitleHeight: number = 56
-  static readonly filesGridTopGap: number = 24
+  static readonly filesGridTopGap: number = 4
   static readonly filesSortIconGroupGap: number = 10
   static readonly filesSortIconGroupWidthPercent: string = '50%'
   static readonly aria2CreateGap: number = 15
@@ -339,6 +342,7 @@ export class CloudThemeToken {
   static readonly imagePreviewCounterTextSize: number = 13
   static readonly imagePreviewCounterHeight: number = 28
   static readonly imagePreviewCounterAreaHeight: number = 36
+  static readonly previewTitleBarBackground: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly videoPreviewControlBorderWidth: number = 1
   static readonly videoPreviewControlSize: number = 42
   static readonly videoPreviewControlIconSize: number = 18
@@ -412,6 +416,7 @@ export class CloudThemeToken {
   static readonly surfaceSubtle: ResourceColor = $r('app.color.cloud_surface_subtle')
   static readonly surfaceTranslucent: ResourceColor = $r('app.color.cloud_surface_translucent')
   static readonly surfaceGlassStrong: ResourceColor = $r('app.color.cloud_surface_glass_strong')
+  static readonly searchFieldBackground: ResourceColor = $r('app.color.cloud_search_field_background')
   static readonly headerGlass: ResourceColor = $r('app.color.cloud_header_glass')
   static readonly previewCloseButtonBackground: ResourceColor = $r('app.color.cloud_preview_close_background')
   static readonly previewCloseIcon: ResourceColor = $r('app.color.cloud_preview_close_icon')

@@ -8,10 +8,10 @@ import { showToast } from "../utils/ToastUtil";
 import { systemShare } from "@kit.ShareKit";
 import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
+import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
-import { CloudIconButton } from "../components/CloudIconButton";
 
 const TAG: string = 'ImagePreview'
 
@@ -110,10 +110,7 @@ export struct ImagePreviewPage {
   }
 
   build() {
-    Column(){
-      Blank().height(CloudThemeToken.getSafeTopInset(this.sysTopRectHeight))
-      this.previewHeader()
-
+    HdsNavigation() {
       Swiper() {
         ForEach(this.previewFiles, (item: PreviewFile, index: number) => {
           this.previewItem(item, index)
@@ -153,56 +150,63 @@ export struct ImagePreviewPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(CloudThemeToken.background)
-  }
-
-  @Builder previewHeader() {
-    Column() {
-      Row() {
-        CloudIconButton({
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(false)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: this.getHeaderTitle()
+        },
+        backIcon: {
           icon: $r('app.media.ic_xmark_bold'),
-          buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.sheetActionIconSize,
-          buttonBackground: CloudThemeToken.previewCloseButtonBackground,
-          iconColor: CloudThemeToken.previewCloseIcon,
-          onAction: () => {
+          action: () => {
             CloudRouter.pop()
           }
-        })
-
-        Text(this.getHeaderTitle())
-          .fontSize(CloudThemeToken.imagePreviewTitleSize)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-          .textAlign(TextAlign.Center)
-          .wordBreak(WordBreak.BREAK_ALL)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.MARQUEE })
-          .layoutWeight(1)
-
-        CloudIconButton({
-          icon: $r('app.media.ic_share'),
-          buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.smallIconButtonSize,
-          iconPadding: CloudThemeToken.imagePreviewHeaderButtonPadding,
-          buttonBackground: CloudThemeToken.surface,
-          iconColor: CloudThemeToken.textPrimary,
-          onAction: () => {
-            this.shareImage()
+        },
+        menu: {
+          value: [{
+            content: {
+              icon: $r('app.media.ic_share'),
+              action: () => {
+                this.shareImage()
+              }
+            }
+          }]
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: false
+        },
+        originalStyle: {
+          backgroundStyle: {
+            backgroundColor: CloudThemeToken.previewTitleBarBackground
+          },
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.onPrimary
+            },
+            backIconStyle: {
+              backgroundColor: CloudThemeToken.videoPreviewControlBackground,
+              iconColor: CloudThemeToken.onPrimary
+            },
+            menuStyle: {
+              backgroundColor: CloudThemeToken.videoPreviewControlBackground,
+              iconColor: CloudThemeToken.onPrimary
+            }
           }
-        })
-      }
-      .alignItems(VerticalAlign.Center)
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .layoutWeight(1)
-      .padding(CloudThemeToken.imagePreviewHeaderPadding)
-      Divider().strokeWidth(CloudThemeToken.imagePreviewDividerWidth).color(CloudThemeToken.line)
-    }
-    .justifyContent(FlexAlign.Center)
-    .height(CloudThemeToken.titleBarHeight)
-    .width('100%')
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
+    })
+    .backgroundColor(CloudThemeToken.previewBackground)
   }
 
   @Builder previewCounter() {

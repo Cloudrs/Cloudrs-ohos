@@ -1,6 +1,6 @@
 import Constant from '../model/Constant';
 import { LoginParam } from '../model/net/LoginParam';
-import { ImagePreview, VideoPreview } from '../model/Params';
+import { FileSearchParam, ImagePreview, VideoPreview } from '../model/Params';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudRouter } from '../utils/CloudRouter';
 import { HomePage } from './HomePage';
@@ -8,6 +8,7 @@ import { LoginPage } from './LoginPage';
 import { ImagePreviewPage } from './ImagePreview';
 import { VideoPreviewPage } from './VideoPreview';
 import { AboutPage } from './AboutPage';
+import { FileSearchPage } from './FileSearchPage';
 
 @Entry
 @Component
@@ -18,6 +19,7 @@ struct Index {
   @State overlayPage: string = '';
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
+  @State fileSearchParam: FileSearchParam = new FileSearchParam();
   private startPageScheduled: boolean = false;
 
   aboutToAppear(): void {
@@ -34,6 +36,8 @@ struct Index {
           this.imagePreviewParam = param as ImagePreview;
         } else if (pageUrl === Constant.VIDEO_PREVIEW_PAGE) {
           this.videoPreviewParam = param as VideoPreview;
+        } else if (pageUrl === Constant.FILE_SEARCH_PAGE) {
+          this.fileSearchParam = param as FileSearchParam;
         }
         this.overlayPage = pageUrl;
       }
@@ -104,6 +108,15 @@ struct Index {
     } else if (this.overlayPage === Constant.VIDEO_PREVIEW_PAGE) {
       VideoPreviewPage({ routeParam: this.videoPreviewParam })
         .zIndex(CloudThemeToken.overlayZIndex)
+    } else if (this.overlayPage === Constant.FILE_SEARCH_PAGE) {
+      FileSearchPage({ routeParam: this.fileSearchParam })
+        .width('100%')
+        .height('100%')
+        .transition(TransitionEffect.OPACITY
+          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
+            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.ABOUT_PAGE) {
       AboutPage()
         .width('100%')
@@ -156,6 +169,19 @@ struct Index {
       .width('100%')
       .height('100%')
       .backgroundColor(CloudThemeToken.background)
+    } else if (name === Constant.FILE_SEARCH_PAGE) {
+      NavDestination() {
+        Stack() {
+          FileSearchPage({ routeParam: param as FileSearchParam })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.surface)
+      }
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.surface)
     } else {
       NavDestination() {
         Stack() {

@@ -3,12 +3,10 @@ import {
 } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
-import { TabFilesTitle } from "../../components/TabFilesTitle";
 import { CloudApi } from "../../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { ObjectItem } from "../../components/ObjectItem";
-import { TabFilesHeader } from "../../components/TabFilesHeader";
-import { ImagePreview, PreviewFile, VideoPreview } from "../../model/Params";
+import { FileSearchParam, ImagePreview, PreviewFile, VideoPreview } from "../../model/Params";
 import { FileMenuType, MoreMenuType, ShowType, SortType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
@@ -33,11 +31,24 @@ import UserPreferences from "../../model/UserPreferences";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { CloudIconButton } from "../../components/CloudIconButton";
+import {
+  DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
+} from "@kit.UIDesignKit";
+import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { Downloads } from "../../components/Downloads";
+import { Uploads } from "../../components/Uploads";
 
 const TAG = 'TabFiles';
 const FILE_THUMB_MAX_CONCURRENT: number = 2
 const FILE_THUMB_QUEUE_DELAY_MS: number = 500
 const FILE_SHARE_REFRESH_DELAY_MS: number = 650
+
+PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
+PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_NAME)
+PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE_RESERVE, new Map<SortType, boolean>([
+  [SortType.SORT_BY_NAME, false], [SortType.SORT_BY_TYPE, false],
+  [SortType.SORT_BY_TIME, false], [SortType.SORT_BY_SIZE, false],
+]))
 
 class FileThumbSourceCache {
   static data: Map<string, string> = new Map<string, string>()
@@ -114,9 +125,9 @@ export struct TabFiles {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
-  @StorageProp(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
-  @StorageProp(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
-  @StorageProp(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
+  @StorageLink(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
+  @StorageLink(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
+  @StorageLink(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
   @State policy: Policy|null = null
   @State isRoot: boolean = true
   @State mainTitle: string|Resource = $r('app.string.files_main_title')
@@ -164,6 +175,14 @@ export struct TabFiles {
   @State sharePassword: string = ''
   @State shareExpireDays: number = ShareExpireDays.SEVEN_DAYS
   @State shareBusy: boolean = false
+  @State showTransportSheet: boolean = false
+  @State showFileMoreMenu: boolean = false
+  @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
+    buttons: [{ text: $r('app.string.task_download') }, { text: $r('app.string.task_upload') }] as SegmentButtonItemTuple,
+    multiply: false,
+    backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
+  })
+  @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex]
   private lastHeaderScrollOffset: number = 0
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
@@ -227,6 +246,134 @@ export struct TabFiles {
       return this.sortTypeReverse.get(type)!
     }
     return false
+  }
+
+  private getTransportCount(): number {
+    return this.downloadingCount + this.uploadingCount
+  }
+
+  private getSearchMenuItem(): HdsNavigationMenuItemOptions {
+    return {
+      content: {
+        icon: $r('app.media.ic_search'),
+        label: '搜索',
+        action: () => {
+          this.openFileSearchPage()
+        }
+      }
+    }
+  }
+
+  private getFileTitleMenu(): HdsNavigationMenuItemOptions[] {
+    return [
+      this.getSearchMenuItem(),
+      this.getTransportMenuItem(),
+      this.getUserMenuItem(),
+      this.getMoreMenuItem()
+    ]
+  }
+
+  private getUserMenuItem(): HdsNavigationMenuItemOptions {
+    return {
+      content: {
+        icon: $r('app.media.ic_person'),
+        label: '用户',
+        action: () => {
+          this.loadCurrentUser()
+          this.showFileMoreMenu = false
+          this.showUserSwitchSheet = true
+        }
+      }
+    }
+  }
+
+  private getMoreMenuItem(): HdsNavigationMenuItemOptions {
+    return {
+      content: {
+        icon: $r('app.media.ic_dot_grid'),
+        label: '更多',
+        action: () => {
+          this.showFileMoreMenu = !this.showFileMoreMenu
+        }
+      }
+    }
+  }
+
+  private getTransportMenuItem(): HdsNavigationMenuItemOptions {
+    let item: HdsNavigationMenuItemOptions = {
+      content: {
+        icon: $r('app.media.ic_transport'),
+        label: '传输',
+        action: () => {
+          this.showTransportSheet = true
+        }
+      }
+    }
+    if (this.getTransportCount() > 0) {
+      item.badge = {
+        count: this.getTransportCount()
+      }
+    }
+    return item
+  }
+
+  private getMultiSelectTitleMenu(): HdsNavigationMenuItemOptions[] {
+    return [{
+      content: {
+        icon: $r('app.media.ic_selected'),
+        label: '全选',
+        action: () => {
+          this.selectAllVisibleObjects()
+        }
+      }
+    }]
+  }
+
+  private openFileSearchPage(): void {
+    const objects = this.objectsInfo.dirObjects.concat(this.objectsInfo.fileObjects)
+    CloudRouter.push(Constant.FILE_SEARCH_PAGE, new FileSearchParam(this.currentPath, objects))
+  }
+
+  private getSortIcon(type: SortType): Resource {
+    if (this.sortType !== type) {
+      return $r('app.media.ic_sort_arrow_up')
+    }
+    return this.isSortTypeReverse(type) ? $r('app.media.ic_sort_arrow_down') : $r('app.media.ic_sort_arrow_up')
+  }
+
+  private toggleFileShowType(): void {
+    this.showType = this.showType === ShowType.SHOW_ICON ? ShowType.SHOW_LIST : ShowType.SHOW_ICON
+    this.isGridPadding = this.getFolderPaddingCount() > 0
+    this.dirDataSource.notifyDataReload()
+    this.fileDataSource.notifyDataReload()
+  }
+
+  private changeShowType(type: ShowType): void {
+    if (this.showType === type) {
+      return
+    }
+    this.showType = type
+    this.isGridPadding = this.getFolderPaddingCount() > 0
+    this.dirDataSource.notifyDataReload()
+    this.fileDataSource.notifyDataReload()
+  }
+
+  private closeFileMoreMenu(): void {
+    this.showFileMoreMenu = false
+  }
+
+  private changeSortType(type: SortType, menuType: MoreMenuType): void {
+    let isReverse = this.isSortTypeReverse(type)
+    if (this.sortType === type) {
+      isReverse = !isReverse
+    } else {
+      this.sortType = type
+      isReverse = false
+    }
+    let sortTypeReverse = new Map<SortType, boolean>(this.sortTypeReverse)
+    sortTypeReverse.set(type, isReverse)
+    this.sortTypeReverse = sortTypeReverse
+    this.onMoreClick(menuType, isReverse)
   }
 
   isCurrentDirectoryEmpty(): boolean {
@@ -310,22 +457,25 @@ export struct TabFiles {
     return items
   }
 
+  getGridSpacerItems(): number[] {
+    const columns = this.getGridColumns()
+    let items: number[] = []
+    for (let index = 0; index < columns; index++) {
+      items.push(index)
+    }
+    return items
+  }
+
   updateHeaderGlassState(): void {
     const scrollOffset = Math.max(CloudThemeToken.zero, this.scrollerForList.currentOffset().yOffset)
     const collapseDistance = this.getHeaderCollapseDistance()
-    const scrollDelta = scrollOffset - this.lastHeaderScrollOffset
-    let nextProgress = this.headerCollapseProgress
-    if (scrollOffset <= CloudThemeToken.zero) {
-      nextProgress = CloudThemeToken.zero
-    } else if (scrollDelta !== CloudThemeToken.zero) {
-      nextProgress = Math.min(CloudThemeToken.fullOpacity,
-        Math.max(CloudThemeToken.zero, this.headerCollapseProgress + scrollDelta / collapseDistance))
-    }
+    const nextProgress = Math.min(CloudThemeToken.fullOpacity, Math.max(CloudThemeToken.zero,
+      scrollOffset / collapseDistance))
     this.lastHeaderScrollOffset = scrollOffset
     if (Math.abs(this.headerCollapseProgress - nextProgress) >= CloudThemeToken.scrollProgressUpdateThreshold) {
       this.headerCollapseProgress = nextProgress
     }
-    const active = scrollOffset > CloudThemeToken.filesHeaderGlassThreshold
+    const active = nextProgress > CloudThemeToken.zero
     if (this.isHeaderGlassActive !== active) {
       this.isHeaderGlassActive = active
     }
@@ -349,6 +499,20 @@ export struct TabFiles {
     return CloudThemeToken.fullOpacity - this.headerCollapseProgress
   }
 
+  getTitleHeaderVisibleProgress(): number {
+    if (this.isMultiSelectMode) {
+      return CloudThemeToken.zero
+    }
+    return this.getSearchHeaderVisibleProgress()
+  }
+
+  getTitleBarMaterialOpacity(): number {
+    if (this.isMultiSelectMode) {
+      return CloudThemeToken.fullOpacity
+    }
+    return this.headerCollapseProgress * CloudThemeToken.filesHeaderGlassMaxOpacity
+  }
+
   getHeaderCollapsedOffset(): number {
     return (CloudThemeToken.iconButtonSize + CloudThemeToken.spacingCard) * this.headerCollapseProgress
   }
@@ -365,22 +529,62 @@ export struct TabFiles {
     return -this.getHeaderCollapsedOffset()
   }
 
+  getTitleHeaderHeight(): number {
+    return CloudThemeToken.filesTitleHeight * this.getTitleHeaderVisibleProgress()
+  }
+
+  getTitleSearchGap(): number {
+    if (this.isMultiSelectMode) {
+      return CloudThemeToken.zero
+    }
+    return CloudThemeToken.spacingCard * this.getSearchHeaderVisibleProgress()
+  }
+
   getHeaderContentHeight(): number {
-    return CloudThemeToken.iconButtonSize + CloudThemeToken.spacingCard + CloudThemeToken.filesTitleHeight -
-      this.getHeaderCollapsedOffset()
+    return CloudThemeToken.zero
+  }
+
+  getHdsTitleBarBaseHeight(): number {
+    return this.getTopInset() + CloudThemeToken.rowHeight5xl
   }
 
   getHeaderContainerHeight(): number {
-    return this.getTopInset() + CloudThemeToken.pageTopPadding + this.getHeaderContentHeight()
+    return this.getHdsTitleBarBaseHeight() + this.getHeaderContentHeight()
   }
 
   getExpandedHeaderContainerHeight(): number {
-    return this.getTopInset() + CloudThemeToken.pageTopPadding + CloudThemeToken.iconButtonSize +
-      CloudThemeToken.spacingCard + CloudThemeToken.filesTitleHeight
+    return this.getHdsTitleBarBaseHeight()
   }
 
   getGridTopPadding(): number {
     return this.getHeaderContainerHeight() + CloudThemeToken.filesGridTopGap
+  }
+
+  getGridTopSpacerHeight(): number {
+    return Math.max(CloudThemeToken.zero, this.getGridTopPadding() - CloudThemeToken.gridGap)
+  }
+
+  getFileContentTopPadding(): number {
+    return this.getExpandedHeaderContainerHeight() + CloudThemeToken.filesGridTopGap
+  }
+
+  getTitleBackIcon(): Resource {
+    if (this.isMultiSelectMode) {
+      return $r('app.media.ic_xmark_bold')
+    }
+    return $r('app.media.ic_back')
+  }
+
+  getFileTitleStackLeftPadding(): number {
+    return CloudThemeToken.filesTitleHorizontalPadding + (this.isRoot ? CloudThemeToken.zero : CloudThemeToken.rowHeight5xl)
+  }
+
+  getFileTitleStackRightPadding(): number {
+    return CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.rowHeight5xl * 4
+  }
+
+  getStorageHeaderTranslateY(): number {
+    return -CloudThemeToken.filesHeaderCollapsedContentLift * this.headerCollapseProgress
   }
 
   getRefreshPullDistance(): number {
@@ -909,8 +1113,8 @@ export struct TabFiles {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Stack({ alignContent: Alignment.Top }) {
+    HdsNavigation() {
+      Stack({ alignContent: Alignment.Bottom }) {
         Stack({alignContent: Alignment.BottomEnd}) {
           Refresh({
             refreshing: $$this.isRefreshing,
@@ -965,42 +1169,136 @@ export struct TabFiles {
         .width('100%')
         .height('100%')
 
-        this.filesHeaderOverlay()
+        if (this.showObjectDetail) {
+          this.detailOverlay()
+        }
+
+        if (this.isMultiSelectMode) {
+          this.multiSelectActionBar()
+        }
+
+        if (this.showSelectFileSheet) {
+          this.selectFileOverlay()
+        }
+
+        if (this.showInputSheet) {
+          this.inputSheetOverlay()
+        }
+
+        if (this.showShareSheet) {
+          this.shareSheetOverlay()
+        }
+
+        if (this.showFileMoreMenu) {
+          this.fileMoreMenuOverlay()
+        }
+
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.showTransportSheet, this.transportSheetBuilder(), {
+            backgroundColor: CloudThemeToken.surface,
+            title: this.transportSheetTitle($r('app.string.transport_title')),
+            onDisappear: () => {
+              this.showTransportSheet = false
+            }
+          })
       }
       .width('100%')
       .height('100%')
       .backgroundColor(CloudThemeToken.background)
-
-      if (this.showObjectDetail) {
-        this.detailOverlay()
-      }
-
-      if (this.isMultiSelectMode) {
-        this.multiSelectActionBar()
-      }
-
-      if (this.showSelectFileSheet) {
-        this.selectFileOverlay()
-      }
-
-      if (this.showInputSheet) {
-        this.inputSheetOverlay()
-      }
-
-      if (this.showShareSheet) {
-        this.shareSheetOverlay()
-      }
+      .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
+        detents: [SheetSize.FIT_CONTENT],
+        showClose: false,
+        backgroundColor: CloudThemeToken.background,
+        onDisappear: () => {
+          this.showUserSwitchSheet = false
+        }
+      })
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
-      detents: [SheetSize.FIT_CONTENT],
-      showClose: false,
-      backgroundColor: CloudThemeToken.background,
-      onDisappear: () => {
-        this.showUserSwitchSheet = false
-      }
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideTitleBar(false)
+    .hideBackButton(this.isRoot && !this.isMultiSelectMode)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: this.isMultiSelectMode ? this.getSelectedCountText() : ' ',
+          subTitle: this.isMultiSelectMode ? '选择文件后操作' : ' '
+        },
+        backIcon: {
+          icon: this.getTitleBackIcon(),
+          action: () => {
+            if (this.isMultiSelectMode) {
+              this.exitMultiSelectMode()
+            } else {
+              this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+            }
+          }
+        },
+        menu: {
+          value: this.isMultiSelectMode ? this.getMultiSelectTitleMenu() : this.getFileTitleMenu(),
+          maxCount: this.isMultiSelectMode ? 1 : 4
+        },
+        stackBuilder: () => {
+          this.fileTitleBarStack()
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: true,
+          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+        },
+        originalStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary,
+              subTitleColor: CloudThemeToken.textSecondary
+            },
+            backIconStyle: {
+              backgroundColor: CloudThemeToken.surfaceSubtle,
+              iconColor: CloudThemeToken.textPrimary
+            },
+            menuStyle: {
+              backgroundColor: CloudThemeToken.surfaceSubtle,
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        scrollEffectStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary,
+              subTitleColor: CloudThemeToken.textSecondary
+            },
+            backIconStyle: {
+              backgroundColor: CloudThemeToken.surfaceSubtle,
+              iconColor: CloudThemeToken.textPrimary
+            },
+            menuStyle: {
+              backgroundColor: CloudThemeToken.surfaceSubtle,
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
     })
+    .bindToScrollable([this.scrollerForList])
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder userSwitchSheet() {
@@ -1169,65 +1467,293 @@ export struct TabFiles {
     return danger ? CloudThemeToken.danger : CloudThemeToken.primary
   }
 
-  @Builder filesHeaderOverlay() {
-    Column() {
-      Column() {
-        TabFilesHeader({
-          isRoot: this.isRoot,
-          searchKeyword: this.searchKeyword,
-          downloadObjects: this.downloadObjects,
-          downloadingCount: this.downloadingCount,
-          uploadObjects: this.uploadObjects,
-          uploadingCount: this.uploadingCount,
-          onBackClick: (async () => {
-            await this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
-          }),
-          onSearchChange: () => {
-            if (this.isMultiSelectMode) {
-              this.selectedObjects = []
-            }
-            this.applyVisibleObjects()
-          },
-          onPersonClick: () => {
-            this.loadCurrentUser()
-            this.showUserSwitchSheet = true
+  @Builder fileTitleBarStack() {
+    if (!this.isMultiSelectMode) {
+      Stack() {
+        Row() {
+          Column({ space: CloudThemeToken.spacingTiny }) {
+            Text(this.mainTitle)
+              .fontSize(CloudThemeToken.textSizeHeadline)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(CloudThemeToken.textPrimary)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+            Text(this.subTitle)
+              .fontSize(CloudThemeToken.textSizeTiny)
+              .fontColor(CloudThemeToken.textSecondary)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+          .justifyContent(FlexAlign.Center)
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .height('100%')
+        .padding({
+          left: this.getFileTitleStackLeftPadding(),
+          right: this.getFileTitleStackRightPadding()
         })
+        .alignItems(VerticalAlign.Center)
+        .translate({ y: CloudThemeToken.filesTitleBarContentOffsetY })
+        .hitTestBehavior(HitTestMode.None)
       }
       .width('100%')
-      .height(CloudThemeToken.iconButtonSize)
-      .opacity(this.getSearchHeaderVisibleProgress())
-      .translate({ y: this.getSearchHeaderTranslateY() })
-      .margin({ bottom: this.getSearchHeaderBottomGap() })
+      .height('100%')
+      .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration, curve: Curve.EaseOut })
+    }
+  }
+
+  @Builder fileStorageHeaderOverlay() {
+    if (!this.isMultiSelectMode) {
+      Column() {
+        Column({ space: CloudThemeToken.topBarTextGap }) {
+          Text(this.mainTitle)
+            .fontSize(CloudThemeToken.filesTitleMainSize)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+          Text(this.subTitle)
+            .fontSize(CloudThemeToken.filesTitleSubtitleSize)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        .padding({
+          left: CloudThemeToken.filesTitleHorizontalPadding,
+          right: CloudThemeToken.filesTitleHorizontalPadding
+        })
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Start)
+        .height(this.getHeaderContentHeight())
+        .clip(true)
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ top: this.getHdsTitleBarBaseHeight() })
+      .opacity(this.getTitleHeaderVisibleProgress())
+      .translate({ y: this.getStorageHeaderTranslateY() })
+      .hitTestBehavior(HitTestMode.None)
+      .zIndex(CloudThemeToken.filesHeaderZIndex)
+    }
+  }
+
+  @Builder fileMoreMenuOverlay() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.transparent)
+        .onClick(() => {
+          this.closeFileMoreMenu()
+        })
 
       Column() {
-        if (this.isMultiSelectMode) {
-          this.multiSelectTitle()
-        } else {
-          TabFilesTitle({
-            mainTitle: this.mainTitle,
-            subTitle: this.subTitle,
-            onMoreClick: (type: MoreMenuType, isReverse?: boolean) => {
-              this.onMoreClick(type, isReverse)
-            }
+        Column() {
+          this.fileMoreCommonItem($r('app.string.more_multi_select'), $r('app.media.ic_selected'), false, () => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.MULTI_SELECT)
+          })
+        }
+
+        this.fileMoreGroupDivider()
+
+        Column() {
+          this.fileMoreCommonItem($r('app.string.more_show_icon'), $r('app.media.ic_grid'),
+            this.showType === ShowType.SHOW_ICON, () => {
+              this.closeFileMoreMenu()
+              this.changeShowType(ShowType.SHOW_ICON)
+            })
+          this.fileMoreCommonItem($r('app.string.more_show_list'), $r('app.media.ic_list_bullet_circle'),
+            this.showType === ShowType.SHOW_LIST, () => {
+              this.closeFileMoreMenu()
+              this.changeShowType(ShowType.SHOW_LIST)
+            })
+        }
+
+        this.fileMoreGroupDivider()
+
+        Column() {
+          this.fileMoreSortItem($r('app.string.more_sort_by_name'), SortType.SORT_BY_NAME)
+          this.fileMoreSortItem($r('app.string.more_sort_by_time'), SortType.SORT_BY_TIME)
+          this.fileMoreSortItem($r('app.string.more_sort_by_size'), SortType.SORT_BY_SIZE)
+        }
+
+        this.fileMoreGroupDivider()
+
+        Column() {
+          this.fileMoreCommonItem($r('app.string.more_new_dir'), $r('app.media.ic_folder_badge_plus'), false, () => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.NEW_DIR)
+          })
+          this.fileMoreCommonItem($r('app.string.more_new_file'), $r('app.media.ic_doc_text_badge_arrow_up'), false, () => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.NEW_FILE)
+          })
+        }
+
+        this.fileMoreGroupDivider()
+
+        Column() {
+          this.fileMoreCommonItem($r('app.string.more_upload_file'), $r('app.media.ic_arrowshape_up'), false, () => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.UPLOAD_FILE)
           })
         }
       }
-      .width('100%')
-      .height(CloudThemeToken.filesTitleHeight)
-      .translate({ y: this.getTitleHeaderTranslateY() })
+      .width(CloudThemeToken.menuWidth)
+      .padding(CloudThemeToken.zero)
+      .borderRadius(CloudThemeToken.controlRadiusXl)
+      .clip(true)
+      .backgroundColor(CloudThemeToken.surface)
+      .shadow({
+        radius: CloudThemeToken.sheetShadowRadius,
+        color: CloudThemeToken.sheetShadow,
+        offsetY: CloudThemeToken.refreshShadowOffsetY
+      })
+      .margin({
+        top: this.getHdsTitleBarBaseHeight() - CloudThemeToken.spacingSm,
+        right: CloudThemeToken.filesHeaderPadding
+      })
     }
     .width('100%')
-    .height(this.getHeaderContainerHeight())
+    .height('100%')
+    .zIndex(CloudThemeToken.overlayZIndex)
+  }
+
+  @Builder fileMoreGroupDivider() {
+    Blank()
+      .width('100%')
+      .height(CloudThemeToken.spacingSm)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+  }
+
+  @Builder fileMoreCommonItem(content: ResourceStr, icon: Resource, isSelected: boolean, action: () => void) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Image(icon)
+        .width(CloudThemeToken.objectMenuIconSize)
+        .height(CloudThemeToken.objectMenuIconSize)
+        .fillColor(CloudThemeToken.textPrimary)
+        .draggable(false)
+
+      Text(content)
+        .fontSize(CloudThemeToken.objectMenuTextSize)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+        .height(CloudThemeToken.menuItemLabelHeight)
+
+      Image(isSelected ? $r('app.media.ic_selected') : '')
+        .width(CloudThemeToken.objectMenuIconSize)
+        .height(CloudThemeToken.objectMenuIconSize)
+        .fillColor(CloudThemeToken.primary)
+        .draggable(false)
+    }
     .padding({
-      top: this.getHeaderTopPadding(),
-      bottom: this.getHeaderBottomPadding()
+      left: CloudThemeToken.objectMenuHorizontalPadding,
+      right: CloudThemeToken.objectMenuHorizontalPadding
     })
-    .justifyContent(FlexAlign.Start)
-    .backgroundColor(this.isHeaderGlassActive ? CloudThemeToken.headerGlass : CloudThemeToken.transparent)
-    .backgroundBlurStyle(this.isHeaderGlassActive ? CloudThemeToken.filesHeaderGlassBlurStyle : BlurStyle.NONE)
-    .zIndex(CloudThemeToken.filesHeaderZIndex)
-    .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration, curve: Curve.EaseOut })
+    .width('100%')
+    .height(CloudThemeToken.menuItemHeight)
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.SpaceBetween)
+    .onClick(action)
+  }
+
+  @Builder fileMoreSortItem(content: ResourceStr, type: SortType) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Image($r('app.media.ic_sort_arrow_up'))
+        .width(CloudThemeToken.objectMenuIconSize)
+        .height(CloudThemeToken.objectMenuIconSize)
+        .fillColor(CloudThemeToken.textPrimary)
+        .draggable(false)
+
+      Text(content)
+        .fontSize(CloudThemeToken.objectMenuTextSize)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+        .height(CloudThemeToken.menuItemLabelHeight)
+
+      Row({ space: CloudThemeToken.filesSortIconGroupGap }) {
+        Image(this.sortType === type ? this.isSortTypeReverse(type) ? $r('app.media.ic_sort_arrow_down') :
+        $r('app.media.ic_sort_arrow_up') : '')
+          .width(CloudThemeToken.objectMenuIconSize)
+          .height(CloudThemeToken.objectMenuIconSize)
+          .fillColor(CloudThemeToken.primary)
+          .draggable(false)
+        Image(this.sortType === type ? $r('app.media.ic_selected') : '')
+          .width(CloudThemeToken.objectMenuIconSize)
+          .height(CloudThemeToken.objectMenuIconSize)
+          .fillColor(CloudThemeToken.primary)
+          .draggable(false)
+      }
+      .width(CloudThemeToken.filesSortIconGroupWidthPercent)
+      .justifyContent(FlexAlign.SpaceBetween)
+    }
+    .padding({
+      left: CloudThemeToken.objectMenuHorizontalPadding,
+      right: CloudThemeToken.objectMenuHorizontalPadding
+    })
+    .width('100%')
+    .height(CloudThemeToken.menuItemHeight)
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.SpaceBetween)
+    .onClick(() => {
+      this.closeFileMoreMenu()
+      if (type === SortType.SORT_BY_NAME) {
+        this.changeSortType(SortType.SORT_BY_NAME, MoreMenuType.SORT_BY_NAME)
+      } else if (type === SortType.SORT_BY_TIME) {
+        this.changeSortType(SortType.SORT_BY_TIME, MoreMenuType.SORT_BY_TIME)
+      } else if (type === SortType.SORT_BY_SIZE) {
+        this.changeSortType(SortType.SORT_BY_SIZE, MoreMenuType.SORT_BY_SIZE)
+      }
+    })
+  }
+
+  @Builder transportSheetTitle(title: ResourceStr) {
+    Row() {
+      Text(title)
+        .fontSize(CloudThemeToken.filesTransportTitleSize)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder transportSheetBuilder() {
+    Column() {
+      SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
+      Column() {
+        if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
+          Downloads({downloadObjects: this.downloadObjects})
+        } else {
+          Uploads({uploadObjects: this.uploadObjects})
+        }
+      }
+      .width('100%')
+      .margin({ top: CloudThemeToken.filesTransportContentTopMargin })
+      .borderRadius(CloudThemeToken.cardRadius)
+      .backgroundColor(CloudThemeToken.background)
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Center)
+      .justifyContent(FlexAlign.Center)
+    }
+    .padding({
+      left: CloudThemeToken.filesHeaderPadding,
+      right: CloudThemeToken.filesHeaderPadding,
+      top: CloudThemeToken.filesHeaderPadding,
+      bottom: this.bottomRectHeight + CloudThemeToken.filesTransportPaddingBottom
+    })
+    .height('100%')
+    .width('100%')
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder loadingState() {
@@ -1704,6 +2230,15 @@ export struct TabFiles {
 
   @Builder objectGrid() {
     Grid(this.scrollerForList) {
+      ForEach(this.getGridSpacerItems(), (item: number) => {
+        GridItem() {
+          Row()
+            .width('100%')
+            .height(this.getGridTopSpacerHeight())
+        }
+        .selectable(false)
+      }, (item: number) => `top-spacer-${item}`)
+
       LazyForEach(this.dirDataSource, (item: ObjectInfo, index: number) => {
         GridItem() {
           ObjectItem({ index, item, showType: this.showType,
@@ -1739,14 +2274,21 @@ export struct TabFiles {
           this.onItemClick(item)
         })
       }, (item: ObjectInfo, index: number) => item.id)
+
+      ForEach(this.getGridSpacerItems(), (item: number) => {
+        GridItem() {
+          Row()
+            .width('100%')
+            .height(this.tabBarHeight + CloudThemeToken.tabContentBottomGap)
+        }
+        .selectable(false)
+      }, (item: number) => `bottom-spacer-${item}`)
     }
     .cachedCount(CloudThemeToken.fileGridCachedCount)
     .maxCount(this.getGridColumns())
     .padding({
       left: CloudThemeToken.spacingCard,
-      right: CloudThemeToken.spacingCard,
-      top: this.getGridTopPadding(),
-      bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap
+      right: CloudThemeToken.spacingCard
     })
     .width('100%')
     .height('100%') //!!!使用lazyforeach必须设置高度才能有效

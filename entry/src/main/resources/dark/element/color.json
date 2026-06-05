@@ -29,6 +29,10 @@
       "value": "#CC151B23"
     },
     {
+      "name": "cloud_search_field_background",
+      "value": "#E6151B23"
+    },
+    {
       "name": "cloud_header_glass",
       "value": "#66151B23"
     },

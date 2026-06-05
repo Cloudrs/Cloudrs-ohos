@@ -986,6 +986,32 @@ async fn v4_do_delete(api: &CloudreveAPI, items: &[String], dirs: &[String]) -> 
     Ok(())
 }
 
+async fn v4_create_object(v4: &ApiV4Client, path: &str, object_type: &str) -> Result<(), ApiError> {
+    let uri = v4_path_to_uri(path);
+    let url = format!("{}/api/v4/file/create", v4.base_url.trim_end_matches('/'));
+    let body = json!({
+        "uri": uri,
+        "type": object_type,
+        "err_on_conflict": true,
+    });
+    let mut request = v4.http_client.post(&url).json(&body);
+    if let Some(token) = &v4.token {
+        request = request.bearer_auth(token);
+    }
+    let response: V4ApiResponse<serde_json::Value> = request
+        .send()
+        .await?
+        .json()
+        .await?;
+    if response.code != 0 {
+        return Err(ApiError::Api {
+            code: response.code,
+            message: response.msg,
+        });
+    }
+    Ok(())
+}
+
 async fn v4_do_move(api: &CloudreveAPI, items: &[String], dirs: &[String], dst: &str) -> Result<(), ApiError> {
     for path in items.iter().chain(dirs.iter()) {
         api.move_file(path, dst).await?;
@@ -1114,9 +1140,17 @@ pub async fn rename_object(id: String, new_name: String, is_dir: bool) -> napi::
 #[napi]
 pub async fn new_directory(path: String) -> napi::Result<()> {
     let api = get_client()?;
-    api.create_directory(&path)
-        .await
-        .map_err(|e| napi::Error::from_reason(e.to_string()))
+    if api.inner().as_v3().is_some() {
+        api.create_directory(&path)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    } else {
+        let v4 = api.inner().as_v4()
+            .ok_or_else(|| napi::Error::from_reason("not a v4 client"))?;
+        v4_create_object(v4, &path, "folder")
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
 }
 
 #[napi]
@@ -1130,21 +1164,8 @@ pub async fn new_file(path: String) -> napi::Result<()> {
     } else {
         let v4 = api.inner().as_v4()
             .ok_or_else(|| napi::Error::from_reason("not a v4 client"))?;
-        // Split path into parent dir and filename for V4 API
-        let (parent, name) = match path.rfind('/') {
-            None | Some(0) => ("/", path.as_str()),
-            Some(idx) => (&path[..idx], &path[idx + 1..]),
-        };
-        use cloudreve_api::api::v4::models::CreateFileRequest as V4CreateFileRequest;
-        let req = V4CreateFileRequest {
-            path: parent,
-            name,
-            content: None,
-            overwrite: None,
-        };
-        v4.create_file(&req)
+        v4_create_object(v4, &path, "file")
             .await
-            .map(|_| ())
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 }

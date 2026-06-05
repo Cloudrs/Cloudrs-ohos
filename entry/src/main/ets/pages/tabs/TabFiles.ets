@@ -1350,12 +1350,15 @@ export struct TabFiles {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      Row({ space: CloudThemeToken.spacingSection }) {
+      Row({ space: CloudThemeToken.spacingCard }) {
         this.multiActionButton($r('app.media.ic_copy'), '复制', () => {
           this.startSelectedCopyMove(FileMenuType.COPY)
         })
         this.multiActionButton($r('app.media.ic_move_to'), '移动', () => {
           this.startSelectedCopyMove(FileMenuType.MOVE)
+        })
+        this.multiActionButton($r('app.media.ic_arrowshape_down'), '下载', () => {
+          this.downloadSelectedObjects()
         })
         this.multiActionButton($r('app.media.ic_delete_fill'), '删除', () => {
           this.deleteSelectedObjects()
@@ -2542,6 +2545,47 @@ export struct TabFiles {
     this.openPathSelectSheet()
   }
 
+  private downloadSelectedObjects(): void {
+    if (this.selectedObjects.length === 0) {
+      return
+    }
+
+    const selectedFiles = this.selectedObjects.filter((item: ObjectInfo) => item.type !== Constant.OBJECT_DIR_TYPE)
+    if (selectedFiles.length === 0) {
+      showToast('已选择的项目中没有可下载文件')
+      return
+    }
+
+    try {
+      const context = this.getAbilityContext()
+      if (!context) {
+        showToast($r('app.string.get_context_failed'))
+        return
+      }
+
+      const documentSaveOptions = new picker.DocumentSaveOptions()
+      documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
+      const documentPicker = new picker.DocumentViewPicker(context)
+      documentPicker.save(documentSaveOptions).then((documentSaveResult: Array<string>) => {
+        if (documentSaveResult.length === 0) {
+          return
+        }
+        const targetDirUri = documentSaveResult[Constant.FIRST_ARRAY_INDEX]
+        selectedFiles.forEach((item: ObjectInfo) => {
+          const filePath = FileSystemUtil.getPathFromUri(targetDirUri + '/' + item.name)
+          this.enqueueDownloadTask(context, item, filePath)
+        })
+        this.exitMultiSelectMode()
+        showToast(`已添加${selectedFiles.length}个下载任务`)
+      }).catch((err: BusinessError) => {
+        console.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`)
+      })
+    } catch (error) {
+      const err: BusinessError = error as BusinessError
+      console.error(TAG, `Error code: ${err.code}, message: ${err.message}`)
+    }
+  }
+
   private deleteSelectedObjects(): void {
     if (this.selectedObjects.length === 0) {
       return
@@ -2922,6 +2966,37 @@ export struct TabFiles {
     })
   }
 
+  private enqueueDownloadTask(context: common.UIAbilityContext, item: ObjectInfo, filePath: string): void {
+    CloudApi.getDownloadUri(item.id, {
+      onSuccess: (data) => {
+        let url = (data.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
+          data.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? data : CloudApi.getBaseURL() + data
+        let object: TransportObject = new TransportObject(item, filePath, url)
+        this.downloadObjects.pushData(object)
+        this.downloadingCount++
+
+        let fileModel: FileModel = new FileModel(item.id, filePath, url, undefined, (trans, state) => {
+          object.update(trans, state)
+          if (state == FileModelState.COMPLETED) {
+            console.debug(TAG, `${context.cacheDir}/${object.item.name} -> ` + filePath)
+            FileSystemUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
+              console.debug(TAG, 'move to ' + filePath)
+            }).catch((err: Error) => {
+              console.error(TAG, `err: ${err}`)
+            })
+            this.downloadingCount--
+          }
+        })
+
+        // 创建下载任务
+        requestDownload.downloadFileBackground(fileModel, context)
+      },
+      onFailure: (msg) => {
+        console.error(TAG, 'get download uri failed, msg: ' + msg)
+      }
+    })
+  }
+
   itemDownload(index: number, item: ObjectInfo) {
     try {
       const context = this.getAbilityContext();
@@ -2933,36 +3008,12 @@ export struct TabFiles {
       documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
       let documentPicker = new picker.DocumentViewPicker(context);
       documentPicker.save(documentSaveOptions).then((documentSaveResult: Array<string>) => {
+        if (documentSaveResult.length === 0) {
+          return
+        }
         let filePath = FileSystemUtil.getPathFromUri(documentSaveResult[Constant.FIRST_ARRAY_INDEX] + '/' + item.name);
         console.debug(TAG, 'documentViewPicker.save to file succeed and uris are:' + filePath);
-        CloudApi.getDownloadUri(item.id, {
-          onSuccess: (data) => {
-            let url = (data.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
-              data.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? data : CloudApi.getBaseURL() + data
-            let object: TransportObject = new TransportObject(item, filePath, url)
-            this.downloadObjects.pushData(object)
-            this.downloadingCount++
-
-            let fileModel: FileModel = new FileModel(item.id, filePath, url, undefined, (trans, state) => {
-              object.update(trans, state)
-              if (state == FileModelState.COMPLETED) {
-                console.debug(TAG, `${context.cacheDir}/${object.item.name} -> ` + filePath)
-                FileSystemUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
-                  console.debug(TAG, 'move to ' + filePath)
-                }).catch((err: Error) => {
-                  console.error(TAG, `err: ${err}`)
-                })
-                this.downloadingCount--
-              }
-            })
-
-            // 创建下载任务
-            requestDownload.downloadFileBackground(fileModel, context)
-          },
-          onFailure: (msg) => {
-            console.error(TAG, 'get download uri failed, msg: ' + msg)
-          }
-        })
+        this.enqueueDownloadTask(context, item, filePath)
       }).catch((err: BusinessError) => {
         console.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`);
       })

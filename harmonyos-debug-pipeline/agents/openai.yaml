@@ -1,0 +1,7 @@
+interface:
+  display_name: "HarmonyOS 调试流水线"
+  short_description: "HarmonyOS 一体化调试流程"
+  default_prompt: "Use $harmonyos-debug-pipeline to build, install, collect logs, and pull screenshot artifacts for a HarmonyOS app."
+  brand_color: "#0F9D58"
+policy:
+  allow_implicit_invocation: true

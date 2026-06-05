@@ -48,8 +48,7 @@ export struct SelectFileSheet {
         this.uploadSourceItem(
           $r('app.media.ic_upload_file_modern'),
           $r('app.string.local_files'),
-          '从文管选择任意文件',
-          CloudThemeToken.uploadFileSoft,
+          '从文件管理选择文件',
           () => {
             this.selectFiles()
           })
@@ -58,7 +57,6 @@ export struct SelectFileSheet {
           $r('app.media.ic_upload_photo_modern'),
           $r('app.string.local_photos'),
           '从相册选择图片',
-          CloudThemeToken.uploadPhotoSoft,
           () => {
             this.selectPhotos(false)
           })
@@ -67,7 +65,6 @@ export struct SelectFileSheet {
           $r('app.media.ic_upload_video_modern'),
           $r('app.string.local_videos'),
           '从相册选择视频',
-          CloudThemeToken.uploadVideoSoft,
           () => {
             this.selectPhotos(true)
           })
@@ -106,20 +103,19 @@ export struct SelectFileSheet {
     .zIndex(1)
   }
 
-  @Builder uploadSourceItem(icon: Resource, title: ResourceStr, description: ResourceStr,
-    iconBackground: ResourceColor, onClick: () => void) {
+  @Builder uploadSourceItem(icon: Resource, title: ResourceStr, description: ResourceStr, onClick: () => void) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: CloudThemeToken.uploadSourceItemGap }) {
         Stack() {
           Image(icon)
-            .width(CloudThemeToken.sheetOptionIconSize)
-            .height(CloudThemeToken.sheetOptionIconSize)
+            .width(CloudThemeToken.icon3xl)
+            .height(CloudThemeToken.icon3xl)
             .draggable(false)
         }
         .width(CloudThemeToken.uploadSourceIconBoxSize)
         .height(CloudThemeToken.uploadSourceIconBoxSize)
         .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(iconBackground)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
 
         Column({ space: CloudThemeToken.uploadSourceTextGap }) {
           Text(title)

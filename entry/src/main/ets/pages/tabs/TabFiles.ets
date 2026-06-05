@@ -1,5 +1,5 @@
 import {
-  DbUserInfo, DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy, ShareLinkInfo
+  DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy, ShareLinkInfo
 } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import LazyDataSource from "../../utils/LazyDataSource";
@@ -28,7 +28,6 @@ import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
 import UserPreferences from "../../model/UserPreferences";
-import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { CloudIconButton } from "../../components/CloudIconButton";
 import {
@@ -162,7 +161,6 @@ export struct TabFiles {
   @State isHeaderGlassActive: boolean = false
   @State headerCollapseProgress: number = 0
   @State refreshPullOffset: number = 0
-  @State showUserSwitchSheet: boolean = false
   @State currentUser: string = ''
   @State currentUrl: string = ''
   @State isMultiSelectMode: boolean = false
@@ -252,6 +250,24 @@ export struct TabFiles {
     return this.downloadingCount + this.uploadingCount
   }
 
+  private shouldDimFileTitleActions(): boolean {
+    return this.showObjectDetail ||
+      this.showPathSelect ||
+      this.showSelectFileSheet ||
+      this.showInputSheet ||
+      this.showShareSheet ||
+      this.showTransportSheet ||
+      this.showFileMoreMenu
+  }
+
+  private getFileTitleActionBackground(): ResourceColor {
+    return this.shouldDimFileTitleActions() ? '#4DFFFFFF' : CloudThemeToken.surfaceSubtle
+  }
+
+  private getFileTitleActionIconColor(): ResourceColor {
+    return this.shouldDimFileTitleActions() ? '#66111827' : CloudThemeToken.textPrimary
+  }
+
   private getSearchMenuItem(): HdsNavigationMenuItemOptions {
     return {
       content: {
@@ -268,23 +284,8 @@ export struct TabFiles {
     return [
       this.getSearchMenuItem(),
       this.getTransportMenuItem(),
-      this.getUserMenuItem(),
       this.getMoreMenuItem()
     ]
-  }
-
-  private getUserMenuItem(): HdsNavigationMenuItemOptions {
-    return {
-      content: {
-        icon: $r('app.media.ic_person'),
-        label: '用户',
-        action: () => {
-          this.loadCurrentUser()
-          this.showFileMoreMenu = false
-          this.showUserSwitchSheet = true
-        }
-      }
-    }
   }
 
   private getMoreMenuItem(): HdsNavigationMenuItemOptions {
@@ -580,7 +581,7 @@ export struct TabFiles {
   }
 
   getFileTitleStackRightPadding(): number {
-    return CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.rowHeight5xl * 4
+    return CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.rowHeight5xl * this.getFileTitleMenu().length
   }
 
   getStorageHeaderTranslateY(): number {
@@ -1207,14 +1208,6 @@ export struct TabFiles {
       .width('100%')
       .height('100%')
       .backgroundColor(CloudThemeToken.background)
-      .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
-        detents: [SheetSize.FIT_CONTENT],
-        showClose: false,
-        backgroundColor: CloudThemeToken.background,
-        onDisappear: () => {
-          this.showUserSwitchSheet = false
-        }
-      })
     }
     .width('100%')
     .height('100%')
@@ -1241,7 +1234,7 @@ export struct TabFiles {
         },
         menu: {
           value: this.isMultiSelectMode ? this.getMultiSelectTitleMenu() : this.getFileTitleMenu(),
-          maxCount: this.isMultiSelectMode ? 1 : 4
+          maxCount: this.isMultiSelectMode ? 1 : 3
         },
         stackBuilder: () => {
           this.fileTitleBarStack()
@@ -1262,13 +1255,13 @@ export struct TabFiles {
               subTitleColor: CloudThemeToken.textSecondary
             },
             backIconStyle: {
-              backgroundColor: CloudThemeToken.surfaceSubtle,
-              iconColor: CloudThemeToken.textPrimary
+              backgroundColor: this.getFileTitleActionBackground(),
+              iconColor: this.getFileTitleActionIconColor()
             },
             menuStyle: {
-              backgroundColor: CloudThemeToken.surfaceSubtle,
-              iconColor: CloudThemeToken.textPrimary,
-              textColor: CloudThemeToken.textPrimary
+              backgroundColor: this.getFileTitleActionBackground(),
+              iconColor: this.getFileTitleActionIconColor(),
+              textColor: this.getFileTitleActionIconColor()
             }
           }
         },
@@ -1279,13 +1272,13 @@ export struct TabFiles {
               subTitleColor: CloudThemeToken.textSecondary
             },
             backIconStyle: {
-              backgroundColor: CloudThemeToken.surfaceSubtle,
-              iconColor: CloudThemeToken.textPrimary
+              backgroundColor: this.getFileTitleActionBackground(),
+              iconColor: this.getFileTitleActionIconColor()
             },
             menuStyle: {
-              backgroundColor: CloudThemeToken.surfaceSubtle,
-              iconColor: CloudThemeToken.textPrimary,
-              textColor: CloudThemeToken.textPrimary
+              backgroundColor: this.getFileTitleActionBackground(),
+              iconColor: this.getFileTitleActionIconColor(),
+              textColor: this.getFileTitleActionIconColor()
             }
           }
         },
@@ -1299,25 +1292,6 @@ export struct TabFiles {
     })
     .bindToScrollable([this.scrollerForList])
     .backgroundColor(CloudThemeToken.background)
-  }
-
-  @Builder userSwitchSheet() {
-    UserSwitchSheet({
-      currentUser: this.currentUser,
-      currentUrl: this.currentUrl,
-      onSelect: (user: DbUserInfo) => {
-        if (CloudRouter.switchToUser(user.username, user.url, true)) {
-          this.showUserSwitchSheet = false
-          this.shareLinks = []
-          this.sharedPaths = []
-          this.loadCurrentUser()
-          this.getFileList(true, '/')
-        }
-      },
-      onClose: () => {
-        this.showUserSwitchSheet = false
-      }
-    })
   }
 
   @Builder multiSelectTitle() {

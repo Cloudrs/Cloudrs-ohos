@@ -6,6 +6,7 @@ import { CloudApi } from "../../model/net/CloudApi";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { CloudScaffold } from "../../components/CloudScaffold";
+import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { SectionHeader } from "../../components/SectionHeader";
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
@@ -74,6 +75,7 @@ export struct TabMine {
   @State cachedGroupName: string = ''
   @State cachedDiffDays: number = 0
   private avatarSize: number = CloudThemeToken.avatarLargeSize
+  @State showUserSwitchSheet: boolean = false
   @State showSettingsSheet: boolean = false
   @State activeSheetType: MineSheetType = MineSheetType.NONE
   @State themeMode: string = Constant.APP_THEME_LIGHT
@@ -125,8 +127,9 @@ export struct TabMine {
     this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string
     this.currentUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
     this.hydrateMineCacheOrReset()
+    const shouldRefresh = this.shouldRefreshUserSettings()
     this.loadCachedUserInfo()
-    if (this.shouldRefreshUserSettings()) {
+    if (shouldRefresh) {
       this.scheduleUserSettingsRefresh()
     }
   }
@@ -150,23 +153,45 @@ export struct TabMine {
   }
 
   getUserSettings() {
+    const cacheKey = this.getMineCacheKey()
     this.markMineSettingsRefresh()
-    // 获取站点信息
+    this.fetchMineRemoteData(cacheKey, true)
+  }
+
+  private fetchMineRemoteData(cacheKey: string, allowSessionRefresh: boolean): void {
     CloudApi.getSiteConfig({
       onSuccess: (data: SiteConfig) => {
-        this.siteConfig = data
-        this.diffDays = CommonUtil.getDaysDifference(new Date(this.siteConfig.user.created_at), new Date())
-        this.refreshCachedUserInfo(data.user)
-        this.saveMineCache()
+        if (cacheKey !== this.getMineCacheKey()) {
+          return
+        }
+        if (allowSessionRefresh && this.shouldRefreshV4SessionFromSiteConfig(data)) {
+          this.refreshV4Session(cacheKey, () => {
+            this.fetchMineRemoteData(cacheKey, false)
+          })
+          return
+        }
+        this.applySiteConfig(data)
+        this.fetchUserSettingAndStorage(cacheKey)
       },
       onFailure: (msg) => {
+        if (allowSessionRefresh && this.shouldRefreshStoredV4Session() && this.isUnauthorizedMessage(msg)) {
+          this.refreshV4Session(cacheKey, () => {
+            this.fetchMineRemoteData(cacheKey, false)
+          })
+          return
+        }
         console.error(TAG, `SiteConfig get failed, ${msg}`)
+        this.fetchUserSettingAndStorage(cacheKey)
       }
     })
+  }
 
-    // 获取用户配置
+  private fetchUserSettingAndStorage(cacheKey: string): void {
     CloudApi.userSetting({
       onSuccess: (data: UserSetting) => {
+        if (cacheKey !== this.getMineCacheKey()) {
+          return
+        }
         this.userSetting = data
         this.saveMineCache()
       },
@@ -175,9 +200,11 @@ export struct TabMine {
       }
     })
 
-    // 获取用户存储容量
     CloudApi.userStorage({
       onSuccess: (data: UserStorage) => {
+        if (cacheKey !== this.getMineCacheKey()) {
+          return
+        }
         this.userStorage = data
         this.updateDate = new Date()
         this.saveMineCache()
@@ -205,6 +232,18 @@ export struct TabMine {
         }
         .width('100%')
       }
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
+          detents: [SheetSize.FIT_CONTENT],
+          showClose: false,
+          backgroundColor: CloudThemeToken.background,
+          onDisappear: () => {
+            this.showUserSwitchSheet = false
+          }
+        })
     }
     .width('100%')
     .height('100%')
@@ -216,6 +255,80 @@ export struct TabMine {
         this.activeSheetType = MineSheetType.NONE
       }
     })
+  }
+
+  private applySiteConfig(data: SiteConfig): void {
+    this.siteConfig = data
+    this.diffDays = this.getCreatedDays(data.user.created_at)
+    this.refreshCachedUserInfo(data.user)
+    this.saveMineCache()
+  }
+
+  private refreshV4Session(cacheKey: string, onReady: () => void): void {
+    const dbUserInfo = this.getCurrentDbUserInfo()
+    if (!dbUserInfo || !this.isV4DbUser(dbUserInfo) || dbUserInfo.refresh_token.length === 0) {
+      onReady()
+      return
+    }
+    CloudApi.loginWithRefreshToken(dbUserInfo.url, dbUserInfo.refresh_token, {
+      onSuccess: (userInfo: UserInfo) => {
+        if (cacheKey !== this.getMineCacheKey()) {
+          return
+        }
+        const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? dbUserInfo.cookie
+        const expires = AppStorage.get<string>(Constant.CLOUD_COOKIE_EXPIRES) ?? dbUserInfo.expires
+        const refreshToken = AppStorage.get<string>(Constant.CLOUD_REFRESH_TOKEN) ?? dbUserInfo.refresh_token
+        dbUserInfo.cookie = cookie
+        dbUserInfo.expires = expires
+        dbUserInfo.refresh_token = refreshToken
+        if (!this.isAnonymousUserInfo(userInfo)) {
+          dbUserInfo.userinfo = userInfo
+        }
+        UserDatabase.insertUserInfo(dbUserInfo)
+        onReady()
+      },
+      onFailure: (msg: string) => {
+        console.error(TAG, `refresh v4 session failed, ${msg}`)
+        onReady()
+      }
+    })
+  }
+
+  private shouldRefreshV4SessionFromSiteConfig(data: SiteConfig): boolean {
+    return this.shouldRefreshStoredV4Session() && this.isAnonymousUserInfo(data.user)
+  }
+
+  private shouldRefreshStoredV4Session(): boolean {
+    const dbUserInfo = this.getCurrentDbUserInfo()
+    return !!dbUserInfo && this.isV4DbUser(dbUserInfo) && dbUserInfo.refresh_token.length > 0
+  }
+
+  private isV4DbUser(dbUserInfo: DbUserInfo): boolean {
+    return dbUserInfo.cookie.startsWith(Constant.CLOUD_V4_COOKIE_PREFIX)
+  }
+
+  private isAnonymousUserInfo(userInfo: UserInfo): boolean {
+    return userInfo.anonymous === true || this.isInvalidCreatedAt(userInfo.created_at)
+  }
+
+  private isUnauthorizedMessage(msg: string): boolean {
+    return msg.toLowerCase().indexOf('unauthorized') >= 0 || msg.indexOf('登录') >= 0
+  }
+
+  private getCreatedDays(createdAt?: string): number {
+    if (!createdAt || this.isInvalidCreatedAt(createdAt)) {
+      return 0
+    }
+    const createdDate = new Date(createdAt)
+    return CommonUtil.getDaysDifference(createdDate, new Date())
+  }
+
+  private isInvalidCreatedAt(createdAt?: string): boolean {
+    if (!createdAt || createdAt.length === 0) {
+      return true
+    }
+    const createdDate = new Date(createdAt)
+    return Number.isNaN(createdDate.getTime()) || createdDate.getFullYear() <= 1971
   }
 
   private getMineCacheKey(): string {
@@ -298,7 +411,7 @@ export struct TabMine {
     }
     console.info(TAG, `Mine avatar cached user loaded, memory=${!!memoryAvatar}, cacheUri=${this.userAvatarCacheUri.length > 0}`)
     if (dbUserInfo.userinfo.created_at && dbUserInfo.userinfo.created_at.length > 0) {
-      this.cachedDiffDays = CommonUtil.getDaysDifference(new Date(dbUserInfo.userinfo.created_at), new Date())
+      this.cachedDiffDays = this.getCreatedDays(dbUserInfo.userinfo.created_at)
     }
     if (!this.userAvatar && this.userAvatarCacheUri.length === 0) {
       this.loadAvatar(dbUserInfo, false)
@@ -321,7 +434,7 @@ export struct TabMine {
     this.cachedGroupName = userInfo.group?.name ?? ''
     this.userAvatarCacheUri = AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
     if (userInfo.created_at && userInfo.created_at.length > 0) {
-      this.cachedDiffDays = CommonUtil.getDaysDifference(new Date(userInfo.created_at), new Date())
+      this.cachedDiffDays = this.getCreatedDays(userInfo.created_at)
     }
     const avatarChanged = previousUserId !== (userInfo.id ?? '') || previousAvatar !== (userInfo.avatar ?? '')
     console.info(TAG, `Mine avatar refresh info, changed=${avatarChanged}, cacheUri=${this.userAvatarCacheUri.length > 0}`)
@@ -448,9 +561,42 @@ export struct TabMine {
       .height(CloudThemeToken.cardHeightLg)
     }
     .padding(CloudThemeToken.spacingPage)
+      .width('100%')
+      .borderRadius(CloudThemeToken.cardRadius)
+      .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder switchAccountAction() {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      Image($r('app.media.ic_person'))
+        .width(CloudThemeToken.iconBoxXs)
+        .height(CloudThemeToken.iconBoxXs)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .padding(CloudThemeToken.spacingLg)
+        .fillColor(CloudThemeToken.onPrimary)
+        .backgroundColor(CloudThemeToken.settingIconPrivacyBackground)
+        .draggable(false)
+      Text('切换账号')
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+      Image($r('app.media.ic_chevron_right'))
+        .width(CloudThemeToken.iconXs)
+        .height(CloudThemeToken.iconXs)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
+    }
     .width('100%')
-    .borderRadius(CloudThemeToken.cardRadius)
+    .height(CloudThemeToken.rowHeight4xl)
+    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .clip(true)
     .backgroundColor(CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.showUserSwitchSheet = true
+    })
   }
 
   getUserIdText(): string {
@@ -754,6 +900,7 @@ export struct TabMine {
 
   @Builder settingButton() {
     Column({ space: CloudThemeToken.spacingCard }) {
+      this.switchAccountAction()
       this.rowWithNext($r('app.media.ic_privacy_secure'),
         CloudThemeToken.settingIconPrivacyBackground,
         $r('app.string.user_privacy_secure'),
@@ -797,6 +944,22 @@ export struct TabMine {
   private closeSettingsSheet(): void {
     this.showSettingsSheet = false
     this.activeSheetType = MineSheetType.NONE
+  }
+
+  @Builder userSwitchSheet() {
+    UserSwitchSheet({
+      currentUser: this.currentUser,
+      currentUrl: this.currentUrl,
+      onSelect: (user: DbUserInfo) => {
+        if (CloudRouter.switchToUser(user.username, user.url, true)) {
+          this.showUserSwitchSheet = false
+          this.loadMineData()
+        }
+      },
+      onClose: () => {
+        this.showUserSwitchSheet = false
+      }
+    })
   }
 
   @Builder settingsSheet() {
@@ -846,9 +1009,6 @@ export struct TabMine {
           this.verifySystemAuth()
         })
       }
-      this.privacyActionRow('刷新头像缓存', '重新获取当前账号头像', false, () => {
-        this.refreshCurrentAvatarCache()
-      })
       this.privacyActionRow('清理与重置', '清除缓存或删除当前登录凭证', false, () => {
         this.activeSheetType = MineSheetType.CLEANUP
       })

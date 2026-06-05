@@ -232,6 +232,12 @@ export struct ImagePreviewPage {
     }
   }
 
+  private getPreviewContentTopPadding(): number {
+    return CloudThemeToken.getSafeTopInset(this.sysTopRectHeight) +
+      CloudThemeToken.titleBarHeight +
+      CloudThemeToken.spacingSm
+  }
+
   @Builder previewItem(item: PreviewFile, index: number) {
     Column() {
       if (this.hasImage(item.fileId)) {
@@ -253,6 +259,10 @@ export struct ImagePreviewPage {
     }
     .width('100%')
     .height('100%')
+    .padding({
+      top: this.getPreviewContentTopPadding(),
+      bottom: CloudThemeToken.spacingPage
+    })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .backgroundColor(CloudThemeToken.previewBackground)

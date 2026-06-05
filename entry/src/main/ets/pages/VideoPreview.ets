@@ -4,7 +4,6 @@ import { VideoPreview } from "../model/Params";
 import { CloudApi } from "../model/net/CloudApi";
 import { CloudRouter } from "../utils/CloudRouter";
 import { showToast } from "../utils/ToastUtil";
-import { CloudIconButton } from "../components/CloudIconButton";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 
 const TAG: string = 'VideoPreview'
@@ -270,22 +269,48 @@ export struct VideoPreviewPage {
   }
 
   @Builder playbackButton() {
-    this.videoControlButton(this.isPlaying ? $r('app.media.ic_pause_fill') : $r('app.media.ic_play_fill'),
-      CloudThemeToken.videoPreviewControlIconSize, () => {
+    Button({ type: ButtonType.Circle, stateEffect: true }) {
+      if (this.isPlaying) {
+        Image($r('app.media.ic_pause_fill'))
+          .width(CloudThemeToken.videoPreviewControlIconSize)
+          .height(CloudThemeToken.videoPreviewControlIconSize)
+          .fillColor(CloudThemeToken.onPrimary)
+          .draggable(false)
+      } else {
+        Image($r('app.media.ic_play_fill'))
+          .width(CloudThemeToken.videoPreviewControlIconSize)
+          .height(CloudThemeToken.videoPreviewControlIconSize)
+          .fillColor(CloudThemeToken.onPrimary)
+          .draggable(false)
+      }
+    }
+    .width(CloudThemeToken.videoPreviewControlSize)
+    .height(CloudThemeToken.videoPreviewControlSize)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .border({
+      width: CloudThemeToken.videoPreviewControlBorderWidth,
+      color: CloudThemeToken.videoPreviewControlBorder
+    })
+    .clip(true)
+    .onClick(() => {
       this.togglePlayback()
     })
   }
 
   @Builder videoControlButton(icon: ResourceStr, iconSize: number, onAction: () => void) {
-    CloudIconButton({
-      icon: icon,
-      buttonSize: CloudThemeToken.videoPreviewControlSize,
-      iconSize: iconSize,
-      buttonRadius: CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor,
-      buttonBackground: CloudThemeToken.videoPreviewControlBackground,
-      iconColor: CloudThemeToken.onPrimary,
-      onAction: onAction
-    })
+    Button({ type: ButtonType.Circle, stateEffect: true }) {
+      Image(icon)
+        .width(iconSize)
+        .height(iconSize)
+        .fillColor(CloudThemeToken.onPrimary)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.videoPreviewControlSize)
+    .height(CloudThemeToken.videoPreviewControlSize)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
     .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,

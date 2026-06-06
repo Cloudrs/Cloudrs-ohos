@@ -1200,29 +1200,66 @@ export struct TabFiles {
         .width('100%')
         .height('100%')
 
-        if (this.showObjectDetail) {
-          this.detailOverlay()
-        }
-
         if (this.isMultiSelectMode) {
           this.multiSelectActionBar()
-        }
-
-        if (this.showSelectFileSheet) {
-          this.selectFileOverlay()
-        }
-
-        if (this.showInputSheet) {
-          this.inputSheetOverlay()
-        }
-
-        if (this.showShareSheet) {
-          this.shareSheetOverlay()
         }
 
         if (this.showFileMoreMenu) {
           this.fileMoreMenuOverlay()
         }
+
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.showObjectDetail, this.detailBindSheet(), {
+            detents: [SheetSize.FIT_CONTENT],
+            showClose: false,
+            backgroundColor: CloudThemeToken.background,
+            onDisappear: () => {
+              this.showObjectDetail = false
+            }
+          })
+
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.showSelectFileSheet, this.selectFileSheetBuilder(), {
+            detents: [SheetSize.FIT_CONTENT],
+            showClose: false,
+            backgroundColor: CloudThemeToken.background,
+            onDisappear: () => {
+              this.showSelectFileSheet = false
+            }
+          })
+
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.showInputSheet, this.inputSheetBuilder(), {
+            detents: [SheetSize.FIT_CONTENT],
+            showClose: false,
+            backgroundColor: CloudThemeToken.background,
+            onDisappear: () => {
+              this.showInputSheet = false
+              this.resetInputSheetState()
+            }
+          })
+
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.showShareSheet, this.shareSheetBuilder(), {
+            detents: [SheetSize.FIT_CONTENT],
+            showClose: false,
+            backgroundColor: CloudThemeToken.background,
+            onDisappear: () => {
+              this.showShareSheet = false
+              this.shareTarget = null
+              this.shareLinkText = ''
+              this.sharePassword = ''
+              this.shareBusy = false
+            }
+          })
 
         Column()
           .width(CloudThemeToken.zero)
@@ -1850,15 +1887,8 @@ export struct TabFiles {
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
 
-        CloudIconButton({
-          icon: $r('app.media.ic_xmark_bold'),
-          buttonSize: CloudThemeToken.iconBoxSm,
-          iconSize: CloudThemeToken.iconMd,
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          iconColor: CloudThemeToken.textSecondary,
-          onAction: () => {
-            this.closeInputSheet()
-          }
+        this.sheetCloseButton(() => {
+          this.closeInputSheet()
         })
       }
       .width('100%')
@@ -1996,15 +2026,8 @@ export struct TabFiles {
         .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
 
-      CloudIconButton({
-        icon: $r('app.media.ic_xmark_bold'),
-        buttonSize: CloudThemeToken.iconBoxSm,
-        iconSize: CloudThemeToken.iconMd,
-        buttonBackground: CloudThemeToken.surfaceSubtle,
-        iconColor: CloudThemeToken.textSecondary,
-        onAction: () => {
-          this.closeShareSheet()
-        }
+      this.sheetCloseButton(() => {
+        this.closeShareSheet()
       })
     }
     .width('100%')
@@ -2342,6 +2365,41 @@ export struct TabFiles {
     DetailSheet({detailData: this.detailData})
   }
 
+  @Builder sheetCloseButton(onClose: () => void) {
+    Button({ type: ButtonType.Normal }) {
+      Image($r('app.media.ic_xmark_bold'))
+        .width(CloudThemeToken.sheetActionIconSize)
+        .height(CloudThemeToken.sheetActionIconSize)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.iconBoxSm)
+    .height(CloudThemeToken.iconBoxSm)
+    .borderRadius(CloudThemeToken.controlRadius)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
+    .onClick(onClose)
+  }
+
+  @Builder detailBindSheet() {
+    Column() {
+      Row() {
+        Blank()
+          .layoutWeight(1)
+        this.sheetCloseButton(() => {
+          this.closeDetailSheet()
+        })
+      }
+      .height(CloudThemeToken.rowHeight2xl)
+      .width('100%')
+      .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingPage, top: CloudThemeToken.spacingXl })
+
+      this.detailSheet()
+    }
+    .width('100%')
+    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
+    .backgroundColor(CloudThemeToken.background)
+  }
+
   @Builder detailOverlay() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column()
@@ -2357,17 +2415,9 @@ export struct TabFiles {
         Row() {
           Blank()
             .layoutWeight(1)
-          CloudIconButton({
-            icon: $r('app.media.ic_xmark_bold'),
-            buttonSize: CloudThemeToken.iconBoxMd,
-            iconSize: CloudThemeToken.iconLg,
-            buttonRadius: CloudThemeToken.controlRadiusRoundLg,
-            buttonBackground: CloudThemeToken.surfaceSubtle,
-            iconColor: CloudThemeToken.textSecondary,
-            onAction: () => {
-              this.showObjectDetail = false
-              this.overLap = true
-            }
+          this.sheetCloseButton(() => {
+            this.showObjectDetail = false
+            this.overLap = true
           })
         }
         .height(CloudThemeToken.rowHeight2xl)
@@ -2655,7 +2705,6 @@ export struct TabFiles {
     CloudApi.getObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
         this.detailData = new DetailData(item.name, item.type == Constant.OBJECT_DIR_TYPE, data)
-        this.overLap = false
         this.showObjectDetail = true
       },
       onFailure: (msg) => {
@@ -2686,12 +2735,10 @@ export struct TabFiles {
   }
 
   private openSelectFileSheet(): void {
-    this.overLap = false
     this.showSelectFileSheet = true
   }
 
   private openInputSheet(): void {
-    this.overLap = false
     this.showInputSheet = true
   }
 
@@ -2702,29 +2749,24 @@ export struct TabFiles {
     this.sharePassword = ''
     this.shareExpireDays = ShareExpireDays.SEVEN_DAYS
     this.shareBusy = false
-    this.overLap = false
     this.showShareSheet = true
     this.refreshShareLinks()
   }
 
   private closeFileSheet(): void {
     this.showSelectFileSheet = false
-    this.overLap = true
   }
 
   private closeInputSheet(): void {
     this.showInputSheet = false
-    this.resetInputSheetState()
-    this.overLap = true
   }
 
   private closeShareSheet(): void {
     this.showShareSheet = false
-    this.shareTarget = null
-    this.shareLinkText = ''
-    this.sharePassword = ''
-    this.shareBusy = false
-    this.overLap = true
+  }
+
+  private closeDetailSheet(): void {
+    this.showObjectDetail = false
   }
 
   private openPathSelectSheet(): void {

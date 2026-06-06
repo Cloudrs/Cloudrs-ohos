@@ -5,7 +5,6 @@ import { picker } from "@kit.CoreFileKit"
 import { CloudThemeToken } from "../model/CloudTheme"
 import Constant from "../model/Constant"
 import { showToastTips, ToastType } from "../utils/ToastUtil"
-import { CloudIconButton } from "./CloudIconButton"
 
 const TAG: string = 'SelectFileSheet'
 
@@ -28,16 +27,20 @@ export struct SelectFileSheet {
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
 
-        CloudIconButton({
-          icon: $r('app.media.ic_xmark_bold'),
-          buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.sheetActionIconSize,
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          iconColor: CloudThemeToken.textSecondary,
-          onAction: () => {
-            if (this.onClose) {
-              this.onClose()
-            }
+        Button({ type: ButtonType.Normal }) {
+          Image($r('app.media.ic_xmark_bold'))
+            .width(CloudThemeToken.sheetActionIconSize)
+            .height(CloudThemeToken.sheetActionIconSize)
+            .fillColor(CloudThemeToken.textSecondary)
+            .draggable(false)
+        }
+        .width(CloudThemeToken.iconBoxSm)
+        .height(CloudThemeToken.iconBoxSm)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .onClick(() => {
+          if (this.onClose) {
+            this.onClose()
           }
         })
       }

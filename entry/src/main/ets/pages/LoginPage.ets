@@ -94,6 +94,10 @@ export struct LoginPage {
   private readonly otpInputId: string = 'loginOtpInput'
   private scanShouldAutoLogin: boolean = false
 
+  private isKeyboardVisible(): boolean {
+    return this.keyHeight > CloudThemeToken.zero
+  }
+
   private requestOtpFocus(attempt: number = CloudThemeToken.zero): void {
     setTimeout(() => {
       try {
@@ -201,11 +205,11 @@ export struct LoginPage {
       Column() {
         Row() {
           CloudIconButton({
-            icon: $r('app.media.ic_arrow_left_circle'),
-            buttonSize: CloudThemeToken.smallIconButtonSize,
-            iconSize: CloudThemeToken.smallIconButtonSize,
-            buttonBackground: CloudThemeToken.surface,
-            iconColor: CloudThemeToken.textSecondary,
+            icon: $r('app.media.ic_back'),
+            buttonSize: CloudThemeToken.iconButtonSize,
+            iconSize: CloudThemeToken.actionIconSize,
+            buttonBackground: CloudThemeToken.surfaceSubtle,
+            iconColor: CloudThemeToken.textPrimary,
             onAction: () => {
               if (this.needs2FA) {
                 this.needs2FA = false
@@ -250,12 +254,15 @@ export struct LoginPage {
         .width('100%')
       }
 
-      Column({ space: CloudThemeToken.loginFooterGap }) {
-        // 扫描添加及历史账户
-        this.buttonScanAndUsers()
+      if (!this.isKeyboardVisible()) {
+        Column({ space: CloudThemeToken.loginFooterGap }) {
+          // 扫描添加及历史账户
+          this.buttonScanAndUsers()
 
-        // 隐私条款声明
-        this.privacyText()
+          // 隐私条款声明
+          this.privacyText()
+        }
+        .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginTransitionDuration }))
       }
     }
     .height("100%")
@@ -946,7 +953,7 @@ export struct LoginPage {
   }
 
   @Builder showLoginInput() {
-    Column({ space: CloudThemeToken.loginInputGroupGap }) {
+    Column({ space: this.isKeyboardVisible() ? CloudThemeToken.loginOtpGap : CloudThemeToken.loginInputGroupGap }) {
       // 用户名
       Row() {
         Image($r("app.media.ic_envelope"))
@@ -1054,6 +1061,5 @@ export struct LoginPage {
       .height(CloudThemeToken.loginPrivacyLinkHeight)
     }
     .width("100%")
-    .margin({bottom: this.keyHeight})
   }
 }

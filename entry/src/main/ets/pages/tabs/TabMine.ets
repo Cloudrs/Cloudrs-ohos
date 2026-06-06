@@ -103,6 +103,7 @@ export struct TabMine {
 
   aboutToDisappear(): void {
     this.cancelScheduledUserSettingsRefresh()
+    this.overLap = true
   }
 
   private onActiveChanged(): void {
@@ -244,26 +245,23 @@ export struct TabMine {
       Column()
         .width(0)
         .height(0)
-        .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
-          detents: [SheetSize.FIT_CONTENT],
-          showClose: false,
-          backgroundColor: CloudThemeToken.background,
-          onDisappear: () => {
-            this.showUserSwitchSheet = false
-          }
-        })
         .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
           detents: [SheetSize.FIT_CONTENT],
           showClose: false,
-          backgroundColor: CloudThemeToken.background,
-          onDisappear: () => {
-            this.showFeedbackSheet = false
-          }
+          backgroundColor: CloudThemeToken.background
         })
 
-      if (this.hasSettingsOverlay()) {
-        this.settingsOverlay()
-      }
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showSettingsSheet, this.settingsSheet(), {
+          detents: [SheetSize.FIT_CONTENT],
+          showClose: false,
+          backgroundColor: CloudThemeToken.background,
+          onDisappear: () => {
+            this.finishCloseSettingsSheet()
+          }
+        })
     }
     .width('100%')
     .height('100%')
@@ -561,7 +559,7 @@ export struct TabMine {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
         .onClick(() => {
-          this.showUserSwitchSheet = true
+          this.openUserSwitchSheet()
         })
       }
       .width('100%')
@@ -610,7 +608,7 @@ export struct TabMine {
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
-      this.showUserSwitchSheet = true
+      this.openUserSwitchSheet()
     })
   }
 
@@ -965,23 +963,49 @@ export struct TabMine {
   }
 
   private openSettingsSheet(type: MineSheetType): void {
+    this.activeSheetType = type
+    this.showUserSwitchSheet = false
+    this.showPrivacySheet = false
+    this.showThemeSheet = false
+    this.showMoreSettingsSheet = false
+    this.showCleanupSettings = false
     if (type === MineSheetType.PRIVACY || type === MineSheetType.CLEANUP) {
       this.syncSystemAuthState()
     }
     if (type === MineSheetType.THEME) {
       this.showThemeSheet = true
+      this.showSettingsSheet = true
       return
     }
     if (type === MineSheetType.MORE) {
       this.showMoreSettingsSheet = true
+      this.showSettingsSheet = true
       return
     }
     this.showCleanupSettings = type === MineSheetType.CLEANUP
     this.showPrivacySheet = true
+    this.showSettingsSheet = true
+  }
+
+  private openUserSwitchSheet(): void {
+    this.activeSheetType = MineSheetType.NONE
+    this.showPrivacySheet = false
+    this.showThemeSheet = false
+    this.showMoreSettingsSheet = false
+    this.showCleanupSettings = false
+    this.showUserSwitchSheet = true
+    this.showSettingsSheet = true
   }
 
   private closeSettingsSheet(): void {
     this.showSettingsSheet = false
+  }
+
+  private finishCloseSettingsSheet(): void {
+    if (this.showSettingsSheet) {
+      return
+    }
+    this.showUserSwitchSheet = false
     this.showPrivacySheet = false
     this.showThemeSheet = false
     this.showMoreSettingsSheet = false
@@ -989,8 +1013,12 @@ export struct TabMine {
     this.activeSheetType = MineSheetType.NONE
   }
 
+  private closeFeedbackSheet(): void {
+    this.showFeedbackSheet = false
+  }
+
   private hasSettingsOverlay(): boolean {
-    return this.showPrivacySheet || this.showThemeSheet || this.showMoreSettingsSheet
+    return this.showUserSwitchSheet || this.showPrivacySheet || this.showThemeSheet || this.showMoreSettingsSheet
   }
 
   @Builder userSwitchSheet() {
@@ -999,18 +1027,46 @@ export struct TabMine {
       currentUrl: this.currentUrl,
       onSelect: (user: DbUserInfo) => {
         if (CloudRouter.switchToUser(user.username, user.url, true)) {
-          this.showUserSwitchSheet = false
+          this.closeSettingsSheet()
           this.loadMineData()
         }
       },
       onClose: () => {
-        this.showUserSwitchSheet = false
+        this.closeSettingsSheet()
       }
     })
   }
 
+  @Builder userSwitchOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.overlayScrim)
+        .onClick(() => {
+          this.showUserSwitchSheet = false
+        })
+
+      Column() {
+        this.userSwitchSheet()
+      }
+      .width('100%')
+      .padding({
+        bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      })
+      .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
+      .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
+      .backgroundColor(CloudThemeToken.background)
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(CloudThemeToken.overlayZIndex)
+  }
+
   @Builder settingsSheet() {
-    if (this.activeSheetType === MineSheetType.THEME) {
+    if (this.showUserSwitchSheet) {
+      this.userSwitchSheet()
+    } else if (this.activeSheetType === MineSheetType.THEME) {
       this.themeSettingsSheet()
     } else if (this.activeSheetType === MineSheetType.PRIVACY) {
       this.privacySettingsSheet()
@@ -1039,7 +1095,14 @@ export struct TabMine {
           this.closeSettingsSheet()
         })
 
-      this.settingsOverlayContent()
+      Column() {
+        this.settingsOverlayContent()
+      }
+      .width('100%')
+      .transition(TransitionEffect.OPACITY
+        .animation({ duration: CloudThemeToken.defaultAnimationDuration * 2, curve: Curve.EaseOut })
+        .combine(TransitionEffect.translate({ y: CloudThemeToken.detailSheetMinHeight })
+          .animation({ duration: CloudThemeToken.defaultAnimationDuration * 2, curve: Curve.EaseOut })))
     }
     .width('100%')
     .height('100%')
@@ -1047,9 +1110,33 @@ export struct TabMine {
   }
 
   @Builder settingsOverlayContent() {
-    if (this.showThemeSheet) {
+    if (this.showUserSwitchSheet) {
+          Scroll() {
+            Column() {
+              this.userSwitchSheet()
+            }
+            .width('100%')
+            .padding({
+              bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+            })
+          }
+          .width('100%')
+          .constraintSize({ maxHeight: '88%' })
+        } else if (this.showThemeSheet) {
       this.themeSettingsSheet()
-    } else if (this.showMoreSettingsSheet) {
+    } else if (this.showUserSwitchSheet) {
+          Scroll() {
+            Column() {
+              this.userSwitchSheet()
+            }
+            .width('100%')
+            .padding({
+              bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+            })
+          }
+          .width('100%')
+          .constraintSize({ maxHeight: '88%' })
+        } else if (this.showMoreSettingsSheet) {
       this.moreSettingsSheet()
     } else {
       this.privacySheet()
@@ -1100,7 +1187,7 @@ export struct TabMine {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
@@ -1127,7 +1214,7 @@ export struct TabMine {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
@@ -1227,7 +1314,7 @@ export struct TabMine {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
@@ -1247,7 +1334,7 @@ export struct TabMine {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
@@ -1572,7 +1659,7 @@ export struct TabMine {
       account: this.currentUser,
       user: this.siteConfig?.user
     }))
-    this.showFeedbackSheet = false
+    this.closeFeedbackSheet()
   }
 
   private openFeedbackMail(): void {
@@ -1583,7 +1670,7 @@ export struct TabMine {
       account: this.currentUser,
       user: this.siteConfig?.user
     }))
-    this.showFeedbackSheet = false
+    this.closeFeedbackSheet()
   }
 
   @Builder rowWithJump(icon: ResourceStr, backgroundColor: ResourceColor, title: ResourceStr, url: string) {
@@ -1677,7 +1764,7 @@ export struct TabMine {
         this.openFeedbackMail()
       },
       onClose: () => {
-        this.showFeedbackSheet = false
+        this.closeFeedbackSheet()
       }
     })
   }

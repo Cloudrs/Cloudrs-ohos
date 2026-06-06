@@ -19,18 +19,10 @@ class FeedbackUtil {
     let group = '未知';
     let uid = '未知';
     if (user) {
-      if (user.nickname.length > 0) {
-        nickname = user.nickname;
-      }
-      if (user.user_name.length > 0) {
-        rawAccount = user.user_name;
-      }
-      if (user.group.name.length > 0) {
-        group = user.group.name;
-      }
-      if (user.id.length > 0) {
-        uid = user.id;
-      }
+      nickname = this.pickUserText(() => user.nickname, nickname);
+      rawAccount = this.pickUserText(() => user.user_name, rawAccount);
+      group = this.pickUserText(() => user.group.name, group);
+      uid = this.pickUserText(() => user.id, uid);
     }
     const account = this.maskAccount(rawAccount);
     const server = this.maskServerUrl(input.serverUrl);
@@ -80,6 +72,17 @@ class FeedbackUtil {
     const timePart = Date.now().toString(36).toUpperCase();
     const randomPart = Math.floor(Math.random() * 1679616).toString(36).toUpperCase().padStart(4, '0');
     return `CR-${timePart}-${randomPart}`;
+  }
+
+  private pickUserText(getter: () => string, fallback: string): string {
+    try {
+      const value = getter();
+      if (value.length > 0) {
+        return value;
+      }
+    } catch (err) {
+    }
+    return fallback;
   }
 
   private maskAccount(account: string): string {

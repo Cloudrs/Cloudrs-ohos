@@ -1568,39 +1568,26 @@ export struct TabMine {
   }
 
   @Builder feedbackEntryRow() {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: CloudThemeToken.spacingSection }) {
-        Image($r('app.media.ic_feedback'))
-          .width(CloudThemeToken.icon4xl)
-          .height(CloudThemeToken.icon4xl)
-          .borderRadius(CloudThemeToken.controlRadiusXl)
-          .padding(CloudThemeToken.spacingSm)
-          .fillColor(CloudThemeToken.onPrimary)
-          .backgroundColor(CloudThemeToken.settingIconWebJumpBackground)
-          .draggable(false)
+    Row({ space: CloudThemeToken.spacingCard }) {
+      Image($r('app.media.ic_feedback'))
+        .width(CloudThemeToken.icon4xl)
+        .height(CloudThemeToken.icon4xl)
+        .borderRadius(CloudThemeToken.controlRadiusXl)
+        .padding(CloudThemeToken.spacingSm)
+        .fillColor(CloudThemeToken.onPrimary)
+        .backgroundColor(CloudThemeToken.settingIconWebJumpBackground)
+        .draggable(false)
 
-        Column({ space: CloudThemeToken.spacingTiny }) {
-          Text($r('app.string.feedback'))
-            .fontSize(CloudThemeToken.textSizeLarge)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('复制诊断信息，快速定位问题')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
+      Text($r('app.string.feedback'))
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontColor(CloudThemeToken.textPrimary)
         .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
 
-        Image($r('app.media.ic_chevron_right'))
-          .width(CloudThemeToken.iconMd)
-          .height(CloudThemeToken.iconMd)
-          .fillColor(CloudThemeToken.textSecondary)
-          .draggable(false)
-      }
-      .width('100%')
-      .height('100%')
-      .alignItems(VerticalAlign.Center)
+      Image($r('app.media.ic_chevron_right'))
+        .width(CloudThemeToken.iconMd)
+        .height(CloudThemeToken.iconMd)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
     }
     .width('100%')
     .height(CloudThemeToken.rowHeight3xl)
@@ -1609,6 +1596,7 @@ export struct TabMine {
     .backgroundColor(CloudThemeToken.surface)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
+    .alignItems(VerticalAlign.Center)
     .onClick(() => {
       this.showFeedbackSheet = true
     })

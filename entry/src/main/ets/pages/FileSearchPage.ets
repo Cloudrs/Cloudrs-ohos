@@ -1,10 +1,11 @@
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { ObjectItem } from "../components/ObjectItem";
+import { FileMenuType, ShowType } from "../model/MenuModel";
 import { ObjectInfo } from "../model/net/ApiTypes";
 import { FileSearchParam, ImagePreview, PreviewFile, VideoPreview } from "../model/Params";
 import { CommonUtil, FileType } from "../utils/CommonUtil";
 import { CloudRouter } from "../utils/CloudRouter";
-import { DateFormatUtil } from "../utils/DateFormatUtil";
 import { showToast } from "../utils/ToastUtil";
 import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsEffect, hdsMaterial } from "@kit.UIDesignKit";
 
@@ -13,12 +14,16 @@ export struct FileSearchPage {
   routeParam?: FileSearchParam
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @Provide thumbImage: Map<string, PixelMap> = new Map<string, PixelMap>()
+  @Provide thumbSource: Map<string, string> = new Map<string, string>()
   @State searchKeyword: string = ''
   @State results: ObjectInfo[] = []
   private objects: ObjectInfo[] = []
 
   aboutToAppear(): void {
     this.objects = this.routeParam?.objects ?? []
+    this.thumbImage = this.routeParam?.thumbImage ?? new Map<string, PixelMap>()
+    this.thumbSource = this.routeParam?.thumbSource ?? new Map<string, string>()
     this.applySearch()
   }
 
@@ -28,6 +33,18 @@ export struct FileSearchPage {
 
   private getTitleBarHeight(): number {
     return this.getTopInset() + CloudThemeToken.rowHeight5xl
+  }
+
+  private getShowType(): ShowType {
+    return this.routeParam?.showType ?? ShowType.SHOW_LIST
+  }
+
+  private getResultDirs(): ObjectInfo[] {
+    return this.results.filter((item: ObjectInfo) => item.type === Constant.OBJECT_DIR_TYPE)
+  }
+
+  private getResultFiles(): ObjectInfo[] {
+    return this.results.filter((item: ObjectInfo) => item.type !== Constant.OBJECT_DIR_TYPE)
   }
 
   private getSearchFieldEffect(): VisualEffect {
@@ -55,19 +72,26 @@ export struct FileSearchPage {
     this.results = this.objects.filter((item: ObjectInfo) => item.name.toLowerCase().includes(keyword))
   }
 
-  private getResultIcon(item: ObjectInfo): Resource {
-    if (item.type === Constant.OBJECT_DIR_TYPE) {
-      return $r('app.media.ic_folder_fill')
+  private dispatchOpenResult(item: ObjectInfo): void {
+    if (this.routeParam?.onOpen) {
+      CloudRouter.pop()
+      this.routeParam.onOpen(item)
+      return
     }
-    return CommonUtil.getFileIconInfo(item.name).icon
+    this.openResult(item)
   }
 
-  private getResultMetaText(item: ObjectInfo): string {
-    const dateText = DateFormatUtil.format(new Date(item.date), 'yyyy-MM-dd')
-    if (item.type === Constant.OBJECT_DIR_TYPE) {
-      return dateText
+  private dispatchMenuClick(item: ObjectInfo, type: FileMenuType): void {
+    if (this.routeParam?.onMenuClick) {
+      CloudRouter.pop()
+      this.routeParam.onMenuClick(item, type)
+      return
     }
-    return `${dateText} · ${CommonUtil.formatBytes(item.size)}`
+    if (type === FileMenuType.PREVIEW || type === FileMenuType.DIR_ENTER) {
+      this.openResult(item)
+      return
+    }
+    showToast('请返回文件页操作')
   }
 
   private openResult(item: ObjectInfo): void {
@@ -105,7 +129,7 @@ export struct FileSearchPage {
         top: this.getTitleBarHeight() + CloudThemeToken.spacingSection,
         bottom: this.bottomRectHeight + CloudThemeToken.spacingPage
       })
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudThemeToken.background)
     }
     .width('100%')
     .height('100%')
@@ -158,7 +182,7 @@ export struct FileSearchPage {
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false
     })
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder searchTitleStack() {
@@ -223,23 +247,62 @@ export struct FileSearchPage {
 
   @Builder resultList() {
     if (this.results.length > CloudThemeToken.zero) {
-      List({ space: CloudThemeToken.zero }) {
-        ForEach(this.results, (item: ObjectInfo) => {
-          ListItem() {
-            this.resultRow(item)
+      if (this.getShowType() === ShowType.SHOW_ICON) {
+        Grid() {
+          ForEach(this.getResultDirs(), (item: ObjectInfo, index: number) => {
+            GridItem() {
+              this.resultRow(item, index)
+            }
+          }, (item: ObjectInfo) => item.id)
+
+          if (this.getResultDirs().length % 2 !== CloudThemeToken.zero) {
+            GridItem() {
+              Row()
+                .width('100%')
+                .height(CloudThemeToken.objectGridFolderHeight)
+            }
           }
-        }, (item: ObjectInfo) => item.id)
+
+          ForEach(this.getResultFiles(), (item: ObjectInfo, index: number) => {
+            GridItem() {
+              this.resultRow(item, index)
+            }
+          }, (item: ObjectInfo) => item.id)
+        }
+        .width('100%')
+        .height('100%')
+        .columnsTemplate('1fr 1fr')
+        .columnsGap(CloudThemeToken.spacingCard)
+        .rowsGap(CloudThemeToken.spacingCard)
+        .padding({
+          left: CloudThemeToken.filesTitleHorizontalPadding,
+          right: CloudThemeToken.filesTitleHorizontalPadding
+        })
+      } else {
+        List({ space: CloudThemeToken.zero }) {
+          ForEach(this.getResultDirs(), (item: ObjectInfo, index: number) => {
+            ListItem() {
+              this.resultRow(item, index)
+            }
+          }, (item: ObjectInfo) => item.id)
+
+          ForEach(this.getResultFiles(), (item: ObjectInfo, index: number) => {
+            ListItem() {
+              this.resultRow(item, index)
+            }
+          }, (item: ObjectInfo) => item.id)
+        }
+        .width('100%')
+        .height('100%')
+        .cachedCount(CloudThemeToken.compactListCachedCount)
+        .divider({
+          strokeWidth: CloudThemeToken.lineWidth,
+          color: CloudThemeToken.line,
+          startMargin: CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.objectListIconSize +
+          CloudThemeToken.objectItemGap,
+          endMargin: CloudThemeToken.filesTitleHorizontalPadding
+        })
       }
-      .width('100%')
-      .height('100%')
-      .cachedCount(CloudThemeToken.compactListCachedCount)
-      .divider({
-        strokeWidth: CloudThemeToken.lineWidth,
-        color: CloudThemeToken.line,
-        startMargin: CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.objectListIconSize +
-        CloudThemeToken.objectItemGap,
-        endMargin: CloudThemeToken.filesTitleHorizontalPadding
-      })
     } else {
       Blank()
         .width('100%')
@@ -247,41 +310,17 @@ export struct FileSearchPage {
     }
   }
 
-  @Builder resultRow(item: ObjectInfo) {
-    Row({ space: CloudThemeToken.objectItemGap }) {
-      Image(this.getResultIcon(item))
-        .width(CloudThemeToken.objectListIconSize)
-        .height(CloudThemeToken.objectListIconSize)
-        .draggable(false)
-
-      Column({ space: CloudThemeToken.objectMetaGap }) {
-        Text(item.name)
-          .fontSize(CloudThemeToken.textSizeLargePlus)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Text(this.getResultMetaText(item))
-          .fontSize(CloudThemeToken.textSizeBody)
-          .fontColor(CloudThemeToken.textSecondary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+  @Builder resultRow(item: ObjectInfo, index: number) {
+    ObjectItem({
+      index: index,
+      item: item,
+      showType: this.getShowType(),
+      onMenuClick: (menuItem: ObjectInfo, type: FileMenuType) => {
+        this.dispatchMenuClick(menuItem, type)
       }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-      .justifyContent(FlexAlign.Center)
-    }
-    .width('100%')
-    .height(CloudThemeToken.objectListRowHeight + CloudThemeToken.spacingSection)
-    .padding({
-      left: CloudThemeToken.filesTitleHorizontalPadding,
-      right: CloudThemeToken.filesTitleHorizontalPadding
     })
-    .alignItems(VerticalAlign.Center)
-    .backgroundColor(CloudThemeToken.surface)
     .onClick(() => {
-      this.openResult(item)
+      this.dispatchOpenResult(item)
     })
   }
 }

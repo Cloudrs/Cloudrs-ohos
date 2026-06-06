@@ -331,7 +331,38 @@ export struct TabFiles {
 
   private openFileSearchPage(): void {
     const objects = this.objectsInfo.dirObjects.concat(this.objectsInfo.fileObjects)
-    CloudRouter.push(Constant.FILE_SEARCH_PAGE, new FileSearchParam(this.currentPath, objects))
+    CloudRouter.push(Constant.FILE_SEARCH_PAGE, new FileSearchParam(this.currentPath, objects,
+      (item: ObjectInfo) => {
+        this.onSearchResultOpen(item)
+      },
+      (item: ObjectInfo, type: FileMenuType) => {
+        this.onSearchResultMenuClick(item, type)
+      },
+      this.showType,
+      this.thumbImage,
+      this.thumbSource))
+  }
+
+  private onSearchResultOpen(item: ObjectInfo): void {
+    this.onItemClick(item)
+  }
+
+  private onSearchResultMenuClick(item: ObjectInfo, type: FileMenuType): void {
+    const index = this.getSearchResultObjectIndex(item)
+    this.onMenuClick(index, item, type)
+  }
+
+  private getSearchResultObjectIndex(item: ObjectInfo): number {
+    const visibleObjects = item.type === Constant.OBJECT_DIR_TYPE ?
+    this.dirDataSource.dataArray : this.fileDataSource.dataArray
+    const visibleIndex = visibleObjects.findIndex((object: ObjectInfo) => object.id === item.id)
+    if (visibleIndex >= CloudThemeToken.zero) {
+      return visibleIndex
+    }
+
+    const allObjects = item.type === Constant.OBJECT_DIR_TYPE ?
+    this.objectsInfo.dirObjects : this.objectsInfo.fileObjects
+    return allObjects.findIndex((object: ObjectInfo) => object.id === item.id)
   }
 
   private getSortIcon(type: SortType): Resource {

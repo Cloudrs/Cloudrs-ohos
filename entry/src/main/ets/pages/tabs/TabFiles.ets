@@ -256,16 +256,15 @@ export struct TabFiles {
       this.showSelectFileSheet ||
       this.showInputSheet ||
       this.showShareSheet ||
-      this.showTransportSheet ||
-      this.showFileMoreMenu
+      this.showTransportSheet
   }
 
   private getFileTitleActionBackground(): ResourceColor {
-    return this.shouldDimFileTitleActions() ? '#4DFFFFFF' : CloudThemeToken.surfaceSubtle
+    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudThemeToken.surfaceSubtle
   }
 
   private getFileTitleActionIconColor(): ResourceColor {
-    return this.shouldDimFileTitleActions() ? '#66111827' : CloudThemeToken.textPrimary
+    return this.shouldDimFileTitleActions() ? '#33111827' : CloudThemeToken.textPrimary
   }
 
   private getSearchMenuItem(): HdsNavigationMenuItemOptions {

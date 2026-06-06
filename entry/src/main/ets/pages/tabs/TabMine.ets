@@ -7,16 +7,18 @@ import { CommonUtil } from "../../utils/CommonUtil";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
+import { FeedbackSheet } from "../../components/FeedbackSheet";
 import { SectionHeader } from "../../components/SectionHeader";
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
 import { AvatarUtil } from "../../utils/AvatarUtil";
+import FeedbackUtil from "../../utils/FeedbackUtil";
 import { showToast } from "../../utils/ToastUtil";
 import { AppLockUtil } from "../../utils/AppLockUtil";
 import { SystemAuthResult } from "../../utils/SystemAuthUtil";
-import { BusinessError } from "@kit.BasicServicesKit";
+import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
 
 const TAG:string = 'TabMine'
 const MINE_SETTINGS_REFRESH_INTERVAL_MS: number = 30000
@@ -77,6 +79,7 @@ export struct TabMine {
   private avatarSize: number = CloudThemeToken.avatarLargeSize
   @State showUserSwitchSheet: boolean = false
   @State showSettingsSheet: boolean = false
+  @State showFeedbackSheet: boolean = false
   @State activeSheetType: MineSheetType = MineSheetType.NONE
   @State themeMode: string = Constant.APP_THEME_LIGHT
   private scroller: Scroller = new Scroller;
@@ -253,6 +256,13 @@ export struct TabMine {
       onDisappear: () => {
         this.showSettingsSheet = false
         this.activeSheetType = MineSheetType.NONE
+      }
+    })
+    .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
+      showClose: false,
+      backgroundColor: CloudThemeToken.background,
+      onDisappear: () => {
+        this.showFeedbackSheet = false
       }
     })
   }
@@ -1467,6 +1477,52 @@ export struct TabMine {
     })
   }
 
+  private buildFeedbackDiagnostic(): string {
+    return FeedbackUtil.buildDiagnosticMarkdown({
+      appVersion: this.appVersion,
+      serverUrl: this.currentUrl,
+      account: this.currentUser,
+      user: this.siteConfig?.user
+    })
+  }
+
+  private copyFeedbackDiagnostic(): void {
+    try {
+      const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.buildFeedbackDiagnostic())
+      pasteboard.getSystemPasteboard().setData(pasteData).then(() => {
+        showToast($r('app.string.copy_success'))
+      }).catch((err: Error) => {
+        console.error(TAG, 'copy feedback diagnostic failed: ' + err.message)
+        showToast($r('app.string.copy_failed'))
+      })
+    } catch (err) {
+      console.error(TAG, 'copy feedback diagnostic failed: ' + JSON.stringify(err))
+      showToast($r('app.string.copy_failed'))
+    }
+  }
+
+  private openFeedbackIssue(): void {
+    this.copyFeedbackDiagnostic()
+    this.openExternalUrl(FeedbackUtil.buildIssueUrl({
+      appVersion: this.appVersion,
+      serverUrl: this.currentUrl,
+      account: this.currentUser,
+      user: this.siteConfig?.user
+    }))
+    this.showFeedbackSheet = false
+  }
+
+  private openFeedbackMail(): void {
+    this.copyFeedbackDiagnostic()
+    this.openExternalUrl(FeedbackUtil.buildMailUrl({
+      appVersion: this.appVersion,
+      serverUrl: this.currentUrl,
+      account: this.currentUser,
+      user: this.siteConfig?.user
+    }))
+    this.showFeedbackSheet = false
+  }
+
   @Builder rowWithJump(icon: ResourceStr, backgroundColor: ResourceColor, title: ResourceStr, url: string) {
     Row({ space: CloudThemeToken.spacingCard }) {
       Image(icon)
@@ -1505,13 +1561,73 @@ export struct TabMine {
 
   @Builder webButton() {
     Column({ space: CloudThemeToken.spacingCard }) {
-      this.rowWithJump($r('app.media.ic_feedback'),
-        CloudThemeToken.settingIconWebJumpBackground,
-        $r('app.string.feedback'),
-        'https://gitee.com/larriti/cloudrs-ohos/issues'
-      )
+      this.feedbackEntryRow()
     }
     .width('100%')
     .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder feedbackEntryRow() {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Row({ space: CloudThemeToken.spacingSection }) {
+        Image($r('app.media.ic_feedback'))
+          .width(CloudThemeToken.icon4xl)
+          .height(CloudThemeToken.icon4xl)
+          .borderRadius(CloudThemeToken.controlRadiusXl)
+          .padding(CloudThemeToken.spacingSm)
+          .fillColor(CloudThemeToken.onPrimary)
+          .backgroundColor(CloudThemeToken.settingIconWebJumpBackground)
+          .draggable(false)
+
+        Column({ space: CloudThemeToken.spacingTiny }) {
+          Text($r('app.string.feedback'))
+            .fontSize(CloudThemeToken.textSizeLarge)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('复制诊断信息，快速定位问题')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Image($r('app.media.ic_chevron_right'))
+          .width(CloudThemeToken.iconMd)
+          .height(CloudThemeToken.iconMd)
+          .fillColor(CloudThemeToken.textSecondary)
+          .draggable(false)
+      }
+      .width('100%')
+      .height('100%')
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .height(CloudThemeToken.rowHeight3xl)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .clip(true)
+    .backgroundColor(CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
+    .onClick(() => {
+      this.showFeedbackSheet = true
+    })
+  }
+
+  @Builder feedbackSheet() {
+    FeedbackSheet({
+      onCopy: () => {
+        this.copyFeedbackDiagnostic()
+      },
+      onIssue: () => {
+        this.openFeedbackIssue()
+      },
+      onMail: () => {
+        this.openFeedbackMail()
+      },
+      onClose: () => {
+        this.showFeedbackSheet = false
+      }
+    })
   }
 }

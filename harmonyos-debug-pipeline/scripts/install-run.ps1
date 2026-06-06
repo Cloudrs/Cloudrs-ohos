@@ -29,9 +29,13 @@ if ($NoDaemon.IsPresent) { $args += '--no-daemon' }
 if ($LASTEXITCODE -ne 0) { Fail "assembleHap failed, exit code: $LASTEXITCODE" }
 
 if (-not $Target) {
-  $targets = & $HdcExe list targets | Where-Object { $_ -match '\S' }
+  $targets = & $HdcExe list targets | Where-Object { $_ -match '\S' -and $_.Trim() -ne '[Empty]' }
   if (!$targets) { Fail 'No hdc target found. Start emulator or connect a device.' }
   $Target = ($targets | Select-Object -First 1).Trim()
+}
+
+if ($Target.Trim() -eq '[Empty]') {
+  Fail 'No hdc target found. Start emulator or connect a device.'
 }
 
 if (-not $HapPath) {
@@ -48,12 +52,18 @@ if (-not $HapPath) {
 }
 if (-not (Test-Path $HapPath)) { Fail "HAP not found: $HapPath" }
 
-& $HdcExe -t $Target install $HapPath
-if ($LASTEXITCODE -ne 0) { Fail "hdc install failed, exit code: $LASTEXITCODE" }
+$installOutput = & $HdcExe -t $Target install $HapPath 2>&1
+$installOutput | Write-Output
+if ($LASTEXITCODE -ne 0 -or ($installOutput -match '\[Fail\]|failed|Not match target')) {
+  Fail "hdc install failed, exit code: $LASTEXITCODE"
+}
 
 if (-not $NoStart.IsPresent) {
-  & $HdcExe -t $Target shell aa start -b $BundleName -a $AbilityName
-  if ($LASTEXITCODE -ne 0) { Fail "aa start failed, exit code: $LASTEXITCODE" }
+  $startOutput = & $HdcExe -t $Target shell aa start -b $BundleName -a $AbilityName 2>&1
+  $startOutput | Write-Output
+  if ($LASTEXITCODE -ne 0 -or ($startOutput -match '\[Fail\]|failed|Not match target')) {
+    Fail "aa start failed, exit code: $LASTEXITCODE"
+  }
 }
 
 Write-Output "INSTALL FLOW FINISHED"

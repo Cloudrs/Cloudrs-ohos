@@ -62,6 +62,7 @@ export struct TabMine {
   @Prop isActive: boolean = false
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
@@ -79,6 +80,10 @@ export struct TabMine {
   private avatarSize: number = CloudThemeToken.avatarLargeSize
   @State showUserSwitchSheet: boolean = false
   @State showSettingsSheet: boolean = false
+  @State showPrivacySheet: boolean = false
+  @State showThemeSheet: boolean = false
+  @State showMoreSettingsSheet: boolean = false
+  @State showCleanupSettings: boolean = false
   @State showFeedbackSheet: boolean = false
   @State activeSheetType: MineSheetType = MineSheetType.NONE
   @State themeMode: string = Constant.APP_THEME_LIGHT
@@ -222,7 +227,7 @@ export struct TabMine {
     Stack() {
       CloudScaffold({
         scroller: this.scroller,
-        topPadding: CloudThemeToken.pageTopPadding,
+        topPadding: CloudThemeToken.zero,
         bottomPadding: CloudThemeToken.pageBottomPadding
       }) {
         Column({ space: CloudThemeToken.sectionGap }) {
@@ -247,24 +252,21 @@ export struct TabMine {
             this.showUserSwitchSheet = false
           }
         })
+        .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
+          detents: [SheetSize.FIT_CONTENT],
+          showClose: false,
+          backgroundColor: CloudThemeToken.background,
+          onDisappear: () => {
+            this.showFeedbackSheet = false
+          }
+        })
+
+      if (this.hasSettingsOverlay()) {
+        this.settingsOverlay()
+      }
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.showSettingsSheet, this.settingsSheet(), {
-      showClose: false,
-      backgroundColor: CloudThemeToken.background,
-      onDisappear: () => {
-        this.showSettingsSheet = false
-        this.activeSheetType = MineSheetType.NONE
-      }
-    })
-    .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
-      showClose: false,
-      backgroundColor: CloudThemeToken.background,
-      onDisappear: () => {
-        this.showFeedbackSheet = false
-      }
-    })
   }
 
   private applySiteConfig(data: SiteConfig): void {
@@ -558,6 +560,9 @@ export struct TabMine {
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
+        .onClick(() => {
+          this.showUserSwitchSheet = true
+        })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -861,42 +866,42 @@ export struct TabMine {
     })
   }
 
-  @Builder rowWithSelect(icon: ResourceStr, bgColor: ResourceColor,
-    title: ResourceStr, currentValue: number,
-    options: SelectOption[], onChange: (val: number) => void) {
+  @Builder rowWithSelect(title: ResourceStr) {
     Row({ space: CloudThemeToken.spacingCard }) {
-      Image(icon)
-        .width(CloudThemeToken.iconBoxXs)
-        .height(CloudThemeToken.iconBoxXs)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .padding(CloudThemeToken.spacingLg)
-        .fillColor(CloudThemeToken.onPrimary)
-        .backgroundColor(bgColor)
-        .draggable(false)
+      Column({ space: CloudThemeToken.spacingSm }) {
+        Text(title)
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
 
-      Text(title)
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
+        Text('当前 ' + this.uploadMaxConcurrent.toString() + ' 个任务同时上传')
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
 
-      Select(options)
-        .value(currentValue.toString())
-        .selected(currentValue - 1)
-        .onSelect((index: number) => { onChange(index + 1); })
-        .width(CloudThemeToken.mineSelectWidth)
-        .height(CloudThemeToken.rowHeightSm)
-        .font({ size: CloudThemeToken.textSizeBody, weight: FontWeight.Medium })
-        .fontColor(CloudThemeToken.textPrimary)
-        .selectedOptionFont({ size: CloudThemeToken.textSizeBody, weight: FontWeight.Medium })
-        .selectedOptionFontColor(CloudThemeToken.primary)
-        .optionFont({ size: CloudThemeToken.textSizeBody })
-        .optionFontColor(CloudThemeToken.textPrimary)
-        .optionBgColor(CloudThemeToken.surface)
-        .optionHeight(CloudThemeToken.rowHeightSm)
-        .menuBackgroundColor(CloudThemeToken.surface)
-        .borderRadius(CloudThemeToken.controlRadiusLg)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+      Row() {
+        this.concurrentStepButton('-', this.uploadMaxConcurrent <= Constant.UPLOAD_CONCURRENT_MIN, () => {
+          this.changeUploadMaxConcurrent(-1)
+        })
+
+        Text(this.uploadMaxConcurrent.toString())
+          .width(CloudThemeToken.rowHeightMd)
+          .height(CloudThemeToken.rowHeightSm)
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+          .textAlign(TextAlign.Center)
+
+        this.concurrentStepButton('+', this.uploadMaxConcurrent >= Constant.UPLOAD_CONCURRENT_MAX, () => {
+          this.changeUploadMaxConcurrent(1)
+        })
+      }
+      .height(CloudThemeToken.rowHeight2xl)
+      .padding({ left: CloudThemeToken.spacingSm, right: CloudThemeToken.spacingSm })
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
     .height(CloudThemeToken.rowHeight4xl)
@@ -908,9 +913,25 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
   }
 
+  @Builder concurrentStepButton(text: string, disabled: boolean, onClick: () => void) {
+    Text(text)
+      .width(CloudThemeToken.rowHeightSm)
+      .height(CloudThemeToken.rowHeightSm)
+      .fontSize(CloudThemeToken.textSizeLarge)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(disabled ? CloudThemeToken.textSecondary : CloudThemeToken.textPrimary)
+      .textAlign(TextAlign.Center)
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .opacity(disabled ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
+      .onClick(() => {
+        if (!disabled) {
+          onClick()
+        }
+      })
+  }
+
   @Builder settingButton() {
     Column({ space: CloudThemeToken.spacingCard }) {
-      this.switchAccountAction()
       this.rowWithNext($r('app.media.ic_privacy_secure'),
         CloudThemeToken.settingIconPrivacyBackground,
         $r('app.string.user_privacy_secure'),
@@ -947,13 +968,29 @@ export struct TabMine {
     if (type === MineSheetType.PRIVACY || type === MineSheetType.CLEANUP) {
       this.syncSystemAuthState()
     }
-    this.activeSheetType = type
-    this.showSettingsSheet = true
+    if (type === MineSheetType.THEME) {
+      this.showThemeSheet = true
+      return
+    }
+    if (type === MineSheetType.MORE) {
+      this.showMoreSettingsSheet = true
+      return
+    }
+    this.showCleanupSettings = type === MineSheetType.CLEANUP
+    this.showPrivacySheet = true
   }
 
   private closeSettingsSheet(): void {
     this.showSettingsSheet = false
+    this.showPrivacySheet = false
+    this.showThemeSheet = false
+    this.showMoreSettingsSheet = false
+    this.showCleanupSettings = false
     this.activeSheetType = MineSheetType.NONE
+  }
+
+  private hasSettingsOverlay(): boolean {
+    return this.showPrivacySheet || this.showThemeSheet || this.showMoreSettingsSheet
   }
 
   @Builder userSwitchSheet() {
@@ -981,6 +1018,41 @@ export struct TabMine {
       this.cleanupSettingsSheet()
     } else {
       this.moreSettingsSheet()
+    }
+  }
+
+  @Builder privacySheet() {
+    if (this.showCleanupSettings) {
+      this.cleanupSettingsSheet()
+    } else {
+      this.privacySettingsSheet()
+    }
+  }
+
+  @Builder settingsOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.overlayScrim)
+        .onClick(() => {
+          this.closeSettingsSheet()
+        })
+
+      this.settingsOverlayContent()
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(CloudThemeToken.overlayZIndex)
+  }
+
+  @Builder settingsOverlayContent() {
+    if (this.showThemeSheet) {
+      this.themeSettingsSheet()
+    } else if (this.showMoreSettingsSheet) {
+      this.moreSettingsSheet()
+    } else {
+      this.privacySheet()
     }
   }
 
@@ -1020,7 +1092,7 @@ export struct TabMine {
         })
       }
       this.privacyActionRow('清理与重置', '清除缓存或删除当前登录凭证', false, () => {
-        this.activeSheetType = MineSheetType.CLEANUP
+        this.showCleanupSettings = true
       })
     }
     .width('100%')
@@ -1028,8 +1100,9 @@ export struct TabMine {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
+    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -1037,7 +1110,7 @@ export struct TabMine {
   @Builder cleanupSettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
       this.sheetSubHeader('清理与重置', () => {
-        this.activeSheetType = MineSheetType.PRIVACY
+        this.showCleanupSettings = false
       }, () => {
         this.closeSettingsSheet()
       })
@@ -1054,8 +1127,9 @@ export struct TabMine {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
+    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -1153,8 +1227,9 @@ export struct TabMine {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
+    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -1165,29 +1240,16 @@ export struct TabMine {
         this.closeSettingsSheet()
       })
 
-      this.rowWithSelect(
-        $r('app.media.ic_more_setting'),
-        CloudThemeToken.settingIconMoreBackground,
-        $r('app.string.upload_max_concurrent'),
-        this.uploadMaxConcurrent,
-        this.getUploadConcurrentOptions(),
-        (val: number) => {
-          this.uploadMaxConcurrent = this.normalizeUploadConcurrent(val);
-          UserPreferences.putSync(
-            Constant.USER_PREFERENCES,
-            Constant.UPLOAD_MAX_CONCURRENT,
-            this.uploadMaxConcurrent
-          );
-        }
-      )
+      this.rowWithSelect($r('app.string.upload_max_concurrent'))
     }
     .width('100%')
     .padding({
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+      bottom: this.tabBarHeight + this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
+    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
   }
@@ -1199,12 +1261,13 @@ export struct TabMine {
     return Math.max(Constant.UPLOAD_CONCURRENT_MIN, Math.min(Constant.UPLOAD_CONCURRENT_MAX, raw))
   }
 
-  private getUploadConcurrentOptions(): SelectOption[] {
-    const options: SelectOption[] = []
-    for (let value = Constant.UPLOAD_CONCURRENT_MIN; value <= Constant.UPLOAD_CONCURRENT_MAX; value++) {
-      options.push({ value: value.toString() } as SelectOption)
-    }
-    return options
+  private changeUploadMaxConcurrent(delta: number): void {
+    this.uploadMaxConcurrent = this.normalizeUploadConcurrent(this.uploadMaxConcurrent + delta)
+    UserPreferences.putSync(
+      Constant.USER_PREFERENCES,
+      Constant.UPLOAD_MAX_CONCURRENT,
+      this.uploadMaxConcurrent
+    )
   }
 
   @Builder sheetHeader(title: ResourceStr, onClose: () => void) {

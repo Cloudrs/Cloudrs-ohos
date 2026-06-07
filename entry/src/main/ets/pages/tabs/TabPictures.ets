@@ -7,7 +7,6 @@ import Constant from '../../model/Constant';
 import {
   PhotoBackupItem,
   PhotoBackupItemData,
-  PhotoBackupPathHistory,
   PhotoBackupSettings,
   PhotoBackupState,
   PhotoBackupStatus
@@ -765,28 +764,6 @@ export struct TabPictures {
     return `${this.getSettingsWifiOnly() ? '仅 Wi-Fi' : '任意网络'} · ${this.getSettingsRemotePath()}`;
   }
 
-  getPrimaryActionText(): string {
-    if (!this.getSettingsEnabled()) {
-      return '开启备份';
-    }
-    if (this.backupState === PhotoBackupState.BACKING_UP) {
-      return '备份中';
-    }
-    if (this.backupState === PhotoBackupState.PAUSED) {
-      return '继续备份';
-    }
-    if (!this.hasBackupPath()) {
-      return '选择路径';
-    }
-    if (this.waitingPhotoCount > 0) {
-      return '立即备份';
-    }
-    if (this.failedPhotoCount > 0) {
-      return '重试失败';
-    }
-    return '立即备份';
-  }
-
   updateSettings(mutator: (settings: PhotoBackupSettings) => void): void {
     let next = this.createSettingsSnapshot();
     mutator(next);
@@ -823,10 +800,6 @@ export struct TabPictures {
     return this.settingsRemotePath;
   }
 
-  getBackupPathText(): string {
-    return this.hasBackupPath() ? this.getSettingsRemotePath() : '未选择备份路径';
-  }
-
   hasBackupPath(): boolean {
     return this.getSettingsRemotePath().trim().length > 0;
   }
@@ -845,39 +818,6 @@ export struct TabPictures {
 
   normalizeUploadConcurrent(value: number): number {
     return Math.min(Math.max(value, CloudThemeToken.photoBackupMinConcurrent), CloudThemeToken.photoBackupMaxConcurrent);
-  }
-
-  updateUploadConcurrent(delta: number): void {
-    let nextValue = this.normalizeUploadConcurrent(this.getSettingsUploadConcurrent() + delta);
-    if (nextValue === this.getSettingsUploadConcurrent()) {
-      return;
-    }
-    this.updateSettings((settings: PhotoBackupSettings) => {
-      settings.uploadConcurrent = nextValue;
-    });
-  }
-
-  allowAnyNetworkBackup(): void {
-    this.updateSettings((settings: PhotoBackupSettings) => {
-      settings.wifiOnly = false;
-    });
-    if (this.backupState === PhotoBackupState.WAITING_NETWORK) {
-      this.backupState = PhotoBackupState.IDLE;
-    }
-    showToast('已允许任意网络备份');
-  }
-
-  updateRemotePath(path: string): void {
-    if (path.length === 0 || path === this.getSettingsRemotePath()) {
-      return;
-    }
-    this.updateSettings((settings: PhotoBackupSettings) => {
-      settings.remotePath = path;
-    });
-    this.refreshDoneStatus();
-    this.savePhotoRecords();
-    this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
-    showToast('已切换备份路径，状态已重新同步');
   }
 
   scheduleActiveAutoScan(): void {
@@ -1091,40 +1031,6 @@ export struct TabPictures {
     return modifiedAt;
   }
 
-  async pickPhotosForBackup(): Promise<void> {
-    try {
-      let options = new photoAccessHelper.PhotoSelectOptions();
-      options.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
-      options.maxSelectNumber = CloudThemeToken.photoBackupPickerMaxSelect;
-      let picker = new photoAccessHelper.PhotoViewPicker();
-      let result = await picker.select(options);
-      let uris = result.photoUris ?? [];
-      if (uris.length === 0) {
-        return;
-      }
-      let selectedItems: PhotoBackupItem[] = uris.map((uri: string) => {
-        let item = this.createBackupItem(uri, this.getNameFromUri(uri), 0, new Date().getTime());
-        item.id = uri;
-        item.status = this.isPhotoDone(item) ? PhotoBackupStatus.COMPLETED : PhotoBackupStatus.WAITING;
-        item.progress = item.status === PhotoBackupStatus.COMPLETED ? CloudThemeToken.percentageFull : CloudThemeToken.zero;
-        return item;
-      });
-      let before = this.getPhotos().length;
-      this.photos = this.mergePhotoList(selectedItems, true);
-      this.refreshPhotoStats();
-      let added = this.getPhotos().length - before;
-      this.savePhotoRecords();
-      showToast(added > 0 ? `已加入 ${added} 张图片` : '选择的图片已在备份列表中');
-      if (this.backupState === PhotoBackupState.COMPLETED && this.getWaitingItems().length > 0) {
-        this.backupState = PhotoBackupState.IDLE;
-      }
-    } catch (err) {
-      let error = err as BusinessError;
-      console.error(TAG, `pick photos failed: ${error.code}, ${error.message}`);
-      showToast('选择图片失败');
-    }
-  }
-
   createBackupItem(uri: string, name: string, size: number, modifiedAt: number,
     width: number = 0, height: number = 0, albumName: string = ''): PhotoBackupItem {
     let item = new PhotoBackupItem(uri, name.length > 0 ? name : this.getNameFromUri(uri), size, modifiedAt);
@@ -1328,47 +1234,6 @@ export struct TabPictures {
 
   isDoneIdForCurrentPath(id: string): boolean {
     return id.startsWith(`${this.normalizeRemotePath(this.getSettingsRemotePath())}|`);
-  }
-
-  getBackupPathHistory(): PhotoBackupPathHistory[] {
-    let pathCounts: Map<string, number> = new Map<string, number>();
-    Array.from(this.doneIds).forEach((id: string) => {
-      if (!this.isPathDoneId(id)) {
-        return;
-      }
-      let separatorIndex = id.indexOf('|');
-      let path = id.substring(0, separatorIndex);
-      pathCounts.set(path, (pathCounts.get(path) ?? 0) + 1);
-    });
-
-    let currentPath = this.normalizeRemotePath(this.getSettingsRemotePath());
-    if (this.isDefaultBackupPath()) {
-      let legacyCount = Array.from(this.doneIds).filter((id: string) => !this.isPathDoneId(id)).length;
-      if (legacyCount > 0) {
-        pathCounts.set(currentPath, Math.max(pathCounts.get(currentPath) ?? 0, legacyCount));
-      }
-    }
-
-    let result: PhotoBackupPathHistory[] = [];
-    pathCounts.forEach((count: number, path: string) => {
-      result.push(new PhotoBackupPathHistory(path, count, path === currentPath));
-    });
-    result.sort((left: PhotoBackupPathHistory, right: PhotoBackupPathHistory) => {
-      if (left.isCurrent !== right.isCurrent) {
-        return left.isCurrent ? -1 : 1;
-      }
-      return right.count - left.count;
-    });
-    return result;
-  }
-
-  getVisibleBackupPathHistory(): PhotoBackupPathHistory[] {
-    return this.getBackupPathHistory().slice(CloudThemeToken.zero, CloudThemeToken.photoBackupHistoryPreviewLimit);
-  }
-
-  getHiddenBackupPathHistoryCount(): number {
-    let hiddenCount = this.getBackupPathHistory().length - CloudThemeToken.photoBackupHistoryPreviewLimit;
-    return Math.max(hiddenCount, CloudThemeToken.zero);
   }
 
   getNameFromUri(uri: string): string {

@@ -50,16 +50,6 @@ export struct FileSearchPage {
   private getSearchFieldEffect(): VisualEffect {
     return new hdsEffect.HdsEffectBuilder()
       .pressShadow(hdsEffect.PressShadowType.BLEND_GRADIENT)
-      .pointLight({
-        sourceType: hdsEffect.PointLightSourceType.SOFT,
-        illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT,
-        options: {
-          color: CloudThemeToken.onPrimary,
-          intensity: CloudThemeToken.hdsIconButtonLightIntensity * 0.72,
-          height: CloudThemeToken.hdsIconButtonLightHeight,
-          bloom: CloudThemeToken.hdsIconButtonLightBloom * 0.72
-        }
-      })
       .buildEffect()
   }
 

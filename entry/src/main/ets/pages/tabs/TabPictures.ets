@@ -2350,6 +2350,23 @@ export struct TabPictures {
     })
   }
 
+  @Builder concurrentStepButton(text: string, disabled: boolean, onClick: () => void) {
+    Text(text)
+      .width(CloudThemeToken.rowHeightSm)
+      .height(CloudThemeToken.rowHeightSm)
+      .fontSize(CloudThemeToken.textSizeLarge)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(disabled ? CloudThemeToken.textSecondary : CloudThemeToken.textPrimary)
+      .textAlign(TextAlign.Center)
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .opacity(disabled ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
+      .onClick(() => {
+        if (!disabled) {
+          onClick()
+        }
+      })
+  }
+
   @Builder settingsPanel() {
     Column({ space: CloudThemeToken.spacingPage }) {
       Row() {
@@ -2474,34 +2491,28 @@ export struct TabPictures {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        Row({ space: CloudThemeToken.spacingXl }) {
-          Button('-')
-            .width(CloudThemeToken.smallIconButtonSize)
-            .height(CloudThemeToken.smallIconButtonSize)
-            .enabled(this.getSettingsUploadConcurrent() > CloudThemeToken.photoBackupMinConcurrent)
-            .backgroundColor(CloudThemeToken.surface)
-            .fontColor(CloudThemeToken.textPrimary)
-            .onClick(() => {
-              this.updateUploadConcurrent(-1);
-            })
+        Row() {
+          this.concurrentStepButton('-',
+            this.getSettingsUploadConcurrent() <= CloudThemeToken.photoBackupMinConcurrent, () => {
+            this.updateUploadConcurrent(-1);
+          })
 
           Text(`${this.getSettingsUploadConcurrent()}`)
+            .width(CloudThemeToken.rowHeightMd)
+            .height(CloudThemeToken.rowHeightSm)
             .fontSize(CloudThemeToken.textSizeLarge)
-            .fontWeight(FontWeight.Bold)
+            .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
             .textAlign(TextAlign.Center)
-            .width(CloudThemeToken.iconBoxSm)
 
-          Button('+')
-            .width(CloudThemeToken.smallIconButtonSize)
-            .height(CloudThemeToken.smallIconButtonSize)
-            .enabled(this.getSettingsUploadConcurrent() < CloudThemeToken.photoBackupMaxConcurrent)
-            .backgroundColor(CloudThemeToken.surface)
-            .fontColor(CloudThemeToken.textPrimary)
-            .onClick(() => {
-              this.updateUploadConcurrent(1);
-            })
+          this.concurrentStepButton('+',
+            this.getSettingsUploadConcurrent() >= CloudThemeToken.photoBackupMaxConcurrent, () => {
+            this.updateUploadConcurrent(1);
+          })
         }
+        .height(CloudThemeToken.rowHeight2xl)
+        .padding({ left: CloudThemeToken.spacingSm, right: CloudThemeToken.spacingSm })
+        .borderRadius(CloudThemeToken.controlRadiusRoundMd)
         .alignItems(VerticalAlign.Center)
       }
       .width('100%')

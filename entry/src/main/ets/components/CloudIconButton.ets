@@ -1,4 +1,3 @@
-import { hdsEffect } from '@kit.UIDesignKit';
 import { CloudThemeToken } from '../model/CloudTheme';
 
 @Component
@@ -38,22 +37,6 @@ export struct CloudIconButton {
     }
   }
 
-  private getPressEffect(): VisualEffect {
-    return new hdsEffect.HdsEffectBuilder()
-      .pressShadow(hdsEffect.PressShadowType.BLEND_GRADIENT)
-      .pointLight({
-        sourceType: hdsEffect.PointLightSourceType.SOFT,
-        illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT,
-        options: {
-          color: CloudThemeToken.onPrimary,
-          intensity: CloudThemeToken.hdsIconButtonLightIntensity,
-          height: CloudThemeToken.hdsIconButtonLightHeight,
-          bloom: CloudThemeToken.hdsIconButtonLightBloom
-        }
-      })
-      .buildEffect()
-  }
-
   build() {
     if (this.onAction) {
       Button({ type: ButtonType.Normal }) {
@@ -65,7 +48,6 @@ export struct CloudIconButton {
       .backgroundColor(this.buttonBackground)
       .enabled(this.isEnabled)
       .opacity(this.isEnabled ? CloudThemeToken.fullOpacity : CloudThemeToken.disabledOpacity)
-      .visualEffect(this.getPressEffect())
       .onClick(() => {
         if (this.isEnabled && this.onAction) {
           this.onAction()
@@ -81,7 +63,6 @@ export struct CloudIconButton {
       .backgroundColor(this.buttonBackground)
       .enabled(this.isEnabled)
       .opacity(this.isEnabled ? CloudThemeToken.fullOpacity : CloudThemeToken.disabledOpacity)
-      .visualEffect(this.getPressEffect())
     }
   }
 }

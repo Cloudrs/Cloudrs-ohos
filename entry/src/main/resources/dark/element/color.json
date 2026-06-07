@@ -57,6 +57,10 @@
       "value": "#A7B1C2"
     },
     {
+      "name": "file_icon_background",
+      "value": "#1F2937"
+    },
+    {
       "name": "cloud_danger",
       "value": "#FF6B70"
     },

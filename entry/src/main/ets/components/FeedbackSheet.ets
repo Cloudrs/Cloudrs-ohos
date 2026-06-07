@@ -1,6 +1,5 @@
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
-import { CloudIconButton } from "./CloudIconButton";
 
 @Component
 export struct FeedbackSheet {
@@ -27,15 +26,19 @@ export struct FeedbackSheet {
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
 
-        CloudIconButton({
-          icon: $r('app.media.ic_xmark_bold'),
-          buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.sheetActionIconSize,
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          iconColor: CloudThemeToken.textSecondary,
-          onAction: () => {
-            this.onClose?.()
-          }
+        Button({ type: ButtonType.Normal }) {
+          Image($r('app.media.ic_xmark_bold'))
+            .width(CloudThemeToken.sheetActionIconSize)
+            .height(CloudThemeToken.sheetActionIconSize)
+            .fillColor(CloudThemeToken.textSecondary)
+            .draggable(false)
+        }
+        .width(CloudThemeToken.smallIconButtonSize)
+        .height(CloudThemeToken.smallIconButtonSize)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .onClick(() => {
+          this.onClose?.()
         })
       }
       .width('100%')

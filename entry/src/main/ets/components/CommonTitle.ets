@@ -1,7 +1,6 @@
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudRouter } from "../utils/CloudRouter";
-import { CloudIconButton } from "./CloudIconButton";
 
 @Component
 export struct CommonTitle {
@@ -15,18 +14,22 @@ export struct CommonTitle {
         .height(CloudThemeToken.getSafeTopInset(this.topRectHeight))
 
       Row({ space: CloudThemeToken.spacingPage }) {
-        CloudIconButton({
-          icon: $r('app.media.ic_back'),
-          iconSize: CloudThemeToken.iconButtonSize,
-          iconPadding: CloudThemeToken.commonTitleIconPadding,
-          buttonBackground: CloudThemeToken.surface,
-          iconColor: CloudThemeToken.textPrimary,
-          onAction: () => {
-            if (this.onBackClick) {
-              this.onBackClick()
-            } else {
-              CloudRouter.pop()
-            }
+        Button({ type: ButtonType.Normal }) {
+          Image($r('app.media.ic_back'))
+            .width(CloudThemeToken.actionIconSize)
+            .height(CloudThemeToken.actionIconSize)
+            .fillColor(CloudThemeToken.textPrimary)
+            .draggable(false)
+        }
+        .width(CloudThemeToken.iconButtonSize)
+        .height(CloudThemeToken.iconButtonSize)
+        .borderRadius(CloudThemeToken.controlRadius)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .onClick(() => {
+          if (this.onBackClick) {
+            this.onBackClick()
+          } else {
+            CloudRouter.pop()
           }
         })
 

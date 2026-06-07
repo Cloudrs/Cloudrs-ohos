@@ -1,6 +1,6 @@
 import Constant from '../model/Constant';
 import { LoginParam } from '../model/net/LoginParam';
-import { FileSearchParam, ImagePreview, VideoPreview } from '../model/Params';
+import { FileSearchParam, ImagePreview, PhotoLocalPreviewParam, VideoPreview } from '../model/Params';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudRouter } from '../utils/CloudRouter';
 import { HomePage } from './HomePage';
@@ -9,6 +9,7 @@ import { ImagePreviewPage } from './ImagePreview';
 import { VideoPreviewPage } from './VideoPreview';
 import { AboutPage } from './AboutPage';
 import { FileSearchPage } from './FileSearchPage';
+import { PhotoLocalPreviewPage } from './PhotoLocalPreview';
 
 @Entry
 @Component
@@ -20,6 +21,7 @@ struct Index {
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
   @State fileSearchParam: FileSearchParam = new FileSearchParam();
+  @State photoLocalPreviewParam: PhotoLocalPreviewParam = new PhotoLocalPreviewParam([], 0, false);
   private startPageScheduled: boolean = false;
 
   aboutToAppear(): void {
@@ -38,6 +40,8 @@ struct Index {
           this.videoPreviewParam = param as VideoPreview;
         } else if (pageUrl === Constant.FILE_SEARCH_PAGE) {
           this.fileSearchParam = param as FileSearchParam;
+        } else if (pageUrl === Constant.PHOTO_LOCAL_PREVIEW_PAGE) {
+          this.photoLocalPreviewParam = param as PhotoLocalPreviewParam;
         }
         this.overlayPage = pageUrl;
       }
@@ -126,6 +130,11 @@ struct Index {
           .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
             .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
         .zIndex(CloudThemeToken.overlayZIndex)
+    } else if (this.overlayPage === Constant.PHOTO_LOCAL_PREVIEW_PAGE) {
+      PhotoLocalPreviewPage({ routeParam: this.photoLocalPreviewParam })
+        .width('100%')
+        .height('100%')
+        .zIndex(CloudThemeToken.overlayZIndex)
     }
   }
 
@@ -182,6 +191,19 @@ struct Index {
       .width('100%')
       .height('100%')
       .backgroundColor(CloudThemeToken.surface)
+    } else if (name === Constant.PHOTO_LOCAL_PREVIEW_PAGE) {
+      NavDestination() {
+        Stack() {
+          PhotoLocalPreviewPage({ routeParam: param as PhotoLocalPreviewParam })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.previewBackground)
+      }
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.previewBackground)
     } else {
       NavDestination() {
         Stack() {

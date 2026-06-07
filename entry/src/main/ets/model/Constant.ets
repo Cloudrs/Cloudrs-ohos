@@ -133,6 +133,8 @@ class Constant {
 
   ABOUT_PAGE = 'AboutPage'
 
+  PHOTO_LOCAL_PREVIEW_PAGE = 'PhotoLocalPreviewPage'
+
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
 
   CURRENT_PATH = 'currentPath'

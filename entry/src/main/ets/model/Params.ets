@@ -2,6 +2,7 @@
 import { ObjectInfo } from "./net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
 import { FileMenuType, ShowType } from "./MenuModel"
+import { PhotoBackupItem } from "./PhotoBackupModel"
 
 export class PreviewFile {
   fileName: string = ''
@@ -40,6 +41,18 @@ export class VideoPreview {
     this.fileName = fileName
     this.fileId = fileId
     this.fileExtension = fileExtension
+  }
+}
+
+export class PhotoLocalPreviewParam {
+  items: PhotoBackupItem[] = []
+  index: number = 0
+  backupEnabled: boolean = false
+
+  constructor(items: PhotoBackupItem[], index: number, backupEnabled: boolean) {
+    this.items = items
+    this.index = index
+    this.backupEnabled = backupEnabled
   }
 }
 

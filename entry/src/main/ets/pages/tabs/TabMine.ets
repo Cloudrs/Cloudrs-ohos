@@ -21,7 +21,7 @@ import { SystemAuthResult } from "../../utils/SystemAuthUtil";
 import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
 import { PhotoBackupSettingsSheet } from '../../components/PhotoBackupSettingsSheet';
 import { PathSelectSheet } from '../../components/PathSelectSheet';
-import { PhotoBackupSettingsStore } from '../../model/PhotoBackupSettingsStore';
+import { PhotoBackupSettingsStore, PHOTO_BACKUP_ENABLED_KEY } from '../../model/PhotoBackupSettingsStore';
 import { PhotoBackupSettings } from '../../model/PhotoBackupModel';
 
 const TAG:string = 'TabMine'
@@ -98,6 +98,7 @@ export struct TabMine {
   @State systemAuthBusy: boolean = false
   private settingsRefreshTimer: number = -1
   @State photoBackupEnabledText: string = '未开启'
+  @StorageProp(PHOTO_BACKUP_ENABLED_KEY) @Watch('onPhotoBackupEnabledChanged') photoBackupEnabledMirror: boolean = false;
   @State showPhotoBackupPathSheet: boolean = false
 
   aboutToAppear() {
@@ -136,7 +137,13 @@ export struct TabMine {
       Constant.UPLOAD_CONCURRENT_DEFAULT
     ) as number;
     this.uploadMaxConcurrent = this.normalizeUploadConcurrent(raw)
-    this.photoBackupEnabledText = PhotoBackupSettingsStore.load().enabled ? '已开启' : '未开启'
+    const pbSettings = PhotoBackupSettingsStore.load();
+    this.photoBackupEnabledText = pbSettings.enabled ? '已开启' : '未开启';
+    PhotoBackupSettingsStore.mirror(pbSettings);
+  }
+
+  private onPhotoBackupEnabledChanged(): void {
+    this.photoBackupEnabledText = this.photoBackupEnabledMirror ? '已开启' : '未开启';
   }
 
   private loadMineData(): void {
@@ -1032,6 +1039,7 @@ export struct TabMine {
     this.showPrivacySheet = false
     this.showThemeSheet = false
     this.showMoreSettingsSheet = false
+    this.showPhotoBackupPathSheet = false
     if (type === MineSheetType.PRIVACY) {
       this.syncSystemAuthState()
     }

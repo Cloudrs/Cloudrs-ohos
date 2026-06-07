@@ -28,8 +28,7 @@ enum MineSheetType {
   NONE = 'none',
   MORE = 'more',
   THEME = 'theme',
-  PRIVACY = 'privacy',
-  CLEANUP = 'cleanup'
+  PRIVACY = 'privacy'
 }
 
 enum MineMetricType {
@@ -83,9 +82,9 @@ export struct TabMine {
   @State showPrivacySheet: boolean = false
   @State showThemeSheet: boolean = false
   @State showMoreSettingsSheet: boolean = false
-  @State showCleanupSettings: boolean = false
   @State showFeedbackSheet: boolean = false
   @State activeSheetType: MineSheetType = MineSheetType.NONE
+  @State showMetrics: boolean = false
   @State themeMode: string = Constant.APP_THEME_LIGHT
   private scroller: Scroller = new Scroller;
   @State versionInfo: string = ''
@@ -503,7 +502,7 @@ export struct TabMine {
   }
 
   @Builder userInfo() {
-    Column({ space: CloudThemeToken.spacingPage }) {
+    Column() {
       Row({ space: CloudThemeToken.spacingPanel }) {
         Stack() {
           Text(this.getAvatarFallbackText())
@@ -549,12 +548,33 @@ export struct TabMine {
             .maxLines(1)
             .textOverflow({overflow: TextOverflow.Ellipsis})
 
-          Text(this.getGroupBadgeText())
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.primary)
-            .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard, top: CloudThemeToken.spacingXs, bottom: CloudThemeToken.spacingXs })
-            .borderRadius(CloudThemeToken.controlRadius)
-            .backgroundColor(CloudThemeToken.primarySoft)
+          Row({ space: CloudThemeToken.spacingCard }) {
+            Text(this.getGroupBadgeText())
+              .fontSize(CloudThemeToken.textSizeSmall)
+              .fontColor(CloudThemeToken.primary)
+              .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard, top: CloudThemeToken.spacingXs, bottom: CloudThemeToken.spacingXs })
+              .borderRadius(CloudThemeToken.controlRadius)
+              .backgroundColor(CloudThemeToken.primarySoft)
+
+            Image($r('app.media.ic_chevron_down'))
+              .width(CloudThemeToken.iconBoxXs - 12)
+              .height(CloudThemeToken.iconBoxXs - 12)
+              .fillColor(CloudThemeToken.onPrimary)
+              .rotate({ angle: this.showMetrics ? 180 : 0 })
+              .padding(CloudThemeToken.spacingXs)
+              .borderRadius(CloudThemeToken.controlRadius)
+              .backgroundColor(CloudThemeToken.primary)
+              .draggable(false)
+              .onClick(() => {
+                this.getUIContext().animateTo({
+                  duration: CloudThemeToken.defaultAnimationDuration,
+                  curve: Curve.EaseOut
+                }, () => {
+                  this.showMetrics = !this.showMetrics
+                })
+              })
+          }
+          .alignItems(VerticalAlign.Center)
         }
         .layoutWeight(1)
         .alignItems(HorizontalAlign.Start)
@@ -571,7 +591,10 @@ export struct TabMine {
         this.metricCell($r('app.string.user_days'), MineMetricType.USER_DAYS)
       }
       .width('100%')
-      .height(CloudThemeToken.cardHeightLg)
+      .height(this.showMetrics ? CloudThemeToken.cardHeightLg : 0)
+      .margin({ top: this.showMetrics ? CloudThemeToken.spacingPage : 0 })
+      .opacity(this.showMetrics ? 1 : 0)
+      .clip(true)
     }
     .padding(CloudThemeToken.spacingPage)
       .width('100%')
@@ -968,8 +991,7 @@ export struct TabMine {
     this.showPrivacySheet = false
     this.showThemeSheet = false
     this.showMoreSettingsSheet = false
-    this.showCleanupSettings = false
-    if (type === MineSheetType.PRIVACY || type === MineSheetType.CLEANUP) {
+    if (type === MineSheetType.PRIVACY) {
       this.syncSystemAuthState()
     }
     if (type === MineSheetType.THEME) {
@@ -982,7 +1004,6 @@ export struct TabMine {
       this.showSettingsSheet = true
       return
     }
-    this.showCleanupSettings = type === MineSheetType.CLEANUP
     this.showPrivacySheet = true
     this.showSettingsSheet = true
   }
@@ -992,7 +1013,6 @@ export struct TabMine {
     this.showPrivacySheet = false
     this.showThemeSheet = false
     this.showMoreSettingsSheet = false
-    this.showCleanupSettings = false
     this.showUserSwitchSheet = true
     this.showSettingsSheet = true
   }
@@ -1009,16 +1029,11 @@ export struct TabMine {
     this.showPrivacySheet = false
     this.showThemeSheet = false
     this.showMoreSettingsSheet = false
-    this.showCleanupSettings = false
     this.activeSheetType = MineSheetType.NONE
   }
 
   private closeFeedbackSheet(): void {
     this.showFeedbackSheet = false
-  }
-
-  private hasSettingsOverlay(): boolean {
-    return this.showUserSwitchSheet || this.showPrivacySheet || this.showThemeSheet || this.showMoreSettingsSheet
   }
 
   @Builder userSwitchSheet() {
@@ -1070,76 +1085,8 @@ export struct TabMine {
       this.themeSettingsSheet()
     } else if (this.activeSheetType === MineSheetType.PRIVACY) {
       this.privacySettingsSheet()
-    } else if (this.activeSheetType === MineSheetType.CLEANUP) {
-      this.cleanupSettingsSheet()
     } else {
       this.moreSettingsSheet()
-    }
-  }
-
-  @Builder privacySheet() {
-    if (this.showCleanupSettings) {
-      this.cleanupSettingsSheet()
-    } else {
-      this.privacySettingsSheet()
-    }
-  }
-
-  @Builder settingsOverlay() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.overlayScrim)
-        .onClick(() => {
-          this.closeSettingsSheet()
-        })
-
-      Column() {
-        this.settingsOverlayContent()
-      }
-      .width('100%')
-      .transition(TransitionEffect.OPACITY
-        .animation({ duration: CloudThemeToken.defaultAnimationDuration * 2, curve: Curve.EaseOut })
-        .combine(TransitionEffect.translate({ y: CloudThemeToken.detailSheetMinHeight })
-          .animation({ duration: CloudThemeToken.defaultAnimationDuration * 2, curve: Curve.EaseOut })))
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
-  }
-
-  @Builder settingsOverlayContent() {
-    if (this.showUserSwitchSheet) {
-          Scroll() {
-            Column() {
-              this.userSwitchSheet()
-            }
-            .width('100%')
-            .padding({
-              bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-            })
-          }
-          .width('100%')
-          .constraintSize({ maxHeight: '88%' })
-        } else if (this.showThemeSheet) {
-      this.themeSettingsSheet()
-    } else if (this.showUserSwitchSheet) {
-          Scroll() {
-            Column() {
-              this.userSwitchSheet()
-            }
-            .width('100%')
-            .padding({
-              bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-            })
-          }
-          .width('100%')
-          .constraintSize({ maxHeight: '88%' })
-        } else if (this.showMoreSettingsSheet) {
-      this.moreSettingsSheet()
-    } else {
-      this.privacySheet()
     }
   }
 
@@ -1178,33 +1125,6 @@ export struct TabMine {
           this.verifySystemAuth()
         })
       }
-      this.privacyActionRow('清理与重置', '清除缓存或删除当前登录凭证', false, () => {
-        this.showCleanupSettings = true
-      })
-    }
-    .width('100%')
-    .padding({
-      left: CloudThemeToken.spacingSheetHorizontal,
-      right: CloudThemeToken.spacingSheetHorizontal,
-      top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-    })
-    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
-    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
-  }
-
-  @Builder cleanupSettingsSheet() {
-    Column({ space: CloudThemeToken.spacingPage }) {
-      this.sheetSubHeader('清理与重置', () => {
-        this.showCleanupSettings = false
-      }, () => {
-        this.closeSettingsSheet()
-      })
-
-      this.privacyActionRow('清除头像缓存', '下次进入时重新加载头像', false, () => {
-        this.clearCurrentAvatarCache()
-      })
       this.privacyActionRow('删除当前登录凭证', '清除本机保存的 token 并重新登录', true, () => {
         this.deleteCurrentCredential()
       })
@@ -1509,19 +1429,6 @@ export struct TabMine {
         console.error(TAG, `refresh avatar cache failed: ${err.message}`)
         showToast('头像刷新失败')
       })
-  }
-
-  private clearCurrentAvatarCache(): void {
-    const dbUserInfo = this.getCurrentDbUserInfo()
-    if (!dbUserInfo) {
-      showToast('未找到当前账号')
-      return
-    }
-    AvatarUtil.clearDbUserAvatar(dbUserInfo)
-    this.userAvatar = undefined
-    this.userAvatarCacheUri = ''
-    this.saveMineCache()
-    showToast('头像缓存已清除')
   }
 
   private getSystemAuthDescription(): string {

@@ -79,6 +79,7 @@ export class PhotoBackupItem {
   @Trace status: PhotoBackupStatus = PhotoBackupStatus.WAITING
   @Trace progress: number = 0
   @Trace error: string = ''
+  albumName: string = ''
 
   constructor(uri: string, name: string, size: number, modifiedAt: number) {
     this.uri = uri
@@ -94,6 +95,7 @@ export class PhotoBackupItem {
     item.status = data.status ?? PhotoBackupStatus.WAITING
     item.progress = data.progress ?? 0
     item.error = data.error ?? ''
+    item.albumName = data.albumName ?? ''
     return item
   }
 
@@ -106,7 +108,8 @@ export class PhotoBackupItem {
       modifiedAt: this.modifiedAt,
       status: this.status,
       progress: this.progress,
-      error: this.error
+      error: this.error,
+      albumName: this.albumName
     }
   }
 }
@@ -120,6 +123,7 @@ export interface PhotoBackupItemData {
   status?: PhotoBackupStatus
   progress?: number
   error?: string
+  albumName?: string
 }
 
 export class PhotoBackupPathHistory {

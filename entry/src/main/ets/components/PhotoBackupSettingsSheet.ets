@@ -1,11 +1,12 @@
 import { CloudThemeToken } from '../model/CloudTheme';
 import { PhotoBackupSettings } from '../model/PhotoBackupModel';
-import { PhotoBackupSettingsStore } from '../model/PhotoBackupSettingsStore';
+import { PhotoBackupSettingsStore, PHOTO_BACKUP_PATH_KEY } from '../model/PhotoBackupSettingsStore';
 import Constant from '../model/Constant';
 
 @Component
 export struct PhotoBackupSettingsSheet {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  @StorageProp(PHOTO_BACKUP_PATH_KEY) mirroredPath: string = '';
   @State settings: PhotoBackupSettings = new PhotoBackupSettings();
   onClose: () => void = () => {};
   onPickPath: () => void = () => {};
@@ -14,8 +15,20 @@ export struct PhotoBackupSettingsSheet {
     this.settings = PhotoBackupSettingsStore.load();
   }
 
-  private persist(): void {
-    PhotoBackupSettingsStore.save(this.settings);
+  private updateSettings(mutate: (s: PhotoBackupSettings) => void): void {
+    if (this.mirroredPath && this.mirroredPath.length > 0) {
+      this.settings.remotePath = this.mirroredPath;
+    }
+    const next = new PhotoBackupSettings();
+    next.enabled = this.settings.enabled;
+    next.remotePath = this.settings.remotePath;
+    next.wifiOnly = this.settings.wifiOnly;
+    next.autoBackup = this.settings.autoBackup;
+    next.uploadConcurrent = this.settings.uploadConcurrent;
+    next.lastScanAt = this.settings.lastScanAt;
+    mutate(next);
+    this.settings = next;        // new reference → guaranteed re-render
+    PhotoBackupSettingsStore.save(next);
   }
 
   @Builder switchRow(title: string, desc: string, value: boolean, onToggle: (v: boolean) => void) {
@@ -99,8 +112,7 @@ export struct PhotoBackupSettingsSheet {
         '扫描本地图片并上传到云端',
         this.settings.enabled,
         (v: boolean) => {
-          this.settings.enabled = v;
-          this.persist();
+          this.updateSettings((s) => { s.enabled = v; });
         }
       )
 
@@ -111,7 +123,7 @@ export struct PhotoBackupSettingsSheet {
             .fontSize(CloudThemeToken.textSizeLarge)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
-          Text(this.settings.remotePath)
+          Text(this.mirroredPath && this.mirroredPath.length > 0 ? this.mirroredPath : this.settings.remotePath)
             .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
@@ -144,8 +156,7 @@ export struct PhotoBackupSettingsSheet {
         '关闭后将使用移动网络备份',
         this.settings.wifiOnly,
         (v: boolean) => {
-          this.settings.wifiOnly = v;
-          this.persist();
+          this.updateSettings((s) => { s.wifiOnly = v; });
         }
       )
 
@@ -165,9 +176,9 @@ export struct PhotoBackupSettingsSheet {
 
         Row() {
           this.concurrentStepButton('-', this.settings.uploadConcurrent <= Constant.UPLOAD_CONCURRENT_MIN, () => {
-            this.settings.uploadConcurrent =
-              PhotoBackupSettingsStore.normalizeConcurrent(this.settings.uploadConcurrent - 1);
-            this.persist();
+            this.updateSettings((s) => {
+              s.uploadConcurrent = PhotoBackupSettingsStore.normalizeConcurrent(s.uploadConcurrent - 1);
+            });
           })
 
           Text(this.settings.uploadConcurrent.toString())
@@ -179,9 +190,9 @@ export struct PhotoBackupSettingsSheet {
             .textAlign(TextAlign.Center)
 
           this.concurrentStepButton('+', this.settings.uploadConcurrent >= Constant.UPLOAD_CONCURRENT_MAX, () => {
-            this.settings.uploadConcurrent =
-              PhotoBackupSettingsStore.normalizeConcurrent(this.settings.uploadConcurrent + 1);
-            this.persist();
+            this.updateSettings((s) => {
+              s.uploadConcurrent = PhotoBackupSettingsStore.normalizeConcurrent(s.uploadConcurrent + 1);
+            });
           })
         }
         .height(CloudThemeToken.rowHeight2xl)

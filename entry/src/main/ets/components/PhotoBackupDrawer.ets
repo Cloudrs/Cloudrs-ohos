@@ -2,7 +2,7 @@ import { CloudThemeToken } from '../model/CloudTheme';
 
 @Component
 export struct PhotoBackupDrawer {
-  @Prop enabled: boolean = false;
+  @Prop backupEnabled: boolean = false;
   @Prop running: boolean = false;
   @Prop paused: boolean = false;
   @Prop completedCount: number = 0;
@@ -31,7 +31,7 @@ export struct PhotoBackupDrawer {
 
   build() {
     Column({ space: CloudThemeToken.spacingSection }) {
-      if (!this.enabled) {
+      if (!this.backupEnabled) {
         Row() {
           Text('备份已关闭')
             .fontSize(CloudThemeToken.textSizeBody)

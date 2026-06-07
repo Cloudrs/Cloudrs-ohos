@@ -24,6 +24,13 @@ import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
 import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
 import LazyDataSource from '../../utils/LazyDataSource';
+import { PhotoBackupDrawer } from '../../components/PhotoBackupDrawer';
+import { PhotoGalleryGrid } from '../../components/PhotoGalleryGrid';
+import { PhotoGallerySegment } from '../../components/PhotoGallerySegment';
+import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../model/PhotoGalleryModel';
+import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
+import { PhotoLocalPreviewParam } from '../../model/Params';
+import { CloudRouter } from '../../utils/CloudRouter';
 
 const TAG: string = 'TabPictures';
 
@@ -104,6 +111,10 @@ export struct TabPictures {
   private thumbnailLoadingIds: Set<string> = new Set<string>();
   private autoScanTimer: number = -1;
   private stalePhotoRefreshTimer: number = -1;
+  @State drawerOpen: boolean = false;
+  @State segment: GallerySegment = GallerySegment.TIME;
+  @State galleryGroups: PhotoGroup[] = [];
+  @StorageProp(PHOTO_BACKUP_REVISION_KEY) @Watch('onSettingsRevisionChanged') settingsMirrorRevision: number = 0;
 
   aboutToAppear(): void {
     this.photoBackupThumbs = PhotoBackupThumbnailCache.snapshot();
@@ -111,6 +122,7 @@ export struct TabPictures {
     this.loadSettings();
     this.loadDoneIds();
     this.loadPhotoRecords();
+    this.rebuildGroups();
     this.scheduleActiveAutoScan();
   }
 
@@ -143,8 +155,7 @@ export struct TabPictures {
   }
 
   loadSettings(): void {
-    let json = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_SETTINGS, '') as string;
-    this.applySettings(PhotoBackupSettings.fromJson(json ?? ''));
+    this.applySettings(PhotoBackupSettingsStore.load());
     this.settingsRevision++;
   }
 
@@ -496,6 +507,7 @@ export struct TabPictures {
       this.completedPreviewItems = completedPreview;
       this.syncAllPreviewDataSources();
       this.refreshPhotoCountText();
+      this.rebuildGroups();
     });
     this.preloadPreviewThumbnails(uploadingPreview);
     this.preloadPreviewThumbnails(waitingPreview);
@@ -1545,71 +1557,102 @@ export struct TabPictures {
     return CloudThemeToken.getSafeTopInset(this.topRectHeight);
   }
 
+  rebuildGroups(): void {
+    const list = this.getPhotos();
+    this.galleryGroups = this.segment === GallerySegment.TIME
+      ? groupByDate(list, new Date()) : groupByAlbum(list);
+  }
+
+  onSettingsRevisionChanged(): void {
+    this.loadSettings();
+    this.rebuildGroups();
+  }
+
+  openLocalPreview(item: PhotoBackupItem): void {
+    const flat = this.getPhotos();
+    const idx = flat.findIndex((it: PhotoBackupItem) => it.id === item.id);
+    CloudRouter.push(Constant.PHOTO_LOCAL_PREVIEW_PAGE,
+      new PhotoLocalPreviewParam(flat, Math.max(idx, 0), this.getSettingsEnabled()));
+  }
+
+  retryFailedPhotos(): void {
+    this.getFailedItems().forEach((it: PhotoBackupItem) =>
+      this.setPhotoStatus(it, PhotoBackupStatus.WAITING, 0, ''));
+    this.startBackup();
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column({ space: CloudThemeToken.sectionGap }) {
-        this.header();
-
-        List({ space: CloudThemeToken.sectionGap }) {
-          if (this.showSettings) {
-            ListItem() {
-              this.settingsPanel();
+        Row() {
+          Text('相册')
+            .fontSize(CloudThemeToken.textSizeTitle)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+            .layoutWeight(1)
+          CloudIconButton({
+            icon: $r('app.media.ic_chevron_down'),
+            iconColor: CloudThemeToken.textPrimary,
+            onAction: () => {
+              this.getUIContext().animateTo({
+                duration: CloudThemeToken.defaultAnimationDuration,
+                curve: Curve.EaseOut
+              }, () => {
+                this.drawerOpen = !this.drawerOpen;
+              });
             }
-          }
-          ListItem() {
-            this.summaryCard();
-          }
-          if (this.uploadingPhotoCount > 0) {
-            ListItem() {
-              this.sectionUploading();
-            }
-          }
-          if (this.waitingPhotoCount > 0 || this.getPhotos().length === 0) {
-            ListItem() {
-              this.sectionWaiting();
-            }
-          }
-          if (this.failedPhotoCount > 0) {
-            ListItem() {
-              this.sectionFailed();
-            }
-          }
-          if (this.completedPhotoCount > 0) {
-            ListItem() {
-              this.sectionCompleted();
-            }
-          }
-          if (!this.isBackupRunning()) {
-            ListItem() {
-              this.sectionBackupHistory();
-            }
-          }
+          })
+            .rotate({ angle: this.drawerOpen ? 180 : 0 })
         }
         .width('100%')
-        .layoutWeight(1)
-        .padding({ bottom: this.tabBarHeight + CloudThemeToken.scaffoldBottomPadding })
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-        .clip(true)
+        .alignItems(VerticalAlign.Center)
+
+        if (this.drawerOpen) {
+          PhotoBackupDrawer({
+            backupEnabled: this.getSettingsEnabled(),
+            running: this.isBackupRunning(),
+            paused: this.backupState === PhotoBackupState.PAUSED,
+            completedCount: this.completedPhotoCount,
+            localCount: this.localPhotoCount,
+            uploadingCount: this.uploadingPhotoCount,
+            waitingCount: this.waitingPhotoCount,
+            failedCount: this.failedPhotoCount,
+            statusText: this.getStatusText(),
+            onPrimary: () => { this.startBackup(); },
+            onPauseResume: () => { this.isBackupRunning() ? this.pauseBackup() : this.startBackup(); },
+            onRetryFailed: () => { this.retryFailedPhotos(); },
+            onGoEnable: () => { showToast('请在「我的 - 相册备份」中开启备份'); }
+          })
+        }
+
+        PhotoGallerySegment({
+          current: this.segment,
+          onSelect: (seg: GallerySegment) => {
+            this.segment = seg;
+            this.rebuildGroups();
+          }
+        })
+
+        PhotoGalleryGrid({
+          groups: this.galleryGroups,
+          backupEnabled: this.getSettingsEnabled(),
+          onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
+          onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
+        })
+          .layoutWeight(1)
       }
       .width('100%')
       .height('100%')
       .padding({
         left: CloudThemeToken.pagePadding,
         right: CloudThemeToken.pagePadding,
-        top: this.getTopInset() + CloudThemeToken.scaffoldTopPadding
+        top: this.getTopInset() + CloudThemeToken.scaffoldTopPadding,
+        bottom: this.tabBarHeight + CloudThemeToken.scaffoldBottomPadding
       })
       .backgroundColor(CloudThemeToken.background)
     }
     .width('100%')
     .height('100%')
-    .bindSheet($$this.showPathSelect, this.pathSelectSheet(), {
-      showClose: false,
-      backgroundColor: CloudThemeToken.background,
-      onDisappear: () => {
-        this.showPathSelect = false;
-      }
-    })
   }
 
   @Builder header() {

@@ -21,9 +21,12 @@ export struct PhotoGalleryGrid {
     return 1; // thumbnails are square; uniform 1:1 ratio
   }
 
+  private badgeOf(item: PhotoBackupItem): PhotoBadge {
+    return badgeForStatus(item.status, this.backupEnabled);
+  }
+
   @Builder badge(item: PhotoBackupItem) {
-    const badge: PhotoBadge = badgeForStatus(item.status, this.backupEnabled);
-    if (badge === PhotoBadge.CLOUD) {
+    if (this.badgeOf(item) === PhotoBadge.CLOUD) {
       Stack() {
         Circle({ width: BADGE_SIZE, height: BADGE_SIZE })
           .fill('rgba(0,0,0,0.55)')
@@ -36,7 +39,7 @@ export struct PhotoGalleryGrid {
       .width(BADGE_SIZE)
       .height(BADGE_SIZE)
       .margin({ right: BADGE_MARGIN, bottom: BADGE_MARGIN })
-    } else if (badge === PhotoBadge.UPLOADING) {
+    } else if (this.badgeOf(item) === PhotoBadge.UPLOADING) {
       Stack() {
         Circle({ width: BADGE_SIZE, height: BADGE_SIZE })
           .fill(CloudThemeToken.primary)
@@ -49,7 +52,7 @@ export struct PhotoGalleryGrid {
       .width(BADGE_SIZE)
       .height(BADGE_SIZE)
       .margin({ right: BADGE_MARGIN, bottom: BADGE_MARGIN })
-    } else if (badge === PhotoBadge.FAILED) {
+    } else if (this.badgeOf(item) === PhotoBadge.FAILED) {
       Stack() {
         Circle({ width: BADGE_SIZE, height: BADGE_SIZE })
           .fill(CloudThemeToken.danger)

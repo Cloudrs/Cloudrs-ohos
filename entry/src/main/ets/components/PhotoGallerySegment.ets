@@ -1,6 +1,9 @@
 import { CloudThemeToken } from '../model/CloudTheme';
 import { GallerySegment } from '../model/PhotoGalleryModel';
 
+const SEG_INNER_HEIGHT: number = 40;
+const SEG_PADDING: number = 4;
+
 @Component
 export struct PhotoGallerySegment {
   @Prop current: GallerySegment = GallerySegment.TIME;
@@ -10,12 +13,12 @@ export struct PhotoGallerySegment {
     Text(title)
       .layoutWeight(1)
       .textAlign(TextAlign.Center)
-      .height(CloudThemeToken.rowHeight2xl)
-      .fontSize(CloudThemeToken.textSizeBody)
+      .height(SEG_INNER_HEIGHT)
+      .fontSize(CloudThemeToken.textSizeBodyPlus)
       .fontWeight(this.current === value ? FontWeight.Bold : FontWeight.Normal)
       .fontColor(this.current === value ? CloudThemeToken.onPrimary : CloudThemeToken.textSecondary)
       .backgroundColor(this.current === value ? CloudThemeToken.primary : Color.Transparent)
-      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .borderRadius(SEG_INNER_HEIGHT / 2)
       .onClick(() => { this.onSelect(value); })
   }
 
@@ -25,8 +28,8 @@ export struct PhotoGallerySegment {
       this.seg('相册', GallerySegment.ALBUM)
     }
     .width('100%')
-    .padding(CloudThemeToken.spacingXs)
-    .borderRadius(CloudThemeToken.controlRadiusRoundXl)
+    .padding(SEG_PADDING)
+    .borderRadius(SEG_INNER_HEIGHT / 2 + SEG_PADDING)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 }

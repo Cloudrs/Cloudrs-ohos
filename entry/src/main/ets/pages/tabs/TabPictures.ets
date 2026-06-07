@@ -47,6 +47,12 @@ function toMillis(value: number): number {
   return value > 0 && value < SECONDS_TO_MS_THRESHOLD ? value * 1000 : value;
 }
 
+// The floating segment bar fades/slides in direct proportion to scroll:
+// scrolling up raises its hide-progress (0 shown → 1 hidden) over one block
+// height of travel, scrolling down lowers it. Tracks the finger 1:1.
+const SEGMENT_NEAR_TOP: number = 8;
+const SEGMENT_HIDDEN_THRESHOLD: number = 0.5;
+
 class PhotoBackupThumbnailCache {
   static data: Map<string, PixelMap> = new Map<string, PixelMap>();
 
@@ -124,7 +130,9 @@ export struct TabPictures {
   @State drawerOpen: boolean = false;
   @State segment: GallerySegment = GallerySegment.TIME;
   @State galleryGroups: PhotoGroup[] = [];
+  @State segmentProgress: number = 0;
   private gridScroller: Scroller = new Scroller();
+  private lastScrollY: number = 0;
   @StorageProp(PHOTO_BACKUP_REVISION_KEY) @Watch('onSettingsRevisionChanged') settingsMirrorRevision: number = 0;
 
   aboutToAppear(): void {
@@ -1647,9 +1655,37 @@ export struct TabPictures {
     .justifyContent(FlexAlign.End)
   }
 
+  /** Height of the floating segment block (capsule segment 40 + 2*4 padding + gap below). */
+  getSegmentBlockHeight(): number {
+    return 48 + CloudThemeToken.sectionGap;
+  }
+
+  /** Top spacer the grid reserves so photos start below the title + segment overlay. */
+  getGridTopInset(): number {
+    return this.getHdsTitleBarBaseHeight() + this.getSegmentBlockHeight();
+  }
+
+  /** Map scroll movement directly onto the segment hide-progress (0 shown → 1 hidden). */
+  private onGridScroll(yOffset: number): void {
+    const delta = yOffset - this.lastScrollY;
+    this.lastScrollY = yOffset;
+    if (delta === 0) {
+      return;
+    }
+    let next = this.segmentProgress + delta / this.getSegmentBlockHeight();
+    if (yOffset <= SEGMENT_NEAR_TOP) {
+      next = 0;
+    }
+    next = Math.min(1, Math.max(0, next));
+    if (next !== this.segmentProgress) {
+      this.segmentProgress = next;
+    }
+  }
+
+  /** Drawer (backup status) scrolls with the content; rendered only when open. */
   @Builder galleryHeader() {
-    Column({ space: CloudThemeToken.sectionGap }) {
-      if (this.drawerOpen) {
+    if (this.drawerOpen) {
+      Column() {
         PhotoBackupDrawer({
           backupEnabled: this.getSettingsEnabled(),
           running: this.isBackupRunning(),
@@ -1666,6 +1702,14 @@ export struct TabPictures {
           onGoEnable: () => { showToast('请在「我的 - 相册备份」中开启备份'); }
         })
       }
+      .width('100%')
+      .padding({ bottom: CloudThemeToken.sectionGap })
+    }
+  }
+
+  /** Floating segment bar pinned under the title; fades/slides with scroll direction. */
+  @Builder segmentOverlay() {
+    Column() {
       PhotoGallerySegment({
         current: this.segment,
         onSelect: (seg: GallerySegment) => {
@@ -1678,7 +1722,15 @@ export struct TabPictures {
       })
     }
     .width('100%')
-    .padding({ bottom: CloudThemeToken.sectionGap })
+    .padding({
+      top: this.getHdsTitleBarBaseHeight(),
+      left: CloudThemeToken.pagePadding,
+      right: CloudThemeToken.pagePadding,
+      bottom: CloudThemeToken.sectionGap
+    })
+    .opacity(CloudThemeToken.fullOpacity - this.segmentProgress)
+    .translate({ y: -this.segmentProgress * this.getSegmentBlockHeight() })
+    .hitTestBehavior(this.segmentProgress < SEGMENT_HIDDEN_THRESHOLD ? HitTestMode.Default : HitTestMode.None)
   }
 
   @Builder emptyStateBody(icon: ResourceStr, title: string, description: string, actionText: string) {
@@ -1705,18 +1757,25 @@ export struct TabPictures {
         this.emptyStateBody($r('app.media.ic_select_photos'), '还没有本地照片',
           '扫描本地相册后，照片会显示在这里。', '扫描相册')
       } else {
-        PhotoGalleryGrid({
-          groups: this.galleryGroups,
-          backupEnabled: this.getSettingsEnabled(),
-          topInset: this.getHdsTitleBarBaseHeight(),
-          bottomInset: this.tabBarHeight,
-          scroller: this.gridScroller,
-          headerContent: () => { this.galleryHeader() },
-          onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
-          onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
-        })
-          .width('100%')
-          .height('100%')
+        Stack({ alignContent: Alignment.TopStart }) {
+          PhotoGalleryGrid({
+            groups: this.galleryGroups,
+            backupEnabled: this.getSettingsEnabled(),
+            topInset: this.getGridTopInset(),
+            bottomInset: this.tabBarHeight,
+            scroller: this.gridScroller,
+            headerContent: () => { this.galleryHeader() },
+            onScroll: (yOffset: number) => { this.onGridScroll(yOffset); },
+            onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
+            onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
+          })
+            .width('100%')
+            .height('100%')
+
+          this.segmentOverlay()
+        }
+        .width('100%')
+        .height('100%')
       }
     }
     .width('100%')

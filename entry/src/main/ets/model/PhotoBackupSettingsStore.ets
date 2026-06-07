@@ -2,10 +2,6 @@ import UserPreferences from './UserPreferences';
 import Constant from './Constant';
 import { PhotoBackupSettings } from './PhotoBackupModel';
 
-const CONCURRENT_MIN: number = 1;
-const CONCURRENT_MAX: number = 10;
-const DEFAULT_PATH: string = '/Photos/Camera';
-
 /** AppStorage mirror key, used by album tab and mine tab via @StorageProp to observe changes */
 export const PHOTO_BACKUP_ENABLED_KEY: string = 'photoBackupEnabledMirror';
 export const PHOTO_BACKUP_PATH_KEY: string = 'photoBackupPathMirror';
@@ -16,13 +12,16 @@ export class PhotoBackupSettingsStore {
     if (typeof value !== 'number' || Number.isNaN(value)) {
       return Constant.UPLOAD_CONCURRENT_DEFAULT;
     }
-    return Math.min(Math.max(Math.floor(value), CONCURRENT_MIN), CONCURRENT_MAX);
+    return Math.min(
+      Math.max(Math.floor(value), Constant.UPLOAD_CONCURRENT_MIN),
+      Constant.UPLOAD_CONCURRENT_MAX
+    );
   }
 
   static normalizeRemotePath(path: string): string {
     let value = (path ?? '').trim();
     if (value.length === 0) {
-      return DEFAULT_PATH;
+      return PhotoBackupSettings.DEFAULT_REMOTE_PATH;
     }
     if (!value.startsWith('/')) {
       value = `/${value}`;
@@ -42,13 +41,26 @@ export class PhotoBackupSettingsStore {
   }
 
   static save(settings: PhotoBackupSettings): void {
-    settings.uploadConcurrent = PhotoBackupSettingsStore.normalizeConcurrent(settings.uploadConcurrent);
-    settings.remotePath = PhotoBackupSettingsStore.normalizeRemotePath(settings.remotePath);
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_SETTINGS, settings.toJson());
-    PhotoBackupSettingsStore.mirror(settings);
+    const concurrent = PhotoBackupSettingsStore.normalizeConcurrent(settings.uploadConcurrent);
+    const path = PhotoBackupSettingsStore.normalizeRemotePath(settings.remotePath);
+    const normalized = new PhotoBackupSettings();
+    normalized.enabled = settings.enabled;
+    normalized.remotePath = path;
+    normalized.wifiOnly = settings.wifiOnly;
+    normalized.autoBackup = settings.autoBackup;
+    normalized.uploadConcurrent = concurrent;
+    normalized.lastScanAt = settings.lastScanAt;
+    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_SETTINGS, normalized.toJson());
+    PhotoBackupSettingsStore.mirror(normalized);
   }
 
-  /** Write AppStorage mirrors and increment revision to trigger cross-page refresh */
+  /**
+   * Push already-normalized values to AppStorage and increment the revision counter
+   * to trigger cross-page refresh. Callers should prefer `save()`, which normalizes
+   * values first and then delegates here; call `mirror()` directly only to rehydrate
+   * AppStorage on startup from a settings object that was already normalized (e.g.
+   * the result of `load()`).
+   */
   static mirror(settings: PhotoBackupSettings): void {
     AppStorage.setOrCreate(PHOTO_BACKUP_ENABLED_KEY, settings.enabled);
     AppStorage.setOrCreate(PHOTO_BACKUP_PATH_KEY, settings.remotePath);

@@ -18,9 +18,10 @@ export enum PhotoBackupState {
 export class PhotoBackupSettings {
   static readonly DEFAULT_UPLOAD_CONCURRENT: number = 5
   static readonly MIN_UPLOAD_CONCURRENT: number = 1
+  static readonly DEFAULT_REMOTE_PATH: string = '/Photos/Camera'
 
   enabled: boolean = false
-  remotePath: string = '/Photos/Camera'
+  remotePath: string = PhotoBackupSettings.DEFAULT_REMOTE_PATH
   wifiOnly: boolean = true
   autoBackup: boolean = true
   uploadConcurrent: number = PhotoBackupSettings.DEFAULT_UPLOAD_CONCURRENT
@@ -35,7 +36,7 @@ export class PhotoBackupSettings {
     try {
       let value = JSON.parse(json) as PhotoBackupSettingsData
       settings.enabled = (value.enabled as boolean) ?? false
-      settings.remotePath = (value.remotePath as string) ?? '/Photos/Camera'
+      settings.remotePath = (value.remotePath as string) ?? PhotoBackupSettings.DEFAULT_REMOTE_PATH
       settings.wifiOnly = (value.wifiOnly as boolean) ?? true
       settings.autoBackup = (value.autoBackup as boolean) ?? true
       settings.uploadConcurrent = Math.max((value.uploadConcurrent as number) ??

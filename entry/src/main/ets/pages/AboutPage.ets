@@ -19,7 +19,9 @@ export struct AboutPage {
       this.aboutInfo()
 
       Blank().layoutWeight(1)
-      Hyperlink('https://beian.miit.gov.cn', $r('app.string.icp_id')).height(CloudThemeToken.aboutIcpHeight)
+      Hyperlink('https://beian.miit.gov.cn', $r('app.string.icp_id'))
+        .height(CloudThemeToken.aboutIcpHeight)
+        .margin({ bottom: CloudThemeToken.pageBottomPadding })
 
       Blank().height(this.bottomRectHeight)
     }

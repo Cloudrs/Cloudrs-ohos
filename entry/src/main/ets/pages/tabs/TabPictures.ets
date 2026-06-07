@@ -1620,14 +1620,6 @@ export struct TabPictures {
     return '备份失败，请稍后重试';
   }
 
-  previewBackupProgress(item: PhotoBackupItem, index: number): void {
-    setTimeout(() => {
-      if (item.status === PhotoBackupStatus.UPLOADING && item.progress < CloudThemeToken.photoBackupPreviewProgress) {
-        this.updatePhotoProgress(item, CloudThemeToken.photoBackupPreviewProgress);
-      }
-    }, CloudThemeToken.photoBackupPreviewDelayMs + index * CloudThemeToken.photoBackupPreviewDelayStepMs);
-  }
-
   getTopInset(): number {
     return CloudThemeToken.getSafeTopInset(this.topRectHeight);
   }
@@ -1700,21 +1692,57 @@ export struct TabPictures {
           })
         }
 
-        PhotoGallerySegment({
-          current: this.segment,
-          onSelect: (seg: GallerySegment) => {
-            this.segment = seg;
-            this.rebuildGroups();
-          }
-        })
+        if (this.getPhotos().length > 0) {
+          PhotoGallerySegment({
+            current: this.segment,
+            onSelect: (seg: GallerySegment) => {
+              this.segment = seg;
+              this.rebuildGroups();
+            }
+          })
+        }
 
-        PhotoGalleryGrid({
-          groups: this.galleryGroups,
-          backupEnabled: this.getSettingsEnabled(),
-          onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
-          onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
-        })
+        if (this.getPhotos().length === 0 && this.permissionHint.length > 0) {
+          Column({ space: CloudThemeToken.sectionGap }) {
+            EmptyState({
+              icon: $r('app.media.ic_lock_fill'),
+              title: '无法读取相册',
+              description: this.permissionHint
+            })
+            Button('授权读取相册')
+              .width('100%')
+              .height(CloudThemeToken.emptyStatePrimaryActionHeight)
+              .onClick(() => {
+                this.scanLocalPhotos(true, false);
+              })
+          }
+          .width('100%')
           .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+        } else if (this.getPhotos().length === 0) {
+          Column() {
+            EmptyState({
+              icon: $r('app.media.ic_select_photos'),
+              title: '还没有本地照片',
+              description: '扫描本地相册后，照片会显示在这里。',
+              actionText: '扫描相册',
+              onAction: () => {
+                this.scanLocalPhotos(true, false);
+              }
+            })
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .justifyContent(FlexAlign.Center)
+        } else {
+          PhotoGalleryGrid({
+            groups: this.galleryGroups,
+            backupEnabled: this.getSettingsEnabled(),
+            onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
+            onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
+          })
+            .layoutWeight(1)
+        }
       }
       .width('100%')
       .height('100%')

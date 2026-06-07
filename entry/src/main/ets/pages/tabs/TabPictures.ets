@@ -1703,18 +1703,14 @@ export struct TabPictures {
         }
 
         if (this.getPhotos().length === 0 && this.permissionHint.length > 0) {
-          Column({ space: CloudThemeToken.sectionGap }) {
+          Column() {
             EmptyState({
               icon: $r('app.media.ic_lock_fill'),
               title: '无法读取相册',
-              description: this.permissionHint
+              description: this.permissionHint,
+              actionText: '授权读取相册',
+              onAction: () => { this.scanLocalPhotos(true, false); }
             })
-            Button('授权读取相册')
-              .width('100%')
-              .height(CloudThemeToken.emptyStatePrimaryActionHeight)
-              .onClick(() => {
-                this.scanLocalPhotos(true, false);
-              })
           }
           .width('100%')
           .layoutWeight(1)

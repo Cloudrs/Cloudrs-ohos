@@ -14,11 +14,9 @@ import {
 } from '../../model/PhotoBackupModel';
 import { CloudApi } from '../../model/net/CloudApi';
 import UserPreferences from '../../model/UserPreferences';
-import { PathSelectSheet } from '../../components/PathSelectSheet';
 import { showToast } from '../../utils/ToastUtil';
 import { CloudThemeToken } from '../../model/CloudTheme';
 import { EmptyState } from '../../components/EmptyState';
-import { CloudTopBar } from '../../components/CloudTopBar';
 import { CloudIconButton } from '../../components/CloudIconButton';
 import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
@@ -33,6 +31,10 @@ import { PhotoLocalPreviewParam } from '../../model/Params';
 import { CloudRouter } from '../../utils/CloudRouter';
 
 const TAG: string = 'TabPictures';
+
+// Max number of user albums to enumerate when building the uri -> albumName
+// map during a scan. Keeps album mapping bounded on large libraries.
+const ALBUM_SCAN_LIMIT: number = 60;
 
 class PhotoBackupThumbnailCache {
   static data: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -72,14 +74,11 @@ export struct TabPictures {
   @State backupState: PhotoBackupState = PhotoBackupState.IDLE;
   @State photos: PhotoBackupItem[] = [];
   @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex];
-  @State showSettings: boolean = false;
-  @State showPathSelect: boolean = false;
   @State isScanning: boolean = false;
   @State backupQueueDone: number = 0;
   @State backupQueueTotal: number = 0;
   @State shouldPauseBackup: boolean = false;
   @State permissionHint: string = '';
-  @State photoGridWidth: number = 0;
   @State settingsRevision: number = 0;
   @State localPhotoCount: number = 0;
   @State completedPhotoCount: number = 0;
@@ -450,7 +449,9 @@ export struct TabPictures {
 
   private updatePhotoItemFromAsset(item: PhotoBackupItem, asset: photoAccessHelper.PhotoAsset): void {
     const resolved = this.createBackupItem(asset.uri, asset.displayName,
-      this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset));
+      this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset),
+      this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.WIDTH),
+      this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.HEIGHT));
     this.updatePhotoItemFromResolved(item, resolved);
   }
 
@@ -460,6 +461,14 @@ export struct TabPictures {
 
   private getPhotoAssetModifiedAt(asset: photoAccessHelper.PhotoAsset): number {
     return (asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0;
+  }
+
+  private getPhotoAssetDimension(asset: photoAccessHelper.PhotoAsset, key: photoAccessHelper.PhotoKeys): number {
+    try {
+      return (asset.get(key) as number) ?? 0;
+    } catch (err) {
+      return 0;
+    }
   }
 
   refreshPhotoStats(): void {
@@ -955,13 +964,16 @@ export struct TabPictures {
           photoAccessHelper.PhotoKeys.PHOTO_TYPE,
           photoAccessHelper.PhotoKeys.DISPLAY_NAME,
           photoAccessHelper.PhotoKeys.SIZE,
-          photoAccessHelper.PhotoKeys.DATE_MODIFIED
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED,
+          photoAccessHelper.PhotoKeys.WIDTH,
+          photoAccessHelper.PhotoKeys.HEIGHT
         ],
         predicates: predicates
       };
+      const albumNameByUri = await this.buildAlbumNameMap(phAccessHelper);
       let fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> =
         await phAccessHelper.getAssets(fetchOptions);
-      let nextPhotos: PhotoBackupItem[] = await this.readPhotoFetchResult(fetchResult);
+      let nextPhotos: PhotoBackupItem[] = await this.readPhotoFetchResult(fetchResult, albumNameByUri);
       if (nextPhotos.length === 0 && forceFull) {
         this.permissionHint = '未扫描到本地图片。如果相册中已有图片，请检查相册读取权限，或手动选择图片加入备份。';
       } else if (forceFull && previousCount > 0 && nextPhotos.length < previousCount) {
@@ -994,7 +1006,8 @@ export struct TabPictures {
     }
   }
 
-  async readPhotoFetchResult(fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset>):
+  async readPhotoFetchResult(fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset>,
+    albumNameByUri?: Map<string, string>):
     Promise<PhotoBackupItem[]> {
     try {
       let assets: photoAccessHelper.PhotoAsset[] = await fetchResult.getAllObjects();
@@ -1003,8 +1016,12 @@ export struct TabPictures {
         if (asset.photoType !== photoAccessHelper.PhotoType.IMAGE) {
           return;
         }
+        const albumName = albumNameByUri?.get(asset.uri) ?? '';
         const item = this.createBackupItem(asset.uri, asset.displayName,
-          this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset));
+          this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset),
+          this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.WIDTH),
+          this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.HEIGHT),
+          albumName);
         this.photoAssetCache.set(item.id, asset);
         nextPhotos.push(item);
       });
@@ -1012,6 +1029,58 @@ export struct TabPictures {
     } finally {
       fetchResult.close();
     }
+  }
+
+  /**
+   * Enumerate user albums once and build a uri -> albumName map. Bounded to a
+   * reasonable number of albums/assets to keep scanning fast on large libraries.
+   * Returns an empty map on any failure (album names then fall back to '其他').
+   */
+  async buildAlbumNameMap(phAccessHelper: photoAccessHelper.PhotoAccessHelper): Promise<Map<string, string>> {
+    const map: Map<string, string> = new Map<string, string>();
+    let albumFetch: photoAccessHelper.FetchResult<photoAccessHelper.Album> | undefined = undefined;
+    try {
+      albumFetch = await phAccessHelper.getAlbums(photoAccessHelper.AlbumType.USER,
+        photoAccessHelper.AlbumSubtype.USER_GENERIC);
+      const albums: photoAccessHelper.Album[] = await albumFetch.getAllObjects();
+      const albumLimit = Math.min(albums.length, ALBUM_SCAN_LIMIT);
+      for (let i = 0; i < albumLimit; i++) {
+        const album = albums[i];
+        const albumName = album.albumName ?? '';
+        if (albumName.length === 0) {
+          continue;
+        }
+        let assetFetch: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> | undefined = undefined;
+        try {
+          const predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
+          predicates.equalTo(photoAccessHelper.PhotoKeys.PHOTO_TYPE, photoAccessHelper.PhotoType.IMAGE);
+          const options: photoAccessHelper.FetchOptions = {
+            fetchColumns: [photoAccessHelper.PhotoKeys.URI],
+            predicates: predicates
+          };
+          assetFetch = await album.getAssets(options);
+          const assets: photoAccessHelper.PhotoAsset[] = await assetFetch.getAllObjects();
+          assets.forEach((asset: photoAccessHelper.PhotoAsset) => {
+            if (!map.has(asset.uri)) {
+              map.set(asset.uri, albumName);
+            }
+          });
+        } catch (err) {
+          console.warn(TAG, `read album assets failed: ${(err as Error)?.message ?? err}`);
+        } finally {
+          if (assetFetch) {
+            assetFetch.close();
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(TAG, `build album name map failed: ${(err as Error)?.message ?? err}`);
+    } finally {
+      if (albumFetch) {
+        albumFetch.close();
+      }
+    }
+    return map;
   }
 
   getIncrementalModifiedFloor(): number {
@@ -1056,10 +1125,14 @@ export struct TabPictures {
     }
   }
 
-  createBackupItem(uri: string, name: string, size: number, modifiedAt: number): PhotoBackupItem {
+  createBackupItem(uri: string, name: string, size: number, modifiedAt: number,
+    width: number = 0, height: number = 0, albumName: string = ''): PhotoBackupItem {
     let item = new PhotoBackupItem(uri, name.length > 0 ? name : this.getNameFromUri(uri), size, modifiedAt);
     item.status = this.isPhotoDone(item) ? PhotoBackupStatus.COMPLETED : PhotoBackupStatus.WAITING;
     item.progress = item.status === PhotoBackupStatus.COMPLETED ? CloudThemeToken.percentageFull : CloudThemeToken.zero;
+    item.width = width > 0 ? width : 0;
+    item.height = height > 0 ? height : 0;
+    item.albumName = albumName;
     return item;
   }
 
@@ -1126,6 +1199,13 @@ export struct TabPictures {
     target.size = resolved.size;
     target.modifiedAt = resolved.modifiedAt;
     target.id = resolved.id;
+    if (resolved.width > 0 && resolved.height > 0) {
+      target.width = resolved.width;
+      target.height = resolved.height;
+    }
+    if (resolved.albumName.length > 0) {
+      target.albumName = resolved.albumName;
+    }
     if (wasDone || resolved.status === PhotoBackupStatus.COMPLETED) {
       target.status = PhotoBackupStatus.COMPLETED;
       target.progress = CloudThemeToken.percentageFull;
@@ -1317,15 +1397,11 @@ export struct TabPictures {
 
   startBackup(retryFailedOnly: boolean = false): void {
     if (!this.getSettingsEnabled()) {
-      this.updateSettings((settings: PhotoBackupSettings) => {
-        settings.enabled = true;
-      });
-      this.showSettings = true;
+      showToast('请在「我的 - 相册备份」中开启备份或选择路径');
       return;
     }
     if (!this.hasBackupPath()) {
-      this.showSettings = true;
-      showToast('请先选择相册备份路径');
+      showToast('请在「我的 - 相册备份」中开启备份或选择路径');
       return;
     }
     if (this.getPhotos().length === 0) {
@@ -1341,7 +1417,6 @@ export struct TabPictures {
     }
     if (!this.canBackupNow()) {
       this.backupState = PhotoBackupState.WAITING_NETWORK;
-      this.showSettings = true;
       showToast('当前不是 Wi-Fi，已暂停相册备份');
       return;
     }
@@ -1655,995 +1730,6 @@ export struct TabPictures {
     .height('100%')
   }
 
-  @Builder header() {
-    CloudTopBar({
-      title: '相册备份',
-      subtitle: this.getStatusText(),
-      actionIcon: $r('app.media.ic_gearshape'),
-      onAction: () => {
-        this.showSettings = !this.showSettings;
-      }
-    })
-  }
-
-  @Builder summaryCard() {
-    Column({ space: CloudThemeToken.spacingPage }) {
-      Row() {
-        Column({ space: CloudThemeToken.spacingXs }) {
-        Text(this.getSettingsEnabled() ? '备份已开启' : '备份未开启')
-            .fontSize(CloudThemeToken.textSizeTitle)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text(this.getSettingsEnabled() ? `目标路径 ${this.getBackupPathText()}` : '开启后会扫描本地图片并备份到云端')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Row({ space: CloudThemeToken.spacingXl }) {
-          Button(this.getPrimaryActionText())
-            .fontSize(CloudThemeToken.textSizeBody)
-            .height(CloudThemeToken.rowHeightSm)
-            .enabled(this.backupState !== PhotoBackupState.BACKING_UP)
-            .onClick(() => {
-              this.startBackup();
-            })
-
-          if (this.backupState === PhotoBackupState.BACKING_UP) {
-            Button('暂停')
-              .fontSize(CloudThemeToken.textSizeBody)
-              .height(CloudThemeToken.rowHeightSm)
-              .backgroundColor(CloudThemeToken.surfaceSubtle)
-              .fontColor(CloudThemeToken.textPrimary)
-              .onClick(() => {
-                this.pauseBackup();
-              })
-          }
-        }
-      }
-
-      Row() {
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text(this.localPhotoCountText)
-            .fontSize(CloudThemeToken.textSizeHeadline)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('本地')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(CloudThemeToken.photoBackupMetricWidth)
-        .height(CloudThemeToken.rowHeight5xl)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .borderRadius(CloudThemeToken.cardRadius)
-
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text(this.uploadingPhotoCountText)
-            .fontSize(CloudThemeToken.textSizeHeadline)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('上传中')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(CloudThemeToken.photoBackupMetricWidth)
-        .height(CloudThemeToken.rowHeight5xl)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .borderRadius(CloudThemeToken.cardRadius)
-
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text(this.completedPhotoCountText)
-            .fontSize(CloudThemeToken.textSizeHeadline)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('已备份')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(CloudThemeToken.photoBackupMetricWidth)
-        .height(CloudThemeToken.rowHeight5xl)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .borderRadius(CloudThemeToken.cardRadius)
-
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text(this.waitingPhotoCountText)
-            .fontSize(CloudThemeToken.textSizeHeadline)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('待备份')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(CloudThemeToken.photoBackupMetricWidth)
-        .height(CloudThemeToken.rowHeight5xl)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .borderRadius(CloudThemeToken.cardRadius)
-
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text(this.failedPhotoCountText)
-            .fontSize(CloudThemeToken.textSizeHeadline)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('失败')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .width(CloudThemeToken.photoBackupMetricWidth)
-        .height(CloudThemeToken.rowHeight5xl)
-        .justifyContent(FlexAlign.Center)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .borderRadius(CloudThemeToken.cardRadius)
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.SpaceBetween)
-
-      if (this.getSettingsEnabled() && this.getSettingsWifiOnly()) {
-        Text('默认仅在 Wi-Fi 下自动备份，可在设置中改为任意网络或手动备份。')
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-
-      if (this.permissionHint.length > 0) {
-        this.permissionHintCard();
-      }
-
-      if (this.getSettingsEnabled() && !this.hasBackupPath()) {
-        this.emptyPathCard();
-      }
-
-      if (this.backupState === PhotoBackupState.BACKING_UP) {
-        Text(`本轮备份进度 ${this.backupQueueText} 张。`)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-
-      if (this.backupState === PhotoBackupState.PAUSED) {
-        Text('备份已暂停，点击继续备份会处理剩余待备份图片。')
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-
-      if (this.backupState === PhotoBackupState.WAITING_NETWORK && this.getSettingsWifiOnly()) {
-        Button('允许任意网络备份')
-          .fontSize(CloudThemeToken.textSizeSmallPlus)
-          .height(CloudThemeToken.iconBoxSm)
-          .width('100%')
-          .backgroundColor(CloudThemeToken.primarySoft)
-          .fontColor(CloudThemeToken.primary)
-          .onClick(() => {
-            this.allowAnyNetworkBackup();
-          })
-      }
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingPage)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
-  }
-
-  @Builder permissionHintCard() {
-    Column({ space: CloudThemeToken.spacingCard }) {
-      Text(this.permissionHint)
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
-        .width('100%')
-      Button('选择图片加入备份')
-        .fontSize(CloudThemeToken.textSizeSmallPlus)
-        .height(CloudThemeToken.iconBoxSm)
-        .width('100%')
-        .buttonStyle(ButtonStyleMode.TEXTUAL)
-        .onClick(() => {
-          this.pickPhotosForBackup();
-        })
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingSection)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
-  }
-
-  @Builder emptyPathCard() {
-    Column({ space: CloudThemeToken.spacingCard }) {
-      Text('还没有选择云端备份路径，选择路径后才会开始上传图片。')
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
-        .width('100%')
-      Button('选择备份路径')
-        .fontSize(CloudThemeToken.textSizeSmallPlus)
-        .height(CloudThemeToken.iconBoxSm)
-        .width('100%')
-        .buttonStyle(ButtonStyleMode.TEXTUAL)
-        .onClick(() => {
-          this.openPathSelectSheet();
-        })
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingSection)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.primarySoft)
-  }
-
-  @Builder sectionUploading() {
-    if (this.uploadingPhotoCount > 0) {
-      Column({ space: CloudThemeToken.spacingCard }) {
-        this.uploadingSectionHeader();
-        ForEach(this.uploadingPreviewItems, (item: PhotoBackupItem) => {
-          this.uploadingItem(item);
-        }, (item: PhotoBackupItem) => item.id)
-      }
-      .width('100%')
-    }
-  }
-
-  @Builder uploadingItem(item: PhotoBackupItem) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      if (this.photoBackupThumbs.has(item.id)) {
-        Image(this.photoBackupThumbs.get(item.id))
-          .width(CloudThemeToken.iconBox3xl)
-          .height(CloudThemeToken.rowHeight4xl)
-          .objectFit(ImageFit.Cover)
-          .borderRadius(CloudThemeToken.controlRadiusMd)
-      } else {
-        this.uploadingUriThumbnail(item);
-      }
-
-      Column({ space: CloudThemeToken.spacingXl }) {
-        Text(item.name)
-          .fontSize(CloudThemeToken.textSizeBodyPlus)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Progress({ value: item.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Linear })
-          .height(CloudThemeToken.thinProgressHeight)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Text(`${item.progress}%`)
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingSection)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
-  }
-
-  @Builder uploadingThumbnailPlaceholder() {
-    Stack({ alignContent: Alignment.Center }) {
-      Image($r('app.media.ic_select_photos'))
-        .width(CloudThemeToken.iconBoxLg)
-        .height(CloudThemeToken.iconBoxLg)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width(CloudThemeToken.iconBox3xl)
-    .height(CloudThemeToken.rowHeight4xl)
-    .borderRadius(CloudThemeToken.controlRadiusMd)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
-  }
-
-  @Builder uploadingUriThumbnail(item: PhotoBackupItem) {
-    Stack({ alignContent: Alignment.Center }) {
-      this.uploadingThumbnailPlaceholder();
-    }
-    .width(CloudThemeToken.iconBox3xl)
-    .height(CloudThemeToken.rowHeight4xl)
-    .clip(true)
-    .onAppear(() => {
-      this.loadPhotoThumbnail(item);
-    })
-  }
-
-  @Builder uploadingSectionHeader() {
-    Row() {
-      Text('正在备份')
-        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-
-      Text(this.uploadingPhotoCountText)
-        .fontSize(CloudThemeToken.sectionHeaderCountSize)
-        .fontColor(CloudThemeToken.textSecondary)
-        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
-
-      Blank()
-    }
-    .width('100%')
-    .height(CloudThemeToken.sectionHeaderHeight)
-    .alignItems(VerticalAlign.Center)
-    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
-  }
-
-  @Builder waitingSectionHeader() {
-    Row() {
-      Text('待备份')
-        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-
-      Text(this.waitingPhotoCountText)
-        .fontSize(CloudThemeToken.sectionHeaderCountSize)
-        .fontColor(CloudThemeToken.textSecondary)
-        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
-
-      Blank()
-    }
-    .width('100%')
-    .height(CloudThemeToken.sectionHeaderHeight)
-    .alignItems(VerticalAlign.Center)
-    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
-  }
-
-  @Builder failedSectionHeader() {
-    Row() {
-      Text('失败')
-        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-
-      Text(this.failedPhotoCountText)
-        .fontSize(CloudThemeToken.sectionHeaderCountSize)
-        .fontColor(CloudThemeToken.textSecondary)
-        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
-
-      Blank()
-    }
-    .width('100%')
-    .height(CloudThemeToken.sectionHeaderHeight)
-    .alignItems(VerticalAlign.Center)
-    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
-  }
-
-  @Builder completedSectionHeader() {
-    Row() {
-      Text('最近完成')
-        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-
-      Text(this.completedPhotoCountText)
-        .fontSize(CloudThemeToken.sectionHeaderCountSize)
-        .fontColor(CloudThemeToken.textSecondary)
-        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
-
-      Blank()
-    }
-    .width('100%')
-    .height(CloudThemeToken.sectionHeaderHeight)
-    .alignItems(VerticalAlign.Center)
-    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
-  }
-
-  @Builder backupHistorySectionHeader() {
-    Row() {
-      Text('备份历史')
-        .fontSize(CloudThemeToken.sectionHeaderTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-
-      Text(this.getVisibleBackupPathHistory().length.toString())
-        .fontSize(CloudThemeToken.sectionHeaderCountSize)
-        .fontColor(CloudThemeToken.textSecondary)
-        .margin({ left: CloudThemeToken.sectionHeaderCountGap })
-
-      Blank()
-    }
-    .width('100%')
-    .height(CloudThemeToken.sectionHeaderHeight)
-    .alignItems(VerticalAlign.Center)
-    .margin({ top: CloudThemeToken.sectionHeaderTopMargin })
-  }
-
-  @Builder photoBackupPlaceholder(status: PhotoBackupStatus) {
-    Text(this.getBadgeText(status))
-      .fontSize(CloudThemeToken.textSizeSmall)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(this.getBadgeColor(status))
-      .textAlign(TextAlign.Center)
-      .width(CloudThemeToken.iconBox3xl)
-      .height(CloudThemeToken.rowHeight4xl)
-      .borderRadius(CloudThemeToken.controlRadiusMd)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-  }
-
-  @Builder compactPhotoSection(title: string, count: number, description: string, status: PhotoBackupStatus) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Circle()
-        .width(CloudThemeToken.photoBackupCompactDotSize)
-        .height(CloudThemeToken.photoBackupCompactDotSize)
-        .fill(this.getBadgeColor(status))
-
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text(title)
-          .fontSize(CloudThemeToken.textSizeBodyPlus)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-        Text(description)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Text(count.toString())
-        .fontSize(CloudThemeToken.textSizeBodyPlus)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-        .textAlign(TextAlign.End)
-        .width(CloudThemeToken.photoBackupCompactBadgeWidth)
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingPanel)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
-  }
-
-  @Builder legacyUploadingItem(item: PhotoBackupItem) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      if (this.photoBackupThumbs.has(item.id)) {
-        Image(this.photoBackupThumbs.get(item.id))
-          .width(CloudThemeToken.iconBox3xl)
-          .height(CloudThemeToken.rowHeight4xl)
-          .objectFit(ImageFit.Cover)
-          .borderRadius(CloudThemeToken.controlRadiusMd)
-      } else {
-        this.uploadingUriThumbnail(item);
-      }
-
-      Column({ space: CloudThemeToken.spacingXl }) {
-        Text(item.name)
-          .fontSize(CloudThemeToken.textSizeBodyPlus)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Progress({ value: item.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Linear })
-          .height(CloudThemeToken.thinProgressHeight)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Text(`${item.progress}%`)
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingSection)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
-  }
-
-  @Builder sectionWaiting() {
-    if (this.waitingPhotoCount > 0) {
-      Column({ space: CloudThemeToken.spacingCard }) {
-        this.waitingSectionHeader();
-        this.photoGrid(this.waitingPreviewDataSource, PhotoBackupStatus.WAITING);
-      }
-      .width('100%')
-    } else if (this.getPhotos().length === 0) {
-      this.emptyState();
-    }
-  }
-
-  @Builder sectionFailed() {
-    if (this.failedPhotoCount > 0) {
-      Column({ space: CloudThemeToken.spacingCard }) {
-        this.failedSectionHeader();
-        this.failedActionCard();
-        if (!this.isBackupRunning()) {
-          this.photoGrid(this.failedPreviewDataSource, PhotoBackupStatus.FAILED);
-        }
-      }
-      .width('100%')
-    }
-  }
-
-  @Builder failedActionCard() {
-    Column({ space: CloudThemeToken.spacingCard }) {
-      Row() {
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text('部分图片备份失败')
-            .fontSize(CloudThemeToken.textSizeBodyPlus)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text(this.getFirstFailureMessage())
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Button('重试')
-          .fontSize(CloudThemeToken.textSizeSmallPlus)
-          .height(CloudThemeToken.rowHeightSm)
-          .backgroundColor(CloudThemeToken.dangerSoft)
-          .fontColor(CloudThemeToken.danger)
-          .onClick(() => {
-            this.startBackup(true);
-          })
-      }
-      .width('100%')
-
-      if (this.getSettingsWifiOnly()) {
-        Row({ space: CloudThemeToken.spacingMd }) {
-          Text('当前仍按仅 Wi-Fi 条件备份，没有 Wi-Fi 时可允许任意网络后重试。')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-            .layoutWeight(1)
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-          Button('允许任意网络')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .height(CloudThemeToken.rowHeightSm)
-            .backgroundColor(CloudThemeToken.surface)
-            .fontColor(CloudThemeToken.primary)
-            .onClick(() => {
-              this.allowAnyNetworkBackup();
-            })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-      }
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingPanel)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.dangerSoft)
-  }
-
-  getFirstFailureMessage(): string {
-    let failed = this.failedPreviewItems.length > 0 ? this.failedPreviewItems : this.getFailedItems();
-    if (failed.length === 0) {
-      return '请稍后重试备份。';
-    }
-    let message = failed[Constant.FIRST_ARRAY_INDEX].error;
-    return message.length > 0 ? message : '请稍后重试备份。';
-  }
-
-  @Builder sectionCompleted() {
-    if (this.completedPhotoCount > 0) {
-      Column({ space: CloudThemeToken.spacingCard }) {
-        this.completedSectionHeader();
-        if (this.completedPreviewItems.length > 0) {
-          this.photoGrid(this.completedPreviewDataSource, PhotoBackupStatus.COMPLETED);
-        } else {
-          this.compactPhotoSection('已备份', this.completedPhotoCount, '备份完成后展示最近图片',
-            PhotoBackupStatus.COMPLETED);
-        }
-      }
-      .width('100%')
-    }
-  }
-
-  @Builder sectionBackupHistory() {
-    if (this.getBackupPathHistory().length > 0) {
-      Column({ space: CloudThemeToken.spacingCard }) {
-        this.backupHistorySectionHeader();
-        ForEach(this.getVisibleBackupPathHistory(), (history: PhotoBackupPathHistory) => {
-          this.backupHistoryRow(history);
-        }, (history: PhotoBackupPathHistory) => history.path)
-        if (this.getHiddenBackupPathHistoryCount() > 0) {
-          this.backupHistoryMoreRow(this.getHiddenBackupPathHistoryCount());
-        }
-      }
-      .width('100%')
-    }
-  }
-
-  @Builder backupHistoryRow(history: PhotoBackupPathHistory) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Row({ space: CloudThemeToken.spacingXl }) {
-          Text(history.path)
-            .fontSize(CloudThemeToken.textSizeBodyPlus)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-
-          if (history.isCurrent) {
-            Text('当前')
-              .fontSize(CloudThemeToken.textSizeMicro)
-              .fontColor(CloudThemeToken.primary)
-              .padding({ left: CloudThemeToken.spacingXl, right: CloudThemeToken.spacingXl, top: CloudThemeToken.spacingTiny, bottom: CloudThemeToken.spacingTiny })
-              .borderRadius(CloudThemeToken.controlRadiusMd)
-              .backgroundColor(CloudThemeToken.primarySoft)
-          }
-        }
-        .width('100%')
-
-        Text(`${history.count} 张图片已记录为已备份`)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingPanel)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(history.isCurrent ? CloudThemeToken.surface : CloudThemeToken.surfaceSubtle)
-    .border({ width: history.isCurrent ? CloudThemeToken.lineWidth : CloudThemeToken.zero, color: CloudThemeToken.line })
-  }
-
-  @Builder backupHistoryMoreRow(count: number) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Text(`还有 ${count} 个历史路径`)
-        .fontSize(CloudThemeToken.textSizeBody)
-        .fontColor(CloudThemeToken.textSecondary)
-        .layoutWeight(1)
-
-      Text('保留记录')
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.primary)
-    }
-    .width('100%')
-    .padding(CloudThemeToken.spacingPanel)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
-  }
-
-  @Builder photoGrid(dataSource: LazyDataSource<PhotoBackupItem>, status: PhotoBackupStatus) {
-    PhotoBackupGrid({
-      dataSource: dataSource,
-      status: status,
-      columnsTemplate: this.getPhotoGridColumnsTemplate(),
-      maxCount: this.getPhotoGridColumns(),
-      gridHeight: this.getPhotoGridHeight(dataSource.totalCount()),
-      onItemVisible: (item: PhotoBackupItem) => {
-        this.loadPhotoThumbnail(item);
-      },
-      onWidthChange: (width: number) => {
-        if (Math.abs(width - this.photoGridWidth) >= CloudThemeToken.layoutChangeThreshold) {
-          this.photoGridWidth = width;
-        }
-      }
-    })
-  }
-
-  getBadgeText(status: PhotoBackupStatus): string {
-    switch (status) {
-      case PhotoBackupStatus.COMPLETED:
-        return '已备份';
-      case PhotoBackupStatus.FAILED:
-        return '失败';
-      default:
-        return '待传';
-    }
-  }
-
-  getBadgeColor(status: PhotoBackupStatus): ResourceColor {
-    switch (status) {
-      case PhotoBackupStatus.COMPLETED:
-        return CloudThemeToken.success;
-      case PhotoBackupStatus.FAILED:
-        return CloudThemeToken.danger;
-      default:
-        return CloudThemeToken.primary;
-    }
-  }
-
-  getPhotoGridColumns(): number {
-    if (this.photoGridWidth >= CloudThemeToken.wideBreakpoint) {
-      return CloudThemeToken.photoBackupGridWideColumns;
-    }
-    if (this.photoGridWidth >= CloudThemeToken.tabletBreakpoint) {
-      return CloudThemeToken.photoBackupGridTabletColumns;
-    }
-    if (this.photoGridWidth >= CloudThemeToken.twoColumnBreakpoint) {
-      return CloudThemeToken.photoBackupGridMediumColumns;
-    }
-    return CloudThemeToken.photoBackupGridPhoneColumns;
-  }
-
-  getPhotoGridColumnsTemplate(): string {
-    const columns = this.getPhotoGridColumns();
-    let templates: string[] = [];
-    for (let index = 0; index < columns; index++) {
-      templates.push(CloudThemeToken.singleColumnTemplate);
-    }
-    return templates.join(' ');
-  }
-
-  getPhotoGridHeight(itemCount: number): number {
-    if (itemCount <= CloudThemeToken.zero) {
-      return CloudThemeToken.zero;
-    }
-    const columns = this.getPhotoGridColumns();
-    const rows = Math.ceil(itemCount / columns);
-    const width = this.photoGridWidth > CloudThemeToken.zero ? this.photoGridWidth :
-      CloudThemeToken.photoBackupGridFallbackWidth;
-    const totalGap = (columns - 1) * CloudThemeToken.spacingXl;
-    const itemWidth = Math.max((width - totalGap) / columns, CloudThemeToken.zero);
-    return rows * itemWidth + Math.max(rows - 1, CloudThemeToken.zero) * CloudThemeToken.spacingXl;
-  }
-
-  @Builder emptyState() {
-    EmptyState({
-      icon: $r('app.media.ic_select_photos'),
-      title: this.getSettingsEnabled() ? '还没有扫描到本地图片' : '开启相册备份后开始扫描',
-      description: 'Cloudrs 只会上传备份，不会删除你的本地照片。',
-      actionText: this.getSettingsEnabled() ? '重新扫描' : '开启备份',
-      secondaryActionText: this.getSettingsEnabled() ? '选择图片加入备份' : undefined,
-      onAction: () => {
-        if (this.getSettingsEnabled()) {
-          this.scanLocalPhotos();
-        } else {
-          this.showSettings = true;
-        }
-      },
-      onSecondaryAction: () => {
-        this.pickPhotosForBackup();
-      }
-    })
-  }
-
-  @Builder concurrentStepButton(text: string, disabled: boolean, onClick: () => void) {
-    Text(text)
-      .width(CloudThemeToken.rowHeightSm)
-      .height(CloudThemeToken.rowHeightSm)
-      .fontSize(CloudThemeToken.textSizeLarge)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(disabled ? CloudThemeToken.textSecondary : CloudThemeToken.textPrimary)
-      .textAlign(TextAlign.Center)
-      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-      .opacity(disabled ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
-      .onClick(() => {
-        if (!disabled) {
-          onClick()
-        }
-      })
-  }
-
-  @Builder settingsPanel() {
-    Column({ space: CloudThemeToken.spacingPage }) {
-      Row() {
-        Text('相册备份设置')
-          .fontSize(CloudThemeToken.textSizeTitle)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-        CloudIconButton({
-          icon: $r('app.media.ic_xmark_bold'),
-          buttonSize: CloudThemeToken.smallIconButtonSize,
-          iconSize: CloudThemeToken.iconLg,
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          iconColor: CloudThemeToken.textSecondary,
-          onAction: () => {
-            this.showSettings = false;
-          }
-        })
-      }
-      .width('100%')
-
-      Row() {
-        Text('开启相册备份')
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.settingsEnabled })
-          .id(`photo-backup-enabled-${this.settingsEnabled}`)
-          .onChange((value: boolean) => {
-            this.updateSettings((settings: PhotoBackupSettings) => {
-              settings.enabled = value;
-            });
-            if (value) {
-              this.scanLocalPhotos();
-            }
-          })
-      }
-      .width('100%')
-      .height(CloudThemeToken.rowHeight2xl)
-      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-      .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-
-      this.pathRow();
-
-      Column({ space: CloudThemeToken.spacingXl }) {
-        Text('网络条件')
-          .fontSize(CloudThemeToken.textSizeBodyPlus)
-          .fontWeight(FontWeight.Medium)
-          .width('100%')
-        Row({ space: CloudThemeToken.spacingXl }) {
-          Text('仅 Wi-Fi')
-            .fontSize(CloudThemeToken.textSizeBody)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.settingsWifiOnly ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
-            .textAlign(TextAlign.Center)
-            .layoutWeight(1)
-            .height(CloudThemeToken.iconBoxMd)
-            .borderRadius(CloudThemeToken.controlRadius)
-            .backgroundColor(this.settingsWifiOnly ? CloudThemeToken.primary : CloudThemeToken.surfaceSubtle)
-            .align(Alignment.Center)
-            .id(`photo-backup-wifi-only-${this.settingsWifiOnly}`)
-            .onClick(() => {
-              this.updateSettings((settings: PhotoBackupSettings) => {
-                settings.wifiOnly = true;
-              });
-            })
-
-          Text('任意网络')
-            .fontSize(CloudThemeToken.textSizeBody)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(!this.settingsWifiOnly ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
-            .textAlign(TextAlign.Center)
-            .layoutWeight(1)
-            .height(CloudThemeToken.iconBoxMd)
-            .borderRadius(CloudThemeToken.controlRadius)
-            .backgroundColor(!this.settingsWifiOnly ? CloudThemeToken.primary : CloudThemeToken.surfaceSubtle)
-            .align(Alignment.Center)
-            .id(`photo-backup-any-network-${this.settingsWifiOnly}`)
-            .onClick(() => {
-              this.updateSettings((settings: PhotoBackupSettings) => {
-                settings.wifiOnly = false;
-              });
-              if (this.backupState === PhotoBackupState.WAITING_NETWORK) {
-                this.backupState = PhotoBackupState.IDLE;
-              }
-            })
-        }
-      }
-
-      Row() {
-        Text('自动备份')
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.settingsAutoBackup })
-          .id(`photo-backup-auto-${this.settingsAutoBackup}`)
-          .onChange((value: boolean) => {
-            this.updateSettings((settings: PhotoBackupSettings) => {
-              settings.autoBackup = value;
-            });
-          })
-      }
-      .width('100%')
-      .height(CloudThemeToken.rowHeight2xl)
-      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-      .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-
-      Row() {
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text('同时上传')
-            .fontSize(CloudThemeToken.textSizeLarge)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('备份任务会按队列执行')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Row() {
-          this.concurrentStepButton('-',
-            this.getSettingsUploadConcurrent() <= CloudThemeToken.photoBackupMinConcurrent, () => {
-            this.updateUploadConcurrent(-1);
-          })
-
-          Text(`${this.getSettingsUploadConcurrent()}`)
-            .width(CloudThemeToken.rowHeightMd)
-            .height(CloudThemeToken.rowHeightSm)
-            .fontSize(CloudThemeToken.textSizeLarge)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-            .textAlign(TextAlign.Center)
-
-          this.concurrentStepButton('+',
-            this.getSettingsUploadConcurrent() >= CloudThemeToken.photoBackupMaxConcurrent, () => {
-            this.updateUploadConcurrent(1);
-          })
-        }
-        .height(CloudThemeToken.rowHeight2xl)
-        .padding({ left: CloudThemeToken.spacingSm, right: CloudThemeToken.spacingSm })
-        .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-        .alignItems(VerticalAlign.Center)
-      }
-      .width('100%')
-      .height(CloudThemeToken.rowHeight5xl)
-      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-      .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-
-      Row({ space: CloudThemeToken.spacingCard }) {
-        Button('重新扫描本地相册')
-          .layoutWeight(1)
-          .height(CloudThemeToken.rowHeightXl)
-          .onClick(() => {
-            this.showSettings = false;
-            this.scanLocalPhotos();
-          })
-        Button('选择图片加入')
-          .layoutWeight(1)
-          .height(CloudThemeToken.rowHeightXl)
-          .buttonStyle(ButtonStyleMode.TEXTUAL)
-          .onClick(() => {
-            this.pickPhotosForBackup();
-          })
-      }
-      .width('100%')
-
-      Text('备份只会上传本地图片到远程路径，不会删除本地照片，也不会自动删除云端文件。')
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
-        .width('100%')
-    }
-    .padding(CloudThemeToken.spacingPage)
-    .width('100%')
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
-  }
-
-  @Builder pathRow() {
-    Row() {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text('备份路径')
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-        Text(this.getBackupPathText())
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Image($r('app.media.ic_chevron_right'))
-        .width(CloudThemeToken.iconSm)
-        .height(CloudThemeToken.iconSm)
-        .fillColor(CloudThemeToken.textSecondary)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight5xl)
-    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
-    .onClick(() => {
-      this.openPathSelectSheet();
-    })
-  }
-
-  @Builder pathSelectSheet() {
-    PathSelectSheet({
-      title: $r('app.string.backup_to'),
-      filterDirId: '',
-      onClose: (isFinished: boolean, path?: string) => {
-        this.closePathSelectSheet();
-        if (isFinished && path && path.length > 0) {
-          this.updateRemotePath(path);
-        }
-      }
-    })
-  }
-
-  private openPathSelectSheet(): void {
-    this.showPathSelect = true;
-  }
-
-  private closePathSelectSheet(): void {
-    this.showPathSelect = false;
-  }
 
   getAbilityContext(): common.UIAbilityContext | undefined {
     const hostContext = this.getUIContext().getHostContext()
@@ -2651,115 +1737,5 @@ export struct TabPictures {
       return undefined
     }
     return hostContext as common.UIAbilityContext
-  }
-}
-
-@Component
-struct PhotoBackupGrid {
-  @Consume photoBackupThumbs: Map<string, PixelMap>
-  dataSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource()
-  status: PhotoBackupStatus = PhotoBackupStatus.WAITING
-  columnsTemplate: string = ''
-  maxCount: number = CloudThemeToken.zero
-  gridHeight: number = CloudThemeToken.zero
-  onItemVisible?: (item: PhotoBackupItem) => void
-  onWidthChange?: (width: number) => void
-
-  getBadgeText(): string {
-    switch (this.status) {
-      case PhotoBackupStatus.COMPLETED:
-        return '已备份';
-      case PhotoBackupStatus.FAILED:
-        return '失败';
-      default:
-        return '待传';
-    }
-  }
-
-  getBadgeColor(): ResourceColor {
-    switch (this.status) {
-      case PhotoBackupStatus.COMPLETED:
-        return CloudThemeToken.success;
-      case PhotoBackupStatus.FAILED:
-        return CloudThemeToken.danger;
-      default:
-        return CloudThemeToken.primary;
-    }
-  }
-
-  build() {
-    Grid() {
-      LazyForEach(this.dataSource, (item: PhotoBackupItem) => {
-        GridItem() {
-          Stack({ alignContent: Alignment.TopEnd }) {
-            if (this.photoBackupThumbs.has(item.id)) {
-              Image(this.photoBackupThumbs.get(item.id))
-                .width('100%')
-                .aspectRatio(CloudThemeToken.squareAspectRatio)
-                .objectFit(ImageFit.Cover)
-                .borderRadius(CloudThemeToken.controlRadiusLg)
-            } else {
-              this.uriThumbnail(item)
-            }
-
-            Text(this.getBadgeText())
-              .fontSize(CloudThemeToken.textSizeTiny)
-              .fontColor(CloudThemeToken.onPrimary)
-              .padding({
-                left: CloudThemeToken.spacingMd,
-                right: CloudThemeToken.spacingMd,
-                top: CloudThemeToken.spacingTiny,
-                bottom: CloudThemeToken.spacingTiny
-              })
-              .backgroundColor(this.getBadgeColor())
-              .borderRadius(CloudThemeToken.controlRadiusSm)
-              .margin(CloudThemeToken.spacingMd)
-          }
-          .width('100%')
-          .aspectRatio(CloudThemeToken.squareAspectRatio)
-          .clip(true)
-        }
-        .onAppear(() => {
-          this.onItemVisible?.(item);
-        })
-      }, (item: PhotoBackupItem) => item.id)
-    }
-    .cachedCount(CloudThemeToken.photoBackupGridCachedCount)
-    .columnsTemplate(this.columnsTemplate)
-    .maxCount(this.maxCount)
-    .columnsGap(CloudThemeToken.spacingXl)
-    .rowsGap(CloudThemeToken.spacingXl)
-    .width('100%')
-    .height(this.gridHeight)
-    .clip(true)
-    .onAreaChange((oldValue: Area, newValue: Area) => {
-      const width = Number(newValue.width);
-      if (!Number.isNaN(width)) {
-        this.onWidthChange?.(width);
-      }
-    })
-  }
-
-  @Builder uriThumbnail(item: PhotoBackupItem) {
-    Stack({ alignContent: Alignment.Center }) {
-      this.thumbnailPlaceholder()
-    }
-    .width('100%')
-    .aspectRatio(CloudThemeToken.squareAspectRatio)
-    .clip(true)
-  }
-
-  @Builder thumbnailPlaceholder() {
-    Stack({ alignContent: Alignment.Center }) {
-      Image($r('app.media.ic_select_photos'))
-        .width(CloudThemeToken.iconBoxLg)
-        .height(CloudThemeToken.iconBoxLg)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .aspectRatio(CloudThemeToken.squareAspectRatio)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 }

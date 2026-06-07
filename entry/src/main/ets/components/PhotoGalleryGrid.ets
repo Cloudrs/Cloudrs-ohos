@@ -17,8 +17,12 @@ export struct PhotoGalleryGrid {
   onTapPhoto: (item: PhotoBackupItem) => void = () => {};
   @State containerWidth: number = 0;
 
-  private ratioOf(_item: PhotoBackupItem): number {
-    return 1; // thumbnails are square; uniform 1:1 ratio
+  private ratioOf(item: PhotoBackupItem): number {
+    if (item.width > 0 && item.height > 0) {
+      const r = item.width / item.height;
+      return Math.min(Math.max(r, 0.5), 2.0); // clamp to avoid extreme rows
+    }
+    return 1;
   }
 
   private badgeOf(item: PhotoBackupItem): PhotoBadge {

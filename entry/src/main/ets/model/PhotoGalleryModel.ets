@@ -45,6 +45,9 @@ function dateTitle(ms: number, today: Date): string {
   if (isSameDay) {
     return '今天';
   }
+  if (d.getFullYear() !== today.getFullYear()) {
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  }
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 

@@ -21,7 +21,6 @@ import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
 import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
 import LazyDataSource from '../../utils/LazyDataSource';
-import { PhotoBackupDrawer } from '../../components/PhotoBackupDrawer';
 import { PhotoGalleryGrid } from '../../components/PhotoGalleryGrid';
 import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../model/PhotoGalleryModel';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
@@ -1610,7 +1609,12 @@ export struct TabPictures {
 
   openLocalPreview(item: PhotoBackupItem): void {
     const flat = this.getPhotos();
-    const idx = flat.findIndex((it: PhotoBackupItem) => it.id === item.id);
+    // Match by uri (the stable key) rather than id, which embeds size/modifiedAt
+    // and can diverge between scanned and loaded records for the same photo.
+    let idx = flat.findIndex((it: PhotoBackupItem) => it.uri === item.uri);
+    if (idx < 0) {
+      idx = flat.findIndex((it: PhotoBackupItem) => it.id === item.id);
+    }
     CloudRouter.push(Constant.PHOTO_LOCAL_PREVIEW_PAGE,
       new PhotoLocalPreviewParam(flat, Math.max(idx, 0), this.getSettingsEnabled()));
   }
@@ -1668,25 +1672,119 @@ export struct TabPictures {
     }
   }
 
-  /** Backup-status drawer as a fixed overlay under the title; auto-collapses on scroll. */
+
+  /**
+   * Backup-status drawer inlined here (not a child component) so the live counts
+   * read directly from @State — child @Prop bindings were not refreshing mid-backup.
+   */
+  @Builder drawerCard() {
+    Column({ space: CloudThemeToken.spacingSection }) {
+      if (!this.getSettingsEnabled()) {
+        Row() {
+          Text('备份已关闭')
+            .fontSize(CloudThemeToken.textSizeBody)
+            .fontColor(CloudThemeToken.textSecondary)
+            .layoutWeight(1)
+          Button('去开启')
+            .fontSize(CloudThemeToken.textSizeSmallPlus)
+            .height(CloudThemeToken.rowHeightSm)
+            .onClick(() => { showToast('请在「我的 - 相册备份」中开启备份'); })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+      } else {
+        Row() {
+          Column({ space: CloudThemeToken.spacingXs }) {
+            Text(this.getStatusText())
+              .fontSize(CloudThemeToken.textSizeBody)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(CloudThemeToken.textPrimary)
+            Text(`已备份 ${this.completedPhotoCount} / ${this.localPhotoCount}`)
+              .fontSize(CloudThemeToken.textSizeSmall)
+              .fontColor(CloudThemeToken.textSecondary)
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+
+          if (this.isBackupRunning() || this.backupState === PhotoBackupState.PAUSED) {
+            Button(this.backupState === PhotoBackupState.PAUSED ? '继续' : '暂停')
+              .fontSize(CloudThemeToken.textSizeSmallPlus)
+              .height(CloudThemeToken.rowHeightSm)
+              .backgroundColor(CloudThemeToken.surface)
+              .fontColor(CloudThemeToken.primary)
+              .onClick(() => { this.isBackupRunning() ? this.pauseBackup() : this.startBackup(); })
+          } else {
+            Button('立即备份')
+              .fontSize(CloudThemeToken.textSizeSmallPlus)
+              .height(CloudThemeToken.rowHeightSm)
+              .onClick(() => { this.startBackup(); })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Progress({ value: this.completedPhotoCount, total: Math.max(this.localPhotoCount, 1), type: ProgressType.Capsule })
+          .width('100%')
+          .height(CloudThemeToken.storageProgressHeight)
+          .color(CloudThemeToken.primary)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+
+        Row({ space: CloudThemeToken.spacingPage }) {
+          // Read @State directly in each Text (not via a @Builder value param) so the
+          // counts refresh live during backup.
+          Column({ space: CloudThemeToken.spacingXs }) {
+            Text(this.uploadingPhotoCount.toString())
+              .fontSize(CloudThemeToken.textSizeTitle)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(CloudThemeToken.primary)
+            Text('上传中')
+              .fontSize(CloudThemeToken.textSizeSmall)
+              .fontColor(CloudThemeToken.textSecondary)
+          }
+
+          Column({ space: CloudThemeToken.spacingXs }) {
+            Text(this.waitingPhotoCount.toString())
+              .fontSize(CloudThemeToken.textSizeTitle)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(CloudThemeToken.textPrimary)
+            Text('待备份')
+              .fontSize(CloudThemeToken.textSizeSmall)
+              .fontColor(CloudThemeToken.textSecondary)
+          }
+
+          Column({ space: CloudThemeToken.spacingXs }) {
+            Text(this.failedPhotoCount.toString())
+              .fontSize(CloudThemeToken.textSizeTitle)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(CloudThemeToken.danger)
+            Text('失败 · 重试')
+              .fontSize(CloudThemeToken.textSizeSmall)
+              .fontColor(CloudThemeToken.textSecondary)
+          }
+          .onClick(() => {
+            if (this.failedPhotoCount > 0) { this.retryFailedPhotos(); }
+          })
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Start)
+      }
+    }
+    .width('100%')
+    .padding(CloudThemeToken.spacingPage)
+    .borderRadius({
+      bottomLeft: CloudThemeToken.surfaceRadius,
+      bottomRight: CloudThemeToken.surfaceRadius
+    })
+    .backgroundColor(CloudThemeToken.surfaceTranslucent)
+    .backdropBlur(18)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+  }
+
+  /** Backup drawer as a fixed overlay under the title; auto-collapses on scroll. */
   @Builder drawerOverlay() {
     if (this.drawerOpen) {
       Column() {
-        PhotoBackupDrawer({
-          backupEnabled: this.getSettingsEnabled(),
-          running: this.isBackupRunning(),
-          paused: this.backupState === PhotoBackupState.PAUSED,
-          completedCount: this.completedPhotoCount,
-          localCount: this.localPhotoCount,
-          uploadingCount: this.uploadingPhotoCount,
-          waitingCount: this.waitingPhotoCount,
-          failedCount: this.failedPhotoCount,
-          statusText: this.getStatusText(),
-          onPrimary: () => { this.startBackup(); },
-          onPauseResume: () => { this.isBackupRunning() ? this.pauseBackup() : this.startBackup(); },
-          onRetryFailed: () => { this.retryFailedPhotos(); },
-          onGoEnable: () => { showToast('请在「我的 - 相册备份」中开启备份'); }
-        })
+        this.drawerCard()
       }
       .width('100%')
       .padding({ top: this.getHdsTitleBarBaseHeight() })

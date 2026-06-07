@@ -76,17 +76,30 @@ export struct PhotoLocalPreviewPage {
   }
 
   @Builder slide(item: PhotoBackupItem) {
-    Stack() {
-      LoadingProgress()
-        .width(48)
-        .height(48)
-        .color(Color.White)
-      Image(item.uri)
-        .width('100%')
-        .height('100%')
-        .objectFit(ImageFit.Contain)
-        .draggable(false)
-        .onError(() => { console.warn(TAG, `image load failed: ${item.name}`) })
+    Stack({ alignContent: Alignment.Bottom }) {
+      Stack() {
+        LoadingProgress()
+          .width(48)
+          .height(48)
+          .color(Color.White)
+        Image(item.uri)
+          .width('100%')
+          .height('100%')
+          .objectFit(ImageFit.Contain)
+          .draggable(false)
+          .onError(() => { console.warn(TAG, `image load failed: ${item.name}`) })
+      }
+      .width('100%')
+      .height('100%')
+
+      // Per-slide info bar so the status always matches the visible photo.
+      Column() {
+        this.infoBar(item)
+      }
+      .width('100%')
+      .opacity(this.chromeVisible ? 1 : 0)
+      .translate({ y: this.chromeVisible ? 0 : 40 })
+      .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
     }
     .width('100%')
     .height('100%')
@@ -124,7 +137,7 @@ export struct PhotoLocalPreviewPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack() {
       Swiper() {
         LazyForEach(this.itemSource, (item: PhotoBackupItem) => {
           this.slide(item)
@@ -139,16 +152,6 @@ export struct PhotoLocalPreviewPage {
       })
       .width('100%')
       .height('100%')
-
-      if (this.items.length > 0 && this.index < this.items.length) {
-        Column() {
-          this.infoBar(this.items[this.index])
-        }
-        .width('100%')
-        .opacity(this.chromeVisible ? 1 : 0)
-        .translate({ y: this.chromeVisible ? 0 : 40 })
-        .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
-      }
     }
     .width('100%')
     .height('100%')

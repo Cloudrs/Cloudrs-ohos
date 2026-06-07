@@ -19,6 +19,10 @@ import { showToast } from "../../utils/ToastUtil";
 import { AppLockUtil } from "../../utils/AppLockUtil";
 import { SystemAuthResult } from "../../utils/SystemAuthUtil";
 import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
+import { PhotoBackupSettingsSheet } from '../../components/PhotoBackupSettingsSheet';
+import { PathSelectSheet } from '../../components/PathSelectSheet';
+import { PhotoBackupSettingsStore } from '../../model/PhotoBackupSettingsStore';
+import { PhotoBackupSettings } from '../../model/PhotoBackupModel';
 
 const TAG:string = 'TabMine'
 const MINE_SETTINGS_REFRESH_INTERVAL_MS: number = 30000
@@ -28,7 +32,8 @@ enum MineSheetType {
   NONE = 'none',
   MORE = 'more',
   THEME = 'theme',
-  PRIVACY = 'privacy'
+  PRIVACY = 'privacy',
+  PHOTO_BACKUP = 'photo_backup'
 }
 
 enum MineMetricType {
@@ -92,6 +97,8 @@ export struct TabMine {
   @State systemAuthEnabled: boolean = false
   @State systemAuthBusy: boolean = false
   private settingsRefreshTimer: number = -1
+  @State photoBackupEnabledText: string = '未开启'
+  @State showPhotoBackupPathSheet: boolean = false
 
   aboutToAppear() {
     this.loadLocalPreferences()
@@ -129,6 +136,7 @@ export struct TabMine {
       Constant.UPLOAD_CONCURRENT_DEFAULT
     ) as number;
     this.uploadMaxConcurrent = this.normalizeUploadConcurrent(raw)
+    this.photoBackupEnabledText = PhotoBackupSettingsStore.load().enabled ? '已开启' : '未开启'
   }
 
   private loadMineData(): void {
@@ -261,9 +269,35 @@ export struct TabMine {
             this.finishCloseSettingsSheet()
           }
         })
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showPhotoBackupPathSheet, this.photoBackupPathSheet(), {
+          showClose: false,
+          backgroundColor: CloudThemeToken.background,
+          onDisappear: () => {
+            this.showPhotoBackupPathSheet = false
+          }
+        })
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder photoBackupPathSheet() {
+    PathSelectSheet({
+      title: $r('app.string.backup_to'),
+      filterDirId: '',
+      onClose: (isFinished: boolean, path?: string) => {
+        this.showPhotoBackupPathSheet = false
+        if (isFinished && path && path.length > 0) {
+          const s: PhotoBackupSettings = PhotoBackupSettingsStore.load()
+          s.remotePath = path
+          PhotoBackupSettingsStore.save(s)
+        }
+      }
+    })
   }
 
   private applySiteConfig(data: SiteConfig): void {
@@ -967,6 +1001,13 @@ export struct TabMine {
         () => {
           this.openSettingsSheet(MineSheetType.THEME)
         })
+      this.rowWithNext($r('app.media.ic_externaldrive_fill'),
+        CloudThemeToken.settingIconThemeBackground,
+        '相册备份',
+        this.photoBackupEnabledText,
+        () => {
+          this.openSettingsSheet(MineSheetType.PHOTO_BACKUP)
+        })
       this.rowWithNext($r('app.media.ic_more_setting'),
         CloudThemeToken.settingIconMoreBackground,
         $r('app.string.more_setting'),
@@ -1001,6 +1042,10 @@ export struct TabMine {
     }
     if (type === MineSheetType.MORE) {
       this.showMoreSettingsSheet = true
+      this.showSettingsSheet = true
+      return
+    }
+    if (type === MineSheetType.PHOTO_BACKUP) {
       this.showSettingsSheet = true
       return
     }
@@ -1085,9 +1130,18 @@ export struct TabMine {
       this.themeSettingsSheet()
     } else if (this.activeSheetType === MineSheetType.PRIVACY) {
       this.privacySettingsSheet()
+    } else if (this.activeSheetType === MineSheetType.PHOTO_BACKUP) {
+      this.photoBackupSheet()
     } else {
       this.moreSettingsSheet()
     }
+  }
+
+  @Builder photoBackupSheet() {
+    PhotoBackupSettingsSheet({
+      onClose: () => { this.closeSettingsSheet() },
+      onPickPath: () => { this.showPhotoBackupPathSheet = true }
+    })
   }
 
   @Builder privacySettingsSheet() {

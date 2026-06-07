@@ -13,9 +13,9 @@ export struct PhotoGallerySegment {
       .height(CloudThemeToken.rowHeight2xl)
       .fontSize(CloudThemeToken.textSizeBody)
       .fontWeight(this.current === value ? FontWeight.Bold : FontWeight.Normal)
-      .fontColor(this.current === value ? CloudThemeToken.textPrimary : CloudThemeToken.textSecondary)
-      .backgroundColor(this.current === value ? CloudThemeToken.surface : Color.Transparent)
-      .borderRadius(CloudThemeToken.controlRadius)
+      .fontColor(this.current === value ? CloudThemeToken.onPrimary : CloudThemeToken.textSecondary)
+      .backgroundColor(this.current === value ? CloudThemeToken.primary : Color.Transparent)
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
       .onClick(() => { this.onSelect(value); })
   }
 
@@ -26,7 +26,7 @@ export struct PhotoGallerySegment {
     }
     .width('100%')
     .padding(CloudThemeToken.spacingXs)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .borderRadius(CloudThemeToken.controlRadiusRoundXl)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 }

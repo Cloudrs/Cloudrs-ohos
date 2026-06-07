@@ -136,3 +136,78 @@ export function justifyRows(ratios: number[], containerWidth: number, targetHeig
   flushRow(current, start, true);
   return rows;
 }
+
+/** Clamped aspect ratio (width/height) for an item; 1 when dimensions are missing. */
+export function ratioForItem(item: PhotoBackupItem): number {
+  if (item.width > 0 && item.height > 0) {
+    const r = item.width / item.height;
+    return Math.min(Math.max(r, 0.5), 2.0);
+  }
+  return 1;
+}
+
+/** A flat render row consumed by the gallery's LazyForEach: either a section header or a row of photo cells. */
+export enum GalleryRowKind { HEADER = 0, PHOTOS = 1 }
+
+export class GalleryCell {
+  item: PhotoBackupItem;
+  width: number;
+  height: number;
+
+  constructor(item: PhotoBackupItem, width: number, height: number) {
+    this.item = item;
+    this.width = width;
+    this.height = height;
+  }
+}
+
+export class GalleryRenderRow {
+  kind: GalleryRowKind;
+  key: string;
+  title: string;
+  count: number;
+  collapsed: boolean;
+  height: number;
+  cells: GalleryCell[];
+
+  constructor(kind: GalleryRowKind, key: string, title: string, count: number,
+    collapsed: boolean, height: number, cells: GalleryCell[]) {
+    this.kind = kind;
+    this.key = key;
+    this.title = title;
+    this.count = count;
+    this.collapsed = collapsed;
+    this.height = height;
+    this.cells = cells;
+  }
+}
+
+/**
+ * Flatten grouped photos into a single ordered list of render rows
+ * (one header row per group, followed by its justified photo rows).
+ * Collapsed groups (by title) emit only their header. Keys encode the group
+ * title so LazyForEach diffs correctly when the grouping dimension changes.
+ * Computed once per data/width/collapse change so LazyForEach can virtualize it.
+ */
+export function buildRenderRows(groups: PhotoGroup[], containerWidth: number,
+  targetHeight: number, gap: number, collapsed: Set<string>): GalleryRenderRow[] {
+  const result: GalleryRenderRow[] = [];
+  groups.forEach((group: PhotoGroup) => {
+    const isCollapsed = collapsed.has(group.title);
+    result.push(new GalleryRenderRow(GalleryRowKind.HEADER, `h:${group.title}`,
+      group.title, group.items.length, isCollapsed, 0, []));
+    if (isCollapsed) {
+      return;
+    }
+    const ratios = group.items.map((it: PhotoBackupItem) => ratioForItem(it));
+    const jrows = justifyRows(ratios, containerWidth, targetHeight, gap);
+    jrows.forEach((jr: JustifiedRow, jrIndex: number) => {
+      const cells: GalleryCell[] = jr.widths.map((w: number, i: number) =>
+        new GalleryCell(group.items[jr.startIndex + i], w, jr.height));
+      const firstId = cells.length > 0 ? cells[0].item.id : 'empty';
+      result.push(new GalleryRenderRow(GalleryRowKind.PHOTOS, `p:${group.title}:${jrIndex}:${firstId}`,
+        '', 0, false, jr.height, cells));
+    });
+  });
+  return result;
+}

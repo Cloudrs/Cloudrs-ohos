@@ -28,12 +28,24 @@ import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../mod
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
 import { PhotoLocalPreviewParam } from '../../model/Params';
 import { CloudRouter } from '../../utils/CloudRouter';
+import {
+  HdsNavigation, HdsNavigationTitleMode, ScrollEffectType, DividerShowType, hdsMaterial
+} from '@kit.UIDesignKit';
 
 const TAG: string = 'TabPictures';
 
 // Max number of user albums to enumerate when building the uri -> albumName
 // map during a scan. Keeps album mapping bounded on large libraries.
 const ALBUM_SCAN_LIMIT: number = 60;
+
+// photoAccessHelper DATE_MODIFIED/DATE_ADDED are in SECONDS. Normalize any
+// second-scale timestamp to milliseconds (values below this threshold are
+// treated as seconds; year-2001-in-ms is ~1e12).
+const SECONDS_TO_MS_THRESHOLD: number = 1e12;
+
+function toMillis(value: number): number {
+  return value > 0 && value < SECONDS_TO_MS_THRESHOLD ? value * 1000 : value;
+}
 
 class PhotoBackupThumbnailCache {
   static data: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -112,6 +124,7 @@ export struct TabPictures {
   @State drawerOpen: boolean = false;
   @State segment: GallerySegment = GallerySegment.TIME;
   @State galleryGroups: PhotoGroup[] = [];
+  private gridScroller: Scroller = new Scroller();
   @StorageProp(PHOTO_BACKUP_REVISION_KEY) @Watch('onSettingsRevisionChanged') settingsMirrorRevision: number = 0;
 
   aboutToAppear(): void {
@@ -208,6 +221,18 @@ export struct TabPictures {
     try {
       let data = JSON.parse(json ?? '[]') as PhotoBackupItemData[];
       this.photos = data.map((item: PhotoBackupItemData) => PhotoBackupItem.fromData(item));
+      // Migrate older records whose modifiedAt was stored in seconds (showed as 1970).
+      let migrated = false;
+      this.photos.forEach((item: PhotoBackupItem) => {
+        const normalized = toMillis(item.modifiedAt);
+        if (normalized !== item.modifiedAt) {
+          item.modifiedAt = normalized;
+          migrated = true;
+        }
+      });
+      if (migrated) {
+        this.savePhotoRecords();
+      }
       this.migrateLegacyDoneIds();
       this.refreshDoneStatus();
     } catch (err) {
@@ -459,7 +484,7 @@ export struct TabPictures {
   }
 
   private getPhotoAssetModifiedAt(asset: photoAccessHelper.PhotoAsset): number {
-    return (asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0;
+    return toMillis((asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0);
   }
 
   private getPhotoAssetDimension(asset: photoAccessHelper.PhotoAsset, key: photoAccessHelper.PhotoKeys): number {
@@ -515,7 +540,7 @@ export struct TabPictures {
       this.completedPreviewItems = completedPreview;
       this.syncAllPreviewDataSources();
       this.refreshPhotoCountText();
-      this.rebuildGroups();
+      this.rebuildGroupsIfPhotoSetChanged();
     });
     this.preloadPreviewThumbnails(uploadingPreview);
     this.preloadPreviewThumbnails(waitingPreview);
@@ -920,6 +945,9 @@ export struct TabPictures {
         this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
       }
       this.photos = this.mergePhotoList(nextPhotos, !forceFull);
+      if (albumNameByUri.size > 0) {
+        this.applyAlbumNames(albumNameByUri);
+      }
       this.refreshPhotoStats();
       this.updateSettings((settings: PhotoBackupSettings) => {
         settings.lastScanAt = new Date().getTime();
@@ -972,16 +1000,28 @@ export struct TabPictures {
   }
 
   /**
-   * Enumerate user albums once and build a uri -> albumName map. Bounded to a
-   * reasonable number of albums/assets to keep scanning fast on large libraries.
-   * Returns an empty map on any failure (album names then fall back to '其他').
+   * Build a uri -> album-name map. Primary source is physical "source" albums
+   * (相机 / 截图 / 微信 / 下载 …) available since API 23; user-created albums fill
+   * any gaps and cover older devices where SOURCE albums are unavailable.
+   * Resilient: unmatched photos fall back to '其他' in groupByAlbum.
    */
   async buildAlbumNameMap(phAccessHelper: photoAccessHelper.PhotoAccessHelper): Promise<Map<string, string>> {
     const map: Map<string, string> = new Map<string, string>();
+    // Physical source buckets — the natural "相册" grouping (since API 23).
+    await this.mapAlbumsOfType(phAccessHelper, photoAccessHelper.AlbumType.SOURCE,
+      photoAccessHelper.AlbumSubtype.SOURCE_GENERIC, map);
+    // User-created albums fill gaps (and are the fallback on devices < API 23).
+    await this.mapAlbumsOfType(phAccessHelper, photoAccessHelper.AlbumType.USER,
+      photoAccessHelper.AlbumSubtype.USER_GENERIC, map);
+    return map;
+  }
+
+  private async mapAlbumsOfType(phAccessHelper: photoAccessHelper.PhotoAccessHelper,
+    albumType: photoAccessHelper.AlbumType, subtype: photoAccessHelper.AlbumSubtype,
+    map: Map<string, string>): Promise<void> {
     let albumFetch: photoAccessHelper.FetchResult<photoAccessHelper.Album> | undefined = undefined;
     try {
-      albumFetch = await phAccessHelper.getAlbums(photoAccessHelper.AlbumType.USER,
-        photoAccessHelper.AlbumSubtype.USER_GENERIC);
+      albumFetch = await phAccessHelper.getAlbums(albumType, subtype);
       const albums: photoAccessHelper.Album[] = await albumFetch.getAllObjects();
       const albumLimit = Math.min(albums.length, ALBUM_SCAN_LIMIT);
       for (let i = 0; i < albumLimit; i++) {
@@ -990,37 +1030,86 @@ export struct TabPictures {
         if (albumName.length === 0) {
           continue;
         }
-        let assetFetch: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> | undefined = undefined;
-        try {
-          const predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
-          predicates.equalTo(photoAccessHelper.PhotoKeys.PHOTO_TYPE, photoAccessHelper.PhotoType.IMAGE);
-          const options: photoAccessHelper.FetchOptions = {
-            fetchColumns: [photoAccessHelper.PhotoKeys.URI],
-            predicates: predicates
-          };
-          assetFetch = await album.getAssets(options);
-          const assets: photoAccessHelper.PhotoAsset[] = await assetFetch.getAllObjects();
-          assets.forEach((asset: photoAccessHelper.PhotoAsset) => {
-            if (!map.has(asset.uri)) {
-              map.set(asset.uri, albumName);
-            }
-          });
-        } catch (err) {
-          console.warn(TAG, `read album assets failed: ${(err as Error)?.message ?? err}`);
-        } finally {
-          if (assetFetch) {
-            assetFetch.close();
-          }
-        }
+        await this.mapAlbumImages(album, albumName, map);
       }
     } catch (err) {
-      console.warn(TAG, `build album name map failed: ${(err as Error)?.message ?? err}`);
+      console.warn(TAG, `map albums (type=${albumType}, subtype=${subtype}) failed: ${(err as Error)?.message ?? err}`);
     } finally {
       if (albumFetch) {
         albumFetch.close();
       }
     }
-    return map;
+  }
+
+  private async mapAlbumImages(album: photoAccessHelper.Album, label: string,
+    map: Map<string, string>): Promise<void> {
+    let assetFetch: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> | undefined = undefined;
+    try {
+      const predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
+      predicates.equalTo(photoAccessHelper.PhotoKeys.PHOTO_TYPE, photoAccessHelper.PhotoType.IMAGE);
+      const options: photoAccessHelper.FetchOptions = {
+        fetchColumns: [photoAccessHelper.PhotoKeys.URI],
+        predicates: predicates
+      };
+      assetFetch = await album.getAssets(options);
+      const assets: photoAccessHelper.PhotoAsset[] = await assetFetch.getAllObjects();
+      assets.forEach((asset: photoAccessHelper.PhotoAsset) => {
+        if (!map.has(asset.uri)) {
+          map.set(asset.uri, label);
+        }
+      });
+    } catch (err) {
+      console.warn(TAG, `read album assets failed: ${(err as Error)?.message ?? err}`);
+    } finally {
+      if (assetFetch) {
+        assetFetch.close();
+      }
+    }
+  }
+
+  /** Apply album names to existing photo records; returns true if anything changed. */
+  private applyAlbumNames(map: Map<string, string>): boolean {
+    const photos = this.getPhotos();
+    let changed = false;
+    photos.forEach((item: PhotoBackupItem) => {
+      const name = map.get(item.uri);
+      if (name && name.length > 0 && item.albumName !== name) {
+        item.albumName = name;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  /**
+   * On-demand album-name population (when the user opens the 相册 segment) so the
+   * grouping is meaningful without waiting for a full re-scan. Runs once.
+   */
+  async ensureAlbumNames(): Promise<void> {
+    if (this.albumNamesEnsured) {
+      return;
+    }
+    this.albumNamesEnsured = true;
+    try {
+      const context = this.getAbilityContext();
+      if (!context) {
+        this.albumNamesEnsured = false;
+        return;
+      }
+      const phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
+      const map = await this.buildAlbumNameMap(phAccessHelper);
+      if (map.size === 0) {
+        this.albumNamesEnsured = false;
+        return;
+      }
+      if (this.applyAlbumNames(map)) {
+        this.savePhotoRecords();
+        this.rebuildGroups();
+      }
+    } catch (err) {
+      this.albumNamesEnsured = false;
+      console.warn(TAG, `ensure album names failed: ${(err as Error)?.message ?? err}`);
+    }
   }
 
   getIncrementalModifiedFloor(): number {
@@ -1489,10 +1578,25 @@ export struct TabPictures {
     return CloudThemeToken.getSafeTopInset(this.topRectHeight);
   }
 
+  private lastGroupedCount: number = -1;
+  private albumNamesEnsured: boolean = false;
+
   rebuildGroups(): void {
     const list = this.getPhotos();
+    this.lastGroupedCount = list.length;
     this.galleryGroups = this.segment === GallerySegment.TIME
       ? groupByDate(list, new Date()) : groupByAlbum(list);
+  }
+
+  /**
+   * Rebuild groups only when the photo set size changed. Per-item status updates
+   * (badges) propagate reactively via @Trace on PhotoBackupItem, so they don't
+   * need a full regroup — this keeps refreshPhotoStats cheap during backups.
+   */
+  rebuildGroupsIfPhotoSetChanged(): void {
+    if (this.getPhotos().length !== this.lastGroupedCount) {
+      this.rebuildGroups();
+    }
   }
 
   onSettingsRevisionChanged(): void {
@@ -1513,110 +1617,167 @@ export struct TabPictures {
     this.startBackup();
   }
 
-  build() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column({ space: CloudThemeToken.sectionGap }) {
-        Row() {
-          Text('相册')
-            .fontSize(CloudThemeToken.textSizeTitle)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-            .layoutWeight(1)
-          CloudIconButton({
-            icon: $r('app.media.ic_chevron_down'),
-            iconColor: CloudThemeToken.textPrimary,
-            onAction: () => {
-              this.getUIContext().animateTo({
-                duration: CloudThemeToken.defaultAnimationDuration,
-                curve: Curve.EaseOut
-              }, () => {
-                this.drawerOpen = !this.drawerOpen;
-              });
-            }
-          })
-            .rotate({ angle: this.drawerOpen ? 180 : 0 })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+  getHdsTitleBarBaseHeight(): number {
+    return CloudThemeToken.getSafeTopInset(this.topRectHeight) + CloudThemeToken.rowHeight5xl;
+  }
 
-        if (this.drawerOpen) {
-          PhotoBackupDrawer({
-            backupEnabled: this.getSettingsEnabled(),
-            running: this.isBackupRunning(),
-            paused: this.backupState === PhotoBackupState.PAUSED,
-            completedCount: this.completedPhotoCount,
-            localCount: this.localPhotoCount,
-            uploadingCount: this.uploadingPhotoCount,
-            waitingCount: this.waitingPhotoCount,
-            failedCount: this.failedPhotoCount,
-            statusText: this.getStatusText(),
-            onPrimary: () => { this.startBackup(); },
-            onPauseResume: () => { this.isBackupRunning() ? this.pauseBackup() : this.startBackup(); },
-            onRetryFailed: () => { this.retryFailedPhotos(); },
-            onGoEnable: () => { showToast('请在「我的 - 相册备份」中开启备份'); }
-          })
-        }
+  private toggleDrawer(): void {
+    this.getUIContext().animateTo({
+      duration: CloudThemeToken.defaultAnimationDuration,
+      curve: Curve.EaseOut
+    }, () => {
+      this.drawerOpen = !this.drawerOpen;
+    });
+  }
 
-        if (this.getPhotos().length > 0) {
-          PhotoGallerySegment({
-            current: this.segment,
-            onSelect: (seg: GallerySegment) => {
-              this.segment = seg;
-              this.rebuildGroups();
-            }
-          })
-        }
-
-        if (this.getPhotos().length === 0 && this.permissionHint.length > 0) {
-          Column() {
-            EmptyState({
-              icon: $r('app.media.ic_lock_fill'),
-              title: '无法读取相册',
-              description: this.permissionHint,
-              actionText: '授权读取相册',
-              onAction: () => { this.scanLocalPhotos(true, false); }
-            })
-          }
-          .width('100%')
-          .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-        } else if (this.getPhotos().length === 0) {
-          Column() {
-            EmptyState({
-              icon: $r('app.media.ic_select_photos'),
-              title: '还没有本地照片',
-              description: '扫描本地相册后，照片会显示在这里。',
-              actionText: '扫描相册',
-              onAction: () => {
-                this.scanLocalPhotos(true, false);
-              }
-            })
-          }
-          .width('100%')
-          .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-        } else {
-          PhotoGalleryGrid({
-            groups: this.galleryGroups,
-            backupEnabled: this.getSettingsEnabled(),
-            onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
-            onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
-          })
-            .layoutWeight(1)
-        }
-      }
-      .width('100%')
-      .height('100%')
-      .padding({
-        left: CloudThemeToken.pagePadding,
-        right: CloudThemeToken.pagePadding,
-        top: this.getTopInset() + CloudThemeToken.scaffoldTopPadding,
-        bottom: this.tabBarHeight + CloudThemeToken.scaffoldBottomPadding
+  @Builder picturesTitleStack() {
+    Row() {
+      Blank()
+      CloudIconButton({
+        icon: $r('app.media.ic_chevron_down'),
+        iconColor: CloudThemeToken.textPrimary,
+        onAction: () => { this.toggleDrawer(); }
       })
-      .backgroundColor(CloudThemeToken.background)
+        .rotate({ angle: this.drawerOpen ? 180 : 0 })
     }
     .width('100%')
     .height('100%')
+    .padding({ right: CloudThemeToken.filesTitleHorizontalPadding })
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.End)
+  }
+
+  @Builder galleryHeader() {
+    Column({ space: CloudThemeToken.sectionGap }) {
+      if (this.drawerOpen) {
+        PhotoBackupDrawer({
+          backupEnabled: this.getSettingsEnabled(),
+          running: this.isBackupRunning(),
+          paused: this.backupState === PhotoBackupState.PAUSED,
+          completedCount: this.completedPhotoCount,
+          localCount: this.localPhotoCount,
+          uploadingCount: this.uploadingPhotoCount,
+          waitingCount: this.waitingPhotoCount,
+          failedCount: this.failedPhotoCount,
+          statusText: this.getStatusText(),
+          onPrimary: () => { this.startBackup(); },
+          onPauseResume: () => { this.isBackupRunning() ? this.pauseBackup() : this.startBackup(); },
+          onRetryFailed: () => { this.retryFailedPhotos(); },
+          onGoEnable: () => { showToast('请在「我的 - 相册备份」中开启备份'); }
+        })
+      }
+      PhotoGallerySegment({
+        current: this.segment,
+        onSelect: (seg: GallerySegment) => {
+          this.segment = seg;
+          this.rebuildGroups();
+          if (seg === GallerySegment.ALBUM) {
+            this.ensureAlbumNames();
+          }
+        }
+      })
+    }
+    .width('100%')
+    .padding({ bottom: CloudThemeToken.sectionGap })
+  }
+
+  @Builder emptyStateBody(icon: ResourceStr, title: string, description: string, actionText: string) {
+    Column() {
+      EmptyState({
+        icon: icon,
+        title: title,
+        description: description,
+        actionText: actionText,
+        onAction: () => { this.scanLocalPhotos(true, false); }
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: this.getHdsTitleBarBaseHeight() })
+    .justifyContent(FlexAlign.Center)
+  }
+
+  build() {
+    HdsNavigation() {
+      if (this.getPhotos().length === 0 && this.permissionHint.length > 0) {
+        this.emptyStateBody($r('app.media.ic_lock_fill'), '无法读取相册', this.permissionHint, '授权读取相册')
+      } else if (this.getPhotos().length === 0) {
+        this.emptyStateBody($r('app.media.ic_select_photos'), '还没有本地照片',
+          '扫描本地相册后，照片会显示在这里。', '扫描相册')
+      } else {
+        PhotoGalleryGrid({
+          groups: this.galleryGroups,
+          backupEnabled: this.getSettingsEnabled(),
+          topInset: this.getHdsTitleBarBaseHeight(),
+          bottomInset: this.tabBarHeight,
+          scroller: this.gridScroller,
+          headerContent: () => { this.galleryHeader() },
+          onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
+          onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
+        })
+          .width('100%')
+          .height('100%')
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(true)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: '相册'
+        },
+        stackBuilder: () => {
+          this.picturesTitleStack()
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: true,
+          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+        },
+        originalStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary,
+              subTitleColor: CloudThemeToken.textSecondary
+            },
+            menuStyle: {
+              backgroundColor: CloudThemeToken.surfaceSubtle,
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        scrollEffectStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary,
+              subTitleColor: CloudThemeToken.textSecondary
+            },
+            menuStyle: {
+              backgroundColor: CloudThemeToken.surfaceSubtle,
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
+    })
+    .bindToScrollable([this.gridScroller])
+    .backgroundColor(CloudThemeToken.background)
   }
 
 

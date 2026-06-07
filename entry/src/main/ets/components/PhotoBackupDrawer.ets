@@ -94,8 +94,12 @@ export struct PhotoBackupDrawer {
     }
     .width('100%')
     .padding(CloudThemeToken.spacingPage)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .borderRadius({
+      bottomLeft: CloudThemeToken.surfaceRadius,
+      bottomRight: CloudThemeToken.surfaceRadius
+    })
+    .backgroundColor(CloudThemeToken.surfaceTranslucent)
+    .backdropBlur(18)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 }

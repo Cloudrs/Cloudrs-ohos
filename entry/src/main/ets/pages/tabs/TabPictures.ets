@@ -23,7 +23,6 @@ import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
 import LazyDataSource from '../../utils/LazyDataSource';
 import { PhotoBackupDrawer } from '../../components/PhotoBackupDrawer';
 import { PhotoGalleryGrid } from '../../components/PhotoGalleryGrid';
-import { PhotoGallerySegment } from '../../components/PhotoGallerySegment';
 import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../model/PhotoGalleryModel';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
 import { PhotoLocalPreviewParam } from '../../model/Params';
@@ -47,11 +46,10 @@ function toMillis(value: number): number {
   return value > 0 && value < SECONDS_TO_MS_THRESHOLD ? value * 1000 : value;
 }
 
-// The floating segment bar fades/slides in direct proportion to scroll:
-// scrolling up raises its hide-progress (0 shown → 1 hidden) over one block
-// height of travel, scrolling down lowers it. Tracks the finger 1:1.
-const SEGMENT_NEAR_TOP: number = 8;
-const SEGMENT_HIDDEN_THRESHOLD: number = 0.5;
+// Left-center frosted capsule for switching the 时间 / 相册 grouping.
+const SWITCHER_ITEM_SIZE: number = 44;
+const SWITCHER_PADDING: number = 4;
+const SWITCHER_GAP: number = 4;
 
 class PhotoBackupThumbnailCache {
   static data: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -130,9 +128,7 @@ export struct TabPictures {
   @State drawerOpen: boolean = false;
   @State segment: GallerySegment = GallerySegment.TIME;
   @State galleryGroups: PhotoGroup[] = [];
-  @State segmentProgress: number = 0;
   private gridScroller: Scroller = new Scroller();
-  private lastScrollY: number = 0;
   @StorageProp(PHOTO_BACKUP_REVISION_KEY) @Watch('onSettingsRevisionChanged') settingsMirrorRevision: number = 0;
 
   aboutToAppear(): void {
@@ -1655,35 +1651,25 @@ export struct TabPictures {
     .justifyContent(FlexAlign.End)
   }
 
-  /** Height of the floating segment block (capsule segment 40 + 2*4 padding + gap below). */
-  getSegmentBlockHeight(): number {
-    return 48 + CloudThemeToken.sectionGap;
-  }
-
-  /** Top spacer the grid reserves so photos start below the title + segment overlay. */
+  /** Top spacer the grid reserves so photos start below the immersive title bar. */
   getGridTopInset(): number {
-    return this.getHdsTitleBarBaseHeight() + this.getSegmentBlockHeight();
+    return this.getHdsTitleBarBaseHeight();
   }
 
-  /** Map scroll movement directly onto the segment hide-progress (0 shown → 1 hidden). */
-  private onGridScroll(yOffset: number): void {
-    const delta = yOffset - this.lastScrollY;
-    this.lastScrollY = yOffset;
-    if (delta === 0) {
-      return;
-    }
-    let next = this.segmentProgress + delta / this.getSegmentBlockHeight();
-    if (yOffset <= SEGMENT_NEAR_TOP) {
-      next = 0;
-    }
-    next = Math.min(1, Math.max(0, next));
-    if (next !== this.segmentProgress) {
-      this.segmentProgress = next;
+  /** Any scroll auto-collapses the backup drawer (it only shows while stationary). */
+  private onGridScroll(_yOffset: number): void {
+    if (this.drawerOpen) {
+      this.getUIContext().animateTo({
+        duration: CloudThemeToken.defaultAnimationDuration,
+        curve: Curve.EaseOut
+      }, () => {
+        this.drawerOpen = false;
+      });
     }
   }
 
-  /** Drawer (backup status) scrolls with the content; rendered only when open. */
-  @Builder galleryHeader() {
+  /** Backup-status drawer as a fixed overlay under the title; auto-collapses on scroll. */
+  @Builder drawerOverlay() {
     if (this.drawerOpen) {
       Column() {
         PhotoBackupDrawer({
@@ -1703,34 +1689,47 @@ export struct TabPictures {
         })
       }
       .width('100%')
-      .padding({ bottom: CloudThemeToken.sectionGap })
+      .padding({ top: this.getHdsTitleBarBaseHeight() })
+      .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.defaultAnimationDuration }))
     }
   }
 
-  /** Floating segment bar pinned under the title; fades/slides with scroll direction. */
-  @Builder segmentOverlay() {
-    Column() {
-      PhotoGallerySegment({
-        current: this.segment,
-        onSelect: (seg: GallerySegment) => {
-          this.segment = seg;
-          this.rebuildGroups();
-          if (seg === GallerySegment.ALBUM) {
-            this.ensureAlbumNames();
-          }
-        }
-      })
+  private selectSegment(value: GallerySegment): void {
+    if (this.segment === value) {
+      return;
     }
-    .width('100%')
-    .padding({
-      top: this.getHdsTitleBarBaseHeight(),
-      left: CloudThemeToken.pagePadding,
-      right: CloudThemeToken.pagePadding,
-      bottom: CloudThemeToken.sectionGap
-    })
-    .opacity(CloudThemeToken.fullOpacity - this.segmentProgress)
-    .translate({ y: -this.segmentProgress * this.getSegmentBlockHeight() })
-    .hitTestBehavior(this.segmentProgress < SEGMENT_HIDDEN_THRESHOLD ? HitTestMode.Default : HitTestMode.None)
+    this.segment = value;
+    this.rebuildGroups();
+    if (value === GallerySegment.ALBUM) {
+      this.ensureAlbumNames();
+    }
+  }
+
+  @Builder switcherItem(title: string, value: GallerySegment) {
+    Text(title)
+      .width(SWITCHER_ITEM_SIZE)
+      .height(SWITCHER_ITEM_SIZE)
+      .textAlign(TextAlign.Center)
+      .fontSize(CloudThemeToken.textSizeSmall)
+      .fontWeight(this.segment === value ? FontWeight.Bold : FontWeight.Normal)
+      .fontColor(this.segment === value ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
+      .backgroundColor(this.segment === value ? CloudThemeToken.primary : Color.Transparent)
+      .borderRadius(SWITCHER_ITEM_SIZE / 2)
+      .onClick(() => { this.selectSegment(value); })
+  }
+
+  /** Frosted vertical capsule pinned at the left-center to switch 时间 / 相册. */
+  @Builder floatingSwitcher() {
+    Column({ space: SWITCHER_GAP }) {
+      this.switcherItem('时间', GallerySegment.TIME)
+      this.switcherItem('相册', GallerySegment.ALBUM)
+    }
+    .padding(SWITCHER_PADDING)
+    .backgroundColor('rgba(120, 120, 128, 0.22)')
+    .backdropBlur(18)
+    .borderRadius(SWITCHER_ITEM_SIZE / 2 + SWITCHER_PADDING)
+    .position({ x: CloudThemeToken.spacingSm, y: '50%' })
+    .markAnchor({ x: 0, y: '50%' })
   }
 
   @Builder emptyStateBody(icon: ResourceStr, title: string, description: string, actionText: string) {
@@ -1764,7 +1763,6 @@ export struct TabPictures {
             topInset: this.getGridTopInset(),
             bottomInset: this.tabBarHeight,
             scroller: this.gridScroller,
-            headerContent: () => { this.galleryHeader() },
             onScroll: (yOffset: number) => { this.onGridScroll(yOffset); },
             onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
             onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
@@ -1772,7 +1770,8 @@ export struct TabPictures {
             .width('100%')
             .height('100%')
 
-          this.segmentOverlay()
+          this.floatingSwitcher()
+          this.drawerOverlay()
         }
         .width('100%')
         .height('100%')

@@ -1009,7 +1009,7 @@ export struct TabMine {
           this.openSettingsSheet(MineSheetType.THEME)
         })
       this.rowWithNext($r('app.media.ic_externaldrive_fill'),
-        CloudThemeToken.settingIconThemeBackground,
+        CloudThemeToken.settingIconPhotoBackupBackground,
         '相册备份',
         this.photoBackupEnabledText,
         () => {

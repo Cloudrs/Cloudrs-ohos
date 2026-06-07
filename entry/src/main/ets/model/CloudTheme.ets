@@ -439,6 +439,7 @@ export class CloudThemeToken {
   static readonly settingIconThemeBackground: ResourceColor = $r('app.color.setting_icon_theme_background')
   static readonly settingIconMoreBackground: ResourceColor = $r('app.color.setting_icon_more_background')
   static readonly settingIconAboutBackground: ResourceColor = $r('app.color.setting_icon_about')
+  static readonly settingIconPhotoBackupBackground: ResourceColor = $r('app.color.setting_icon_photo_backup_background')
   static readonly settingIconWebJumpBackground: ResourceColor = $r('app.color.icon_web_jump')
   static readonly fileIconBackground: ResourceColor = $r('app.color.file_icon_background')
   static readonly glassHighlight: ResourceColor = '#8CFFFFFF'

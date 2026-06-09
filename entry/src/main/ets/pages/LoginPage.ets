@@ -14,6 +14,7 @@ import { UserSwitchSheet } from '../components/UserSwitchSheet';
 import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { CloudIconButton } from '../components/CloudIconButton';
+import AppLogger from '../utils/AppLogger';
 
 @Extend(Row)
 function rowCommonStyle() {
@@ -107,7 +108,7 @@ export struct LoginPage {
           this.requestOtpFocus(attempt + CloudThemeToken.lineWidth)
           return
         }
-        console.error('LoginPage', `request OTP focus failed: ${(err as Error)?.message ?? err}`)
+        AppLogger.error('LoginPage', `request OTP focus failed: ${(err as Error)?.message ?? err}`)
       }
     }, CloudThemeToken.loginOtpFocusDelayMs)
   }
@@ -138,10 +139,10 @@ export struct LoginPage {
           }
         })
       } catch (err) {
-        console.error('LoginPage', `Window layout init failed: ${(err as Error)?.message ?? err}`)
+        AppLogger.error('LoginPage', `Window layout init failed: ${(err as Error)?.message ?? err}`)
       }
     }).catch((err: Error) => {
-      console.error('LoginPage', `getLastWindow failed: ${err.message}`)
+      AppLogger.error('LoginPage', `getLastWindow failed: ${err.message}`)
     })
 
     if (this.routeParam) {
@@ -349,7 +350,7 @@ export struct LoginPage {
     UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, dbUserInfo.url)
     UserDatabase.insertUserInfo(dbUserInfo)
     AvatarUtil.refreshDbUserAvatar(dbUserInfo).catch((err: Error) => {
-      console.warn('LoginPage', `refresh avatar cache failed: ${err.message}`)
+      AppLogger.warn('LoginPage', `refresh avatar cache failed: ${err.message}`)
     })
     CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
   }
@@ -361,18 +362,20 @@ export struct LoginPage {
       return
     }
 
+    AppLogger.info('LoginPage', 'scan start')
     try {
       const result = await scanBarcode.startScanForResult(hostContext, {
         enableAlbum: true,
         enableMultiMode: false
       })
+      AppLogger.info('LoginPage', 'scan captured')
       this.applyScannedAddress(result.originalValue)
     } catch (err) {
       const error = err as BusinessError
       if (error.code === Constant.SCAN_CANCEL_CODE) {
         return
       }
-      console.error('LoginPage', `scan failed: ${error.code}, ${error.message}`)
+      AppLogger.error('LoginPage', `scan failed: ${error.code}, ${error.message}`)
       showToastTips('扫码失败', ToastType.Error)
     }
   }
@@ -691,7 +694,7 @@ export struct LoginPage {
         this.saveUserAndNavigate(userInfo)
       },
       onFailure: (msg: string) => {
-        console.error('LoginPage', `scan refresh login failed: ${msg}`)
+        AppLogger.error('LoginPage', `scan refresh login failed: ${msg}`)
         showToastTips('扫码登录失败，请重新扫码或使用账号密码登录', ToastType.Error)
       }
     })

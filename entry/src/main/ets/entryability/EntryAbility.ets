@@ -1,11 +1,13 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
 import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
 import UserPreferences from '../model/UserPreferences';
 import { AvatarUtil } from '../utils/AvatarUtil';
 import { AppLockUtil } from '../utils/AppLockUtil';
+import AppLogger from '../utils/AppLogger';
 import { VERSION_NAME } from 'BuildProfile';
 
 export default class EntryAbility extends UIAbility {
@@ -48,6 +50,9 @@ export default class EntryAbility extends UIAbility {
     AppLockUtil.setMainWindow(windowClass)
     AppLockUtil.resetSession()
     AvatarUtil.init(this.context)
+    AppLogger.init(this.context)
+    AppLogger.info('EntryAbility', `app start, version=${VERSION_NAME}`)
+    this.logBootSnapshot(windowClass)
     const themeMode = this.applySavedThemeMode()
     if (windowClass) {
       await this.applyImmersiveSystemBars(windowClass, themeMode)
@@ -77,13 +82,36 @@ export default class EntryAbility extends UIAbility {
     AppLockUtil.syncLockPresentation();
     const tick = AppStorage.get<number>(Constant.APP_FOREGROUND_TICK) ?? 0;
     AppStorage.setOrCreate(Constant.APP_FOREGROUND_TICK, tick + 1);
+    AppLogger.info('EntryAbility', `foreground, tick=${tick + 1}`);
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onForeground');
   }
 
   onBackground(): void {
     // Ability has back to background
     AppLockUtil.resetSession();
+    AppLogger.info('EntryAbility', 'background');
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
+  }
+
+  private logBootSnapshot(windowClass: window.Window | undefined): void {
+    try {
+      const parts: string[] = [];
+      parts.push(`brand=${deviceInfo.brand}`);
+      parts.push(`model=${deviceInfo.productModel}`);
+      parts.push(`osFullName=${deviceInfo.osFullName}`);
+      parts.push(`sdkApi=${deviceInfo.sdkApiVersion}`);
+      parts.push(`deviceType=${deviceInfo.deviceType}`);
+      if (windowClass) {
+        try {
+          const props = windowClass.getWindowProperties();
+          parts.push(`window=${props.windowRect.width}x${props.windowRect.height}`);
+        } catch (_) {
+        }
+      }
+      AppLogger.info('EntryAbility', `device ${parts.join(', ')}`);
+    } catch (err) {
+      AppLogger.warn('EntryAbility', `boot snapshot failed: ${(err as Error)?.message ?? err}`);
+    }
   }
 
   private prepareActiveAvatarCache(): void {

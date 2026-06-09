@@ -12,6 +12,7 @@ import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesig
 import { CloudThemeToken } from "../model/CloudTheme";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
+import AppLogger from "../utils/AppLogger";
 
 const TAG: string = 'ImagePreview'
 
@@ -39,7 +40,7 @@ export struct ImagePreviewPage {
   async loadImageAt(index: number) {
     const previewItem = this.getPreviewItem(index)
     if (!previewItem) {
-      console.error(TAG, 'Missing image preview route param');
+      AppLogger.error(TAG, 'Missing image preview route param');
       this.isLoading = false;
       return;
     }
@@ -76,7 +77,7 @@ export struct ImagePreviewPage {
             this.markFailed(previewItem.fileId, true)
           }
         } catch (err) {
-          console.error(TAG, `Load preview failed: ${(err as Error)?.message ?? err}`);
+          AppLogger.error(TAG, `Load preview failed: ${(err as Error)?.message ?? err}`);
           this.markFailed(previewItem.fileId, true)
         } finally {
           req.destroy();
@@ -87,7 +88,7 @@ export struct ImagePreviewPage {
         }
       },
       onFailure: (msg) => {
-        console.error(TAG, `Get download URI failed: ${msg}`);
+        AppLogger.error(TAG, `Get download URI failed: ${msg}`);
         this.markFailed(previewItem.fileId, true)
         this.markLoading(previewItem.fileId, false)
         if (this.getCurrentPreviewItem()?.fileId === previewItem.fileId) {
@@ -101,7 +102,7 @@ export struct ImagePreviewPage {
     if (this.routeParam) {
       this.fileParam = this.routeParam
     }
-    console.info(TAG, `preview param: ${this.fileParam?.fileName ?? ''}, ${this.fileParam?.fileId ?? ''}`)
+    AppLogger.info(TAG, `open image preview, gallery=${this.fileParam?.previewFiles?.length ?? 1}`)
     this.previewFiles = this.fileParam?.previewFiles?.length ? this.fileParam.previewFiles :
       [new PreviewFile(this.fileParam?.fileName ?? '', this.fileParam?.fileId ?? '', this.fileParam?.fileExtension ?? '')]
     this.currentIndex = this.normalizeIndex(this.fileParam?.currentIndex ?? 0)
@@ -287,7 +288,7 @@ export struct ImagePreviewPage {
         await phAccessHelper.applyChanges(assetChangeRequest);
         showToast('已保存至相册')
       } catch(err) {
-        console.error(TAG, `addResourceByArrayBufferDemo failed with error: ${err.code}, ${err.message}`);
+        AppLogger.error(TAG, `addResourceByArrayBufferDemo failed with error: ${err.code}, ${err.message}`);
         showToast('保存至相册失败')
       }
     }
@@ -323,7 +324,7 @@ export struct ImagePreviewPage {
           FileSystemUtil.unlinkIfExists(tempPath)
         })
       } catch(err) {
-        console.error(TAG, `share image failed with error: ${err.code}, ${err.message}`);
+        AppLogger.error(TAG, `share image failed with error: ${err.code}, ${err.message}`);
         if (tempPath.length > 0) {
           FileSystemUtil.unlinkIfExists(tempPath)
         }

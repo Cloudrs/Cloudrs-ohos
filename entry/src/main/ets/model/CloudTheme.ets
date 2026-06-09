@@ -223,6 +223,7 @@ export class CloudThemeToken {
   static readonly detailSheetHorizontalPadding: number = 20
   static readonly detailSheetBottomPadding: number = 20
   static readonly detailSheetMinHeight: number = 360
+  static readonly logViewerBodyHeight: number = 360
   static readonly detailSheetHeaderHeight: number = 44
   static readonly detailSheetSummaryGap: number = 12
   static readonly detailSheetSummaryPadding: number = 14

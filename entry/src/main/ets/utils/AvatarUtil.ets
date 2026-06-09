@@ -4,6 +4,7 @@ import { fileUri } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
 import Constant from '../model/Constant';
 import { DbUserInfo } from '../model/net/ApiTypes';
+import AppLogger from './AppLogger';
 
 const TAG: string = 'AvatarUtil'
 const AVATAR_TRACE_ENABLED: boolean = false
@@ -177,7 +178,7 @@ export class AvatarUtil {
         AvatarUtil.traceEnd(trace, 'direct url')
         return pixelMap
       } catch (err) {
-        console.warn(TAG, `load direct avatar failed: ${(err as Error)?.message ?? err}`)
+        AppLogger.warn(TAG, `load direct avatar failed: ${(err as Error)?.message ?? err}`)
       }
     }
 
@@ -198,7 +199,7 @@ export class AvatarUtil {
           return pixelMap
         }
       } catch (err) {
-        console.warn(TAG, `load v4 avatar endpoint failed: ${(err as Error)?.message ?? err}`)
+        AppLogger.warn(TAG, `load v4 avatar endpoint failed: ${(err as Error)?.message ?? err}`)
       }
 
       try {
@@ -211,7 +212,7 @@ export class AvatarUtil {
           return pixelMap
         }
       } catch (err) {
-        console.warn(TAG, `load v4 avatar failed: ${(err as Error)?.message ?? err}`)
+        AppLogger.warn(TAG, `load v4 avatar failed: ${(err as Error)?.message ?? err}`)
       }
       AvatarUtil.traceEnd(trace, 'v4 empty')
       return undefined
@@ -224,7 +225,7 @@ export class AvatarUtil {
       AvatarUtil.traceEnd(trace, pixelMap ? 'v3 endpoint' : 'v3 empty')
       return pixelMap
     } catch (err) {
-      console.warn(TAG, `load v3 avatar failed: ${(err as Error)?.message ?? err}`)
+      AppLogger.warn(TAG, `load v3 avatar failed: ${(err as Error)?.message ?? err}`)
       AvatarUtil.traceEnd(trace, 'v3 failed')
       return undefined
     }
@@ -373,7 +374,7 @@ export class AvatarUtil {
       AvatarUtil.traceEnd(trace, `file bytes=${data.byteLength}`)
       return pixelMap
     } catch (err) {
-      console.warn(TAG, `decode cached avatar failed: ${(err as Error)?.message ?? err}`)
+      AppLogger.warn(TAG, `decode cached avatar failed: ${(err as Error)?.message ?? err}`)
       AvatarUtil.deleteCache(cacheKey)
       AvatarUtil.traceEnd(trace, 'decode failed')
       return undefined
@@ -398,7 +399,7 @@ export class AvatarUtil {
         fs.writeSync(target.fd, data, { length: data.byteLength })
         writeOk = true
       } catch (err) {
-        console.warn(TAG, `write avatar cache failed: ${(err as Error)?.message ?? err}`)
+        AppLogger.warn(TAG, `write avatar cache failed: ${(err as Error)?.message ?? err}`)
       } finally {
         if (target) {
           try {
@@ -414,7 +415,7 @@ export class AvatarUtil {
           }
         } catch (err) {
           AvatarUtil.deleteCachePath(tempPath)
-          console.warn(TAG, `replace avatar cache failed: ${(err as Error)?.message ?? err}`)
+          AppLogger.warn(TAG, `replace avatar cache failed: ${(err as Error)?.message ?? err}`)
         }
         resolve()
       }

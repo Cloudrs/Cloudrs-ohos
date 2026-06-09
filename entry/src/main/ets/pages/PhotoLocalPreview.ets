@@ -7,6 +7,7 @@ import { DateFormatUtil } from '../utils/DateFormatUtil';
 import LazyDataSource from '../utils/LazyDataSource';
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
+import AppLogger from '../utils/AppLogger';
 
 const TAG: string = 'PhotoLocalPreview'
 const CHROME_ANIM_DURATION: number = 220
@@ -55,7 +56,7 @@ export struct PhotoLocalPreviewPage {
       const win: window.Window = await window.getLastWindow(context)
       await win.setWindowSystemBarEnable(visible ? ['status', 'navigation'] : [])
     } catch (err) {
-      console.warn(TAG, `set system bars failed: ${(err as Error)?.message ?? err}`)
+      AppLogger.warn(TAG, `set system bars failed: ${(err as Error)?.message ?? err}`)
     }
   }
 
@@ -87,7 +88,7 @@ export struct PhotoLocalPreviewPage {
           .height('100%')
           .objectFit(ImageFit.Contain)
           .draggable(false)
-          .onError(() => { console.warn(TAG, `image load failed: ${item.name}`) })
+          .onError(() => { AppLogger.warn(TAG, `image load failed: ${item.name}`) })
       }
       .width('100%')
       .height('100%')

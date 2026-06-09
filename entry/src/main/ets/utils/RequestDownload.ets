@@ -4,6 +4,7 @@ import { request } from '@kit.BasicServicesKit';
 import Constant from '../model/Constant';
 import { FileModel, FileModelState } from '../model/FileModel';
 import Logger from './Logger';
+import AppLogger from './AppLogger';
 import { CommonUtil } from './CommonUtil';
 
 const TAG: string = 'RequestDownload';
@@ -40,6 +41,7 @@ class RequestDownload {
   downloadFileBackground(file: FileModel, context?: common.UIAbilityContext) {
     if (file) {
       Logger.info(TAG, 'downloadFile to -> ' + file.path);
+      AppLogger.info(TAG, `enqueue ${file.path}`);
       if (context) {
         this.context = context;
       }
@@ -103,6 +105,7 @@ class RequestDownload {
 
           task.on('completed', async (progress: request.agent.Progress) => {
             Logger.info(TAG, `complete, file= ${fileModel.url}, progress = ${progress.processed}`);
+            AppLogger.info(TAG, `complete ${fileModel.path}`);
             if (fileModel.callback) {
               fileModel.callback(progress.processed, FileModelState.COMPLETED);
             }
@@ -112,6 +115,7 @@ class RequestDownload {
           task.on('pause', async (progress: request.agent.Progress) => {
             const taskInfo = await this.showTask(task.tid);
             Logger.info(TAG, `pause, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
+            AppLogger.info(TAG, `pause ${fileModel.path}, reason=${taskInfo?.reason ?? ''}`);
             isNetPause = taskInfo?.faults === Constant.TASK_FAULTS_NONE;
             if (fileModel.callback) {
               if (isNetPause) {
@@ -125,6 +129,7 @@ class RequestDownload {
           task.on('resume', async (progress: request.agent.Progress) => {
             const taskInfo = await this.showTask(task.tid);
             Logger.info(TAG, `resume, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
+            AppLogger.info(TAG, `resume ${fileModel.path}`);
             if (fileModel.callback) {
               if (isNetPause) {
                 isNetPause = false;
@@ -138,6 +143,7 @@ class RequestDownload {
           task.on('failed', async (progress: request.agent.Progress) => {
             const taskInfo = await this.showTask(task.tid);
             Logger.info(TAG, `fail, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
+            AppLogger.warn(TAG, `fail ${fileModel.path}, reason=${taskInfo?.reason ?? ''}, faults=${JSON.stringify(taskInfo?.faults ?? '')}`);
             if (fileModel.callback) {
               fileModel.callback(progress.processed, FileModelState.FAILED);
             }

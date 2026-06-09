@@ -1,6 +1,10 @@
 import UserPreferences from './UserPreferences';
 import Constant from './Constant';
 import { PhotoBackupSettings } from './PhotoBackupModel';
+import AppLogger from '../utils/AppLogger';
+
+const TAG: string = 'PhotoBackup';
+let lastLoggedEnabled: boolean | undefined = undefined;
 
 /** AppStorage mirror key, used by album tab and mine tab via @StorageProp to observe changes */
 export const PHOTO_BACKUP_ENABLED_KEY: string = 'photoBackupEnabledMirror';
@@ -51,6 +55,10 @@ export class PhotoBackupSettingsStore {
     normalized.uploadConcurrent = concurrent;
     normalized.lastScanAt = settings.lastScanAt;
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_SETTINGS, normalized.toJson());
+    if (lastLoggedEnabled !== normalized.enabled) {
+      AppLogger.info(TAG, `settings ${normalized.enabled ? 'enabled' : 'disabled'}, path=${normalized.remotePath}, wifiOnly=${normalized.wifiOnly}, concurrent=${normalized.uploadConcurrent}`);
+      lastLoggedEnabled = normalized.enabled;
+    }
     PhotoBackupSettingsStore.mirror(normalized);
   }
 

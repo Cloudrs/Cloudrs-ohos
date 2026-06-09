@@ -5,7 +5,11 @@ export interface FeedbackDiagnosticInput {
   serverUrl: string;
   account: string;
   user?: UserInfo;
+  recentLogs?: string;
+  logFilePath?: string;
 }
+
+const MAX_INLINE_LOG_CHARS: number = 8000;
 
 class FeedbackUtil {
   private readonly issueUrl: string = 'https://gitee.com/larriti/cloudrs-ohos/issues/new';
@@ -52,11 +56,30 @@ class FeedbackUtil {
       `- 用户组：${group}`,
       '',
       '## 最近日志',
-      '- 第一阶段暂未启用应用内日志导出，如问题与崩溃/上传/下载有关，请在反馈后补充操作时间点。',
+      ...this.buildLogSection(input),
       '',
       '## 隐私说明',
       '- 以上诊断信息已脱敏，不包含密码、Token、Cookie、刷新令牌和下载直链。'
     ].join('\n');
+  }
+
+  private buildLogSection(input: FeedbackDiagnosticInput): string[] {
+    const lines: string[] = [];
+    if (input.logFilePath && input.logFilePath.length > 0) {
+      lines.push(`- 本机日志文件：${input.logFilePath}`);
+    }
+    const logs = input.recentLogs ?? '';
+    if (logs.length === 0) {
+      lines.push('- 暂无应用内日志（可能首次启动或刚清空）。如问题与崩溃/上传/下载有关，请补充操作时间点。');
+      return lines;
+    }
+    const trimmed = logs.length > MAX_INLINE_LOG_CHARS
+      ? `... (前段省略) ...\n${logs.substring(logs.length - MAX_INLINE_LOG_CHARS)}`
+      : logs;
+    lines.push('```');
+    lines.push(trimmed);
+    lines.push('```');
+    return lines;
   }
 
   buildIssueUrl(input: FeedbackDiagnosticInput): string {

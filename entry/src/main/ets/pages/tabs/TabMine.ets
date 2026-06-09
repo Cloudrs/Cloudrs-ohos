@@ -8,6 +8,7 @@ import { CloudThemeToken } from "../../model/CloudTheme";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { FeedbackSheet } from "../../components/FeedbackSheet";
+import { LogViewerSheet } from "../../components/LogViewerSheet";
 import { SectionHeader } from "../../components/SectionHeader";
 import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
@@ -15,6 +16,7 @@ import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
 import { AvatarUtil } from "../../utils/AvatarUtil";
 import FeedbackUtil from "../../utils/FeedbackUtil";
+import AppLogger from "../../utils/AppLogger";
 import { showToast } from "../../utils/ToastUtil";
 import { AppLockUtil } from "../../utils/AppLockUtil";
 import { SystemAuthResult } from "../../utils/SystemAuthUtil";
@@ -88,6 +90,7 @@ export struct TabMine {
   @State showThemeSheet: boolean = false
   @State showMoreSettingsSheet: boolean = false
   @State showFeedbackSheet: boolean = false
+  @State showLogViewerSheet: boolean = false
   @State activeSheetType: MineSheetType = MineSheetType.NONE
   @State showMetrics: boolean = false
   @State themeMode: string = Constant.APP_THEME_LIGHT
@@ -203,7 +206,7 @@ export struct TabMine {
           })
           return
         }
-        console.error(TAG, `SiteConfig get failed, ${msg}`)
+        AppLogger.error(TAG, `SiteConfig get failed, ${msg}`)
         this.fetchUserSettingAndStorage(cacheKey)
       }
     })
@@ -219,7 +222,7 @@ export struct TabMine {
         this.saveMineCache()
       },
       onFailure: (msg) => {
-        console.error(TAG, `Setting get failed, ${msg}`)
+        AppLogger.error(TAG, `Setting get failed, ${msg}`)
       }
     })
 
@@ -233,7 +236,7 @@ export struct TabMine {
         this.saveMineCache()
       },
       onFailure: (msg) => {
-        console.error(TAG, `Storage get failed, ${msg}`)
+        AppLogger.error(TAG, `Storage get failed, ${msg}`)
       }
     })
   }
@@ -261,6 +264,15 @@ export struct TabMine {
         .height(0)
         .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
           detents: [SheetSize.FIT_CONTENT],
+          showClose: false,
+          backgroundColor: CloudThemeToken.background
+        })
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showLogViewerSheet, this.logViewerSheet(), {
+          detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           showClose: false,
           backgroundColor: CloudThemeToken.background
         })
@@ -338,7 +350,7 @@ export struct TabMine {
         onReady()
       },
       onFailure: (msg: string) => {
-        console.error(TAG, `refresh v4 session failed, ${msg}`)
+        AppLogger.error(TAG, `refresh v4 session failed, ${msg}`)
         onReady()
       }
     })
@@ -516,7 +528,7 @@ export struct TabMine {
         }
       })
       .catch((err: Error) => {
-        console.warn(TAG, `load cached avatar failed: ${err.message}`)
+        AppLogger.warn(TAG, `load cached avatar failed: ${err.message}`)
         this.loadAvatar(dbUserInfo, false)
       })
   }
@@ -538,7 +550,7 @@ export struct TabMine {
         }
       })
       .catch((err: Error) => {
-        console.error(TAG, `User avatar get failed, ${err.message}`)
+        AppLogger.error(TAG, `User avatar get failed, ${err.message}`)
       })
   }
 
@@ -1442,6 +1454,7 @@ export struct TabMine {
   }
 
   setThemeMode(mode: string): void {
+    AppLogger.info(TAG, `theme mode ${mode}`)
     this.themeMode = mode
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.APP_THEME_MODE, mode)
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
@@ -1450,7 +1463,7 @@ export struct TabMine {
         ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
         : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT)
     } catch (err) {
-      console.error(TAG, `set theme mode failed: ${(err as Error)?.message ?? err}`)
+      AppLogger.error(TAG, `set theme mode failed: ${(err as Error)?.message ?? err}`)
     }
   }
 
@@ -1488,7 +1501,7 @@ export struct TabMine {
         }
       })
       .catch((err: Error) => {
-        console.error(TAG, `refresh avatar cache failed: ${err.message}`)
+        AppLogger.error(TAG, `refresh avatar cache failed: ${err.message}`)
         showToast('头像刷新失败')
       })
   }
@@ -1509,11 +1522,13 @@ export struct TabMine {
       return
     }
     if (this.systemAuthEnabled) {
+      AppLogger.info(TAG, 'system auth disabled')
       AppLockUtil.setEnabled(false)
       this.syncSystemAuthState()
       showToast('已关闭系统认证保护')
       return
     }
+    AppLogger.info(TAG, 'system auth enable requested')
 
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
     if (!context) {
@@ -1536,7 +1551,7 @@ export struct TabMine {
       .catch((err: Error) => {
         this.systemAuthBusy = false
         this.syncSystemAuthState()
-        console.error(TAG, `enable system auth failed: ${err.message}`)
+        AppLogger.error(TAG, `enable system auth failed: ${err.message}`)
         showToast('系统认证失败')
       })
   }
@@ -1558,7 +1573,7 @@ export struct TabMine {
       })
       .catch((err: Error) => {
         this.systemAuthBusy = false
-        console.error(TAG, `verify system auth failed: ${err.message}`)
+        AppLogger.error(TAG, `verify system auth failed: ${err.message}`)
         showToast('系统认证失败')
       })
   }
@@ -1569,6 +1584,7 @@ export struct TabMine {
       message: `${this.currentUser}\n${this.currentUrl}`,
       confirmText: $r('app.string.dialog_delete'),
       onConfirm: () => {
+        AppLogger.info(TAG, 'delete current credential')
         UserDatabase.deleteUserInfo(this.currentUser, this.currentUrl)
         UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
         UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY)
@@ -1591,7 +1607,7 @@ export struct TabMine {
       uri: url,
       entities: ['entity.system.browsable']
     }).catch((err: BusinessError) => {
-      console.error(TAG, `open external url failed: ${err.code}, ${err.message}`)
+      AppLogger.error(TAG, `open external url failed: ${err.code}, ${err.message}`)
       showToast('无法打开浏览器')
     })
   }
@@ -1601,7 +1617,9 @@ export struct TabMine {
       appVersion: this.appVersion,
       serverUrl: this.currentUrl,
       account: this.currentUser,
-      user: this.siteConfig?.user
+      user: this.siteConfig?.user,
+      recentLogs: AppLogger.getRecentText(60),
+      logFilePath: AppLogger.getFilePath()
     })
   }
 
@@ -1611,11 +1629,11 @@ export struct TabMine {
       pasteboard.getSystemPasteboard().setData(pasteData).then(() => {
         showToast($r('app.string.copy_success'))
       }).catch((err: Error) => {
-        console.error(TAG, 'copy feedback diagnostic failed: ' + err.message)
+        AppLogger.error(TAG, 'copy feedback diagnostic failed: ' + err.message)
         showToast($r('app.string.copy_failed'))
       })
     } catch (err) {
-      console.error(TAG, 'copy feedback diagnostic failed: ' + JSON.stringify(err))
+      AppLogger.error(TAG, 'copy feedback diagnostic failed: ' + JSON.stringify(err))
       showToast($r('app.string.copy_failed'))
     }
   }
@@ -1640,6 +1658,22 @@ export struct TabMine {
       user: this.siteConfig?.user
     }))
     this.closeFeedbackSheet()
+  }
+
+  private openLogViewer(): void {
+    this.closeFeedbackSheet()
+    this.showLogViewerSheet = true
+  }
+
+  @Builder logViewerSheet() {
+    LogViewerSheet({
+      onCopyDiagnostic: () => {
+        this.copyFeedbackDiagnostic()
+      },
+      onClose: () => {
+        this.showLogViewerSheet = false
+      }
+    })
   }
 
   @Builder rowWithJump(icon: ResourceStr, backgroundColor: ResourceColor, title: ResourceStr, url: string) {
@@ -1723,14 +1757,14 @@ export struct TabMine {
 
   @Builder feedbackSheet() {
     FeedbackSheet({
-      onCopy: () => {
-        this.copyFeedbackDiagnostic()
+      onMail: () => {
+        this.openFeedbackMail()
       },
       onIssue: () => {
         this.openFeedbackIssue()
       },
-      onMail: () => {
-        this.openFeedbackMail()
+      onViewLogs: () => {
+        this.openLogViewer()
       },
       onClose: () => {
         this.closeFeedbackSheet()

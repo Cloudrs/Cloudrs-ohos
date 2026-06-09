@@ -26,8 +26,28 @@ import {
 } from './ApiTypes';
 import { ObjectSrc, ObjectCopy, ObjectMove, ObjectUpload } from './ObjectParam';
 import Constant from '../Constant';
+import AppLogger from '../../utils/AppLogger';
+
+const CLOUD_API_TAG: string = 'CloudApi';
 
 export class CloudApi {
+  private static withApiLogging<T>(name: string, callback?: HttpCallback<T>): HttpCallback<T> | undefined {
+    if (!callback) {
+      return callback;
+    }
+    const onStart = callback.onStart;
+    const onSuccess = callback.onSuccess;
+    const onFailure = callback.onFailure;
+    return {
+      onStart: onStart,
+      onSuccess: (data: T) => onSuccess(data),
+      onFailure: (msg: string) => {
+        AppLogger.warn(CLOUD_API_TAG, `${name} failed: ${msg}`);
+        onFailure(msg);
+      }
+    };
+  }
+
   static getTotalPath(item: ObjectInfo): string {
     if (item.type === 'dir') {
       return item.path === '/' ? item.path + item.name : `${item.path}/${item.name}`;
@@ -50,7 +70,7 @@ export class CloudApi {
   }
 
   static getSiteConfig(callback?: HttpCallback<SiteConfig>): void {
-    nativeGetSiteConfig(callback);
+    nativeGetSiteConfig(CloudApi.withApiLogging('getSiteConfig', callback));
   }
 
   static getLogo(_baseUrl?: string, _callback?: HttpCallback<ArrayBuffer>): void {
@@ -58,17 +78,23 @@ export class CloudApi {
   }
 
   static login(username: string, password: string, callback?: HttpCallback<UserInfo>, twoFactorCallback?: TwoFactorCallback): void {
+    AppLogger.info(CLOUD_API_TAG, `login user=${username}`);
     if (callback?.onStart) { callback.onStart(); }
     nativeLogin(username, password, {
       onSuccess: (result: string[]) => {
         if (result[Constant.LOGIN_RESULT_USER_INDEX] === Constant.LOGIN_TWO_FACTOR_REQUIRED) {
+          AppLogger.info(CLOUD_API_TAG, 'login 2fa required');
           twoFactorCallback?.onTwoFactorRequired();
           return;
         }
+        AppLogger.info(CLOUD_API_TAG, 'login ok');
         CloudApi.storeLoginResult(result);
         callback?.onSuccess(JSON.parse(result[Constant.LOGIN_RESULT_USER_INDEX]) as UserInfo);
       },
-      onFailure: (msg: string) => callback?.onFailure(msg),
+      onFailure: (msg: string) => {
+        AppLogger.warn(CLOUD_API_TAG, `login failed: ${msg}`);
+        callback?.onFailure(msg);
+      },
     });
   }
 
@@ -76,21 +102,30 @@ export class CloudApi {
     if (callback?.onStart) { callback.onStart(); }
     nativeLogin2fa(code, {
       onSuccess: (result: string[]) => {
+        AppLogger.info(CLOUD_API_TAG, 'login2fa ok');
         CloudApi.storeLoginResult(result);
         callback?.onSuccess(JSON.parse(result[Constant.LOGIN_RESULT_USER_INDEX]) as UserInfo);
       },
-      onFailure: (msg: string) => callback?.onFailure(msg),
+      onFailure: (msg: string) => {
+        AppLogger.warn(CLOUD_API_TAG, `login2fa failed: ${msg}`);
+        callback?.onFailure(msg);
+      },
     });
   }
 
   static loginWithRefreshToken(baseUrl: string, refreshToken: string, callback?: HttpCallback<UserInfo>): void {
     if (callback?.onStart) { callback.onStart(); }
+    AppLogger.info(CLOUD_API_TAG, `session refresh baseUrl=${baseUrl}`);
     nativeLoginWithRefreshToken(baseUrl, refreshToken, {
       onSuccess: (result: string[]) => {
+        AppLogger.info(CLOUD_API_TAG, 'session refresh ok');
         CloudApi.storeLoginResult(result);
         callback?.onSuccess(JSON.parse(result[Constant.LOGIN_RESULT_USER_INDEX]) as UserInfo);
       },
-      onFailure: (msg: string) => callback?.onFailure(msg),
+      onFailure: (msg: string) => {
+        AppLogger.warn(CLOUD_API_TAG, `session refresh failed: ${msg}`);
+        callback?.onFailure(msg);
+      },
     });
   }
 
@@ -112,19 +147,19 @@ export class CloudApi {
   }
 
   static userSetting(callback?: HttpCallback<UserSetting>): void {
-    nativeGetUserSetting(callback);
+    nativeGetUserSetting(CloudApi.withApiLogging('userSetting', callback));
   }
 
   static userStorage(callback?: HttpCallback<UserStorage>): void {
-    nativeGetUserStorage(callback);
+    nativeGetUserStorage(CloudApi.withApiLogging('userStorage', callback));
   }
 
   static getFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
-    nativeGetDirectory(path, callback);
+    nativeGetDirectory(path, CloudApi.withApiLogging(`getFilesInfo(${path})`, callback));
   }
 
   static getThumb(id: string, callback?: HttpCallback<string>): void {
-    nativeGetThumb(id, callback);
+    nativeGetThumb(id, CloudApi.withApiLogging('getThumb', callback));
   }
 
   static getPreview(_id: string, _callback?: HttpCallback<ArrayBuffer>): void {
@@ -136,59 +171,59 @@ export class CloudApi {
   }
 
   static getObjectDetail(id: string, isFolder: boolean, callback?: HttpCallback<ObjectDetail>): void {
-    nativeGetObjectDetail(id, isFolder, callback);
+    nativeGetObjectDetail(id, isFolder, CloudApi.withApiLogging('getObjectDetail', callback));
   }
 
   static newObject(path: string, isDir: boolean, callback?: HttpCallback<null>): void {
     if (isDir) {
-      nativeNewDirectory(path, callback);
+      nativeNewDirectory(path, CloudApi.withApiLogging(`newDirectory(${path})`, callback));
     } else {
-      nativeNewFile(path, callback);
+      nativeNewFile(path, CloudApi.withApiLogging(`newFile(${path})`, callback));
     }
   }
 
   static deleteObjects(src: ObjectSrc, callback?: HttpCallback<null>): void {
-    nativeDeleteObjects(src.items ?? [], src.dirs ?? [], callback);
+    nativeDeleteObjects(src.items ?? [], src.dirs ?? [], CloudApi.withApiLogging('deleteObjects', callback));
   }
 
   static deleteObject(id: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
-    nativeDeleteObjects(isDir ? [] : [id], isDir ? [id] : [], callback);
+    nativeDeleteObjects(isDir ? [] : [id], isDir ? [id] : [], CloudApi.withApiLogging('deleteObject', callback));
   }
 
   static copyObjects(copy: ObjectCopy, callback?: HttpCallback<null>): void {
-    nativeCopyObjects(copy.src.items ?? [], copy.src.dirs ?? [], copy.src_dir, copy.dst, callback);
+    nativeCopyObjects(copy.src.items ?? [], copy.src.dirs ?? [], copy.src_dir, copy.dst, CloudApi.withApiLogging('copyObjects', callback));
   }
 
   static moveObjects(move: ObjectMove, callback?: HttpCallback<null>): void {
-    nativeMoveObjects(move.src.items ?? [], move.src.dirs ?? [], move.src_dir, move.dst, callback);
+    nativeMoveObjects(move.src.items ?? [], move.src.dirs ?? [], move.src_dir, move.dst, CloudApi.withApiLogging('moveObjects', callback));
   }
 
   static renameObject(id: string, newName: string, isDir: boolean = false, callback?: HttpCallback<null>): void {
-    nativeRenameObject(id, newName, isDir, callback);
+    nativeRenameObject(id, newName, isDir, CloudApi.withApiLogging('renameObject', callback));
   }
 
   static aria2Downloading(callback?: HttpCallback<Aria2Downloading[]>): void {
-    nativeAria2Downloading(callback);
+    nativeAria2Downloading(CloudApi.withApiLogging('aria2Downloading', callback));
   }
 
   static aria2Finished(page: number, callback?: HttpCallback<Aria2Finished[]>): void {
-    nativeAria2Finished(page, callback);
+    nativeAria2Finished(page, CloudApi.withApiLogging('aria2Finished', callback));
   }
 
   static userTasks(page: number, callback?: HttpCallback<UserTasks>): void {
-    nativeGetUserTasks(page, callback);
+    nativeGetUserTasks(page, CloudApi.withApiLogging('userTasks', callback));
   }
 
   static aria2TaskCreate(dst: string, urls: string[], callback?: HttpCallback<null>): void {
-    nativeAria2CreateTask(dst, urls, callback);
+    nativeAria2CreateTask(dst, urls, CloudApi.withApiLogging('aria2TaskCreate', callback));
   }
 
   static deleteAria2Task(gid: string, callback?: HttpCallback<null>): void {
-    nativeAria2DeleteTask(gid, callback);
+    nativeAria2DeleteTask(gid, CloudApi.withApiLogging('deleteAria2Task', callback));
   }
 
   static getDownloadUri(id: string, callback?: HttpCallback<string>): void {
-    nativeGetDownloadUri(id, callback);
+    nativeGetDownloadUri(id, CloudApi.withApiLogging('getDownloadUri', callback));
   }
 
   static getUploadUri(object: ObjectUpload, callback?: HttpCallback<UploadRequestResponse>, overwrite: boolean = false): void {
@@ -196,12 +231,12 @@ export class CloudApi {
       object.path, object.size, object.name,
       object.last_modified, object.mime_type,
       overwrite ? 1 : 0,
-      callback
+      CloudApi.withApiLogging(`getUploadUri(${object.name})`, callback)
     );
   }
 
   static uploadLocalFile(localPath: string, remotePath: string, overwrite: boolean = false, callback?: HttpCallback<null>): void {
-    nativeUploadLocalFile(localPath, remotePath, overwrite, callback);
+    nativeUploadLocalFile(localPath, remotePath, overwrite, CloudApi.withApiLogging(`uploadLocalFile(${remotePath})`, callback));
   }
 
   static uploadLocalFileChunk(
@@ -253,22 +288,22 @@ export class CloudApi {
   }
 
   static createShareLink(path: string, expireDays: number, password: string, callback?: HttpCallback<string>): void {
-    nativeCreateShareLink(path, expireDays, password, callback);
+    nativeCreateShareLink(path, expireDays, password, CloudApi.withApiLogging('createShareLink', callback));
   }
 
   static listShareLinks<T>(callback?: HttpCallback<T>): void {
-    nativeListShareLinks(callback);
+    nativeListShareLinks(CloudApi.withApiLogging('listShareLinks', callback));
   }
 
   static deleteShareLink(shareId: string, callback?: HttpCallback<null>): void {
-    nativeDeleteShareLink(shareId, callback);
+    nativeDeleteShareLink(shareId, CloudApi.withApiLogging('deleteShareLink', callback));
   }
 
   static createArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
-    nativeCreateArchive(srcPaths, dstPath, callback);
+    nativeCreateArchive(srcPaths, dstPath, CloudApi.withApiLogging('createArchive', callback));
   }
 
   static extractArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
-    nativeExtractArchive(srcPaths, dstPath, callback);
+    nativeExtractArchive(srcPaths, dstPath, CloudApi.withApiLogging('extractArchive', callback));
   }
 }

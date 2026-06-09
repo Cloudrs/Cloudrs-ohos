@@ -3,6 +3,7 @@ import { CloudApi } from "../model/net/CloudApi";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { PathSelectSheet } from "./PathSelectSheet";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
+import AppLogger from "../utils/AppLogger";
 
 const TAG: string = 'Aria2Create'
 
@@ -24,14 +25,16 @@ export struct Aria2Create {
       return
     }
 
+    AppLogger.info(TAG, `aria2 add task, urls=${this.urls.length}`)
     CloudApi.aria2TaskCreate(path, this.urls, {
       onSuccess: (data) => {
+        AppLogger.info(TAG, 'aria2 add task ok')
         if (this.onFinished) {
           this.onFinished()
         }
       },
       onFailure: (msg) => {
-        console.error(TAG, 'create aria2 task failed, msg: ' + msg)
+        AppLogger.error(TAG, 'create aria2 task failed, msg: ' + msg)
         showToastTips(`创建任务失败：${msg}`, ToastType.Error)
       }
     })

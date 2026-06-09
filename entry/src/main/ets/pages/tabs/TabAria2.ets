@@ -13,6 +13,7 @@ import { Aria2Create } from "../../components/Aria2Create";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
+import AppLogger from "../../utils/AppLogger";
 import { EmptyState } from "../../components/EmptyState";
 import { CloudActionButton } from "../../components/CloudActionButton";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
@@ -115,7 +116,7 @@ export struct TabRemoteDown {
           this.startDownloadUpdateTask(intervalSeconds * Constant.MILLISECONDS_PER_SECOND)
           console.debug(TAG, 'downloading number: ' + this.totalDownloading)
         } else {
-          console.warn(TAG, 'no downloading task')
+          AppLogger.warn(TAG, 'no downloading task')
           this.aria2Downloading = []
           this.totalDownloading = 0
           this.clearDownloadUpdateTask()
@@ -125,7 +126,7 @@ export struct TabRemoteDown {
         this.aria2Downloading = []
         this.totalDownloading = 0
         this.clearDownloadUpdateTask()
-        console.error(TAG, 'Aria2 downloading get failed, msg: ' + msg)
+        AppLogger.error(TAG, 'Aria2 downloading get failed, msg: ' + msg)
       }
     })
   }
@@ -156,14 +157,14 @@ export struct TabRemoteDown {
           console.debug(TAG, 'finished number: ' + this.totalFinished)
         } else {
           this.isLastFinishedPage = true
-          console.warn(TAG, 'finished no found in this page ' + this.finishedPage)
+          AppLogger.warn(TAG, 'finished no found in this page ' + this.finishedPage)
         }
         this.downloadRefresh = false
         this.totalFinished = this.aria2FinishedSource.totalCount()
       },
       onFailure: (msg) => {
         this.downloadRefresh = false
-        console.error(TAG, 'Aria2 finished get failed, msg: ' + msg)
+        AppLogger.error(TAG, 'Aria2 finished get failed, msg: ' + msg)
       }
     })
   }
@@ -192,14 +193,14 @@ export struct TabRemoteDown {
           }
           this.tasksQueueRefresh = false
         } else {
-          console.warn(TAG, 'tasks no found in this page ' + this.tasksQueuePage)
+          AppLogger.warn(TAG, 'tasks no found in this page ' + this.tasksQueuePage)
           this.isLastTasksQueuePage = true
         }
         console.debug(TAG, 'task total number: ' + data.total)
       },
       onFailure: (msg) => {
         this.tasksQueueRefresh = false
-        console.error(TAG, 'user tasks get failed, msg: ' + msg)
+        AppLogger.error(TAG, 'user tasks get failed, msg: ' + msg)
       }
     })
   }
@@ -242,7 +243,7 @@ export struct TabRemoteDown {
             showToast($r('app.string.delete_task_success'))
           },
           onFailure: (msg) => {
-            console.error(TAG, '删除任务失败 msg: ' + msg)
+            AppLogger.error(TAG, '删除任务失败 msg: ' + msg)
             showToastTips(`删除任务失败：${msg}`, ToastType.Error)
           }
         })
@@ -571,7 +572,7 @@ export struct TabRemoteDown {
         if (!this.isLastFinishedPage) {
           this.getAria2Finished(false)
         } else {
-          console.warn(TAG, 'last finished page！！！')
+          AppLogger.warn(TAG, 'last finished page！！！')
         }
       })
       .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
@@ -621,7 +622,7 @@ export struct TabRemoteDown {
         if (!this.isLastTasksQueuePage) {
           this.getUserTasks(false)
         } else {
-          console.warn(TAG, 'last task queue page！！！')
+          AppLogger.warn(TAG, 'last task queue page！！！')
         }
       })
     }

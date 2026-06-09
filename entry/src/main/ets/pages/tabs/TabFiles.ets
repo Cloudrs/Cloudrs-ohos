@@ -25,6 +25,7 @@ import { uploadManager } from '../../utils/UploadManager';
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
+import AppLogger from "../../utils/AppLogger";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
 import UserPreferences from "../../model/UserPreferences";
@@ -998,7 +999,7 @@ export struct TabFiles {
           this.finishThumbLoad(item)
         }, (err: Error) => {
           this.thumbFailedIds.add(item.id)
-          console.error(TAG, `Get thumb failed: ${err.message}`)
+          AppLogger.error(TAG, `Get thumb failed: ${err.message}`)
           this.finishThumbLoad(item)
         })
     }
@@ -1032,6 +1033,7 @@ export struct TabFiles {
     this.loadingFilePath = path
     const isSamePath = path === this.currentPath
     if (!isSamePath) {
+      AppLogger.info(TAG, `enter dir ${path}`)
       this.exitMultiSelectMode()
     }
     const hasVisibleData = this.dirDataSource.totalCount() > 0 || this.fileDataSource.totalCount() > 0
@@ -1122,7 +1124,7 @@ export struct TabFiles {
             this.exitMultiSelectMode()
           },
           onFailure: (msg) => {
-            console.error(TAG, 'copy failed, msg: ' + msg)
+            AppLogger.error(TAG, 'copy failed, msg: ' + msg)
             showToast($r('app.string.copy_failed'))
           }
         })
@@ -1135,7 +1137,7 @@ export struct TabFiles {
             showToast($r('app.string.move_success'))
           },
           onFailure: (msg) => {
-            console.error(TAG, 'move failed, msg: ' + msg)
+            AppLogger.error(TAG, 'move failed, msg: ' + msg)
             showToast($r('app.string.move_failed'))
           }
         })
@@ -2658,11 +2660,11 @@ export struct TabFiles {
         this.exitMultiSelectMode()
         showToast(`已添加${selectedFiles.length}个下载任务`)
       }).catch((err: BusinessError) => {
-        console.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`)
+        AppLogger.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`)
       })
     } catch (error) {
       const err: BusinessError = error as BusinessError
-      console.error(TAG, `Error code: ${err.code}, message: ${err.message}`)
+      AppLogger.error(TAG, `Error code: ${err.code}, message: ${err.message}`)
     }
   }
 
@@ -2693,7 +2695,7 @@ export struct TabFiles {
             showToast($r('app.string.delete_success'))
           },
           onFailure: (msg) => {
-            console.error(TAG, '批量删除失败 msg: ' + msg)
+            AppLogger.error(TAG, '批量删除失败 msg: ' + msg)
             showToast($r('app.string.delete_failed'))
           }
         })
@@ -2708,7 +2710,7 @@ export struct TabFiles {
         this.showObjectDetail = true
       },
       onFailure: (msg) => {
-        console.error(TAG, '获取详细信息失败 msg: ' + msg)
+        AppLogger.error(TAG, '获取详细信息失败 msg: ' + msg)
         showToast($r('app.string.get_detail_failed'))
       }
     })
@@ -2859,6 +2861,7 @@ export struct TabFiles {
     const target = this.shareTarget
     const path = this.getObjectSharePath(target)
     this.shareBusy = true
+    AppLogger.info(TAG, `share create, expireDays=${this.shareExpireDays}, withPassword=${this.sharePassword.trim().length > 0}`)
     CloudApi.createShareLink(path, this.shareExpireDays, this.sharePassword.trim(), {
       onSuccess: (url: string) => {
         const generatedShare: ShareLinkInfo = {
@@ -2886,7 +2889,7 @@ export struct TabFiles {
         showToast('分享链接已创建')
       },
       onFailure: (msg: string) => {
-        console.error(TAG, '创建分享失败 msg: ' + msg)
+        AppLogger.error(TAG, '创建分享失败 msg: ' + msg)
         this.shareBusy = false
         showToast(msg.includes('require V4') ? '当前站点暂不支持分享链接' : '创建分享失败')
       }
@@ -2900,6 +2903,7 @@ export struct TabFiles {
     }
     const sharePath = this.getSharePath(share)
     this.shareBusy = true
+    AppLogger.info(TAG, `share delete`)
     CloudApi.deleteShareLink(share.id, {
       onSuccess: () => {
         this.shareLinks = this.shareLinks.filter((link: ShareLinkInfo) => link.id !== share.id)
@@ -2913,7 +2917,7 @@ export struct TabFiles {
         showToast('已取消分享')
       },
       onFailure: (msg: string) => {
-        console.error(TAG, '取消分享失败 msg: ' + msg)
+        AppLogger.error(TAG, '取消分享失败 msg: ' + msg)
         this.shareBusy = false
         showToast('取消分享失败')
       }
@@ -2929,11 +2933,11 @@ export struct TabFiles {
       pasteboard.getSystemPasteboard().setData(pasteData).then(() => {
         showToast($r('app.string.copy_success'))
       }).catch((err: Error) => {
-        console.error(TAG, 'copy share link failed: ' + err.message)
+        AppLogger.error(TAG, 'copy share link failed: ' + err.message)
         showToast($r('app.string.copy_failed'))
       })
     } catch (err) {
-      console.error(TAG, 'copy share link failed: ' + JSON.stringify(err))
+      AppLogger.error(TAG, 'copy share link failed: ' + JSON.stringify(err))
       showToast($r('app.string.copy_failed'))
     }
   }
@@ -2971,6 +2975,7 @@ export struct TabFiles {
       return
     }
 
+    AppLogger.info(TAG, `rename ${item.type === Constant.OBJECT_DIR_TYPE ? 'dir' : 'file'}`)
     CloudApi.renameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
         item.name = content
@@ -2993,13 +2998,14 @@ export struct TabFiles {
         showToast($r('app.string.rename_success'))
       },
       onFailure: (msg) => {
-        console.error(TAG, '重命名失败 msg: ' + msg)
+        AppLogger.error(TAG, '重命名失败 msg: ' + msg)
         showToast($r('app.string.rename_failed'))
       }
     })
   }
 
   private confirmNewObject(content: string): void {
+    AppLogger.info(TAG, `new ${this.inputNewIsDir ? 'dir' : 'file'} under ${this.inputNewPath}`)
     CloudApi.newObject(`${this.inputNewPath}/${content}`, this.inputNewIsDir, {
       onSuccess: (data) => {
         this.closeInputSheet()
@@ -3007,7 +3013,7 @@ export struct TabFiles {
         showToast(`新建${content}成功`)
       },
       onFailure: (msg) => {
-        console.error(TAG, '新建文件/文件夹失败 msg: ' + msg)
+        AppLogger.error(TAG, '新建文件/文件夹失败 msg: ' + msg)
         showToast(`新建${content}失败`)
       }
     })
@@ -3019,6 +3025,7 @@ export struct TabFiles {
       message: item.name,
       confirmText: $r('app.string.dialog_delete'),
       onConfirm: () => {
+        AppLogger.info(TAG, `delete ${item.type === Constant.OBJECT_DIR_TYPE ? 'dir' : 'file'}`)
         CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
           onSuccess: (data) => {
             if (item.type == Constant.OBJECT_DIR_TYPE) {
@@ -3030,7 +3037,7 @@ export struct TabFiles {
             showToast($r('app.string.delete_success'))
           },
           onFailure: (msg) => {
-            console.error(TAG, '删除失败 msg: ' + msg)
+            AppLogger.error(TAG, '删除失败 msg: ' + msg)
             showToast($r('app.string.delete_failed'))
           }
         })
@@ -3054,7 +3061,7 @@ export struct TabFiles {
             FileSystemUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
               console.debug(TAG, 'move to ' + filePath)
             }).catch((err: Error) => {
-              console.error(TAG, `err: ${err}`)
+              AppLogger.error(TAG, `err: ${err}`)
             })
             this.downloadingCount--
           }
@@ -3064,7 +3071,7 @@ export struct TabFiles {
         requestDownload.downloadFileBackground(fileModel, context)
       },
       onFailure: (msg) => {
-        console.error(TAG, 'get download uri failed, msg: ' + msg)
+        AppLogger.error(TAG, 'get download uri failed, msg: ' + msg)
       }
     })
   }
@@ -3087,11 +3094,11 @@ export struct TabFiles {
         console.debug(TAG, 'documentViewPicker.save to file succeed and uris are:' + filePath);
         this.enqueueDownloadTask(context, item, filePath)
       }).catch((err: BusinessError) => {
-        console.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`);
+        AppLogger.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`);
       })
     } catch (error) {
       const err: BusinessError = error as BusinessError;
-      console.error(TAG, `Error code: ${err.code}, message: ${err.message}`);
+      AppLogger.error(TAG, `Error code: ${err.code}, message: ${err.message}`);
     }
   }
 

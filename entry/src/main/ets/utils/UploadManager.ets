@@ -10,6 +10,7 @@ import LazyDataSource from './LazyDataSource';
 import UserPreferences from '../model/UserPreferences';
 import Constant from '../model/Constant';
 import { FileSystemUtil } from './FileSystemUtil';
+import AppLogger from './AppLogger';
 
 const TAG = 'UploadManager';
 interface UploadTask {
@@ -113,7 +114,7 @@ class UploadManager {
           transportObject.update(copied, FileModelState.RUNNING);
         });
       } catch (err) {
-        console.error(TAG, `copy to cache failed: ${(err as Error)?.message ?? err}`);
+        AppLogger.error(TAG, `copy to cache failed: ${(err as Error)?.message ?? err}`);
         FileSystemUtil.unlinkIfExists(cachePath);
         transportObject.statusText = '';
         transportObject.state = FileModelState.FAILED;
@@ -145,14 +146,14 @@ class UploadManager {
         this._finish(onTaskEnd);
       } catch (err) {
         const msg = (err as Error)?.message ?? String(err);
-        console.error(TAG, `upload failed: ${msg}`);
+        AppLogger.error(TAG, `upload failed: ${msg}`);
         transportObject.speed = 0;
         transportObject.state = FileModelState.FAILED;
         FileSystemUtil.unlinkIfExists(cachePath);
         this._finish(onTaskEnd);
       }
     } catch (unexpected) {
-      console.error(TAG, `unexpected error in _runTask: ${(unexpected as Error)?.message ?? unexpected}`);
+      AppLogger.error(TAG, `unexpected error in _runTask: ${(unexpected as Error)?.message ?? unexpected}`);
       task.transportObject.state = FileModelState.FAILED;
       this._finish(task.onTaskEnd);
     }

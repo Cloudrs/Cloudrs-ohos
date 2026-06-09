@@ -1,5 +1,6 @@
 import { CloudThemeToken } from "../model/CloudTheme";
 import { AvatarSource, AvatarUtil } from "../utils/AvatarUtil";
+import AppLogger from "../utils/AppLogger";
 
 const TAG: string = 'AccountAvatar'
 
@@ -62,7 +63,7 @@ export struct AccountAvatar {
         }
       })
       .catch((err: Error) => {
-        console.warn(TAG, `load avatar failed: ${err.message}`)
+        AppLogger.warn(TAG, `load avatar failed: ${err.message}`)
       })
   }
 

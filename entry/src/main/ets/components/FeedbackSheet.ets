@@ -4,9 +4,9 @@ import { CloudThemeToken } from "../model/CloudTheme";
 @Component
 export struct FeedbackSheet {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
-  onCopy?: () => void
-  onIssue?: () => void
   onMail?: () => void
+  onIssue?: () => void
+  onViewLogs?: () => void
   onClose?: () => void
 
   build() {
@@ -17,7 +17,7 @@ export struct FeedbackSheet {
             .fontSize(CloudThemeToken.uploadSourceTitleSize)
             .fontWeight(FontWeight.Bold)
             .fontColor(CloudThemeToken.textPrimary)
-          Text('复制诊断信息或提交带模板的问题，方便开发者快速定位')
+          Text('优先邮件反馈，附带日志和诊断信息方便快速定位')
             .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
@@ -46,27 +46,27 @@ export struct FeedbackSheet {
 
       Column({ space: CloudThemeToken.uploadSourceListGap }) {
         this.feedbackActionItem(
-          $r('app.media.ic_copy'),
-          '复制诊断信息',
-          '脱敏复制版本、站点、账号和复现模板',
+          $r('app.media.ic_share'),
+          '邮件反馈',
+          '复制诊断到剪贴板并打开系统邮件',
           () => {
-            this.onCopy?.()
+            this.onMail?.()
           })
 
         this.feedbackActionItem(
           $r('app.media.ic_feedback'),
           '提交 Issue',
-          '打开预填模板的 Gitee 问题页面',
+          '复制诊断到剪贴板并打开 Gitee 问题页面',
           () => {
             this.onIssue?.()
           })
 
         this.feedbackActionItem(
-          $r('app.media.ic_share'),
-          '邮件反馈',
-          '使用邮件发送同样的诊断模板',
+          $r('app.media.ic_info_circle'),
+          '查看日志与诊断',
+          '本机查看应用日志，可一键复制诊断或导出文件',
           () => {
-            this.onMail?.()
+            this.onViewLogs?.()
           })
       }
       .width('100%')
@@ -77,7 +77,7 @@ export struct FeedbackSheet {
           .height(CloudThemeToken.iconMd)
           .fillColor(CloudThemeToken.textSecondary)
           .draggable(false)
-        Text('不会包含密码、Token、Cookie、刷新令牌和下载直链。')
+        Text('日志和诊断信息均已脱敏，不含密码、Token、Cookie、刷新令牌和下载直链。')
           .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
           .layoutWeight(1)

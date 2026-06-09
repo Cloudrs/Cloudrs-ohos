@@ -1,5 +1,6 @@
 import { relationalStore } from '@kit.ArkData';
 import { DbUserInfo, UserInfo } from './net/ApiTypes';
+import AppLogger from '../utils/AppLogger';
 
 class UserDatabase {
   rdbStore?: relationalStore.RdbStore
@@ -30,7 +31,7 @@ class UserDatabase {
       try {
         this.rdbStore.executeSync(sql)
       } catch (err) {
-        console.error('UserDatabase', `创建用户表失败, 错误：${JSON.stringify(err)}`)
+        AppLogger.error('UserDatabase', `创建用户表失败, 错误：${JSON.stringify(err)}`)
         return
       }
       // 迁移：为旧表添加 refresh_token 列（已存在则忽略）
@@ -40,16 +41,16 @@ class UserDatabase {
       try {
         this.rdbStore.executeSync(`UPDATE ${this.usersTable} SET password = '' WHERE password != ''`)
       } catch (err) {
-        console.error('UserDatabase', `清理历史密码失败, 错误：${JSON.stringify(err)}`)
+        AppLogger.error('UserDatabase', `清理历史密码失败, 错误：${JSON.stringify(err)}`)
       }
     } catch (e) {
-      console.error('UserDatabase', `数据库${this.dbName}初始化失败, 错误：${e}`)
+      AppLogger.error('UserDatabase', `数据库${this.dbName}初始化失败, 错误：${e}`)
     }
   }
 
   insertUserInfo(dbUserInfo: DbUserInfo): number {
     if (!this.rdbStore) {
-      console.error('UserDatabase', '插入数据失败，数据库未初始化')
+      AppLogger.error('UserDatabase', '插入数据失败，数据库未初始化')
       return -1
     }
 
@@ -65,12 +66,12 @@ class UserDatabase {
         userinfo: JSON.stringify(dbUserInfo.userinfo)
       })
     } catch (err) {
-      console.error('UserDatabase', `插入数据库失败，username:${dbUserInfo.username}, 错误：${JSON.stringify(err)}`)
+      AppLogger.error('UserDatabase', `插入数据库失败，username:${dbUserInfo.username}, 错误：${JSON.stringify(err)}`)
       return -1
     }
 
     if (id < 0) {
-      console.error('UserDatabase', `插入数据库失败，username:${dbUserInfo.username}`)
+      AppLogger.error('UserDatabase', `插入数据库失败，username:${dbUserInfo.username}`)
       return -1
     }
 
@@ -79,7 +80,7 @@ class UserDatabase {
 
   checkUserValid(username: string, url?: string): boolean {
     if (!this.rdbStore) {
-      console.error('UserDatabase', '获取cookie失败，数据库未初始化')
+      AppLogger.error('UserDatabase', '获取cookie失败，数据库未初始化')
       return false
     }
 
@@ -96,10 +97,10 @@ class UserDatabase {
         return true
       }
       else {
-        console.warn('UserDatabase', `数据库未查询到该用户${username}`)
+        AppLogger.warn('UserDatabase', `数据库未查询到该用户${username}`)
       }
     } catch (err) {
-      console.error('UserDatabase', `查询用户失败，username:${username}, 错误：${JSON.stringify(err)}`)
+      AppLogger.error('UserDatabase', `查询用户失败，username:${username}, 错误：${JSON.stringify(err)}`)
     } finally {
       this.closeResult(result)
     }
@@ -109,7 +110,7 @@ class UserDatabase {
 
   getUserInfo(username: string, url?: string): DbUserInfo|null {
     if (!this.rdbStore) {
-      console.error('UserDatabase', '获取cookie失败，数据库未初始化')
+      AppLogger.error('UserDatabase', '获取cookie失败，数据库未初始化')
       return null
     }
 
@@ -143,10 +144,10 @@ class UserDatabase {
         return dbUserInfo
       }
       else {
-        console.warn('UserDatabase', `数据库未查询到该用户${username}的cookie`)
+        AppLogger.warn('UserDatabase', `数据库未查询到该用户${username}的cookie`)
       }
     } catch (err) {
-      console.error('UserDatabase', `获取用户信息失败，username:${username}, 错误：${JSON.stringify(err)}`)
+      AppLogger.error('UserDatabase', `获取用户信息失败，username:${username}, 错误：${JSON.stringify(err)}`)
     } finally {
       this.closeResult(result)
     }
@@ -157,7 +158,7 @@ class UserDatabase {
   listUserInfo(): DbUserInfo[] {
     let users: DbUserInfo[] = []
     if (!this.rdbStore) {
-      console.error('UserDatabase', '获取用户列表失败，数据库未初始化')
+      AppLogger.error('UserDatabase', '获取用户列表失败，数据库未初始化')
       return users
     }
 
@@ -194,7 +195,7 @@ class UserDatabase {
         })
       } while (result.goToNextRow())
     } catch (err) {
-      console.error('UserDatabase', `获取用户列表失败，错误：${JSON.stringify(err)}`)
+      AppLogger.error('UserDatabase', `获取用户列表失败，错误：${JSON.stringify(err)}`)
     } finally {
       this.closeResult(result)
     }
@@ -204,7 +205,7 @@ class UserDatabase {
 
   deleteUserInfo(username: string, url?: string): void {
     if (!this.rdbStore) {
-      console.error('UserDatabase', '获取cookie失败，数据库未初始化')
+      AppLogger.error('UserDatabase', '获取cookie失败，数据库未初始化')
       return
     }
 
@@ -218,14 +219,14 @@ class UserDatabase {
     try {
       id = this.rdbStore.deleteSync(predicates)
     } catch (err) {
-      console.error('UserDatabase', `数据库删除用户${username}失败，错误：${JSON.stringify(err)}`)
+      AppLogger.error('UserDatabase', `数据库删除用户${username}失败，错误：${JSON.stringify(err)}`)
       return
     }
     if (id > 0) {
       console.info('UserDatabase', `数据库删除用户${username}成功，个数:${id}`)
     }
     else {
-      console.warn('UserDatabase', `数据库未查询到该用户${username}`)
+      AppLogger.warn('UserDatabase', `数据库未查询到该用户${username}`)
     }
   }
 
@@ -236,7 +237,7 @@ class UserDatabase {
     try {
       return JSON.parse(userinfo) as UserInfo
     } catch (err) {
-      console.error('UserDatabase', `解析用户信息失败，错误：${JSON.stringify(err)}`)
+      AppLogger.error('UserDatabase', `解析用户信息失败，错误：${JSON.stringify(err)}`)
       return this.createEmptyUserInfo()
     }
   }
@@ -248,7 +249,7 @@ class UserDatabase {
     try {
       result.close()
     } catch (err) {
-      console.error('UserDatabase', `关闭查询结果失败，错误：${JSON.stringify(err)}`)
+      AppLogger.error('UserDatabase', `关闭查询结果失败，错误：${JSON.stringify(err)}`)
     }
   }
 

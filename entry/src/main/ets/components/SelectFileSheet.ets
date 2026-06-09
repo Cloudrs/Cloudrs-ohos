@@ -5,6 +5,7 @@ import { picker } from "@kit.CoreFileKit"
 import { CloudThemeToken } from "../model/CloudTheme"
 import Constant from "../model/Constant"
 import { showToastTips, ToastType } from "../utils/ToastUtil"
+import AppLogger from "../utils/AppLogger"
 
 const TAG: string = 'SelectFileSheet'
 
@@ -194,7 +195,7 @@ export struct SelectFileSheet {
       }
     }).catch((err: BusinessError) => {
       this.stopPicking()
-      console.error(TAG, `Invoke photoViewPicker.select failed, code is ${err.code}, message is ${err.message}`);
+      AppLogger.error(TAG, `Invoke photoViewPicker.select failed, code is ${err.code}, message is ${err.message}`);
       showToastTips(isVideo ? '选择视频失败' : '选择图片失败', ToastType.Error)
     })
   }
@@ -208,7 +209,7 @@ export struct SelectFileSheet {
     const context = this.getAbilityContext();
     if (!context) {
       this.stopPicking()
-      console.error(TAG, 'Document picker context is unavailable');
+      AppLogger.error(TAG, 'Document picker context is unavailable');
       showToastTips($r('app.string.get_context_failed'), ToastType.Error)
       return;
     }
@@ -235,7 +236,7 @@ export struct SelectFileSheet {
       console.info(TAG, 'documentViewPicker.select to file succeed and uris are:' + uris);
     }).catch((err: BusinessError) => {
       this.stopPicking()
-      console.error(TAG, `Invoke documentViewPicker.select failed, code is ${err.code}, message is ${err.message}`);
+      AppLogger.error(TAG, `Invoke documentViewPicker.select failed, code is ${err.code}, message is ${err.message}`);
       showToastTips('选择文件失败', ToastType.Error)
     })
   }

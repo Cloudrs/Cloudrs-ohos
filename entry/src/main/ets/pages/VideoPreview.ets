@@ -4,6 +4,7 @@ import { VideoPreview } from "../model/Params";
 import { CloudApi } from "../model/net/CloudApi";
 import { CloudRouter } from "../utils/CloudRouter";
 import { showToast } from "../utils/ToastUtil";
+import AppLogger from "../utils/AppLogger";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 
 const TAG: string = 'VideoPreview'
@@ -69,6 +70,7 @@ export struct VideoPreviewPage {
                 }
               })
               .onError(() => {
+                AppLogger.warn(TAG, 'video play error')
                 this.isPlaying = false
                 this.isLoading = false
                 this.isFailed = true
@@ -181,16 +183,18 @@ export struct VideoPreviewPage {
     this.isFailed = false
     const cachedUrl = videoDownloadUriCache.get(this.fileParam.fileId)
     if (cachedUrl && cachedUrl.length > CloudThemeToken.zero) {
+      AppLogger.info(TAG, 'open from cache')
       this.videoUrl = cachedUrl
       return
     }
+    AppLogger.info(TAG, 'fetch download uri')
     CloudApi.getDownloadUri(this.fileParam.fileId, {
       onSuccess: (url: string) => {
         videoDownloadUriCache.set(this.fileParam!.fileId, url)
         this.videoUrl = url
       },
       onFailure: (msg: string) => {
-        console.error(TAG, `Get video download URI failed: ${msg}`)
+        AppLogger.error(TAG, `Get video download URI failed: ${msg}`)
         this.isLoading = false
         this.isFailed = true
         showToast('获取视频地址失败')

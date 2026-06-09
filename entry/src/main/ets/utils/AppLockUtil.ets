@@ -3,6 +3,9 @@ import { window } from '@kit.ArkUI';
 import Constant from '../model/Constant';
 import UserPreferences from '../model/UserPreferences';
 import { SystemAuthResult, SystemAuthUtil } from './SystemAuthUtil';
+import AppLogger from './AppLogger';
+
+const TAG: string = 'AppLockUtil';
 
 export class AppLockUtil {
   private static sessionUnlocked: boolean = false;
@@ -52,7 +55,7 @@ export class AppLockUtil {
     }
     AppLockUtil.mainWindow.setWindowPrivacyMode(locked)
       .catch((err: Error) => {
-        console.warn(`Set window privacy mode failed: ${err.message}`);
+        AppLogger.warn(TAG, `set window privacy mode failed: ${err.message}`);
       });
   }
 
@@ -70,10 +73,14 @@ export class AppLockUtil {
     }
 
     AppLockUtil.syncLockPresentation();
+    AppLogger.info(TAG, 'unlock prompt');
     const unlockPromise = SystemAuthUtil.authenticate(context, '解锁 Cloudrs')
       .then((result: SystemAuthResult) => {
         if (result.success) {
           AppLockUtil.sessionUnlocked = true;
+          AppLogger.info(TAG, 'unlock ok');
+        } else {
+          AppLogger.warn(TAG, `unlock failed: ${result.message}`);
         }
         AppLockUtil.syncLockPresentation();
         AppLockUtil.pendingUnlock = undefined;
@@ -82,6 +89,7 @@ export class AppLockUtil {
       .catch((err: Error) => {
         AppLockUtil.pendingUnlock = undefined;
         AppLockUtil.syncLockPresentation();
+        AppLogger.warn(TAG, `unlock threw: ${err.message}`);
         return new SystemAuthResult(false, err.message);
       });
     AppLockUtil.pendingUnlock = unlockPromise;

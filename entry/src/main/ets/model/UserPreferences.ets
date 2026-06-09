@@ -1,5 +1,6 @@
 import { sendablePreferences } from '@kit.ArkData';
 import { lang } from '@kit.ArkTS';
+import AppLogger from '../utils/AppLogger';
 
 class UserPreferences {
   perfMap: Map<string, sendablePreferences.Preferences> = new Map()
@@ -10,14 +11,14 @@ class UserPreferences {
       let perf = sendablePreferences.getPreferencesSync(context, options)
       this.perfMap.set(name, perf)
     } catch (e) {
-      console.error('UserPrivData', `加载首选项失败, 错误: `, e)
+      AppLogger.error('UserPrivData', `加载首选项失败, 错误: ${(e as Error)?.message ?? e}`)
     }
   }
 
   putSync(name: string, key: string, value: lang.ISendable) {
     try {
       if (!this.perfMap.has(name)) {
-        console.error('UserPrivData', `首选项${name}尚未初始化`)
+        AppLogger.error('UserPrivData', `首选项${name}尚未初始化`)
         return
       }
       let perf = this.perfMap.get(name)!
@@ -27,14 +28,14 @@ class UserPreferences {
       perf.flush()
       console.debug('UserPrivData', `保存首选项${name}.${key} : ${value} 成功`)
     } catch (e) {
-      console.error('UserPrivData', `保存首选项${name}.${key} : ${value} 失败, 错误: `, e)
+      AppLogger.error('UserPrivData', `保存首选项${name}.${key} 失败, 错误: ${(e as Error)?.message ?? e}`)
     }
   }
 
   getSync(name: string, key: string, defValue: lang.ISendable = ''): lang.ISendable | undefined {
     try {
       if (!this.perfMap.has(name)) {
-        console.error('UserPrivData', `首选项${name}尚未初始化`)
+        AppLogger.error('UserPrivData', `首选项${name}尚未初始化`)
         return undefined
       }
       let perf = this.perfMap.get(name)!
@@ -43,7 +44,7 @@ class UserPreferences {
       console.debug('UserPrivData', `获取首选项${name}.${key} : ${value} 成功`)
       return value
     } catch (e) {
-      console.error('UserPrivData', `获取首选项${name}.${key} 失败, 错误: `, e)
+      AppLogger.error('UserPrivData', `获取首选项${name}.${key} 失败, 错误: ${(e as Error)?.message ?? e}`)
       return undefined
     }
   }
@@ -51,7 +52,7 @@ class UserPreferences {
   deleteSync(name: string, key: string) {
     try {
       if (!this.perfMap.has(name)) {
-        console.error('UserPrivData', `首选项${name}尚未初始化`)
+        AppLogger.error('UserPrivData', `首选项${name}尚未初始化`)
         return
       }
       let perf = this.perfMap.get(name)!
@@ -61,7 +62,7 @@ class UserPreferences {
       perf.flush()
       console.debug('UserPrivData', `删除首选项${name}.${key} 成功`)
     } catch (e) {
-      console.error('UserPrivData', `删除首选项${name}.${key} 失败, 错误: `, e)
+      AppLogger.error('UserPrivData', `删除首选项${name}.${key} 失败, 错误: ${(e as Error)?.message ?? e}`)
     }
   }
 }

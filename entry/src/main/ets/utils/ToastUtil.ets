@@ -1,5 +1,6 @@
 import { promptAction } from '@kit.ArkUI'
 import Constant from '../model/Constant'
+import AppLogger from './AppLogger'
 
 export enum ToastType {Error, Warn, Info}
 
@@ -22,7 +23,7 @@ export function showToastTips(message: string|Resource, toastType: ToastType = T
  */
 export function showToast(message: string|Resource, duration: number = Constant.TOAST_DEFAULT_DURATION_MS) {
   promptAction.openToast({message: message, duration: duration}).catch((err: Error) => {
-    console.error('ToastUtil', `openToast failed: ${err.message}`)
+    AppLogger.error('ToastUtil', `openToast failed: ${err.message}`)
   })
 }
 

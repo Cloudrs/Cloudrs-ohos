@@ -3,6 +3,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { userAuth } from '@kit.UserAuthenticationKit';
 import Constant from '../model/Constant';
 import { CloudThemeToken } from '../model/CloudTheme';
+import AppLogger from './AppLogger';
 
 const TAG: string = 'SystemAuthUtil';
 
@@ -55,7 +56,7 @@ export class SystemAuthUtil {
       return result.authResults[Constant.FIRST_ARRAY_INDEX] === Constant.PERMISSION_AUTH_GRANTED;
     } catch (err) {
       const error = err as BusinessError;
-      console.warn(TAG, `request biometric permission failed: ${error.code}, ${error.message}`);
+      AppLogger.warn(TAG, `request biometric permission failed: ${error.code}, ${error.message}`);
       return true;
     }
   }
@@ -105,7 +106,7 @@ export class SystemAuthUtil {
             authInstance?.off('result', callback);
           } catch (err) {
             const error = err as BusinessError;
-            console.warn(TAG, `off auth callback failed: ${error.code}, ${error.message}`);
+            AppLogger.warn(TAG, `off auth callback failed: ${error.code}, ${error.message}`);
           }
           resolve(new SystemAuthResult(
             result.result === userAuth.UserAuthResultCode.SUCCESS,
@@ -127,7 +128,7 @@ export class SystemAuthUtil {
         authInstance.start();
       } catch (err) {
         const error = err as BusinessError;
-        console.error(TAG, `system auth start failed: ${error.code}, ${error.message}`);
+        AppLogger.error(TAG, `system auth start failed: ${error.code}, ${error.message}`);
         resolve(new SystemAuthResult(false, SystemAuthUtil.getErrorMessage(error)));
       }
     });

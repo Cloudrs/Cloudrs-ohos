@@ -13,6 +13,7 @@ import {
 } from '../../model/PhotoBackupModel';
 import { CloudApi } from '../../model/net/CloudApi';
 import UserPreferences from '../../model/UserPreferences';
+import AppLogger from '../../utils/AppLogger';
 import { showToast } from '../../utils/ToastUtil';
 import { CloudThemeToken } from '../../model/CloudTheme';
 import { EmptyState } from '../../components/EmptyState';
@@ -183,7 +184,7 @@ export struct TabPictures {
     try {
       this.doneIds = new Set<string>(JSON.parse(json ?? '[]') as string[]);
     } catch (err) {
-      console.error(TAG, `load done ids failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.error(TAG, `load done ids failed: ${(err as Error)?.message ?? err}`);
       this.doneIds = new Set<string>();
     }
     this.refreshPhotoStats();
@@ -239,7 +240,7 @@ export struct TabPictures {
       this.migrateLegacyDoneIds();
       this.refreshDoneStatus();
     } catch (err) {
-      console.error(TAG, `load photo records failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.error(TAG, `load photo records failed: ${(err as Error)?.message ?? err}`);
       this.photos = [];
       this.refreshPhotoStats();
     }
@@ -324,7 +325,7 @@ export struct TabPictures {
       };
       const asset = await this.getPhotoAssetForThumbnail(item);
       if (!asset) {
-        console.warn(TAG, `photo thumbnail asset not found: name=${item.name}, uri=${item.uri}`);
+        AppLogger.warn(TAG, `photo thumbnail asset not found: name=${item.name}, uri=${item.uri}`);
         this.scheduleStalePhotoRefresh();
         return;
       }
@@ -332,14 +333,14 @@ export struct TabPictures {
       try {
         loadedPixelMap = await asset.getThumbnail(size);
       } catch (err) {
-        console.warn(TAG, `load photo asset thumbnail failed: name=${item.name}, uri=${item.uri}, error=${(err as Error)?.message ?? err}`);
+        AppLogger.warn(TAG, `load photo asset thumbnail failed: name=${item.name}, uri=${item.uri}, error=${(err as Error)?.message ?? err}`);
         return;
       }
       this.runInUiScope(() => {
         this.setPhotoThumbnail(item, loadedPixelMap);
       });
     } catch (err) {
-      console.warn(TAG, `load photo thumbnail failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.warn(TAG, `load photo thumbnail failed: ${(err as Error)?.message ?? err}`);
     } finally {
       this.thumbnailLoadingIds.delete(loadingId);
       this.thumbnailLoadingIds.delete(item.id);
@@ -394,7 +395,7 @@ export struct TabPictures {
       }
       return assets[Constant.FIRST_ARRAY_INDEX];
     } catch (err) {
-      console.warn(TAG, `find photo asset by uri failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.warn(TAG, `find photo asset by uri failed: ${(err as Error)?.message ?? err}`);
       return undefined;
     } finally {
       if (fetchResult) {
@@ -435,7 +436,7 @@ export struct TabPictures {
       }
       return this.pickBestPhotoAssetMatch(item, assets);
     } catch (err) {
-      console.warn(TAG, `find photo asset by signature failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.warn(TAG, `find photo asset by signature failed: ${(err as Error)?.message ?? err}`);
       return undefined;
     } finally {
       if (fetchResult) {
@@ -600,7 +601,7 @@ export struct TabPictures {
     try {
       this.getUIContext().runScopedTask(task);
     } catch (err) {
-      console.warn(TAG, `run ui scoped task failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.warn(TAG, `run ui scoped task failed: ${(err as Error)?.message ?? err}`);
       task();
     }
   }
@@ -903,6 +904,7 @@ export struct TabPictures {
     this.isScanning = true;
     this.backupState = PhotoBackupState.SCANNING;
     this.permissionHint = '';
+    AppLogger.info(TAG, `scan start, forceFull=${forceFull}, silent=${silent}`);
     try {
       let context = this.getAbilityContext();
       if (!context) {
@@ -958,15 +960,16 @@ export struct TabPictures {
       if (nextPhotos.length > 0) {
         this.savePhotoRecords();
       }
+      const addedCount = Math.max(this.getPhotos().length - previousCount, CloudThemeToken.zero);
+      AppLogger.info(TAG, `scan ok, scanned=${nextPhotos.length}, added=${addedCount}, total=${this.getPhotos().length}`);
       if (!silent) {
-        const addedCount = Math.max(this.getPhotos().length - previousCount, CloudThemeToken.zero);
         showToast(forceFull ? `已扫描到 ${this.localPhotoCount} 张本地图片` :
           (addedCount > 0 ? `已发现 ${addedCount} 张新图片` : '没有发现新图片'));
       }
       this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
     } catch (err) {
       let error = err as BusinessError;
-      console.error(TAG, `scan failed: ${error.code}, ${error.message}`);
+      AppLogger.error(TAG, `scan failed: ${error.code}, ${error.message}`);
       if (!silent) {
         this.permissionHint = '相册扫描失败，请检查系统相册权限。也可以先使用“选择图片加入备份”继续备份指定图片。';
         showToast('扫描本地相册失败，请检查相册读取权限');
@@ -1036,7 +1039,7 @@ export struct TabPictures {
         await this.mapAlbumImages(album, albumName, map);
       }
     } catch (err) {
-      console.warn(TAG, `map albums (type=${albumType}, subtype=${subtype}) failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.warn(TAG, `map albums (type=${albumType}, subtype=${subtype}) failed: ${(err as Error)?.message ?? err}`);
     } finally {
       if (albumFetch) {
         albumFetch.close();
@@ -1062,7 +1065,7 @@ export struct TabPictures {
         }
       });
     } catch (err) {
-      console.warn(TAG, `read album assets failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.warn(TAG, `read album assets failed: ${(err as Error)?.message ?? err}`);
     } finally {
       if (assetFetch) {
         assetFetch.close();
@@ -1111,7 +1114,7 @@ export struct TabPictures {
       }
     } catch (err) {
       this.albumNamesEnsured = false;
-      console.warn(TAG, `ensure album names failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.warn(TAG, `ensure album names failed: ${(err as Error)?.message ?? err}`);
     }
   }
 
@@ -1347,7 +1350,7 @@ export struct TabPictures {
         result.authResults[Constant.FIRST_ARRAY_INDEX] === Constant.PERMISSION_AUTH_GRANTED;
     } catch (err) {
       let error = err as BusinessError;
-      console.error(TAG, `request photo permission failed: ${error.code}, ${error.message}`);
+      AppLogger.error(TAG, `request photo permission failed: ${error.code}, ${error.message}`);
       return false;
     }
   }
@@ -1380,6 +1383,7 @@ export struct TabPictures {
     this.resetBackupQueue(targets.length);
     this.shouldPauseBackup = false;
     this.backupState = PhotoBackupState.BACKING_UP;
+    AppLogger.info(TAG, `backup start, targets=${targets.length}, retryFailedOnly=${retryFailedOnly}`);
     this.runBackup(targets);
   }
 
@@ -1388,6 +1392,7 @@ export struct TabPictures {
       return;
     }
     this.shouldPauseBackup = true;
+    AppLogger.info(TAG, 'backup pause requested');
     showToast('当前图片完成后暂停备份');
   }
 
@@ -1398,7 +1403,7 @@ export struct TabPictures {
     try {
       return NetworkStateUtil.isWifiConnected();
     } catch (err) {
-      console.error(TAG, `check wifi failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.error(TAG, `check wifi failed: ${(err as Error)?.message ?? err}`);
       return false;
     }
   }
@@ -1429,12 +1434,14 @@ export struct TabPictures {
         this.flushDoneIdsSave();
         this.flushPhotoRecordsSave();
         this.refreshPhotoStats();
+        AppLogger.info(TAG, `backup paused, waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
         return;
       }
       this.flushCompletedPreviewUpdates();
       this.flushDoneIdsSave();
       this.flushPhotoRecordsSave();
       this.refreshPhotoStats();
+      AppLogger.info(TAG, `backup batch done, waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
       if (this.uploadingPhotoCount === 0) {
         this.runInUiScope(() => {
           this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;

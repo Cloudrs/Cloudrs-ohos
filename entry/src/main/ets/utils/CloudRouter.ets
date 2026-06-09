@@ -9,6 +9,7 @@ import { CloudApi } from '../model/net/CloudApi';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { AppLockUtil } from './AppLockUtil';
 import { showToast, showToastTips, ToastType } from './ToastUtil';
+import AppLogger from './AppLogger';
 
 const TAG: string = 'CloudRouter'
 
@@ -36,7 +37,7 @@ export class CloudRouter {
     try {
       hasSession = CloudRouter.restoreCurrentSession(false);
     } catch (err) {
-      console.error(TAG, `restore session failed: ${(err as Error)?.message ?? err}`);
+      AppLogger.error(TAG, `restore session failed: ${(err as Error)?.message ?? err}`);
     }
     if (hasSession) {
       CloudRouter.replaceRoot(Constant.HOME_PAGE);
@@ -85,20 +86,24 @@ export class CloudRouter {
   }
 
   static resetToLogin(nextPage: string = Constant.HOME_PAGE): void {
+    AppLogger.info(TAG, `reset to login, nextPage=${nextPage}`);
     CloudRouter.replaceRoot(Constant.LOGIN_PAGE, new LoginParam(false, nextPage));
   }
 
   static switchToUser(username: string, url?: string, showExpiredTip: boolean = true): boolean {
     const dbUserInfo: DbUserInfo | null = UserDatabase.getUserInfo(username, url);
     if (!dbUserInfo) {
+      AppLogger.warn(TAG, `switch user not found: ${username}`);
       showToastTips('未找到该账号的登录信息', ToastType.Warn);
       return false;
     }
 
     if (!CloudRouter.restoreUserSession(dbUserInfo, showExpiredTip)) {
+      AppLogger.warn(TAG, `switch user session restore failed: ${username}`);
       return false;
     }
 
+    AppLogger.info(TAG, `switch user ok: ${username}`);
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, dbUserInfo.username);
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, dbUserInfo.url);
     return true;
@@ -140,7 +145,7 @@ export class CloudRouter {
         return true;
       }
       abilityContext.terminateSelf().catch((err: Error) => {
-        console.error(TAG, `terminateSelf failed: ${err.message}`);
+        AppLogger.error(TAG, `terminateSelf failed: ${err.message}`);
         showToast('退出失败');
       });
     } else {

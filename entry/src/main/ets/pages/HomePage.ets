@@ -10,6 +10,9 @@ import { CloudRouter } from '../utils/CloudRouter';
 import { common } from '@kit.AbilityKit';
 import { AppLockUtil } from '../utils/AppLockUtil';
 import { showToast } from '../utils/ToastUtil';
+import AppLogger from '../utils/AppLogger';
+
+const HOME_TAB_NAMES: Record<number, string> = { 0: 'files', 1: 'pictures', 2: 'remoteDown', 3: 'mine' };
 
 @Component
 export struct HomePage {
@@ -77,7 +80,7 @@ export struct HomePage {
       })
       .catch((err: Error) => {
         this.appLockChecking = false
-        console.error(`App lock failed: ${err.message}`)
+        AppLogger.error('HomePage', `app lock failed: ${err.message}`)
         this.appLockError = err.message.length > 0 ? err.message : '身份验证失败'
         showToast(this.appLockError)
       })
@@ -150,8 +153,10 @@ export struct HomePage {
       .barMode(BarMode.Fixed)
       .animationDuration(CloudThemeToken.defaultAnimationDuration)
       .onChange((index: number) => {
+        const prev = this.currentIndex
         this.currentIndex = index
         CloudRouter.setHomeBackEnabled(index === TabId.FILES)
+        AppLogger.info('HomePage', `tab change ${HOME_TAB_NAMES[prev] ?? prev} -> ${HOME_TAB_NAMES[index] ?? index}`)
         return true
       })
 

@@ -1,3 +1,5 @@
+import AppLogger from '../utils/AppLogger';
+
 export enum PhotoBackupStatus {
   WAITING = 'waiting',
   UPLOADING = 'uploading',
@@ -43,7 +45,7 @@ export class PhotoBackupSettings {
         PhotoBackupSettings.DEFAULT_UPLOAD_CONCURRENT, PhotoBackupSettings.MIN_UPLOAD_CONCURRENT)
       settings.lastScanAt = (value.lastScanAt as number) ?? 0
     } catch (err) {
-      console.error('PhotoBackupSettings', `parse failed: ${(err as Error)?.message ?? err}`)
+      AppLogger.error('PhotoBackupSettings', `parse failed: ${(err as Error)?.message ?? err}`)
     }
     return settings
   }

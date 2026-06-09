@@ -14,6 +14,7 @@
  */
 
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import AppLogger from './AppLogger';
 
 const LOGGER_PREFIX: string = 'Cloudrs';
 
@@ -38,18 +39,33 @@ class Logger {
 
   debug(...args: string[]): void {
     hilog.debug(this.domain, this.prefix, this.format, args);
+    // 不向 AppLogger 转发 debug，避免反馈日志被海量 trace 淹没
   }
 
   info(...args: string[]): void {
     hilog.info(this.domain, this.prefix, this.format, args);
+    // 不向 AppLogger 转发 info，关键事件请显式调用 AppLogger.info
   }
 
   warn(...args: string[]): void {
     hilog.warn(this.domain, this.prefix, this.format, args);
+    AppLogger.warn(this.pickTag(args), this.pickMessage(args));
   }
 
   error(...args: string[]): void {
     hilog.error(this.domain, this.prefix, this.format, args);
+    AppLogger.error(this.pickTag(args), this.pickMessage(args));
+  }
+
+  private pickTag(args: string[]): string {
+    return args.length > 0 ? args[0] : this.prefix;
+  }
+
+  private pickMessage(args: string[]): string {
+    if (args.length <= 1) {
+      return args.length === 0 ? '' : args[0];
+    }
+    return args.slice(1).join(' ');
   }
 }
 

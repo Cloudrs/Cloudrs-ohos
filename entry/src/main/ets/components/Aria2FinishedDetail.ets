@@ -1,5 +1,5 @@
 import Constant from "../model/Constant"
-import { CloudLayoutMode, CloudThemeToken } from "../model/CloudTheme"
+import { CloudThemeToken } from "../model/CloudTheme"
 import { Aria2Files, Aria2Finished, Aria2Status, TaskError } from "../model/net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
 import { DateFormatUtil } from "../utils/DateFormatUtil"
@@ -43,11 +43,11 @@ export struct Aria2FinishedDetail {
   }
 
   getDetailGridColumns(): number {
-    let layoutMode = CloudThemeToken.getLayoutMode(this.detailGridWidth)
-    if (layoutMode === CloudLayoutMode.WIDE) {
+    // 这里用的是内容容器宽度阈值，跟窗口断点解耦
+    if (this.detailGridWidth >= CloudThemeToken.wideBreakpoint) {
       return CloudThemeToken.aria2DetailWideColumns
     }
-    if (layoutMode === CloudLayoutMode.TABLET) {
+    if (this.detailGridWidth >= CloudThemeToken.tabletBreakpoint) {
       return CloudThemeToken.aria2DetailTabletColumns
     }
     return this.detailGridWidth >= CloudThemeToken.twoColumnBreakpoint ?
@@ -115,26 +115,36 @@ export struct Aria2FinishedDetail {
       .backgroundColor(this.detailData.task_status == Aria2Status.FINISHED ?
         CloudThemeToken.successSoft : CloudThemeToken.dangerSoft)
 
-      Text($r('app.string.task_detail'))
-        .fontSize(CloudThemeToken.aria2DetailSectionTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
+      Scroll() {
+        Column({ space: CloudThemeToken.aria2DetailGap }) {
+          Text($r('app.string.task_detail'))
+            .fontSize(CloudThemeToken.aria2DetailSectionTitleSize)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
 
-      this.taskDetail()
+          this.taskDetail()
 
-      Text($r('app.string.files_list'))
-        .fontSize(CloudThemeToken.aria2DetailSectionTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
+          Text($r('app.string.files_list'))
+            .fontSize(CloudThemeToken.aria2DetailSectionTitleSize)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
 
-      List({ space: CloudThemeToken.aria2DetailFileListGap }) {
-        ForEach(this.detailData.files, (item: Aria2Files, index) => {
-          this.fileItem(item.path)
-        })
+          Column({ space: CloudThemeToken.aria2DetailFileListGap }) {
+            ForEach(this.detailData.files, (item: Aria2Files) => {
+              this.fileItem(item.path)
+            })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
       }
-      .width('100%')
-      .height('100%')
       .layoutWeight(1)
+      .width('100%')
+      .align(Alignment.TopStart)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
 
       this.detailTool()
     }

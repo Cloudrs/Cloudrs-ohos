@@ -135,7 +135,18 @@ export default class EntryAbility extends UIAbility {
   private async applyImmersiveSystemBars(windowClass: window.Window, themeMode: string): Promise<void> {
     const useLightIcon = themeMode === Constant.APP_THEME_DARK
     try {
-      windowClass.setWindowLayoutFullScreen(true)
+      if (deviceInfo.deviceType === '2in1') {
+        // 2in1 上隐藏窗口装饰条，由应用自绘控制
+        try {
+          windowClass.setWindowDecorVisible(false)
+          windowClass.setWindowDecorHeight(64)
+        } catch (err) {
+          hilog.warn(0x0000, 'testTag', 'setWindowDecor failed. Cause: %{public}s',
+            (err as Error)?.message ?? '')
+        }
+      } else {
+        windowClass.setWindowLayoutFullScreen(true)
+      }
       await windowClass.setWindowSystemBarProperties({
         statusBarColor: Constant.SYSTEM_BAR_TRANSPARENT_COLOR,
         navigationBarColor: Constant.SYSTEM_BAR_TRANSPARENT_COLOR,

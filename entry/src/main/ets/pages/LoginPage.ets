@@ -72,6 +72,7 @@ export struct LoginPage {
   routeParam?: LoginParam
   @StorageProp(Constant.CLOUD_COOKIE) cookie: string = '';
   @StorageProp(Constant.CLOUD_COOKIE_EXPIRES) cookieExpires: string = '';
+  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @State protocolIndex: number = Constant.PROTOCOL_HTTPS_INDEX
   @State protocol: string = Constant.PROTOCOL_HTTPS_SCHEME
   @State scrollHeight: number = 0;
@@ -279,6 +280,8 @@ export struct LoginPage {
       detents: [SheetSize.FIT_CONTENT],
       showClose: false,
       backgroundColor: CloudThemeToken.background,
+      preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+      width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
       onDisappear: () => {
         this.showUserSwitchSheet = false
       }

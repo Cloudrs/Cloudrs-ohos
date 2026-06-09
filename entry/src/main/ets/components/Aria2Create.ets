@@ -10,6 +10,7 @@ const TAG: string = 'Aria2Create'
 @Component
 export struct Aria2Create {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @State inputUrls: string = ''
   @State path: string|undefined = undefined
   @State isShowPathSelect: boolean = false
@@ -125,6 +126,8 @@ export struct Aria2Create {
     .bindSheet($$this.isShowPathSelect, this.selectPathSheet(), {
       showClose: false,
       backgroundColor: CloudThemeToken.background,
+      preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+      width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
       onDisappear: () => {
         this.isShowPathSelect = false
       }

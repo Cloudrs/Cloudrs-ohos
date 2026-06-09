@@ -22,7 +22,7 @@ import { requestDownload } from "../../utils/RequestDownload";
 import { FileModel, FileModelState } from "../../model/FileModel";
 import { SelectFileSheet } from '../../components/SelectFileSheet';
 import { uploadManager } from '../../utils/UploadManager';
-import { CloudThemeToken } from "../../model/CloudTheme";
+import { CloudBreakpoint, CloudThemeToken } from "../../model/CloudTheme";
 import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import AppLogger from "../../utils/AppLogger";
@@ -125,6 +125,8 @@ export struct TabFiles {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
+  @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true;
   @StorageLink(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageLink(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
   @StorageLink(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
@@ -450,6 +452,18 @@ export struct TabFiles {
     if (this.showType !== ShowType.SHOW_ICON) {
       return CloudThemeToken.singleColumnMaxCount
     }
+    if (this.gridWidth >= CloudThemeToken.content4xlBreakpoint) {
+      return CloudThemeToken.fileGrid4xlColumns
+    }
+    if (this.gridWidth >= CloudThemeToken.content3xlBreakpoint) {
+      return CloudThemeToken.fileGrid3xlColumns
+    }
+    if (this.gridWidth >= CloudThemeToken.contentXxlBreakpoint) {
+      return CloudThemeToken.fileGridXxlColumns
+    }
+    if (this.gridWidth >= CloudThemeToken.contentXlBreakpoint) {
+      return CloudThemeToken.fileGridXlColumns
+    }
     if (this.gridWidth >= CloudThemeToken.wideBreakpoint) {
       return CloudThemeToken.fileGridWideColumns
     }
@@ -608,7 +622,23 @@ export struct TabFiles {
   }
 
   getFileTitleStackLeftPadding(): number {
-    return CloudThemeToken.filesTitleHorizontalPadding + (this.isRoot ? CloudThemeToken.zero : CloudThemeToken.rowHeight5xl)
+    // 返回按钮已经内嵌到 Row 里，padding 只管基础边距 + sidebar 折叠时给折叠按钮让位
+    let pad = CloudThemeToken.filesTitleHorizontalPadding
+    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+    if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible) {
+      pad += CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    }
+    return pad
+  }
+
+  // FAB 底部 margin：手机端浮在底部 tab bar 之上 + 间距；wide 端无 tab bar，靠 safe area 即可
+  getFabBottomMargin(): number {
+    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+    if (CloudThemeToken.isWideBreakpoint(bp)) {
+      return this.bottomRectHeight + CloudThemeToken.spacingPage
+    }
+    return this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin +
+      this.tabBarHeight + CloudThemeToken.spacingPage
   }
 
   getFileTitleStackRightPadding(): number {
@@ -1196,7 +1226,7 @@ export struct TabFiles {
           .height(CloudThemeToken.rowHeight4xl)
           .borderRadius(CloudThemeToken.controlRadiusRoundXl)
           .backgroundColor(CloudThemeToken.primary)
-          .margin({ right: CloudThemeToken.spacingPage, bottom: this.tabBarHeight + CloudThemeToken.spacingPage })
+          .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
           .onClick(() => { this.openSelectFileSheet() })
         }
         .width('100%')
@@ -1217,6 +1247,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             showClose: false,
             backgroundColor: CloudThemeToken.background,
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {
               this.showObjectDetail = false
             }
@@ -1229,6 +1261,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             showClose: false,
             backgroundColor: CloudThemeToken.background,
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {
               this.showSelectFileSheet = false
             }
@@ -1241,6 +1275,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             showClose: false,
             backgroundColor: CloudThemeToken.background,
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {
               this.showInputSheet = false
               this.resetInputSheetState()
@@ -1254,6 +1290,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             showClose: false,
             backgroundColor: CloudThemeToken.background,
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {
               this.showShareSheet = false
               this.shareTarget = null
@@ -1269,6 +1307,8 @@ export struct TabFiles {
           .bindSheet($$this.showTransportSheet, this.transportSheetBuilder(), {
             backgroundColor: CloudThemeToken.surface,
             title: this.transportSheetTitle($r('app.string.transport_title')),
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {
               this.showTransportSheet = false
             }
@@ -1283,23 +1323,13 @@ export struct TabFiles {
     .mode(NavigationMode.Stack)
     .hideToolBar(true)
     .hideTitleBar(false)
-    .hideBackButton(this.isRoot && !this.isMultiSelectMode)
+    .hideBackButton(true)
     .titleMode(HdsNavigationTitleMode.MINI)
     .titleBar({
       content: {
         title: {
           mainTitle: this.isMultiSelectMode ? this.getSelectedCountText() : ' ',
           subTitle: this.isMultiSelectMode ? '选择文件后操作' : ' '
-        },
-        backIcon: {
-          icon: this.getTitleBackIcon(),
-          action: () => {
-            if (this.isMultiSelectMode) {
-              this.exitMultiSelectMode()
-            } else {
-              this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
-            }
-          }
         },
         menu: {
           value: this.isMultiSelectMode ? this.getMultiSelectTitleMenu() : this.getFileTitleMenu(),
@@ -1516,7 +1546,18 @@ export struct TabFiles {
   @Builder fileTitleBarStack() {
     if (!this.isMultiSelectMode) {
       Stack() {
-        Row() {
+        Row({ space: CloudThemeToken.spacingCard }) {
+          if (!this.isRoot) {
+            CloudIconButton({
+              icon: this.getTitleBackIcon(),
+              buttonBackground: CloudThemeToken.surface,
+              iconColor: CloudThemeToken.textPrimary,
+              onAction: () => {
+                this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+              }
+            })
+          }
+
           Column({ space: CloudThemeToken.spacingTiny }) {
             Text(this.mainTitle)
               .fontSize(CloudThemeToken.textSizeHeadline)
@@ -1534,6 +1575,7 @@ export struct TabFiles {
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
           .justifyContent(FlexAlign.Center)
+          .hitTestBehavior(HitTestMode.None)
         }
         .layoutWeight(1)
         .width('100%')
@@ -1544,7 +1586,6 @@ export struct TabFiles {
         })
         .alignItems(VerticalAlign.Center)
         .translate({ y: CloudThemeToken.filesTitleBarContentOffsetY })
-        .hitTestBehavior(HitTestMode.None)
       }
       .width('100%')
       .height('100%')
@@ -1670,6 +1711,9 @@ export struct TabFiles {
     .width('100%')
     .height('100%')
     .zIndex(CloudThemeToken.overlayZIndex)
+    .transition(TransitionEffect.OPACITY
+      .combine(TransitionEffect.scale({ x: 0.9, y: 0.9, centerX: '100%', centerY: '0%' }))
+      .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut }))
   }
 
   @Builder fileMoreGroupDivider() {
@@ -2343,6 +2387,8 @@ export struct TabFiles {
     .bindSheet($$this.showPathSelect, this.selectPathSheet(), {
       showClose: false,
       backgroundColor: CloudThemeToken.background,
+      preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+      width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
       onDisappear: () => {
         this.showPathSelect = false
       }

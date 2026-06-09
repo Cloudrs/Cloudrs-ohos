@@ -15,7 +15,7 @@ import { CloudApi } from '../../model/net/CloudApi';
 import UserPreferences from '../../model/UserPreferences';
 import AppLogger from '../../utils/AppLogger';
 import { showToast } from '../../utils/ToastUtil';
-import { CloudThemeToken } from '../../model/CloudTheme';
+import { CloudBreakpoint, CloudThemeToken } from '../../model/CloudTheme';
 import { EmptyState } from '../../components/EmptyState';
 import { CloudIconButton } from '../../components/CloudIconButton';
 import { FileSystemUtil } from '../../utils/FileSystemUtil';
@@ -79,6 +79,8 @@ export struct TabPictures {
   @Prop isActive: boolean = false
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
+  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
+  @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true
   @Provide photoBackupThumbs: Map<string, PixelMap> = new Map<string, PixelMap>();
   @State settingsEnabled: boolean = false;
   @State settingsRemotePath: string = '/Photos/Camera';
@@ -1647,7 +1649,12 @@ export struct TabPictures {
 
   @Builder picturesTitleStack() {
     Row() {
-      Blank()
+      Text('相册')
+        .fontSize(CloudThemeToken.textSizeHeadline)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .maxLines(1)
+      Blank().layoutWeight(1)
       CloudIconButton({
         icon: $r('app.media.ic_chevron_down'),
         iconColor: CloudThemeToken.textPrimary,
@@ -1657,9 +1664,20 @@ export struct TabPictures {
     }
     .width('100%')
     .height('100%')
-    .padding({ right: CloudThemeToken.filesTitleHorizontalPadding })
+    .padding({
+      left: this.getPicturesTitleLeftPadding(),
+      right: CloudThemeToken.filesTitleHorizontalPadding
+    })
     .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.End)
+  }
+
+  private getPicturesTitleLeftPadding(): number {
+    let pad = CloudThemeToken.filesTitleHorizontalPadding
+    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+    if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible) {
+      pad += CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    }
+    return pad
   }
 
   /** Top spacer the grid reserves so photos start below the immersive title bar. */
@@ -1891,7 +1909,7 @@ export struct TabPictures {
     .titleBar({
       content: {
         title: {
-          mainTitle: '相册'
+          mainTitle: ' '
         },
         stackBuilder: () => {
           this.picturesTitleStack()

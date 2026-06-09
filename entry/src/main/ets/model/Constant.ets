@@ -113,6 +113,14 @@ class Constant {
 
   TAB_BAR_HEIGHT: string = 'tabBarHeight'
 
+  WINDOW_WIDTH_VP: string = 'windowWidthVp'
+
+  WINDOW_HEIGHT_VP: string = 'windowHeightVp'
+
+  LAYOUT_MODE: string = 'layoutMode'
+
+  SIDEBAR_VISIBLE: string = 'sidebarVisible'
+
   CLOUD_BASE_URL: string = 'cloudBaseUrl'
 
   CLOUD_COOKIE: string = 'cloudCookie'

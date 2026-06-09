@@ -69,6 +69,7 @@ export struct TabMine {
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
+  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
@@ -265,7 +266,9 @@ export struct TabMine {
         .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
           detents: [SheetSize.FIT_CONTENT],
           showClose: false,
-          backgroundColor: CloudThemeToken.background
+          backgroundColor: CloudThemeToken.background,
+          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
         })
 
       Column()
@@ -274,7 +277,9 @@ export struct TabMine {
         .bindSheet($$this.showLogViewerSheet, this.logViewerSheet(), {
           detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           showClose: false,
-          backgroundColor: CloudThemeToken.background
+          backgroundColor: CloudThemeToken.background,
+          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
         })
 
       Column()
@@ -284,6 +289,8 @@ export struct TabMine {
           detents: [SheetSize.FIT_CONTENT],
           showClose: false,
           backgroundColor: CloudThemeToken.background,
+          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onDisappear: () => {
             this.finishCloseSettingsSheet()
           }
@@ -295,6 +302,8 @@ export struct TabMine {
         .bindSheet($$this.showPhotoBackupPathSheet, this.photoBackupPathSheet(), {
           showClose: false,
           backgroundColor: CloudThemeToken.background,
+          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onDisappear: () => {
             this.showPhotoBackupPathSheet = false
           }

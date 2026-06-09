@@ -27,6 +27,7 @@ export struct TabRemoteDown {
   @Watch('onActiveStateChanged')
   @Prop isActive: boolean = false
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
+  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.download_offline') }, { text: $r('app.string.task_queue') }] as SegmentButtonItemTuple,
     multiply: false,
@@ -290,6 +291,8 @@ export struct TabRemoteDown {
         detents: [SheetSize.FIT_CONTENT],
         title: {title: $r('app.string.download_offline')},
         backgroundColor: CloudThemeToken.background,
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
         onDisappear: () => {
           this.showCreateSheet = false
         }
@@ -576,9 +579,11 @@ export struct TabRemoteDown {
         }
       })
       .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
-        detents: [SheetSize.FIT_CONTENT],
+        detents: CloudThemeToken.sheetDetentsForWidth(this.sheetLayoutWidth, SheetSize.FIT_CONTENT),
         showClose: false,
         backgroundColor: CloudThemeToken.background,
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
         onDisappear: () => {
           this.showTaskDetailSheet = false
         }

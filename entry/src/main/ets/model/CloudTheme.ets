@@ -1,3 +1,5 @@
+import { CloudBreakpoint } from '../utils/BreakpointType'
+
 export class CloudThemeToken {
   static readonly zero: number = 0
   static readonly lineWidth: number = 1
@@ -91,6 +93,10 @@ export class CloudThemeToken {
   static readonly fileGridMediumColumns: number = 3
   static readonly fileGridTabletColumns: number = 4
   static readonly fileGridWideColumns: number = 5
+  static readonly fileGridXlColumns: number = 6
+  static readonly fileGridXxlColumns: number = 7
+  static readonly fileGrid3xlColumns: number = 8
+  static readonly fileGrid4xlColumns: number = 9
   static readonly fileNameDisplayMaxLength: number = 28
   static readonly fileNameEdgeSegmentLength: number = 8
   static readonly aria2DetailPhoneColumns: number = 1
@@ -133,8 +139,21 @@ export class CloudThemeToken {
   static readonly systemTopFallbackHeight: number = 48
   static readonly scaffoldTopPadding: number = 12
   static readonly scaffoldBottomPadding: number = 24
+  // 内容容器宽度阈值（TabFiles 文件网格列数切换用，跟窗口断点解耦）
   static readonly tabletBreakpoint: number = 720
   static readonly wideBreakpoint: number = 920
+  static readonly contentXlBreakpoint: number = 1000
+  static readonly contentXxlBreakpoint: number = 1250
+  static readonly content3xlBreakpoint: number = 1500
+  static readonly content4xlBreakpoint: number = 1750
+  // 窗口宽度断点 - 对齐官方 sm / md / lg / xl
+  static readonly breakpointMd: number = 600
+  static readonly breakpointLg: number = 840
+  static readonly breakpointXl: number = 1440
+  // 2in1 窗口左右各占 5.4vp 装饰条，参与断点计算时需扣掉
+  static readonly twoInOneDecorPaddingVp: number = 5.4
+  // 平板/折叠屏全屏下 status bar 高度的保底值，避免 topRectHeight 拿不到时控制按钮跑到状态栏
+  static readonly statusBarFallbackHeight: number = 28
   static readonly smallIconButtonSize: number = 36
   static readonly iconButtonSize: number = 40
   static readonly hdsIconButtonLightHeight: number = 18
@@ -456,25 +475,73 @@ export class CloudThemeToken {
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'
 
   static getSafeTopInset(topRectHeight: number): number {
-    if (topRectHeight <= CloudThemeToken.zero) {
+    // 仅当读取失败（负数 / NaN）才走 fallback；2in1 隐藏装饰条后 topRectHeight 确实是 0，应直接返回 0
+    if (topRectHeight < CloudThemeToken.zero || Number.isNaN(topRectHeight)) {
       return CloudThemeToken.systemTopFallbackHeight
     }
     return Math.min(topRectHeight, CloudThemeToken.systemTopFallbackHeight)
   }
 
-  static getLayoutMode(width: number): CloudLayoutMode {
-    if (width >= CloudThemeToken.wideBreakpoint) {
-      return CloudLayoutMode.WIDE
+  static getBreakpoint(widthVp: number): CloudBreakpoint {
+    if (widthVp >= CloudThemeToken.breakpointXl) {
+      return CloudBreakpoint.XL
     }
-    if (width >= CloudThemeToken.tabletBreakpoint) {
-      return CloudLayoutMode.TABLET
+    if (widthVp >= CloudThemeToken.breakpointLg) {
+      return CloudBreakpoint.LG
     }
-    return CloudLayoutMode.PHONE
+    if (widthVp >= CloudThemeToken.breakpointMd) {
+      return CloudBreakpoint.MD
+    }
+    return CloudBreakpoint.SM
+  }
+
+  static isWideBreakpoint(bp: CloudBreakpoint): boolean {
+    return bp === CloudBreakpoint.LG || bp === CloudBreakpoint.XL
+  }
+
+  // sm/md 不需要（手机端用底部浮动 tab），lg/xl 是侧边栏宽度
+  static readonly sideNavWidthLg: number = 96
+  static readonly sideNavWidthXl: number = 240
+  static readonly sideNavItemHeight: number = 56
+  static readonly sideNavItemRadius: number = 14
+  static readonly sideNavVerticalPadding: number = 24
+  static readonly sideNavHorizontalPadding: number = 12
+  static readonly sideNavGap: number = 6
+  static readonly sideBarToggleSize: number = 32
+  static readonly sideBarToggleIconSize: number = 22
+  static readonly sideBarToggleRadius: number = 16
+
+  static readonly sheetCenterWidth: number = 480
+  static readonly sheetCenterWideWidth: number = 560
+
+  static sheetTypeForBreakpoint(bp: CloudBreakpoint): SheetType | undefined {
+    return CloudThemeToken.isWideBreakpoint(bp) ? SheetType.CENTER : undefined
+  }
+
+  static sheetWidthForBreakpoint(bp: CloudBreakpoint): number | undefined {
+    if (bp === CloudBreakpoint.XL) {
+      return CloudThemeToken.sheetCenterWideWidth
+    }
+    if (bp === CloudBreakpoint.LG) {
+      return CloudThemeToken.sheetCenterWidth
+    }
+    return undefined
+  }
+
+  static sheetTypeForWidth(widthVp: number): SheetType | undefined {
+    return CloudThemeToken.sheetTypeForBreakpoint(CloudThemeToken.getBreakpoint(widthVp))
+  }
+
+  static sheetWidthForWidth(widthVp: number): number | undefined {
+    return CloudThemeToken.sheetWidthForBreakpoint(CloudThemeToken.getBreakpoint(widthVp))
+  }
+
+  // wide 段返回 [LARGE] 让居中 sheet 占大部分高度避免内部 layoutWeight 区被挤扁；其它返回传入 fallback
+  static sheetDetentsForWidth(widthVp: number, fallback: SheetSize): [SheetSize] {
+    return [CloudThemeToken.isWideBreakpoint(CloudThemeToken.getBreakpoint(widthVp))
+      ? SheetSize.LARGE
+      : fallback]
   }
 }
 
-export enum CloudLayoutMode {
-  PHONE = 'phone',
-  TABLET = 'tablet',
-  WIDE = 'wide'
-}
+export { CloudBreakpoint } from '../utils/BreakpointType'

@@ -10,6 +10,7 @@ import { CloudIconButton } from "./CloudIconButton";
 @Component
 export struct TabFilesHeader {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
   @Prop isRoot: boolean;
   @Link searchKeyword: string;
   @State showTransport:boolean = false;
@@ -82,6 +83,8 @@ export struct TabFilesHeader {
           .bindSheet($$this.showTransport, this.transportBuilder(), {
             backgroundColor: CloudThemeToken.surface,
             title: this.transportTitle($r('app.string.transport_title')),
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {
               this.showTransport = false
             }

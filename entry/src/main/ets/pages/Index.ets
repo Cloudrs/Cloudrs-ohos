@@ -10,6 +10,10 @@ import { VideoPreviewPage } from './VideoPreview';
 import { AboutPage } from './AboutPage';
 import { FileSearchPage } from './FileSearchPage';
 import { PhotoLocalPreviewPage } from './PhotoLocalPreview';
+import { window } from '@kit.ArkUI';
+import { common } from '@kit.AbilityKit';
+import { deviceInfo } from '@kit.BasicServicesKit';
+import AppLogger from '../utils/AppLogger';
 
 @Entry
 @Component
@@ -23,8 +27,11 @@ struct Index {
   @State fileSearchParam: FileSearchParam = new FileSearchParam();
   @State photoLocalPreviewParam: PhotoLocalPreviewParam = new PhotoLocalPreviewParam([], 0, false);
   private startPageScheduled: boolean = false;
+  private mainWindow: window.Window | undefined = undefined;
+  private windowSizeListener: ((size: window.Size) => void) | undefined = undefined;
 
   aboutToAppear(): void {
+    this.setupWindowMetrics();
     CloudRouter.init(
       this.pathStack,
       (pageUrl: string, param: Object) => {
@@ -53,6 +60,92 @@ struct Index {
           CloudRouter.showStartPage();
         }
       }, 0);
+    }
+  }
+
+  aboutToDisappear(): void {
+    if (this.mainWindow && this.windowSizeListener) {
+      try {
+        this.mainWindow.off('windowSizeChange', this.windowSizeListener);
+      } catch (_) {
+      }
+    }
+    this.mainWindow = undefined;
+    this.windowSizeListener = undefined;
+  }
+
+  private setupWindowMetrics(): void {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+    if (!context) {
+      return;
+    }
+    window.getLastWindow(context).then((win) => {
+      this.mainWindow = win;
+      this.publishWindowSize();
+      const listener: (size: window.Size) => void = (size: window.Size) => {
+        this.publishWindowSize(size);
+      };
+      this.windowSizeListener = listener;
+      try {
+        win.on('windowSizeChange', listener);
+      } catch (err) {
+        AppLogger.warn('Index', `register windowSizeChange failed: ${(err as Error)?.message ?? err}`);
+      }
+    }).catch((err: Error) => {
+      AppLogger.warn('Index', `getLastWindow failed: ${err.message}`);
+    });
+  }
+
+  private publishWindowSize(size?: window.Size): void {
+    if (!this.mainWindow) {
+      return;
+    }
+    try {
+      const uiContext = this.getUIContext();
+      // 兜底：把 status bar 高度也在这里刷新；EntryAbility 早期可能抛 1300002 走 catch，留下 0
+      try {
+        const topAreaPx = this.mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM).topRect.height;
+        const topAreaVp = uiContext.px2vp(topAreaPx);
+        if (topAreaVp > 0) {
+          AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, topAreaVp);
+        }
+        const bottomAreaPx = this.mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR).bottomRect.height;
+        const bottomAreaVp = uiContext.px2vp(bottomAreaPx);
+        if (bottomAreaVp > 0) {
+          AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, bottomAreaVp);
+        }
+      } catch (_) {
+      }
+      let widthPx: number;
+      let heightPx: number;
+      if (size) {
+        widthPx = size.width;
+        heightPx = size.height;
+      } else {
+        const props = this.mainWindow.getWindowProperties();
+        widthPx = props.windowRect.width;
+        heightPx = props.windowRect.height;
+      }
+      const heightVp = uiContext.px2vp(heightPx);
+      let widthVp = uiContext.px2vp(widthPx);
+      // 2in1 上窗口含两侧装饰条（约 5.4vp x 2），扣掉才能得到真实内容宽
+      if (deviceInfo.deviceType === '2in1') {
+        widthVp = widthVp - 2 * CloudThemeToken.twoInOneDecorPaddingVp;
+      }
+      // 2in1 设备 PC 风格，达到 lg 阈值就直接进入 xl 布局（带文字侧边栏 + 居中 sheet）
+      // 平板/折叠屏继续按宽度断点，因为它们在 lg 段更适合紧凑图标导航
+      const rawWidthVp = widthVp;
+      if (deviceInfo.deviceType === '2in1' && widthVp >= CloudThemeToken.breakpointLg) {
+        widthVp = Math.max(widthVp, CloudThemeToken.breakpointXl);
+      }
+      const bp = CloudThemeToken.getBreakpoint(widthVp);
+      AppStorage.setOrCreate(Constant.WINDOW_WIDTH_VP, widthVp);
+      AppStorage.setOrCreate(Constant.WINDOW_HEIGHT_VP, heightVp);
+      AppStorage.setOrCreate(Constant.LAYOUT_MODE, bp);
+      AppLogger.info('Index',
+        `window metrics rawWidthVp=${rawWidthVp.toFixed(1)} effectiveWidthVp=${widthVp.toFixed(1)} heightVp=${heightVp.toFixed(1)} bp=${bp} deviceType=${deviceInfo.deviceType}`);
+    } catch (err) {
+      AppLogger.warn('Index', `publishWindowSize failed: ${(err as Error)?.message ?? err}`);
     }
   }
 

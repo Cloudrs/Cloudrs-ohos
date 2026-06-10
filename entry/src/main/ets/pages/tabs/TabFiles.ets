@@ -35,7 +35,7 @@ import {
   DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
 } from "@kit.UIDesignKit";
 import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
-import { Downloads } from "../../components/Downloads";
+import { Downloads, TransferAction } from "../../components/Downloads";
 import { Uploads } from "../../components/Uploads";
 
 const TAG = 'TabFiles';
@@ -1822,7 +1822,12 @@ export struct TabFiles {
       SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
       Column() {
         if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
-          Downloads({downloadObjects: this.downloadObjects})
+          Downloads({
+            downloadObjects: this.downloadObjects,
+            onAction: (object: TransportObject, action: TransferAction) => {
+              this.handleDownloadAction(object, action)
+            }
+          })
         } else {
           Uploads({uploadObjects: this.uploadObjects})
         }
@@ -3091,6 +3096,45 @@ export struct TabFiles {
     })
   }
 
+  private handleDownloadAction(object: TransportObject, action: TransferAction): void {
+    const id = object.item.id
+    switch (action) {
+      case TransferAction.PAUSE:
+        requestDownload.pause(id)
+        break
+      case TransferAction.RESUME:
+        if (object.state == FileModelState.FAILED) {
+          const ctx = this.getAbilityContext()
+          if (ctx) {
+            const item = object.item
+            const filePath = object.path
+            this.downloadObjects.deleteDataByItem(object)
+            this.enqueueDownloadTask(ctx, item, filePath)
+          }
+        } else {
+          requestDownload.resume(id)
+        }
+        break
+      case TransferAction.CANCEL:
+        const wasActive = object.state != FileModelState.COMPLETED &&
+          object.state != FileModelState.FAILED &&
+          object.state != FileModelState.REMOVED
+        requestDownload.deleteTask(id)
+        if (object.state != FileModelState.COMPLETED) {
+          const ctx = this.getAbilityContext()
+          if (ctx) {
+            FileSystemUtil.unlinkIfExists(`${ctx.cacheDir}/${object.item.name}`)
+          }
+        }
+        object.state = FileModelState.REMOVED
+        this.downloadObjects.deleteDataByItem(object)
+        if (wasActive) {
+          this.downloadingCount--
+        }
+        break
+    }
+  }
+
   private enqueueDownloadTask(context: common.UIAbilityContext, item: ObjectInfo, filePath: string): void {
     CloudApi.getDownloadUri(item.id, {
       onSuccess: (data) => {
@@ -3100,6 +3144,7 @@ export struct TabFiles {
         this.downloadObjects.pushData(object)
         this.downloadingCount++
 
+        let isCounted = true
         let fileModel: FileModel = new FileModel(item.id, filePath, url, undefined, (trans, state) => {
           object.update(trans, state)
           if (state == FileModelState.COMPLETED) {
@@ -3109,7 +3154,10 @@ export struct TabFiles {
             }).catch((err: Error) => {
               AppLogger.error(TAG, `err: ${err}`)
             })
+          }
+          if (isCounted && (state == FileModelState.COMPLETED || state == FileModelState.FAILED)) {
             this.downloadingCount--
+            isCounted = false
           }
         })
 

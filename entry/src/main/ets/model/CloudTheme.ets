@@ -182,6 +182,11 @@ export class CloudThemeToken {
   static readonly transferNameSize: number = 16
   static readonly transferMetaSize: number = 12
   static readonly transferSpeedRightMargin: number = 10
+  static readonly transferProgressLabelSize: number = 11
+  static readonly transferSwipeActionWidth: number = 72
+  static readonly transferSwipeButtonSize: number = 48
+  static readonly transferSwipeIconSize: number = 22
+  static readonly transferSwipeGap: number = 12
   static readonly sheetActionIconSize: number = 16
   static readonly sheetOptionIconSize: number = 40
   static readonly sheetOptionTileSize: number = 88

@@ -8,9 +8,16 @@ import { TransferStateUtil } from "../utils/TransferStateUtil"
 
 const TAG = 'Downloads'
 
+export enum TransferAction {
+  PAUSE,
+  RESUME,
+  CANCEL
+}
+
 @Component
 export struct Downloads {
   @ObjectLink downloadObjects: LazyDataSource<TransportObject>
+  onAction?: (object: TransportObject, action: TransferAction) => void
 
   build() {
     Column() {
@@ -19,7 +26,16 @@ export struct Downloads {
       } else {
         List({ space: CloudThemeToken.transferListGap }) {
           LazyForEach(this.downloadObjects, (item: TransportObject, index) => {
-            this.downloadItem(item)
+            ListItem() {
+              this.downloadItem(item)
+            }
+            .swipeAction({
+              end: {
+                builder: () => { this.deleteSwipe(item) },
+                actionAreaDistance: CloudThemeToken.transferSwipeActionWidth
+              },
+              edgeEffect: SwipeEdgeEffect.Spring
+            })
           }, (item: TransportObject, index) => item.item.id + index)
         }
         .scrollBar(BarState.Off)
@@ -87,14 +103,31 @@ export struct Downloads {
       .justifyContent(FlexAlign.Center)
       .layoutWeight(1)
 
-      Progress({value: object.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Capsule})
-        .style({
-          showDefaultPercentage: true
+      Stack() {
+        Progress({
+          value: object.progress,
+          total: CloudThemeToken.percentageFull,
+          type: ProgressType.Capsule
         })
-        .width(CloudThemeToken.transferProgressWidth)
-        .height(CloudThemeToken.transferProgressHeight)
-        .color(this.getStateColor(object.state))
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .style({ showDefaultPercentage: false })
+          .width(CloudThemeToken.transferProgressWidth)
+          .height(CloudThemeToken.transferProgressHeight)
+          .color(this.getProgressFillColor(object.state))
+          .backgroundColor(Color.Transparent)
+
+        Text(this.getProgressLabel(object))
+          .fontSize(CloudThemeToken.transferProgressLabelSize)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.getProgressLabelColor(object.state))
+          .textShadow(this.getProgressLabelShadow(object.state))
+      }
+      .width(CloudThemeToken.transferProgressWidth)
+      .height(CloudThemeToken.transferProgressHeight)
+      .backgroundColor(this.getProgressTrackColor(object.state))
+      .borderRadius(CloudThemeToken.transferProgressHeight / 2)
+      .onClick(() => {
+        this.onProgressClick(object)
+      })
     }
     .width('100%')
     .padding(CloudThemeToken.transferItemPadding)
@@ -102,6 +135,124 @@ export struct Downloads {
     .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder deleteSwipe(object: TransportObject) {
+    Row() {
+      Stack() {
+        Image($r('app.media.ic_trash_close'))
+          .width(CloudThemeToken.transferSwipeIconSize)
+          .height(CloudThemeToken.transferSwipeIconSize)
+          .fillColor(Color.White)
+      }
+      .width(CloudThemeToken.transferSwipeButtonSize)
+      .height(CloudThemeToken.transferSwipeButtonSize)
+      .borderRadius(CloudThemeToken.transferSwipeButtonSize / 2)
+      .backgroundColor('#FF3B30')
+      .alignContent(Alignment.Center)
+      .onClick(() => {
+        if (this.onAction) {
+          this.onAction(object, TransferAction.CANCEL)
+        }
+      })
+    }
+    .height('100%')
+    .padding({ left: CloudThemeToken.transferSwipeGap, right: CloudThemeToken.transferSwipeGap })
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  private onProgressClick(object: TransportObject): void {
+    if (!this.onAction) {
+      return
+    }
+    if (this.canPause(object.state)) {
+      this.onAction(object, TransferAction.PAUSE)
+    } else if (this.canResume(object.state)) {
+      this.onAction(object, TransferAction.RESUME)
+    }
+  }
+
+  private getProgressFillColor(state: FileModelState): ResourceColor {
+    switch (state) {
+      case FileModelState.PAUSED:
+      case FileModelState.STOPPED:
+      case FileModelState.FAILED:
+      case FileModelState.COMPLETED:
+        return Color.Transparent
+      default:
+        return CloudThemeToken.primary
+    }
+  }
+
+  private getProgressTrackColor(state: FileModelState): ResourceColor {
+    switch (state) {
+      case FileModelState.PAUSED:
+      case FileModelState.STOPPED:
+        return CloudThemeToken.primarySoft
+      case FileModelState.FAILED:
+        return CloudThemeToken.dangerSoft
+      case FileModelState.COMPLETED:
+        return CloudThemeToken.success
+      default:
+        return CloudThemeToken.surfaceSubtle
+    }
+  }
+
+  private getProgressLabel(object: TransportObject): string {
+    switch (object.state) {
+      case FileModelState.PAUSED:
+      case FileModelState.STOPPED:
+        return '继续'
+      case FileModelState.FAILED:
+        return '重试'
+      case FileModelState.COMPLETED:
+        return '已完成'
+      default:
+        return `${object.progress}%`
+    }
+  }
+
+  private getProgressLabelColor(state: FileModelState): ResourceColor {
+    switch (state) {
+      case FileModelState.PAUSED:
+      case FileModelState.STOPPED:
+        return CloudThemeToken.primary
+      case FileModelState.FAILED:
+        return CloudThemeToken.danger
+      default:
+        return Color.White
+    }
+  }
+
+  private getProgressLabelShadow(state: FileModelState): ShadowOptions | ShadowOptions[] {
+    switch (state) {
+      case FileModelState.PAUSED:
+      case FileModelState.STOPPED:
+      case FileModelState.FAILED:
+      case FileModelState.COMPLETED:
+        return { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 }
+      default:
+        return [
+          { radius: 0, color: 'rgba(0,0,0,0.6)', offsetX: 1, offsetY: 0 },
+          { radius: 0, color: 'rgba(0,0,0,0.6)', offsetX: -1, offsetY: 0 },
+          { radius: 0, color: 'rgba(0,0,0,0.6)', offsetX: 0, offsetY: 1 },
+          { radius: 0, color: 'rgba(0,0,0,0.6)', offsetX: 0, offsetY: -1 },
+          { radius: 3, color: 'rgba(0,0,0,0.5)', offsetX: 0, offsetY: 0 }
+        ]
+    }
+  }
+
+  private canPause(state: FileModelState): boolean {
+    return state == FileModelState.RUNNING ||
+      state == FileModelState.WAITING ||
+      state == FileModelState.RETRYING
+  }
+
+  private canResume(state: FileModelState): boolean {
+    return state == FileModelState.PAUSED ||
+      state == FileModelState.STOPPED ||
+      state == FileModelState.FAILED
   }
 
   getStateText(object: TransportObject): string {

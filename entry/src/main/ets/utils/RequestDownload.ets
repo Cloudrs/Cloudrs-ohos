@@ -8,12 +8,14 @@ import AppLogger from './AppLogger';
 import { CommonUtil } from './CommonUtil';
 
 const TAG: string = 'RequestDownload';
-let isNetPause = false;
 
 class RequestDownload {
   private context: common.UIAbilityContext | undefined = undefined;
   private waitList: FileModel[] = [];
   private downloadTasks: Map<string, request.agent.Task> = new Map();
+  private fileModels: Map<string, FileModel> = new Map();
+  private lastTrans: Map<string, number> = new Map();
+  private userPausedTids: Set<string> = new Set();
 
   constructor() {
     setInterval(() => {
@@ -21,8 +23,9 @@ class RequestDownload {
     }, Constant.BACKGROUND_TASK_FLUSH_INTERVAL_MS);
   }
 
-  setDownloadTask(id: string, task: request.agent.Task) {
+  setDownloadTask(id: string, task: request.agent.Task, fileModel: FileModel) {
     this.downloadTasks.set(id, task)
+    this.fileModels.set(id, fileModel)
   }
 
   getDownloadTask(id: string) {
@@ -33,9 +36,9 @@ class RequestDownload {
   }
 
   deleteDownloadTask(id: string) {
-    if (this.downloadTasks.has(id)) {
-      this.downloadTasks.delete(id)
-    }
+    this.downloadTasks.delete(id)
+    this.fileModels.delete(id)
+    this.lastTrans.delete(id)
   }
 
   downloadFileBackground(file: FileModel, context?: common.UIAbilityContext) {
@@ -88,6 +91,11 @@ class RequestDownload {
         request.agent.create(this.context, downloadConfig).then((task: request.agent.Task) => {
           task.on('progress', async (progress: request.agent.Progress) => {
             Logger.info(TAG, `progress,  progress = ${progress.processed} ${progress.state}`);
+            this.lastTrans.set(fileModel.id, progress.processed);
+
+            if (this.userPausedTids.has(task.tid)) {
+              return;
+            }
 
             let processed = Number(progress.processed.toString()).valueOf();
             let size = progress.sizes[Constant.FIRST_ARRAY_INDEX];
@@ -114,29 +122,20 @@ class RequestDownload {
 
           task.on('pause', async (progress: request.agent.Progress) => {
             const taskInfo = await this.showTask(task.tid);
-            Logger.info(TAG, `pause, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
-            AppLogger.info(TAG, `pause ${fileModel.path}, reason=${taskInfo?.reason ?? ''}`);
-            isNetPause = taskInfo?.faults === Constant.TASK_FAULTS_NONE;
+            const isUserPaused = this.userPausedTids.has(task.tid);
+            Logger.info(TAG, `pause event, user=${isUserPaused}, faults=${JSON.stringify(taskInfo?.faults ?? '')}, progress=${progress.processed}`);
+            AppLogger.info(TAG, `pause ${fileModel.path}, user=${isUserPaused}`);
             if (fileModel.callback) {
-              if (isNetPause) {
-                fileModel.callback(progress.processed, FileModelState.PAUSED);
-              } else {
-                fileModel.callback(progress.processed, FileModelState.STOPPED);
-              }
+              fileModel.callback(progress.processed, isUserPaused ? FileModelState.PAUSED : FileModelState.STOPPED);
             }
           })
 
           task.on('resume', async (progress: request.agent.Progress) => {
-            const taskInfo = await this.showTask(task.tid);
-            Logger.info(TAG, `resume, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
+            Logger.info(TAG, `resume event, progress=${progress.processed}`);
             AppLogger.info(TAG, `resume ${fileModel.path}`);
+            this.userPausedTids.delete(task.tid);
             if (fileModel.callback) {
-              if (isNetPause) {
-                isNetPause = false;
-                fileModel.callback(progress.processed, FileModelState.RUNNING);
-              } else {
-                fileModel.callback(progress.processed, FileModelState.RUNNING);
-              }
+              fileModel.callback(progress.processed, FileModelState.RUNNING);
             }
           })
 
@@ -151,7 +150,7 @@ class RequestDownload {
           })
 
           task.start().then(() => {
-            this.setDownloadTask(fileModel.id, task);
+            this.setDownloadTask(fileModel.id, task, fileModel);
           }).catch((err: Error) => {
             Logger.error(TAG, 'task start error: ', JSON.stringify(err));
           });
@@ -167,28 +166,41 @@ class RequestDownload {
   }
 
   async pause(id: string) {
-    let task = this.getDownloadTask(id)
-    if (task) {
-      try {
-        let taskInfo = await this.showTask(task.tid);
-        Logger.info(TAG, `task pause, taskInfo = ${JSON.stringify(taskInfo)}`);
-        await task.pause();
-      } catch (err) {
-        Logger.error(TAG, `task pause failed, err = ${JSON.stringify(err)}`);
+    const task = this.getDownloadTask(id)
+    const fileModel = this.fileModels.get(id)
+    if (!task) {
+      Logger.warn(TAG, `pause: task not found, id=${id}`);
+      return;
+    }
+    try {
+      this.userPausedTids.add(task.tid);
+      await task.pause();
+      Logger.info(TAG, `pause ok, id=${id}, tid=${task.tid}`);
+      if (fileModel?.callback) {
+        fileModel.callback(this.lastTrans.get(id) ?? 0, FileModelState.PAUSED);
       }
+    } catch (err) {
+      this.userPausedTids.delete(task.tid);
+      Logger.error(TAG, `task pause failed, err = ${JSON.stringify(err)}`);
     }
   }
 
   async resume(id: string) {
-    let task = this.getDownloadTask(id)
-    if (task) {
-      try {
-        let taskInfo = await this.showTask(task.tid);
-        Logger.info(TAG, `task resume, taskInfo = ${JSON.stringify(taskInfo)}`);
-        await task.resume();
-      } catch (err) {
-        Logger.error(TAG, `task resume failed, err = ${JSON.stringify(err)}`);
+    const task = this.getDownloadTask(id)
+    const fileModel = this.fileModels.get(id)
+    if (!task) {
+      Logger.warn(TAG, `resume: task not found, id=${id}`);
+      return;
+    }
+    try {
+      await task.resume();
+      this.userPausedTids.delete(task.tid);
+      Logger.info(TAG, `resume ok, id=${id}, tid=${task.tid}`);
+      if (fileModel?.callback) {
+        fileModel.callback(this.lastTrans.get(id) ?? 0, FileModelState.RUNNING);
       }
+    } catch (err) {
+      Logger.error(TAG, `task resume failed, err = ${JSON.stringify(err)}`);
     }
   }
 
@@ -201,6 +213,7 @@ class RequestDownload {
         task.off('failed');
         task.off('pause');
         task.off('resume');
+        this.userPausedTids.delete(task.tid);
         await request.agent.remove(task.tid);
         this.deleteDownloadTask(id);
       } catch (err) {

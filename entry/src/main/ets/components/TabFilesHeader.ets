@@ -1,7 +1,7 @@
 import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
 import { TransportObject } from "../model/TransportObject";
 import LazyDataSource from "../utils/LazyDataSource";
-import { Downloads } from "./Downloads";
+import { Downloads, TransferAction } from "./Downloads";
 import { Uploads } from "./Uploads";
 import { CloudThemeToken } from "../model/CloudTheme";
 import Constant from "../model/Constant";
@@ -22,6 +22,7 @@ export struct TabFilesHeader {
   onTransportClick?: () => void;
   onPersonClick?: () => void;
   onSearchChange?: () => void;
+  onDownloadAction?: (object: TransportObject, action: TransferAction) => void;
 
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.task_download') }, { text: $r('app.string.task_upload') }] as SegmentButtonItemTuple,
@@ -133,7 +134,14 @@ export struct TabFilesHeader {
       SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
       Column() {
         if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
-          Downloads({downloadObjects: this.downloadObjects})
+          Downloads({
+            downloadObjects: this.downloadObjects,
+            onAction: (object: TransportObject, action: TransferAction) => {
+              if (this.onDownloadAction) {
+                this.onDownloadAction(object, action)
+              }
+            }
+          })
         }
         else {
           Uploads({uploadObjects: this.uploadObjects})

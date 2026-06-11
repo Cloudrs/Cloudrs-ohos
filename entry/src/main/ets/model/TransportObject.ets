@@ -12,6 +12,7 @@ export enum TransportType {
 @ObservedV2
 export class TransportObject {
   type: TransportType = TransportType.DOWNLOAD;
+  id: string = '';
   item: ObjectInfo;
   path: string = '';
   url: string = '';
@@ -23,11 +24,12 @@ export class TransportObject {
   @Trace statusText: string = '';
   private lastTime: number = new Date().getTime();
 
-  constructor(item: ObjectInfo, path: string, url: string) {
+  constructor(item: ObjectInfo, path: string, url: string, id?: string) {
     this.item = item;
     this.path = path;
     this.url = url;
     this.total = item.size
+    this.id = id ?? item.id
   }
 
   update(trans: number, state: FileModelState)

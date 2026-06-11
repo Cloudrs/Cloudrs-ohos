@@ -63,10 +63,11 @@ class BasicDataSource <T> implements IDataSource {
 @Observed
 export default class LazyDataSource<T> extends BasicDataSource<T> {
   dataArray: T[] = [];
+  size: number = 0;
   onDataGet?: (index: number, data: T) => void;
 
   public totalCount(): number {
-    return this.dataArray.length;
+    return this.size;
   }
 
   public getData(index: number): T {
@@ -78,26 +79,31 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
 
   public addData(index: number, data: T): void {
     this.dataArray.splice(index, 0, data);
+    this.size = this.dataArray.length;
     this.notifyDataAdd(index);
   }
 
   public pushData(data: T): void {
     this.dataArray.push(data);
+    this.size = this.dataArray.length;
     this.notifyDataAdd(this.dataArray.length - 1);
   }
 
   public pushArrayData(newData: ObservedArray<T>): void {
     this.dataArray.push(...newData);
+    this.size = this.dataArray.length;
     this.notifyDataReload();
   }
 
   public replaceAll(newData: T[]): void {
     this.dataArray.splice(0, this.dataArray.length, ...newData);
+    this.size = this.dataArray.length;
     this.notifyDataReload();
   }
 
   public deleteData(index: number): void {
     this.dataArray.splice(index, 1);
+    this.size = this.dataArray.length;
     this.notifyDataDelete(index);
   }
 
@@ -105,6 +111,7 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
     let index = this.dataArray.indexOf(data)
     if (index != -1) {
       this.dataArray.splice(index, 1)
+      this.size = this.dataArray.length;
       this.notifyDataDelete(index);
     }
   }
@@ -122,10 +129,11 @@ export default class LazyDataSource<T> extends BasicDataSource<T> {
 
   public clear(): void {
     this.dataArray.splice(0, this.dataArray?.length);
+    this.size = 0;
     this.notifyDataReload();
   }
 
   public isEmpty(): boolean {
-    return this.dataArray.length === 0;
+    return this.size === 0;
   }
 }

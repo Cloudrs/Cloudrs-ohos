@@ -2,6 +2,7 @@ import {
   DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy, ShareLinkInfo
 } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
+import TransferDatabase from "../../model/TransferDatabase";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { CloudApi } from "../../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
@@ -15,7 +16,7 @@ import { CommonUtil, FileType } from "../../utils/CommonUtil";
 import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 import { common } from "@kit.AbilityKit";
-import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
+import { BusinessError, pasteboard, request } from "@kit.BasicServicesKit";
 import { picker } from '@kit.CoreFileKit';
 import { TransportObject } from "../../model/TransportObject";
 import { requestDownload } from "../../utils/RequestDownload";
@@ -443,6 +444,8 @@ export struct TabFiles {
         return item.name.toLowerCase().includes(keyword)
       })
     }
+    this.dirDataSource.size = this.dirDataSource.dataArray.length
+    this.fileDataSource.size = this.fileDataSource.dataArray.length
     this.isGridPadding = this.getFolderPaddingCount() > 0
     this.dirDataSource.notifyDataReload()
     this.fileDataSource.notifyDataReload()
@@ -702,6 +705,7 @@ export struct TabFiles {
     if (!this.initialFileListRequested) {
       this.initialFileListRequested = true
       this.getFileList(true, '/')
+      this.restoreTransfers()
     }
   }
 
@@ -1307,6 +1311,7 @@ export struct TabFiles {
           .bindSheet($$this.showTransportSheet, this.transportSheetBuilder(), {
             backgroundColor: CloudThemeToken.surface,
             title: this.transportSheetTitle($r('app.string.transport_title')),
+            showClose: false,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {
@@ -1808,13 +1813,70 @@ export struct TabFiles {
 
   @Builder transportSheetTitle(title: ResourceStr) {
     Row() {
+      Row({ space: CloudThemeToken.topBarActionGap }) {
+        Stack()
+          .width(CloudThemeToken.iconBoxSm)
+          .height(CloudThemeToken.iconBoxSm)
+        if (this.hasCompletedTransfers()) {
+          Stack()
+            .width(CloudThemeToken.iconBoxSm)
+            .height(CloudThemeToken.iconBoxSm)
+        }
+      }
+
       Text(title)
         .fontSize(CloudThemeToken.filesTransportTitleSize)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Center)
+
+      Row({ space: CloudThemeToken.topBarActionGap }) {
+        if (this.hasCompletedTransfers()) {
+          Button({ type: ButtonType.Normal }) {
+            Image($r('app.media.ic_trash_close'))
+              .width(CloudThemeToken.sheetActionIconSize)
+              .height(CloudThemeToken.sheetActionIconSize)
+              .fillColor(CloudThemeToken.textSecondary)
+              .draggable(false)
+          }
+          .width(CloudThemeToken.iconBoxSm)
+          .height(CloudThemeToken.iconBoxSm)
+          .borderRadius(CloudThemeToken.controlRadius)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .onClick(() => {
+            this.clearCompletedTransfers()
+          })
+        }
+        this.sheetCloseButton(() => {
+          this.showTransportSheet = false
+        })
+      }
     }
     .width('100%')
-    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+  }
+
+  private hasCompletedTransfers(): boolean {
+    const ds = this.downloadObjects.getDataList()
+    for (let i = 0; i < ds.length; i++) {
+      if (ds[i].state === FileModelState.COMPLETED) return true
+    }
+    const us = this.uploadObjects.getDataList()
+    for (let i = 0; i < us.length; i++) {
+      if (us[i].state === FileModelState.COMPLETED) return true
+    }
+    return false
+  }
+
+  private clearCompletedTransfers(): void {
+    TransferDatabase.clearCompleted()
+    const completedDownloads = this.downloadObjects.getDataList().filter((o: TransportObject) =>
+      o.state === FileModelState.COMPLETED)
+    completedDownloads.forEach((o: TransportObject) => this.downloadObjects.deleteDataByItem(o))
+    const completedUploads = this.uploadObjects.getDataList().filter((o: TransportObject) =>
+      o.state === FileModelState.COMPLETED)
+    completedUploads.forEach((o: TransportObject) => this.uploadObjects.deleteDataByItem(o))
   }
 
   @Builder transportSheetBuilder() {
@@ -1829,7 +1891,12 @@ export struct TabFiles {
             }
           })
         } else {
-          Uploads({uploadObjects: this.uploadObjects})
+          Uploads({
+            uploadObjects: this.uploadObjects,
+            onAction: (object: TransportObject, action: TransferAction) => {
+              this.handleUploadAction(object, action)
+            }
+          })
         }
       }
       .width('100%')
@@ -3108,11 +3175,20 @@ export struct TabFiles {
           if (ctx) {
             const item = object.item
             const filePath = object.path
+            const cachePath = `${ctx.cacheDir}/${item.name}`
+            const partialBytes = FileSystemUtil.getFileSize(cachePath)
+            AppLogger.info(TAG, `retry failed task: cache partial=${partialBytes} bytes`)
             this.downloadObjects.deleteDataByItem(object)
-            this.enqueueDownloadTask(ctx, item, filePath)
+            TransferDatabase.deleteDownload(id)
+            this.enqueueDownloadTask(ctx, item, filePath, partialBytes > 0 ? partialBytes : 0)
           }
-        } else {
+        } else if (requestDownload.getTaskTid(id).length > 0) {
           requestDownload.resume(id)
+        } else {
+          const ctx = this.getAbilityContext()
+          if (ctx) {
+            this.restoreDownloadAndResume(ctx, object)
+          }
         }
         break
       case TransferAction.CANCEL:
@@ -3126,6 +3202,7 @@ export struct TabFiles {
             FileSystemUtil.unlinkIfExists(`${ctx.cacheDir}/${object.item.name}`)
           }
         }
+        TransferDatabase.deleteDownload(id)
         object.state = FileModelState.REMOVED
         this.downloadObjects.deleteDataByItem(object)
         if (wasActive) {
@@ -3135,39 +3212,231 @@ export struct TabFiles {
     }
   }
 
-  private enqueueDownloadTask(context: common.UIAbilityContext, item: ObjectInfo, filePath: string): void {
+  private handleUploadAction(object: TransportObject, action: TransferAction): void {
+    switch (action) {
+      case TransferAction.PAUSE:
+        if (object.state == FileModelState.RUNNING || object.state == FileModelState.WAITING) {
+          object.state = FileModelState.PAUSED
+          TransferDatabase.updateUploadState(object.id, FileModelState.PAUSED)
+        }
+        break
+      case TransferAction.RESUME:
+        const ctx = this.getAbilityContext()
+        if (ctx) {
+          uploadManager.resume(object, ctx, () => this.refreshIfCurrentDir(object), () => {})
+        }
+        break
+      case TransferAction.CANCEL:
+        const wasUploadActive = object.state != FileModelState.COMPLETED &&
+          object.state != FileModelState.FAILED &&
+          object.state != FileModelState.REMOVED
+        uploadManager.cancel(object)
+        this.uploadObjects.deleteDataByItem(object)
+        if (wasUploadActive) {
+          this.uploadingCount--
+        }
+        break
+    }
+  }
+
+  private refreshIfCurrentDir(object: TransportObject): void {
+    const parent = object.item.path
+    if (parent === this.currentPath) {
+      this.getFileList(true, this.currentPath)
+    }
+  }
+
+  private mapAgentStateToModel(state: request.agent.State): FileModelState {
+    switch (state) {
+      case request.agent.State.INITIALIZED:
+      case request.agent.State.WAITING:
+        return FileModelState.WAITING
+      case request.agent.State.RUNNING:
+        return FileModelState.RUNNING
+      case request.agent.State.RETRYING:
+        return FileModelState.RETRYING
+      case request.agent.State.PAUSED:
+        return FileModelState.PAUSED
+      case request.agent.State.STOPPED:
+        return FileModelState.STOPPED
+      case request.agent.State.COMPLETED:
+        return FileModelState.COMPLETED
+      case request.agent.State.FAILED:
+        return FileModelState.FAILED
+      default:
+        return FileModelState.STOPPED
+    }
+  }
+
+  async restoreTransfers(): Promise<void> {
+    const ctx = this.getAbilityContext()
+    if (!ctx) {
+      AppLogger.warn(TAG, 'restoreTransfers: ctx is null')
+      return
+    }
+    TransferDatabase.resetAllUploadsToPaused()
+
+    const downloads = TransferDatabase.listDownloads()
+    AppLogger.info(TAG, `restoreTransfers: ${downloads.length} downloads, ${TransferDatabase.listUploads().length} uploads`)
+    for (const record of downloads) {
+      const object = new TransportObject(record.item, record.path, record.url, record.id)
+      object.trans = record.trans
+      object.total = record.total
+      object.progress = record.total > 0 ?
+        Math.min(Constant.BACKGROUND_TASK_COMPLETE_PERCENT,
+          Math.floor(record.trans / record.total * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)) : 0
+
+      if (record.state === FileModelState.COMPLETED || record.state === FileModelState.FAILED) {
+        object.state = record.state
+        this.downloadObjects.pushData(object)
+        continue
+      }
+
+      if (record.tid.length === 0) {
+        object.state = FileModelState.PAUSED
+        TransferDatabase.updateDownloadProgress(record.id, record.trans, FileModelState.PAUSED)
+        this.downloadObjects.pushData(object)
+        continue
+      }
+
+      const taskInfo = await requestDownload.showTask(record.tid)
+      if (!taskInfo) {
+        AppLogger.warn(TAG, `restoreTransfers: task ${record.tid} not found, marking FAILED`)
+        object.state = FileModelState.FAILED
+        TransferDatabase.updateDownloadProgress(record.id, record.trans, FileModelState.FAILED)
+        this.downloadObjects.pushData(object)
+        continue
+      }
+
+      const realState = this.mapAgentStateToModel(taskInfo.progress.state)
+      const realTrans = Number(taskInfo.progress.processed.toString())
+      AppLogger.info(TAG, `restoreTransfers: tid=${record.tid}, agentState=${taskInfo.progress.state}, modelState=${realState}, trans=${realTrans}`)
+
+      object.trans = realTrans
+      object.progress = object.total > 0 ?
+        Math.min(Constant.BACKGROUND_TASK_COMPLETE_PERCENT,
+          Math.floor(realTrans / object.total * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)) : 0
+      object.state = realState
+      TransferDatabase.updateDownloadProgress(record.id, realTrans, realState)
+
+      if (realState === FileModelState.RUNNING || realState === FileModelState.WAITING ||
+        realState === FileModelState.RETRYING) {
+        const fileModel = this.buildDownloadFileModel(ctx, record.item, record.path, record.url, object)
+        requestDownload.restoreTask(record.id, ctx, record.tid, fileModel, false)
+        this.downloadingCount++
+      } else if (realState === FileModelState.COMPLETED) {
+        FileSystemUtil.moveFile(`${ctx.cacheDir}/${object.item.name}`, record.path, 0).catch((err: Error) => {
+          AppLogger.error(TAG, `restoreTransfers move failed: ${err}`)
+        })
+      }
+
+      this.downloadObjects.pushData(object)
+    }
+
+    uploadManager.restoreFromPersistence(this.uploadObjects)
+  }
+
+  private restoreDownloadAndResume(context: common.UIAbilityContext, object: TransportObject): void {
+    const records = TransferDatabase.listDownloads()
+    const record = records.find(r => r.id === object.id)
+    const cachePath = `${context.cacheDir}/${object.item.name}`
+    const partialBytes = FileSystemUtil.getFileSize(cachePath)
+    if (!record || record.tid.length === 0) {
+      AppLogger.warn(TAG, `restoreDownloadAndResume: no tid for id=${object.id}, re-enqueue with begins=${partialBytes}`)
+      this.downloadObjects.deleteDataByItem(object)
+      TransferDatabase.deleteDownload(object.id)
+      this.enqueueDownloadTask(context, object.item, object.path, partialBytes > 0 ? partialBytes : 0)
+      return
+    }
+
+    const fileModel = this.buildDownloadFileModel(context, object.item, object.path, object.url, object)
+    requestDownload.restoreTask(object.id, context, record.tid, fileModel, true).then((ok) => {
+      if (!ok) {
+        AppLogger.warn(TAG, `restoreTask failed, fall back to re-enqueue with begins=${partialBytes}, id=${object.id}`)
+        this.downloadObjects.deleteDataByItem(object)
+        TransferDatabase.deleteDownload(object.id)
+        this.enqueueDownloadTask(context, object.item, object.path, partialBytes > 0 ? partialBytes : 0)
+      } else {
+        this.downloadingCount++
+      }
+    })
+  }
+
+  private buildDownloadFileModel(context: common.UIAbilityContext, item: ObjectInfo,
+                                  filePath: string, url: string, object: TransportObject): FileModel {
+    let isCounted = true
+    let lastPersistAt = 0
+    let tidPersisted = ''
+    return new FileModel(item.id, filePath, url, undefined, (trans, state) => {
+      object.update(trans, state)
+      if (state == FileModelState.COMPLETED) {
+        FileSystemUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).catch((err: Error) => {
+          AppLogger.error(TAG, `err: ${err}`)
+        })
+      }
+      if (isCounted && (state == FileModelState.COMPLETED || state == FileModelState.FAILED)) {
+        this.downloadingCount--
+        isCounted = false
+      }
+      if (tidPersisted.length === 0) {
+        const tid = requestDownload.getTaskTid(item.id)
+        if (tid.length > 0) {
+          TransferDatabase.updateDownloadTid(item.id, tid)
+          tidPersisted = tid
+        }
+      }
+      const now = new Date().getTime()
+      const isTerminal = state == FileModelState.COMPLETED || state == FileModelState.FAILED
+      const isPauseLike = state == FileModelState.PAUSED || state == FileModelState.STOPPED
+      if (isTerminal || isPauseLike || state == FileModelState.RUNNING && now - lastPersistAt > Constant.TRANSFER_PERSIST_INTERVAL_MS) {
+        TransferDatabase.updateDownloadProgress(item.id, trans, state)
+        lastPersistAt = now
+      }
+    })
+  }
+
+  private enqueueDownloadTask(context: common.UIAbilityContext, item: ObjectInfo, filePath: string,
+                               begins: number = 0): void {
     CloudApi.getDownloadUri(item.id, {
       onSuccess: (data) => {
         let url = (data.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
           data.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? data : CloudApi.getBaseURL() + data
         let object: TransportObject = new TransportObject(item, filePath, url)
+        if (begins > 0) {
+          object.trans = begins
+          object.progress = item.size > 0 ?
+            Math.min(Constant.BACKGROUND_TASK_COMPLETE_PERCENT,
+              Math.floor(begins / item.size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)) : 0
+        }
         this.downloadObjects.pushData(object)
         this.downloadingCount++
 
-        let isCounted = true
-        let fileModel: FileModel = new FileModel(item.id, filePath, url, undefined, (trans, state) => {
-          object.update(trans, state)
-          if (state == FileModelState.COMPLETED) {
-            console.debug(TAG, `${context.cacheDir}/${object.item.name} -> ` + filePath)
-            FileSystemUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).then(() => {
-              console.debug(TAG, 'move to ' + filePath)
-            }).catch((err: Error) => {
-              AppLogger.error(TAG, `err: ${err}`)
-            })
-          }
-          if (isCounted && (state == FileModelState.COMPLETED || state == FileModelState.FAILED)) {
-            this.downloadingCount--
-            isCounted = false
-          }
+        AppLogger.info(TAG, `enqueueDownloadTask: persisting id=${item.id}, path=${filePath}, begins=${begins}`)
+        TransferDatabase.upsertDownload({
+          id: item.id,
+          item,
+          path: filePath,
+          url,
+          tid: '',
+          trans: begins,
+          total: item.size,
+          state: FileModelState.WAITING,
+          createdAt: new Date().getTime()
         })
 
-        // 创建下载任务
-        requestDownload.downloadFileBackground(fileModel, context)
+        this.attachDownloadFileModel(context, item, filePath, url, object, begins)
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, 'get download uri failed, msg: ' + msg)
       }
     })
+  }
+
+  private attachDownloadFileModel(context: common.UIAbilityContext, item: ObjectInfo,
+                                   filePath: string, url: string, object: TransportObject,
+                                   begins: number = 0): void {
+    const fileModel = this.buildDownloadFileModel(context, item, filePath, url, object)
+    requestDownload.downloadFileBackground(fileModel, context, begins)
   }
 
   itemDownload(index: number, item: ObjectInfo) {

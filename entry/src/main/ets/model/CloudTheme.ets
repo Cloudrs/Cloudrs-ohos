@@ -379,6 +379,7 @@ export class CloudThemeToken {
   static readonly loginBackTopMargin: number = 20
   static readonly loginTransitionDuration: number = 500
   static readonly loginContentGap: number = 10
+  static readonly loginContentMaxWidth: number = 480
   static readonly loginTipsTextSize: number = 11
   static readonly loginTipsHorizontalMargin: number = 10
   static readonly loginFooterGap: number = 12

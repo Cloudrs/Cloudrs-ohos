@@ -203,7 +203,8 @@ export struct LoginPage {
   }
 
   build() {
-    Column({ space: CloudThemeToken.loginPageGap }) {
+    Row() {
+      Column({ space: CloudThemeToken.loginPageGap }) {
       Column() {
         Row() {
           CloudIconButton({
@@ -266,16 +267,23 @@ export struct LoginPage {
         }
         .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginTransitionDuration }))
       }
+      }
+      .height("100%")
+      .width(this.sheetLayoutWidth >= CloudThemeToken.loginContentMaxWidth
+        ? CloudThemeToken.loginContentMaxWidth
+        : '100%')
+      .padding({
+        top: CloudThemeToken.loginPageVerticalPadding,
+        left: CloudThemeToken.pagePadding,
+        right: CloudThemeToken.pagePadding,
+        bottom: this.keyHeight ? CloudThemeToken.zero : CloudThemeToken.loginPageVerticalPadding
+      })
+      .justifyContent(FlexAlign.SpaceBetween)
     }
+    .width("100%")
     .height("100%")
-    .padding({
-      top: CloudThemeToken.loginPageVerticalPadding,
-      left: CloudThemeToken.pagePadding,
-      right: CloudThemeToken.pagePadding,
-      bottom: this.keyHeight ? CloudThemeToken.zero : CloudThemeToken.loginPageVerticalPadding
-    })
     .backgroundColor(CloudThemeToken.background)
-    .justifyContent(FlexAlign.SpaceBetween)
+    .justifyContent(FlexAlign.Center)
     .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
       detents: [SheetSize.FIT_CONTENT],
       showClose: false,

@@ -12,9 +12,11 @@ const TAG: string = 'RequestDownload';
 class RequestDownload {
   private context: common.UIAbilityContext | undefined = undefined;
   private waitList: FileModel[] = [];
+  private waitBegins: Map<string, number> = new Map();
   private downloadTasks: Map<string, request.agent.Task> = new Map();
   private fileModels: Map<string, FileModel> = new Map();
   private lastTrans: Map<string, number> = new Map();
+  private taskBegins: Map<string, number> = new Map();
   private userPausedTids: Set<string> = new Set();
 
   constructor() {
@@ -41,14 +43,21 @@ class RequestDownload {
     this.lastTrans.delete(id)
   }
 
-  downloadFileBackground(file: FileModel, context?: common.UIAbilityContext) {
+  getTaskTid(id: string): string {
+    return this.downloadTasks.get(id)?.tid ?? ''
+  }
+
+  downloadFileBackground(file: FileModel, context?: common.UIAbilityContext, begins: number = 0) {
     if (file) {
-      Logger.info(TAG, 'downloadFile to -> ' + file.path);
-      AppLogger.info(TAG, `enqueue ${file.path}`);
+      Logger.info(TAG, `downloadFile to -> ${file.path}, begins=${begins}`);
+      AppLogger.info(TAG, `enqueue ${file.path}, begins=${begins}`);
       if (context) {
         this.context = context;
       }
       this.waitList.push(file)
+      if (begins > 0) {
+        this.waitBegins.set(file.id, begins)
+      }
     }
   }
 
@@ -75,6 +84,8 @@ class RequestDownload {
     }
 
     downloadList.forEach(async (fileModel, index) => {
+      const begins = this.waitBegins.get(fileModel.id) ?? 0;
+      this.waitBegins.delete(fileModel.id);
       let downloadConfig: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
         url: fileModel.url,
@@ -83,72 +94,15 @@ class RequestDownload {
         mode: request.agent.Mode.BACKGROUND,
         network: request.agent.Network.ANY,
         saveas: Constant.REQUEST_SAVE_AS_PREFIX + CommonUtil.getFileName(fileModel.path),
-        overwrite: Constant.REQUEST_OVERWRITE_ENABLED,
-        gauge: Constant.REQUEST_GAUGE_ENABLED
+        overwrite: begins > 0 ? false : Constant.REQUEST_OVERWRITE_ENABLED,
+        gauge: Constant.REQUEST_GAUGE_ENABLED,
+        begins
       }
 
       try {
         request.agent.create(this.context, downloadConfig).then((task: request.agent.Task) => {
-          task.on('progress', async (progress: request.agent.Progress) => {
-            Logger.info(TAG, `progress,  progress = ${progress.processed} ${progress.state}`);
-            this.lastTrans.set(fileModel.id, progress.processed);
-
-            if (this.userPausedTids.has(task.tid)) {
-              return;
-            }
-
-            let processed = Number(progress.processed.toString()).valueOf();
-            let size = progress.sizes[Constant.FIRST_ARRAY_INDEX];
-            if (size <= Constant.BACKGROUND_TASK_EMPTY_SIZE) {
-              return;
-            }
-            let process: number = Math.floor(processed / size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT);
-
-            if (process < Constant.BACKGROUND_TASK_COMPLETE_PERCENT) {
-              if (fileModel.callback) {
-                fileModel.callback(progress.processed, FileModelState.RUNNING);
-              }
-            }
-          })
-
-          task.on('completed', async (progress: request.agent.Progress) => {
-            Logger.info(TAG, `complete, file= ${fileModel.url}, progress = ${progress.processed}`);
-            AppLogger.info(TAG, `complete ${fileModel.path}`);
-            if (fileModel.callback) {
-              fileModel.callback(progress.processed, FileModelState.COMPLETED);
-            }
-            this.deleteTask(fileModel.id);
-          })
-
-          task.on('pause', async (progress: request.agent.Progress) => {
-            const taskInfo = await this.showTask(task.tid);
-            const isUserPaused = this.userPausedTids.has(task.tid);
-            Logger.info(TAG, `pause event, user=${isUserPaused}, faults=${JSON.stringify(taskInfo?.faults ?? '')}, progress=${progress.processed}`);
-            AppLogger.info(TAG, `pause ${fileModel.path}, user=${isUserPaused}`);
-            if (fileModel.callback) {
-              fileModel.callback(progress.processed, isUserPaused ? FileModelState.PAUSED : FileModelState.STOPPED);
-            }
-          })
-
-          task.on('resume', async (progress: request.agent.Progress) => {
-            Logger.info(TAG, `resume event, progress=${progress.processed}`);
-            AppLogger.info(TAG, `resume ${fileModel.path}`);
-            this.userPausedTids.delete(task.tid);
-            if (fileModel.callback) {
-              fileModel.callback(progress.processed, FileModelState.RUNNING);
-            }
-          })
-
-          task.on('failed', async (progress: request.agent.Progress) => {
-            const taskInfo = await this.showTask(task.tid);
-            Logger.info(TAG, `fail, reason = ${taskInfo?.reason ?? ''}, progress = ${progress.processed}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
-            AppLogger.warn(TAG, `fail ${fileModel.path}, reason=${taskInfo?.reason ?? ''}, faults=${JSON.stringify(taskInfo?.faults ?? '')}`);
-            if (fileModel.callback) {
-              fileModel.callback(progress.processed, FileModelState.FAILED);
-            }
-            this.deleteTask(fileModel.id);
-          })
-
+          this.taskBegins.set(fileModel.id, begins);
+          this.bindTaskEvents(task, fileModel);
           task.start().then(() => {
             this.setDownloadTask(fileModel.id, task, fileModel);
           }).catch((err: Error) => {
@@ -163,6 +117,99 @@ class RequestDownload {
         this.waitList.push(fileModel);
       }
     })
+  }
+
+  private bindTaskEvents(task: request.agent.Task, fileModel: FileModel): void {
+    task.on('progress', async (progress: request.agent.Progress) => {
+      const begins = this.taskBegins.get(fileModel.id) ?? 0;
+      const absoluteTrans = progress.processed + begins;
+      Logger.info(TAG, `progress, processed=${progress.processed}, begins=${begins}, abs=${absoluteTrans}, state=${progress.state}`);
+      this.lastTrans.set(fileModel.id, absoluteTrans);
+
+      if (this.userPausedTids.has(task.tid)) {
+        return;
+      }
+
+      let size = progress.sizes[Constant.FIRST_ARRAY_INDEX];
+      if (size <= Constant.BACKGROUND_TASK_EMPTY_SIZE) {
+        return;
+      }
+      let process: number = Math.floor(progress.processed / size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT);
+
+      if (process < Constant.BACKGROUND_TASK_COMPLETE_PERCENT) {
+        if (fileModel.callback) {
+          fileModel.callback(absoluteTrans, FileModelState.RUNNING);
+        }
+      }
+    })
+
+    task.on('completed', async (progress: request.agent.Progress) => {
+      const begins = this.taskBegins.get(fileModel.id) ?? 0;
+      const absoluteTrans = progress.processed + begins;
+      Logger.info(TAG, `complete, file= ${fileModel.url}, abs=${absoluteTrans}`);
+      AppLogger.info(TAG, `complete ${fileModel.path}`);
+      if (fileModel.callback) {
+        fileModel.callback(absoluteTrans, FileModelState.COMPLETED);
+      }
+      this.detachTask(fileModel.id, true);
+    })
+
+    task.on('pause', async (progress: request.agent.Progress) => {
+      const begins = this.taskBegins.get(fileModel.id) ?? 0;
+      const absoluteTrans = progress.processed + begins;
+      const taskInfo = await this.showTask(task.tid);
+      const isUserPaused = this.userPausedTids.has(task.tid);
+      Logger.info(TAG, `pause event, user=${isUserPaused}, faults=${JSON.stringify(taskInfo?.faults ?? '')}, abs=${absoluteTrans}`);
+      AppLogger.info(TAG, `pause ${fileModel.path}, user=${isUserPaused}`);
+      if (fileModel.callback) {
+        fileModel.callback(absoluteTrans, isUserPaused ? FileModelState.PAUSED : FileModelState.STOPPED);
+      }
+    })
+
+    task.on('resume', async (progress: request.agent.Progress) => {
+      const begins = this.taskBegins.get(fileModel.id) ?? 0;
+      const absoluteTrans = progress.processed + begins;
+      Logger.info(TAG, `resume event, abs=${absoluteTrans}`);
+      AppLogger.info(TAG, `resume ${fileModel.path}`);
+      this.userPausedTids.delete(task.tid);
+      if (fileModel.callback) {
+        fileModel.callback(absoluteTrans, FileModelState.RUNNING);
+      }
+    })
+
+    task.on('failed', async (progress: request.agent.Progress) => {
+      const begins = this.taskBegins.get(fileModel.id) ?? 0;
+      const absoluteTrans = progress.processed + begins;
+      const taskInfo = await this.showTask(task.tid);
+      Logger.info(TAG, `fail, reason = ${taskInfo?.reason ?? ''}, abs=${absoluteTrans}, faults = ${JSON.stringify(taskInfo?.faults ?? '')}`);
+      AppLogger.warn(TAG, `fail ${fileModel.path}, reason=${taskInfo?.reason ?? ''}, faults=${JSON.stringify(taskInfo?.faults ?? '')}`);
+      if (fileModel.callback) {
+        fileModel.callback(absoluteTrans, FileModelState.FAILED);
+      }
+      this.detachTask(fileModel.id, false);
+    })
+  }
+
+  async restoreTask(id: string, context: common.UIAbilityContext, tid: string,
+                    fileModel: FileModel, autoResume: boolean): Promise<boolean> {
+    if (this.context === undefined) {
+      this.context = context;
+    }
+    try {
+      const task = await request.agent.getTask(context, tid);
+      this.bindTaskEvents(task, fileModel);
+      this.downloadTasks.set(id, task);
+      this.fileModels.set(id, fileModel);
+      this.lastTrans.set(id, this.lastTrans.get(id) ?? 0);
+      Logger.info(TAG, `restoreTask ok, id=${id}, tid=${tid}`);
+      if (autoResume) {
+        await task.resume();
+      }
+      return true;
+    } catch (err) {
+      Logger.error(TAG, `restoreTask failed, tid=${tid}, err=${JSON.stringify(err)}`);
+      return false;
+    }
   }
 
   async pause(id: string) {
@@ -205,20 +252,28 @@ class RequestDownload {
   }
 
   async deleteTask(id: string) {
-    let task = this.getDownloadTask(id)
-    if (task) {
-      try {
-        task.off('progress');
-        task.off('completed');
-        task.off('failed');
-        task.off('pause');
-        task.off('resume');
-        this.userPausedTids.delete(task.tid);
+    await this.detachTask(id, true)
+  }
+
+  private async detachTask(id: string, removeSystem: boolean): Promise<void> {
+    const task = this.getDownloadTask(id)
+    if (!task) {
+      return
+    }
+    try {
+      task.off('progress');
+      task.off('completed');
+      task.off('failed');
+      task.off('pause');
+      task.off('resume');
+      this.userPausedTids.delete(task.tid);
+      this.taskBegins.delete(id);
+      if (removeSystem) {
         await request.agent.remove(task.tid);
-        this.deleteDownloadTask(id);
-      } catch (err) {
-        Logger.info(TAG, `deleteTask fail, err= ${JSON.stringify(err)}`);
       }
+      this.deleteDownloadTask(id);
+    } catch (err) {
+      Logger.info(TAG, `detachTask fail, removeSystem=${removeSystem}, err=${JSON.stringify(err)}`);
     }
   }
 
@@ -234,7 +289,7 @@ class RequestDownload {
     }
   }
 
-  private async showTask(tid: string): Promise<request.agent.TaskInfo | undefined> {
+  async showTask(tid: string): Promise<request.agent.TaskInfo | undefined> {
     try {
       return await request.agent.show(tid);
     } catch (err) {

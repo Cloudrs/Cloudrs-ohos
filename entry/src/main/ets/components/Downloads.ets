@@ -29,6 +29,7 @@ export struct Downloads {
             ListItem() {
               this.downloadItem(item)
             }
+            .bindContextMenu(this.itemMenu(item), ResponseType.RightClick)
             .swipeAction({
               end: {
                 builder: () => { this.deleteSwipe(item) },
@@ -135,6 +136,32 @@ export struct Downloads {
     .backgroundColor(CloudThemeToken.surface)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
+  }
+
+  @Builder itemMenu(object: TransportObject) {
+    Menu() {
+      MenuItemGroup() {
+        if (this.canPause(object.state)) {
+          MenuItem({ content: '暂停' })
+            .onClick(() => {
+              if (this.onAction) this.onAction(object, TransferAction.PAUSE)
+            })
+        } else if (this.canResume(object.state)) {
+          MenuItem({ content: object.state == FileModelState.FAILED ? '重试' : '继续' })
+            .onClick(() => {
+              if (this.onAction) this.onAction(object, TransferAction.RESUME)
+            })
+        }
+      }
+      MenuItemGroup() {
+        MenuItem({ content: '取消' })
+          .contentFontColor(CloudThemeToken.danger)
+          .onClick(() => {
+            if (this.onAction) this.onAction(object, TransferAction.CANCEL)
+          })
+      }
+    }
+    .width(CloudThemeToken.menuWidth)
   }
 
   @Builder deleteSwipe(object: TransportObject) {

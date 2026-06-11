@@ -108,6 +108,21 @@ export class FileSystemUtil {
     }
   }
 
+  static async copyUriToPathFast(uri: string, targetPath: string): Promise<number> {
+    let source: fs.File | undefined = undefined
+    try {
+      source = fs.openSync(uri, fs.OpenMode.READ_ONLY)
+      await fs.copyFile(source.fd, targetPath, 0)
+      return FileSystemUtil.getFileSize(targetPath)
+    } catch (err) {
+      throw new Error((err as Error)?.message ?? `${err}`)
+    } finally {
+      if (source) {
+        try { fs.closeSync(source) } catch (_) {}
+      }
+    }
+  }
+
   static async copyUriToPathInBackground(uri: string, targetPath: string): Promise<number> {
     try {
       const task = new taskpool.Task(copyUriToPathTask, uri, targetPath, Constant.FILE_COPY_CHUNK_SIZE);

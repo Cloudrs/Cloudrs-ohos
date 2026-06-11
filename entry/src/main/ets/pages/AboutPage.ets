@@ -8,10 +8,13 @@ const EMAIL: string = 'wangxian@dreamflytech.com'
 export struct AboutPage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
+  embedded: boolean = false
 
   build() {
     Column({ space: CloudThemeToken.aboutPageGap }) {
-      CommonTitle({title: $r('app.string.about')})
+      if (!this.embedded) {
+        CommonTitle({title: $r('app.string.about')})
+      }
 
       Blank().height(CloudThemeToken.aboutLogoTopGap)
       this.logoTitle()
@@ -23,7 +26,9 @@ export struct AboutPage {
         .height(CloudThemeToken.aboutIcpHeight)
         .margin({ bottom: CloudThemeToken.pageBottomPadding })
 
-      Blank().height(this.bottomRectHeight)
+      if (!this.embedded) {
+        Blank().height(this.bottomRectHeight)
+      }
     }
     .width('100%').height('100%')
     .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })

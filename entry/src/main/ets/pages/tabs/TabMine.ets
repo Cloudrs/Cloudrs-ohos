@@ -1,4 +1,5 @@
 import { DbUserInfo, SiteConfig, UserInfo, UserSetting, UserStorage } from "../../model/net/ApiTypes";
+import { AboutPage } from "../AboutPage";
 import Constant from "../../model/Constant";
 import UserDatabase from "../../model/UserDatabase";
 import UserPreferences from "../../model/UserPreferences";
@@ -92,6 +93,7 @@ export struct TabMine {
   @State showMoreSettingsSheet: boolean = false
   @State showFeedbackSheet: boolean = false
   @State showLogViewerSheet: boolean = false
+  @State showAboutSheet: boolean = false
   @State activeSheetType: MineSheetType = MineSheetType.NONE
   @State showMetrics: boolean = false
   @State themeMode: string = Constant.APP_THEME_LIGHT
@@ -280,6 +282,21 @@ export struct TabMine {
           backgroundColor: CloudThemeToken.background,
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
+        })
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showAboutSheet, this.aboutSheet(), {
+          detents: [SheetSize.MEDIUM, SheetSize.LARGE],
+          title: { title: $r('app.string.about') },
+          showClose: true,
+          backgroundColor: CloudThemeToken.background,
+          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+          onDisappear: () => {
+            this.showAboutSheet = false
+          }
         })
 
       Column()
@@ -1047,7 +1064,7 @@ export struct TabMine {
         CloudThemeToken.settingIconAboutBackground,
         $r('app.string.about'),
         this.versionInfo,
-        () => { CloudRouter.push(Constant.ABOUT_PAGE) }
+        () => { this.showAboutSheet = true }
       )
     }
     .width('100%')
@@ -1672,6 +1689,10 @@ export struct TabMine {
   private openLogViewer(): void {
     this.closeFeedbackSheet()
     this.showLogViewerSheet = true
+  }
+
+  @Builder aboutSheet() {
+    AboutPage({ embedded: true })
   }
 
   @Builder logViewerSheet() {

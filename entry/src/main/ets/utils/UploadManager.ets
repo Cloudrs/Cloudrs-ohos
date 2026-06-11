@@ -11,16 +11,24 @@ import UserPreferences from '../model/UserPreferences';
 import Constant from '../model/Constant';
 import { FileSystemUtil } from './FileSystemUtil';
 import AppLogger from './AppLogger';
+import TransferDatabase, { UploadRecord } from '../model/TransferDatabase';
 
 const TAG = 'UploadManager';
 interface UploadTask {
+  id: string
   uri: string
   remotePath: string
+  fileName: string
   overwrite: boolean
   context: common.UIAbilityContext
   transportObject: TransportObject
   onDirChanged: () => void
   onTaskEnd?: () => void
+  // 续传字段
+  resumeCachePath?: string
+  resumeSession?: UploadRequestResponse
+  resumeOffset?: number
+  resumeChunkIndex?: number
 }
 
 class UploadManager {
@@ -36,6 +44,10 @@ class UploadManager {
     }
   }
 
+  private makeUploadId(remotePath: string): string {
+    return remotePath
+  }
+
   enqueue(
     uris: string[],
     remoteDirPath: string,
@@ -49,21 +61,159 @@ class UploadManager {
       const fileName = this.extractFileName(uri);
       const sep = remoteDirPath.endsWith('/') ? '' : '/';
       const remotePath = `${remoteDirPath}${sep}${fileName}`;
+      const id = this.makeUploadId(remotePath);
       const fakeItem: ObjectInfo = {
-        id: '', name: fileName, path: remoteDirPath,
+        id, name: fileName, path: remoteDirPath,
         thumb: false, size: 0, type: 'file',
         date: '', create_date: '', source_enabled: false
       };
-      const to = new TransportObject(fakeItem, uri, remotePath);
+      const to = new TransportObject(fakeItem, uri, remotePath, id);
       to.type = TransportType.UPLOAD;
       to.state = FileModelState.WAITING;
       uploadObjects.pushData(to);
+
+      const now = new Date().getTime();
+      TransferDatabase.upsertUpload({
+        id,
+        uri,
+        remotePath,
+        fileName,
+        overwrite,
+        sessionId: '',
+        chunkSize: 0,
+        uploadUrls: [],
+        credential: '',
+        storagePolicyType: '',
+        storagePolicyRelay: false,
+        sessionExpiresAt: 0,
+        total: 0,
+        offset: 0,
+        chunkIndex: 0,
+        cachePath: '',
+        state: FileModelState.WAITING,
+        createdAt: now
+      });
+
       this.pendingQueue.push({
-        uri, remotePath, overwrite, context,
+        id, uri, remotePath, fileName, overwrite, context,
         transportObject: to, onDirChanged, onTaskEnd
       });
     });
     this._tryFlush();
+  }
+
+  resume(
+    transportObject: TransportObject,
+    context: common.UIAbilityContext,
+    onDirChanged: () => void,
+    onTaskEnd?: () => void
+  ): void {
+    const id = transportObject.id
+    const records = TransferDatabase.listUploads()
+    const record = records.find(r => r.id === id)
+    if (!record) {
+      AppLogger.warn(TAG, `resume: record not found, id=${id}`)
+      transportObject.state = FileModelState.FAILED
+      return
+    }
+
+    transportObject.state = FileModelState.WAITING
+    transportObject.statusText = '等待中'
+    TransferDatabase.updateUploadState(id, FileModelState.WAITING)
+
+    const expiresMs = record.sessionExpiresAt < 1e12
+      ? record.sessionExpiresAt * 1000
+      : record.sessionExpiresAt
+    const sessionAlive = record.sessionId.length > 0 &&
+      record.cachePath.length > 0 &&
+      expiresMs > new Date().getTime() &&
+      fs.accessSync(record.cachePath)
+
+    if (sessionAlive) {
+      AppLogger.info(TAG, `resume from offset=${record.offset} chunk=${record.chunkIndex}`)
+      const session: UploadRequestResponse = {
+        sessionId: record.sessionId,
+        chunkSize: record.chunkSize,
+        expires: record.sessionExpiresAt,
+        uploadUrls: record.uploadUrls,
+        credential: record.credential,
+        completeUrl: '',
+        storagePolicyType: record.storagePolicyType,
+        storagePolicyRelay: record.storagePolicyRelay
+      }
+      this.pendingQueue.push({
+        id,
+        uri: record.uri,
+        remotePath: record.remotePath,
+        fileName: record.fileName,
+        overwrite: record.overwrite,
+        context,
+        transportObject,
+        onDirChanged,
+        onTaskEnd,
+        resumeCachePath: record.cachePath,
+        resumeSession: session,
+        resumeOffset: record.offset,
+        resumeChunkIndex: record.chunkIndex
+      })
+    } else {
+      AppLogger.info(TAG, `resume: session expired or cache missing, restart from scratch`)
+      if (record.cachePath.length > 0) {
+        FileSystemUtil.unlinkIfExists(record.cachePath)
+      }
+      transportObject.trans = 0
+      transportObject.progress = 0
+      this.pendingQueue.push({
+        id,
+        uri: record.uri,
+        remotePath: record.remotePath,
+        fileName: record.fileName,
+        overwrite: record.overwrite,
+        context,
+        transportObject,
+        onDirChanged,
+        onTaskEnd
+      })
+    }
+    this._tryFlush()
+  }
+
+  restoreFromPersistence(uploadObjects: LazyDataSource<TransportObject>): void {
+    const records = TransferDatabase.listUploads()
+    records.forEach(record => {
+      const fakeItem: ObjectInfo = {
+        id: record.id,
+        name: record.fileName,
+        path: record.remotePath.substring(0, record.remotePath.lastIndexOf('/')) || '/',
+        thumb: false,
+        size: record.total,
+        type: 'file',
+        date: '',
+        create_date: '',
+        source_enabled: false
+      }
+      const to = new TransportObject(fakeItem, record.uri, record.remotePath, record.id)
+      to.type = TransportType.UPLOAD
+      to.trans = record.offset
+      to.total = record.total
+      to.progress = record.total > 0 ?
+        Math.min(Constant.BACKGROUND_TASK_COMPLETE_PERCENT,
+          Math.floor(record.offset / record.total * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)) : 0
+      to.state = (record.state === FileModelState.COMPLETED || record.state === FileModelState.FAILED)
+        ? record.state
+        : FileModelState.PAUSED
+      uploadObjects.pushData(to)
+    })
+  }
+
+  cancel(transportObject: TransportObject): void {
+    transportObject.state = FileModelState.REMOVED
+    const records = TransferDatabase.listUploads()
+    const record = records.find(r => r.id === transportObject.id)
+    if (record && record.cachePath.length > 0) {
+      FileSystemUtil.unlinkIfExists(record.cachePath)
+    }
+    TransferDatabase.deleteUpload(transportObject.id)
   }
 
   private _tryFlush(): void {
@@ -88,74 +238,110 @@ class UploadManager {
   private async _runTask(task: UploadTask): Promise<void> {
     this._activeCount++;
     try {
-      const uri = task.uri;
-      const remotePath = task.remotePath;
-      const overwrite = task.overwrite;
-      const context = task.context;
-      const transportObject = task.transportObject;
-      const onDirChanged = task.onDirChanged;
-      const onTaskEnd = task.onTaskEnd;
-      const fileName = this.extractFileName(uri);
-      const cachePath = `${context.cacheDir}/upload_${new Date().getTime()}_${++this._taskCounter}_${fileName}`;
+      const id = task.id
+      const transportObject = task.transportObject
+      const context = task.context
+      const onDirChanged = task.onDirChanged
+      const onTaskEnd = task.onTaskEnd
+      const fileName = task.fileName
 
-      try {
-        const sourceSize = FileSystemUtil.getFileSize(uri);
-        if (sourceSize > 0) {
-          transportObject.item.size = sourceSize;
-          transportObject.total = sourceSize;
-        }
-        transportObject.statusText = '准备上传';
-        transportObject.update(0, FileModelState.RUNNING);
-        await FileSystemUtil.copyUriToPath(uri, cachePath, (copied: number, total: number) => {
-          if (total > 0 && transportObject.total <= 0) {
-            transportObject.item.size = total;
-            transportObject.total = total;
+      let cachePath = task.resumeCachePath ?? ''
+      let session = task.resumeSession
+      let startOffset = task.resumeOffset ?? 0
+      let startIndex = task.resumeChunkIndex ?? 0
+
+      if (cachePath.length === 0) {
+        cachePath = `${context.cacheDir}/upload_${new Date().getTime()}_${++this._taskCounter}_${fileName}`
+        try {
+          const sourceSize = FileSystemUtil.getFileSize(task.uri)
+          if (sourceSize > 0) {
+            transportObject.item.size = sourceSize
+            transportObject.total = sourceSize
           }
-          transportObject.update(copied, FileModelState.RUNNING);
-        });
-      } catch (err) {
-        AppLogger.error(TAG, `copy to cache failed: ${(err as Error)?.message ?? err}`);
-        FileSystemUtil.unlinkIfExists(cachePath);
-        transportObject.statusText = '';
-        transportObject.state = FileModelState.FAILED;
-        this._finish(onTaskEnd);
-        return;
+          transportObject.statusText = '准备上传'
+          transportObject.update(0, FileModelState.RUNNING)
+          await FileSystemUtil.copyUriToPathFast(task.uri, cachePath)
+        } catch (err) {
+          AppLogger.error(TAG, `copy to cache failed: ${(err as Error)?.message ?? err}`)
+          FileSystemUtil.unlinkIfExists(cachePath)
+          transportObject.statusText = ''
+          transportObject.state = FileModelState.FAILED
+          TransferDatabase.updateUploadState(id, FileModelState.FAILED)
+          this._finish(onTaskEnd)
+          return
+        }
+
+        try {
+          const stat = fs.statSync(cachePath)
+          transportObject.item.size = stat.size
+          transportObject.total = stat.size
+        } catch {}
+        transportObject.trans = 0
+        transportObject.progress = 0
+        transportObject.speed = 0
+        transportObject.update(0, FileModelState.RUNNING)
+        transportObject.statusText = ''
+      } else {
+        transportObject.update(startOffset, FileModelState.RUNNING)
+        transportObject.statusText = ''
+      }
+
+      if (!session) {
+        try {
+          session = await this._createUploadSession(task.remotePath, fileName, transportObject.total, task.overwrite)
+          TransferDatabase.updateUploadSession(
+            id,
+            session.sessionId,
+            session.chunkSize,
+            session.uploadUrls ?? [],
+            session.credential ?? '',
+            session.storagePolicyType ?? '',
+            session.storagePolicyRelay ?? false,
+            session.expires,
+            cachePath,
+            transportObject.total
+          )
+        } catch (err) {
+          AppLogger.error(TAG, `create session failed: ${(err as Error)?.message ?? err}`)
+          transportObject.state = FileModelState.FAILED
+          TransferDatabase.updateUploadState(id, FileModelState.FAILED)
+          FileSystemUtil.unlinkIfExists(cachePath)
+          this._finish(onTaskEnd)
+          return
+        }
       }
 
       try {
-        const stat = fs.statSync(cachePath);
-        transportObject.item.size = stat.size;
-        transportObject.total = stat.size;
-      } catch {
-        // size stays 0, not critical
-      }
-      transportObject.trans = 0;
-      transportObject.progress = 0;
-      transportObject.speed = 0;
-      transportObject.update(0, FileModelState.RUNNING);
-      transportObject.statusText = '';
-
-      try {
-        await this._uploadLocalFileByChunks(cachePath, remotePath, fileName, overwrite, transportObject);
-        transportObject.trans = transportObject.total;
-        transportObject.state = FileModelState.COMPLETED;
-        transportObject.progress = Constant.BACKGROUND_TASK_COMPLETE_PERCENT;
-        transportObject.speed = 0;
-        FileSystemUtil.unlinkIfExists(cachePath);
-        onDirChanged();
-        this._finish(onTaskEnd);
+        const finished = await this._uploadLocalFileByChunks(
+          cachePath, task.remotePath, fileName, task.overwrite,
+          transportObject, session, startOffset, startIndex, id
+        )
+        if (!finished) {
+          this._finish(onTaskEnd)
+          return
+        }
+        transportObject.trans = transportObject.total
+        transportObject.state = FileModelState.COMPLETED
+        transportObject.progress = Constant.BACKGROUND_TASK_COMPLETE_PERCENT
+        transportObject.speed = 0
+        TransferDatabase.updateUploadProgress(id, transportObject.total, startIndex, FileModelState.COMPLETED)
+        FileSystemUtil.unlinkIfExists(cachePath)
+        onDirChanged()
+        this._finish(onTaskEnd)
       } catch (err) {
-        const msg = (err as Error)?.message ?? String(err);
-        AppLogger.error(TAG, `upload failed: ${msg}`);
-        transportObject.speed = 0;
-        transportObject.state = FileModelState.FAILED;
-        FileSystemUtil.unlinkIfExists(cachePath);
-        this._finish(onTaskEnd);
+        const msg = (err as Error)?.message ?? String(err)
+        AppLogger.error(TAG, `upload failed: ${msg}`)
+        transportObject.speed = 0
+        transportObject.state = FileModelState.FAILED
+        TransferDatabase.updateUploadState(id, FileModelState.FAILED)
+        FileSystemUtil.unlinkIfExists(cachePath)
+        this._finish(onTaskEnd)
       }
     } catch (unexpected) {
-      AppLogger.error(TAG, `unexpected error in _runTask: ${(unexpected as Error)?.message ?? unexpected}`);
-      task.transportObject.state = FileModelState.FAILED;
-      this._finish(task.onTaskEnd);
+      AppLogger.error(TAG, `unexpected error in _runTask: ${(unexpected as Error)?.message ?? unexpected}`)
+      task.transportObject.state = FileModelState.FAILED
+      TransferDatabase.updateUploadState(task.id, FileModelState.FAILED)
+      this._finish(task.onTaskEnd)
     }
   }
 
@@ -164,34 +350,48 @@ class UploadManager {
     remotePath: string,
     fileName: string,
     overwrite: boolean,
-    transportObject: TransportObject
-  ): Promise<void> {
-    const session = await this._createUploadSession(remotePath, fileName, transportObject.total, overwrite);
-    const uploadUrls = session.uploadUrls ?? [];
-    const completeUrl = session.completeUrl ?? '';
-    const storagePolicyType = session.storagePolicyType ?? '';
-    const relay = session.storagePolicyRelay ?? false;
-    console.info(TAG, `upload session: chunkSize=${session.chunkSize}, uploadUrls=${uploadUrls.length}, completeUrl=${completeUrl}, policy=${storagePolicyType}, relay=${relay}`);
+    transportObject: TransportObject,
+    session: UploadRequestResponse,
+    startOffset: number,
+    startIndex: number,
+    id: string
+  ): Promise<boolean> {
+    const uploadUrls = session.uploadUrls ?? []
+    const completeUrl = session.completeUrl ?? ''
+    const storagePolicyType = session.storagePolicyType ?? ''
+    const relay = session.storagePolicyRelay ?? false
+    console.info(TAG, `upload session: chunkSize=${session.chunkSize}, uploadUrls=${uploadUrls.length}, completeUrl=${completeUrl}, policy=${storagePolicyType}, relay=${relay}`)
 
     if (completeUrl.length > 0 && !relay && storagePolicyType !== Constant.STORAGE_POLICY_LOCAL &&
       storagePolicyType !== Constant.STORAGE_POLICY_REMOTE) {
-      throw new Error(`当前存储策略(${storagePolicyType})需要云存储完成回调，暂不支持移动端分片上传`);
+      throw new Error(`当前存储策略(${storagePolicyType})需要云存储完成回调，暂不支持移动端分片上传`)
     }
 
-    const chunkSize = session.chunkSize > 0 ? session.chunkSize : transportObject.total;
+    const chunkSize = session.chunkSize > 0 ? session.chunkSize : transportObject.total
     if (session.chunkSize <= 0) {
-      transportObject.statusText = '单块上传中';
+      transportObject.statusText = '单块上传中'
     } else {
-      transportObject.statusText = '';
+      transportObject.statusText = ''
     }
     const useRemoteNode = uploadUrls.length === Constant.REMOTE_NODE_UPLOAD_URL_COUNT && !relay &&
-      storagePolicyType === Constant.STORAGE_POLICY_REMOTE;
-    let offset = 0;
-    let index = 0;
+      storagePolicyType === Constant.STORAGE_POLICY_REMOTE
+    let offset = startOffset
+    let index = startIndex
+    let lastPersistAt = 0
 
     while (offset < transportObject.total) {
-      const length = Math.min(chunkSize, transportObject.total - offset);
-      const chunkOffset = offset;
+      if (transportObject.state === FileModelState.PAUSED ||
+        transportObject.state === FileModelState.STOPPED ||
+        transportObject.state === FileModelState.REMOVED) {
+        AppLogger.info(TAG, `upload interrupted at offset=${offset}, chunk=${index}, state=${transportObject.state}`)
+        if (transportObject.state !== FileModelState.REMOVED) {
+          TransferDatabase.updateUploadProgress(id, offset, index, FileModelState.PAUSED)
+        }
+        return false
+      }
+
+      const length = Math.min(chunkSize, transportObject.total - offset)
+      const chunkOffset = offset
       const uploaded = useRemoteNode
         ? await CloudApi.uploadLocalFileChunkToUrlWithProgress(
           cachePath,
@@ -201,8 +401,8 @@ class UploadManager {
           chunkOffset,
           length,
           (uploadedInChunk: number) => {
-            const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk));
-            transportObject.update(current, FileModelState.RUNNING);
+            const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk))
+            transportObject.update(current, FileModelState.RUNNING)
           }
         )
         : session.chunkSize <= 0
@@ -213,18 +413,26 @@ class UploadManager {
             chunkOffset,
             length,
             (uploadedInChunk: number) => {
-              const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk));
-              transportObject.update(current, FileModelState.RUNNING);
+              const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk))
+              transportObject.update(current, FileModelState.RUNNING)
             }
           )
-          : await CloudApi.uploadLocalFileChunk(cachePath, session.sessionId, index, chunkOffset, length);
-      offset += uploaded > 0 ? uploaded : length;
-      transportObject.update(offset, FileModelState.RUNNING);
-      if (offset >= transportObject.total) {
-        transportObject.statusText = '';
+          : await CloudApi.uploadLocalFileChunk(cachePath, session.sessionId, index, chunkOffset, length)
+      offset += uploaded > 0 ? uploaded : length
+      index++
+      transportObject.update(offset, FileModelState.RUNNING)
+
+      const now = new Date().getTime()
+      if (offset >= transportObject.total || now - lastPersistAt > Constant.TRANSFER_PERSIST_INTERVAL_MS) {
+        TransferDatabase.updateUploadProgress(id, offset, index, FileModelState.RUNNING)
+        lastPersistAt = now
       }
-      index++;
+
+      if (offset >= transportObject.total) {
+        transportObject.statusText = ''
+      }
     }
+    return true
   }
 
   private _createUploadSession(
@@ -246,15 +454,6 @@ class UploadManager {
         onFailure: (msg: string) => reject(new Error(msg))
       };
       CloudApi.getUploadUri(request, callback, overwrite);
-    });
-  }
-
-  private _uploadLocalFileCompat(cachePath: string, remotePath: string, overwrite: boolean): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
-      CloudApi.uploadLocalFile(cachePath, remotePath, overwrite, {
-        onSuccess: () => resolve(),
-        onFailure: (msg: string) => reject(new Error(msg))
-      });
     });
   }
 

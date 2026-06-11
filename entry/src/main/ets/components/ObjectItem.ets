@@ -168,6 +168,7 @@ export struct ObjectItem {
         hoverScale: [CloudThemeToken.fullOpacity, CloudThemeToken.pressedScale]
       }
     })
+    .bindContextMenu(this.fileMenu(item), ResponseType.RightClick)
   }
 
   @Builder fileIconItem(item: ObjectInfo) {
@@ -242,6 +243,7 @@ export struct ObjectItem {
         hoverScale: [CloudThemeToken.fullOpacity, CloudThemeToken.fullOpacity]
       }
     })
+    .bindContextMenu(this.fileMenu(item), ResponseType.RightClick)
     .height(CloudThemeToken.objectGridFileHeight)
     .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
@@ -293,6 +295,7 @@ export struct ObjectItem {
         hoverScale: [CloudThemeToken.fullOpacity, CloudThemeToken.pressedScale]
       }
     })
+    .bindContextMenu(this.fileMenu(item), ResponseType.RightClick)
   }
 
   @Builder fileMenu(item: ObjectInfo) {

@@ -4,6 +4,7 @@ import { deviceInfo } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
 import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
+import TransferDatabase from '../model/TransferDatabase';
 import UserPreferences from '../model/UserPreferences';
 import { AvatarUtil } from '../utils/AvatarUtil';
 import { AppLockUtil } from '../utils/AppLockUtil';
@@ -60,6 +61,7 @@ export default class EntryAbility extends UIAbility {
 
     // 初始化用户信息数据库
     await UserDatabase.init(this.context)
+    await TransferDatabase.init(this.context)
     this.prepareActiveAvatarCache()
 
     windowStage.loadContent('pages/Index', (err) => {

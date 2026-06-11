@@ -210,8 +210,16 @@ class UploadManager {
     transportObject.state = FileModelState.REMOVED
     const records = TransferDatabase.listUploads()
     const record = records.find(r => r.id === transportObject.id)
-    if (record && record.cachePath.length > 0) {
-      FileSystemUtil.unlinkIfExists(record.cachePath)
+    if (record) {
+      if (record.cachePath.length > 0) {
+        FileSystemUtil.unlinkIfExists(record.cachePath)
+      }
+      if (record.sessionId.length > 0) {
+        CloudApi.deleteUploadSession(record.remotePath, record.sessionId, {
+          onSuccess: () => AppLogger.info(TAG, `cancelled upload session ${record.sessionId}`),
+          onFailure: (msg) => AppLogger.warn(TAG, `cancel upload session failed: ${msg}`)
+        })
+      }
     }
     TransferDatabase.deleteUpload(transportObject.id)
   }

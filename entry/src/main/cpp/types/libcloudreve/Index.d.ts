@@ -17,6 +17,7 @@ export const newDirectory: (path: string) => Promise<void>;
 export const newFile: (path: string) => Promise<void>;
 export const getDownloadUri: (id: string) => Promise<string>;
 export const getUploadUri: (path: string, size: number, name: string, lastModified: number, mimeType: string, chunkSize: number) => Promise<string>;
+export const deleteUploadSession: (path: string, sessionId: string) => Promise<void>;
 export const uploadLocalFile: (localPath: string, remotePath: string, overwrite: boolean) => Promise<void>;
 export const uploadLocalFileChunk: (localPath: string, sessionId: string, index: number, offset: number, length: number) => Promise<number>;
 export const uploadLocalFileChunkWithProgress: (localPath: string, sessionId: string, index: number, offset: number, length: number, progress: (uploaded: number) => void) => Promise<number>;

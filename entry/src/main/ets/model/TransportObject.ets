@@ -41,13 +41,16 @@ export class TransportObject {
     } else {
       this.speed = 0;
     }
-    let newTrans = trans
-    this.trans = newTrans;
+    this.trans = trans;
     this.progress = this.total > 0 ?
       Math.min(Constant.BACKGROUND_TASK_COMPLETE_PERCENT,
         Math.floor(trans / this.total * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)) : 0;
-    let newState = state;
-    this.state = newState;
-    this.lastTime = this.lastTime+biosTime;
+    const isUserIntent = this.state === FileModelState.PAUSED ||
+      this.state === FileModelState.STOPPED ||
+      this.state === FileModelState.REMOVED;
+    if (!(state === FileModelState.RUNNING && isUserIntent)) {
+      this.state = state;
+    }
+    this.lastTime = this.lastTime + biosTime;
   }
 }

@@ -6,7 +6,8 @@ import {
   getDirectory, getObjectDetail,
   deleteObjects, moveObjects, copyObjects,
   renameObject, newDirectory, newFile,
-  getDownloadUri, getUploadUri, uploadLocalFile, uploadLocalFileChunk, uploadLocalFileChunkWithProgress,
+  getDownloadUri, getUploadUri, deleteUploadSession,
+  uploadLocalFile, uploadLocalFileChunk, uploadLocalFileChunkWithProgress,
   uploadLocalFileChunkToUrl, uploadLocalFileChunkToUrlWithProgress,
   aria2Downloading, aria2Finished,
   aria2CreateTask, aria2DeleteTask,
@@ -138,6 +139,15 @@ export function nativeGetUploadUri<T>(
   callback?: HttpCallback<T>
 ): void {
   wrapJson(getUploadUri(path, size, name, lastModified, mimeType, chunkSize), callback);
+}
+
+export function nativeDeleteUploadSession(
+  path: string, sessionId: string, callback?: HttpCallback<null>
+): void {
+  if (callback?.onStart) { callback.onStart(); }
+  deleteUploadSession(path, sessionId)
+    .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
 export function nativeUploadLocalFile(

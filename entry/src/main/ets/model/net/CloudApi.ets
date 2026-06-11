@@ -6,7 +6,8 @@ import {
   nativeGetDirectory, nativeGetObjectDetail,
   nativeDeleteObjects, nativeMoveObjects, nativeCopyObjects,
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
-  nativeGetDownloadUri, nativeGetUploadUri, nativeUploadLocalFile, nativeUploadLocalFileChunk,
+  nativeGetDownloadUri, nativeGetUploadUri, nativeDeleteUploadSession,
+  nativeUploadLocalFile, nativeUploadLocalFileChunk,
   nativeUploadLocalFileChunkWithProgress, nativeUploadLocalFileChunkToUrl,
   nativeUploadLocalFileChunkToUrlWithProgress,
   nativeAria2Downloading, nativeAria2Finished,
@@ -224,6 +225,10 @@ export class CloudApi {
 
   static getDownloadUri(id: string, callback?: HttpCallback<string>): void {
     nativeGetDownloadUri(id, CloudApi.withApiLogging('getDownloadUri', callback));
+  }
+
+  static deleteUploadSession(remotePath: string, sessionId: string, callback?: HttpCallback<null>): void {
+    nativeDeleteUploadSession(remotePath, sessionId, CloudApi.withApiLogging(`deleteUploadSession(${remotePath})`, callback));
   }
 
   static getUploadUri(object: ObjectUpload, callback?: HttpCallback<UploadRequestResponse>, overwrite: boolean = false): void {

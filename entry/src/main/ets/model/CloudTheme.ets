@@ -130,7 +130,7 @@ export class CloudThemeToken {
   static readonly otpCellRadius: number = 10
   static readonly tabBarHeight: number = 78
   static readonly tabBarRadius: number = 32
-  static readonly hdsTabBarBottomMargin: number = 14
+  static readonly hdsTabBarBottomMargin: number = 0
   static readonly hdsTabBarBlurStyle: BlurStyle = BlurStyle.BACKGROUND_THIN
   static readonly hdsTabBarLightColor: ResourceColor = '#66FFFFFF'
   static readonly hiddenTabBarBottomMargin: number = -120

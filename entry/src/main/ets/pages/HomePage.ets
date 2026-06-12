@@ -205,7 +205,8 @@ export struct HomePage {
 
   // 控制按钮 top：避开状态栏区。
   // 2in1 装饰条已隐藏 topRectHeight=0；
-  // 平板/折叠屏 setWindowLayoutFullScreen 后 topRectHeight 是 status bar 高度，给个保底（~28vp）防它没生效
+  // 平板/折叠屏 setWindowLayoutFullScreen 后 topRectHeight 是 status bar 高度，给个保底（~28vp）防它没生效。
+  // 偏移取 spacingCard 让按钮垂直中心与标题栏的返回/菜单按钮一致（实测中心线对齐）
   private controlButtonTop(): number {
     if (deviceInfo.deviceType === '2in1') {
       return this.topRectHeight + CloudThemeToken.spacingCard
@@ -265,7 +266,7 @@ export struct HomePage {
     .width(CloudThemeToken.sideBarToggleSize)
     .height(CloudThemeToken.sideBarToggleSize)
     .backgroundColor(CloudThemeToken.surfaceSubtle)
-    .borderRadius(CloudThemeToken.sideBarToggleRadius)
+    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.windowWidth, CloudThemeToken.sideBarToggleRadius))
     .padding(0)
     .margin({
       left: CloudThemeToken.spacingCard,

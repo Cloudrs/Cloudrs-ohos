@@ -14,6 +14,7 @@ export struct FileSearchPage {
   routeParam?: FileSearchParam
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
   @Provide thumbImage: Map<string, PixelMap> = new Map<string, PixelMap>()
   @Provide thumbSource: Map<string, string> = new Map<string, string>()
   @State searchKeyword: string = ''
@@ -228,11 +229,19 @@ export struct FileSearchPage {
     .width('100%')
     .height('100%')
     .padding({
-      left: CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.iconBoxXl,
+      left: this.getSearchFieldLeftInset(),
       right: CloudThemeToken.filesTitleHorizontalPadding
     })
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.End)
+  }
+
+  // 宽屏（PC/平板自由窗口）下 HDS 返回按钮更宽且贴近窗口边缘，
+  // 预留宽度需要在手机基准上再加一段间隙，否则搜索框会顶到返回按钮。
+  private getSearchFieldLeftInset(): number {
+    const base = CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.iconBoxXl
+    return base + (CloudThemeToken.isWideWidth(this.windowWidthVp)
+      ? CloudThemeToken.spacingPage : CloudThemeToken.spacingMd)
   }
 
   @Builder resultList() {

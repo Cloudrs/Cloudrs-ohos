@@ -139,6 +139,7 @@ export struct TabFiles {
   @Provide thumbSource: Map<string, string> = new Map()
   @State isRefreshing:boolean = false
   @State showObjectDetail: boolean = false
+  @State visibleSheetCount: number = 0
   @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
   private currentPath: string = '/'
   private scrollerForList: Scroller = new Scroller()
@@ -254,13 +255,31 @@ export struct TabFiles {
     return this.downloadingCount + this.uploadingCount
   }
 
+  // Dim is driven by sheets actually on screen (onAppear/onDisappear), not by
+  // the request flags — a flag can get stuck true when a sheet open request is
+  // dropped mid context-menu dismissal, which used to leave the title buttons
+  // permanently gray.
   private shouldDimFileTitleActions(): boolean {
-    return this.showObjectDetail ||
-      this.showPathSelect ||
-      this.showSelectFileSheet ||
-      this.showInputSheet ||
-      this.showShareSheet ||
-      this.showTransportSheet
+    return this.visibleSheetCount > 0
+  }
+
+  private markSheetVisible(): void {
+    this.visibleSheetCount += 1
+  }
+
+  private markSheetHidden(): void {
+    this.visibleSheetCount = Math.max(0, this.visibleSheetCount - 1)
+  }
+
+  // Open a sheet flag, self-healing a stale true value (request that never
+  // produced a visible sheet) by re-triggering the two-way binding.
+  private openSheet(isStuck: boolean, setFlag: (value: boolean) => void): void {
+    if (isStuck) {
+      setFlag(false)
+      setTimeout(() => setFlag(true), 50)
+    } else {
+      setFlag(true)
+    }
   }
 
   private getFileTitleActionBackground(): ResourceColor {
@@ -309,7 +328,9 @@ export struct TabFiles {
         icon: $r('app.media.ic_transport'),
         label: '传输',
         action: () => {
-          this.showTransportSheet = true
+          this.openSheet(this.showTransportSheet, (value: boolean) => {
+            this.showTransportSheet = value
+          })
         }
       }
     }
@@ -835,26 +856,7 @@ export struct TabFiles {
     return item.id.startsWith('/') || item.id.startsWith('cloudreve://')
   }
 
-  private addObjectSharePath(paths: string[], value: string): void {
-    const path = this.normalizeSharePath(value)
-    if (path.length > 0 && !paths.includes(path)) {
-      paths.push(path)
-    }
-  }
-
-  private getObjectSharePaths(item: ObjectInfo): string[] {
-    const paths: string[] = []
-    const hasPathId = this.isObjectIdPath(item)
-    if (hasPathId) {
-      this.addObjectSharePath(paths, item.id)
-    }
-    if (item.type === Constant.OBJECT_DIR_TYPE || !hasPathId) {
-      this.addObjectSharePath(paths, CloudApi.getTotalPath(item))
-    }
-    return paths
-  }
-
-  private getSharePath(link: ShareLinkInfo): string {
+  private getShareFullPath(link: ShareLinkInfo): string {
     const candidates: string[] = [
       link.source_uri ?? '',
       link.uri ?? '',
@@ -872,14 +874,14 @@ export struct TabFiles {
     for (let index = 0; index < candidates.length; index++) {
       const path = this.normalizeSharePath(candidates[index])
       if (path.length > 0) {
-        return this.getShareObjectPath(link, path)
+        return this.completeShareFullPath(link, path)
       }
     }
     return ''
   }
 
-  private getShareObjectPath(link: ShareLinkInfo, path: string): string {
-    if (!this.isShareFileType(link) || !link.name || link.name.length === 0) {
+  private completeShareFullPath(link: ShareLinkInfo, path: string): string {
+    if (!link.name || link.name.length === 0) {
       return path
     }
     const lastSeparator = path.lastIndexOf('/')
@@ -890,12 +892,11 @@ export struct TabFiles {
     return path === '/' ? `/${link.name}` : `${path}/${link.name}`
   }
 
-  private isShareFileType(link: ShareLinkInfo): boolean {
-    if (link.source_type === undefined) {
-      return false
-    }
-    const sourceType = `${link.source_type}`.toLowerCase()
-    return sourceType === '0' || sourceType === 'file'
+  // For path matching only — returns the canonical full path that should equal
+  // the object's id for v4 / cloudreve URIs. Kept for compatibility with existing
+  // `sharedPaths` consumers.
+  private getSharePath(link: ShareLinkInfo): string {
+    return this.getShareFullPath(link)
   }
 
   private isShareTypeMatched(link: ShareLinkInfo, item: ObjectInfo): boolean {
@@ -903,33 +904,55 @@ export struct TabFiles {
     if (link.source_type === undefined) {
       return true
     }
-    const sourceType = `${link.source_type}`
-    return isDir ? sourceType === '1' || sourceType.toLowerCase() === 'folder' :
-      sourceType === '0' || sourceType.toLowerCase() === 'file'
+    const sourceType = `${link.source_type}`.toLowerCase()
+    return isDir ? sourceType === '1' || sourceType === 'folder' :
+      sourceType === '0' || sourceType === 'file'
   }
 
-  private isShareNameMatched(link: ShareLinkInfo, item: ObjectInfo): boolean {
-    return this.getSharePath(link).length === 0 &&
-      link.name === item.name &&
-      this.isShareTypeMatched(link, item)
+  // Whether a share whose source path is unknown (v3, or v4 enrichment failed)
+  // should still light up the icon for an item with the same name.
+  private isShareNameOnlyMatched(link: ShareLinkInfo, item: ObjectInfo): boolean {
+    if (this.getShareFullPath(link).length > 0) {
+      return false
+    }
+    const linkName = (link.name ?? link.source?.name ?? '').trim()
+    if (linkName.length === 0) {
+      return false
+    }
+    return linkName === item.name && this.isShareTypeMatched(link, item)
   }
 
   private getShareForObject(item: ObjectInfo): ShareLinkInfo | undefined {
-    const objectPaths = this.getObjectSharePaths(item)
+    const itemFullPath = this.getObjectSharePath(item)
+    const itemParent = this.normalizeSharePath(item.path)
     return this.shareLinks.find((link: ShareLinkInfo) => {
-      if (link.expired === true) {
+      if (!this.isShareTypeMatched(link, item)) {
         return false
       }
-      const sharePath = this.getSharePath(link)
-      return sharePath.length > 0 ? objectPaths.includes(sharePath) : this.isShareNameMatched(link, item)
+      const sharePath = this.getShareFullPath(link)
+      if (sharePath.length > 0) {
+        if (sharePath === itemFullPath) {
+          return true
+        }
+        // Fallback when source_uri is the parent folder rather than the file
+        // path: e.g. v4 file share whose source_uri = `cloudreve://my/folder`
+        // and link.name = `file.png` — we then compare parent + name instead.
+        const linkName = (link.name ?? '').trim()
+        if (linkName.length > 0 && linkName === item.name && sharePath === itemParent) {
+          return true
+        }
+        return false
+      }
+      // No path info (e.g. v3 shares only expose source.name) — match by name+type.
+      return this.isShareNameOnlyMatched(link, item)
     })
   }
 
   private rebuildSharedPaths(links: ShareLinkInfo[]): string[] {
     const paths: string[] = []
     links.forEach((link: ShareLinkInfo) => {
-      const path = this.getSharePath(link)
-      if (path.length > 0 && !paths.includes(path) && link.expired !== true) {
+      const path = this.getShareFullPath(link)
+      if (path.length > 0 && !paths.includes(path)) {
         paths.push(path)
       }
     })
@@ -946,10 +969,13 @@ export struct TabFiles {
     }
     CloudApi.listShareLinks<ShareLinkInfo[]>({
       onSuccess: (data: ShareLinkInfo[]) => {
-        const links = data ? data.filter((link: ShareLinkInfo) => link.expired !== true) : []
+        // Keep expired shares too so the file still shows a badge; the share
+        // sheet surfaces "已过期" status when the user opens it.
+        const links = data ? data.slice() : []
         this.shareLinks = links
         this.sharedPaths = this.rebuildSharedPaths(links)
-        console.debug(TAG, `share links loaded=${links.length}, mapped=${this.sharedPaths.join(',')}`)
+        AppLogger.debug(TAG, `share links loaded=${links.length}, paths=${this.sharedPaths.join('|')}, ` +
+          `names=${links.map((l: ShareLinkInfo) => `${l.name}#${l.source_type}`).join(',')}`)
         if (this.showShareSheet && this.shareTarget) {
           const existing = this.getShareForObject(this.shareTarget)
           if (existing) {
@@ -958,9 +984,10 @@ export struct TabFiles {
         }
       },
       onFailure: (msg: string) => {
-        console.debug(TAG, 'share list unavailable: ' + msg)
-        this.shareLinks = []
-        this.sharedPaths = []
+        // Keep the last known list — a transient failure (e.g. token refresh
+        // race) used to wipe every share badge and made existing shares open
+        // as "创建分享".
+        AppLogger.warn(TAG, 'share list refresh failed, keeping stale data: ' + msg)
       }
     })
   }
@@ -1228,7 +1255,8 @@ export struct TabFiles {
           }
           .width(CloudThemeToken.iconBox3xl)
           .height(CloudThemeToken.rowHeight4xl)
-          .borderRadius(CloudThemeToken.controlRadiusRoundXl)
+          .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
+            CloudThemeToken.controlRadiusRoundXl))
           .backgroundColor(CloudThemeToken.primary)
           .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
           .onClick(() => { this.openSelectFileSheet() })
@@ -1253,7 +1281,11 @@ export struct TabFiles {
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onAppear: () => {
+              this.markSheetVisible()
+            },
             onDisappear: () => {
+              this.markSheetHidden()
               this.showObjectDetail = false
             }
           })
@@ -1267,7 +1299,11 @@ export struct TabFiles {
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onAppear: () => {
+              this.markSheetVisible()
+            },
             onDisappear: () => {
+              this.markSheetHidden()
               this.showSelectFileSheet = false
             }
           })
@@ -1281,7 +1317,11 @@ export struct TabFiles {
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onAppear: () => {
+              this.markSheetVisible()
+            },
             onDisappear: () => {
+              this.markSheetHidden()
               this.showInputSheet = false
               this.resetInputSheetState()
             }
@@ -1296,7 +1336,11 @@ export struct TabFiles {
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onAppear: () => {
+              this.markSheetVisible()
+            },
             onDisappear: () => {
+              this.markSheetHidden()
               this.showShareSheet = false
               this.shareTarget = null
               this.shareLinkText = ''
@@ -1314,7 +1358,11 @@ export struct TabFiles {
             showClose: false,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onAppear: () => {
+              this.markSheetVisible()
+            },
             onDisappear: () => {
+              this.markSheetHidden()
               this.showTransportSheet = false
             }
           })
@@ -1509,7 +1557,8 @@ export struct TabFiles {
         }
         .width(CloudThemeToken.iconBoxXl)
         .height(CloudThemeToken.iconBoxXl)
-        .borderRadius(CloudThemeToken.controlRadiusRoundXl)
+        .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
+          CloudThemeToken.controlRadiusRoundXl))
         .backgroundColor(this.getMultiActionBackground(danger))
         .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
         .shadow({
@@ -1557,6 +1606,8 @@ export struct TabFiles {
               icon: this.getTitleBackIcon(),
               buttonBackground: CloudThemeToken.surface,
               iconColor: CloudThemeToken.textPrimary,
+              buttonRadius: CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
+                CloudThemeToken.controlRadius),
               onAction: () => {
                 this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
               }
@@ -2461,7 +2512,11 @@ export struct TabFiles {
       backgroundColor: CloudThemeToken.background,
       preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
       width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+      onAppear: () => {
+        this.markSheetVisible()
+      },
       onDisappear: () => {
+        this.markSheetHidden()
         this.showPathSelect = false
       }
     })
@@ -2495,7 +2550,7 @@ export struct TabFiles {
     }
     .width(CloudThemeToken.iconBoxSm)
     .height(CloudThemeToken.iconBoxSm)
-    .borderRadius(CloudThemeToken.controlRadius)
+    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth, CloudThemeToken.controlRadius))
     .backgroundColor(CloudThemeToken.surfaceSubtle)
     .onClick(onClose)
   }
@@ -2825,7 +2880,9 @@ export struct TabFiles {
     CloudApi.getObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
         this.detailData = new DetailData(item.name, item.type == Constant.OBJECT_DIR_TYPE, data)
-        this.showObjectDetail = true
+        this.openSheet(this.showObjectDetail, (value: boolean) => {
+          this.showObjectDetail = value
+        })
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, '获取详细信息失败 msg: ' + msg)
@@ -2855,11 +2912,15 @@ export struct TabFiles {
   }
 
   private openSelectFileSheet(): void {
-    this.showSelectFileSheet = true
+    this.openSheet(this.showSelectFileSheet, (value: boolean) => {
+      this.showSelectFileSheet = value
+    })
   }
 
   private openInputSheet(): void {
-    this.showInputSheet = true
+    this.openSheet(this.showInputSheet, (value: boolean) => {
+      this.showInputSheet = value
+    })
   }
 
   private openShareSheet(item: ObjectInfo): void {
@@ -2869,7 +2930,9 @@ export struct TabFiles {
     this.sharePassword = ''
     this.shareExpireDays = ShareExpireDays.SEVEN_DAYS
     this.shareBusy = false
-    this.showShareSheet = true
+    this.openSheet(this.showShareSheet, (value: boolean) => {
+      this.showShareSheet = value
+    })
     this.refreshShareLinks()
   }
 
@@ -2890,7 +2953,9 @@ export struct TabFiles {
   }
 
   private openPathSelectSheet(): void {
-    this.showPathSelect = true
+    this.openSheet(this.showPathSelect, (value: boolean) => {
+      this.showPathSelect = value
+    })
   }
 
   private closePathSelectSheet(): void {
@@ -2993,11 +3058,23 @@ export struct TabFiles {
           created_at: new Date().toISOString(),
           password: this.sharePassword.trim().length > 0 ? this.sharePassword.trim() : undefined
         }
-        const targetPaths = this.getObjectSharePaths(target)
+        const targetPath = this.getObjectSharePath(target)
+        const targetParent = this.normalizeSharePath(target.path)
         this.shareLinks = this.shareLinks
           .filter((link: ShareLinkInfo) => {
-            const linkPath = this.getSharePath(link)
-            return linkPath.length > 0 ? !targetPaths.includes(linkPath) : !this.isShareNameMatched(link, target)
+            const linkPath = this.getShareFullPath(link)
+            if (linkPath.length > 0) {
+              if (linkPath === targetPath) {
+                return false
+              }
+              const linkName = (link.name ?? '').trim()
+              if (linkName.length > 0 && linkName === target.name && linkPath === targetParent &&
+                this.isShareTypeMatched(link, target)) {
+                return false
+              }
+              return true
+            }
+            return !this.isShareNameOnlyMatched(link, target)
           })
           .concat([generatedShare])
         this.sharedPaths = this.rebuildSharedPaths(this.shareLinks)
@@ -3206,7 +3283,7 @@ export struct TabFiles {
         object.state = FileModelState.REMOVED
         this.downloadObjects.deleteDataByItem(object)
         if (wasActive) {
-          this.downloadingCount--
+          this.downloadingCount = Math.max(0, this.downloadingCount - 1)
         }
         break
     }
@@ -3233,7 +3310,7 @@ export struct TabFiles {
         uploadManager.cancel(object)
         this.uploadObjects.deleteDataByItem(object)
         if (wasUploadActive) {
-          this.uploadingCount--
+          this.uploadingCount = Math.max(0, this.uploadingCount - 1)
         }
         break
     }
@@ -3368,6 +3445,14 @@ export struct TabFiles {
     let lastPersistAt = 0
     let tidPersisted = ''
     return new FileModel(item.id, filePath, url, undefined, (trans, state) => {
+      // RequestDownload already suppresses progress callbacks while a download is paused
+      // (via userPausedTids), so any RUNNING signal that reaches here is a real resume.
+      // Force the state out of PAUSED/STOPPED before delegating to update(), which would
+      // otherwise gate the transition to protect the user-pause intent.
+      if (state == FileModelState.RUNNING &&
+        (object.state == FileModelState.PAUSED || object.state == FileModelState.STOPPED)) {
+        object.state = FileModelState.RUNNING
+      }
       object.update(trans, state)
       if (state == FileModelState.COMPLETED) {
         FileSystemUtil.moveFile(`${context.cacheDir}/${object.item.name}`, filePath, 0).catch((err: Error) => {
@@ -3375,7 +3460,7 @@ export struct TabFiles {
         })
       }
       if (isCounted && (state == FileModelState.COMPLETED || state == FileModelState.FAILED)) {
-        this.downloadingCount--
+        this.downloadingCount = Math.max(0, this.downloadingCount - 1)
         isCounted = false
       }
       if (tidPersisted.length === 0) {

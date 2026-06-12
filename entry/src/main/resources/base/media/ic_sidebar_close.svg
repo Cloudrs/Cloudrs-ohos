@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <g stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="4" y1="6" x2="20" y2="6"/>
-    <line x1="4" y1="12" x2="13" y2="12"/>
-    <line x1="4" y1="18" x2="20" y2="18"/>
-  </g>
-  <polygon points="18 8.5 15 12 18 15.5" fill="currentColor"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+  <rect x="4" y="5.1" width="16" height="1.8" rx="0.9"/>
+  <rect x="4" y="11.1" width="8" height="1.8" rx="0.9"/>
+  <rect x="4" y="17.1" width="16" height="1.8" rx="0.9"/>
+  <path d="M18 8.5 L15 12 L18 15.5 Z"/>
 </svg>

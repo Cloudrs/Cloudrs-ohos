@@ -5,6 +5,7 @@ import { CloudRouter } from "../utils/CloudRouter";
 @Component
 export struct CommonTitle {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
+  @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0;
   @Prop title: ResourceStr
   onBackClick?: ()=>void
 
@@ -23,7 +24,7 @@ export struct CommonTitle {
         }
         .width(CloudThemeToken.iconButtonSize)
         .height(CloudThemeToken.iconButtonSize)
-        .borderRadius(CloudThemeToken.controlRadius)
+        .borderRadius(CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius))
         .backgroundColor(CloudThemeToken.surfaceSubtle)
         .onClick(() => {
           if (this.onBackClick) {

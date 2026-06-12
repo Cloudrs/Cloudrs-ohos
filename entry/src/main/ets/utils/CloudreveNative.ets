@@ -1,5 +1,5 @@
 import {
-  init, restoreSession,
+  init, getApiVersionInfo, restoreSession,
   getSiteConfig, login, login2fa, loginWithRefreshToken,
   getUserStorage, getUserSetting,
   getUserAvatar,
@@ -34,6 +34,10 @@ function wrapJson<T>(promise: Promise<string>, callback?: HttpCallback<T>): void
 
 export function nativeInit(url: string, callback?: HttpCallback<string>): void {
   wrap(init(url), callback);
+}
+
+export function nativeGetApiVersionInfo(callback?: HttpCallback<string[]>): void {
+  wrap(getApiVersionInfo(), callback);
 }
 
 export function nativeRestoreSession(url: string, accessToken: string, refreshToken: string, isV3: boolean): void {

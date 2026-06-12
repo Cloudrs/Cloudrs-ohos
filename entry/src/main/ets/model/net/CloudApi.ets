@@ -1,5 +1,5 @@
 import {
-  nativeInit, nativeRestoreSession,
+  nativeInit, nativeGetApiVersionInfo, nativeRestoreSession,
   nativeGetSiteConfig, nativeLogin, nativeLogin2fa, nativeLoginWithRefreshToken,
   nativeGetUserStorage, nativeGetUserSetting,
   nativeGetUserAvatar,
@@ -63,6 +63,10 @@ export class CloudApi {
   static init(url: string, callback?: HttpCallback<string>): void {
     AppStorage.setOrCreate(Constant.CLOUD_BASE_URL, url);
     nativeInit(url, callback);
+  }
+
+  static getApiVersionInfo(callback?: HttpCallback<string[]>): void {
+    nativeGetApiVersionInfo(CloudApi.withApiLogging('getApiVersionInfo', callback));
   }
 
   static restoreSession(url: string, token: string, refreshToken: string, isV3: boolean): void {

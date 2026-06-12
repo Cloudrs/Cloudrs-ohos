@@ -505,6 +505,18 @@ export class CloudThemeToken {
     return bp === CloudBreakpoint.LG || bp === CloudBreakpoint.XL
   }
 
+  static isWideWidth(widthVp: number): boolean {
+    return CloudThemeToken.isWideBreakpoint(CloudThemeToken.getBreakpoint(widthVp))
+  }
+
+  // HDS 在 PC/宽屏自由窗口形态把标题栏按钮画成小圆角方形；自定义按钮在宽屏跟随
+  // 该形态保持风格统一，手机/窄屏继续用圆形。
+  static readonly actionSquircleRadius: number = 10
+
+  static actionRadiusForWidth(widthVp: number, roundRadius: number): number {
+    return CloudThemeToken.isWideWidth(widthVp) ? CloudThemeToken.actionSquircleRadius : roundRadius
+  }
+
   // sm/md 不需要（手机端用底部浮动 tab），lg/xl 是侧边栏宽度
   static readonly sideNavWidthLg: number = 96
   static readonly sideNavWidthXl: number = 240
@@ -513,8 +525,9 @@ export class CloudThemeToken {
   static readonly sideNavVerticalPadding: number = 24
   static readonly sideNavHorizontalPadding: number = 12
   static readonly sideNavGap: number = 6
-  static readonly sideBarToggleSize: number = 32
-  static readonly sideBarToggleIconSize: number = 22
+  // 与标题栏图标按钮（iconButtonSize 40 / actionIconSize 22 级别）保持一致
+  static readonly sideBarToggleSize: number = 40
+  static readonly sideBarToggleIconSize: number = 24
   static readonly sideBarToggleRadius: number = 16
 
   static readonly sheetCenterWidth: number = 480

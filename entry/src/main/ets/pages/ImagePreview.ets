@@ -57,9 +57,11 @@ export struct ImagePreviewPage {
 
     CloudApi.getDownloadUri(previewItem.fileId, {
       onSuccess: async (url: string) => {
+        const resolvedUrl = (url.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
+          url.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? url : CloudApi.getBaseURL() + url
         const req = http.createHttp();
         try {
-          const resp = await req.request(url, {
+          const resp = await req.request(resolvedUrl, {
             method: http.RequestMethod.GET,
             expectDataType: http.HttpDataType.ARRAY_BUFFER,
             maxLimit: Constant.IMAGE_PREVIEW_MAX_DOWNLOAD_BYTES,

@@ -433,7 +433,13 @@ export struct TabRemoteDown {
   @Builder finishedItem(index: number, item: Aria2Finished) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Stack({alignContent: Alignment.Center}) {
-        DataPanel({ values: [this.getDownloadLength(item.files)], max: item.total, type: DataPanelType.Circle })
+        DataPanel({
+          // Cloudreve reports total=0 for tasks that failed before sizing (e.g. "resource
+          // not found"); fall back to a sentinel max so the ring still renders.
+          values: [item.task_status == Aria2Status.FINISHED ? this.getDownloadLength(item.files) : 1],
+          max: item.total > 0 ? item.total : 1,
+          type: DataPanelType.Circle
+        })
           .width(CloudThemeToken.iconBox2xl)
           .height(CloudThemeToken.rowHeight2xl)
           .strokeWidth(CloudThemeToken.strongProgressStrokeWidth)

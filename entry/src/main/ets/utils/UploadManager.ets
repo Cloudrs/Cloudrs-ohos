@@ -258,6 +258,15 @@ class UploadManager {
       let startOffset = task.resumeOffset ?? 0
       let startIndex = task.resumeChunkIndex ?? 0
 
+      // Clear any lingering PAUSED/STOPPED state before running. update() suppresses
+      // RUNNING transitions while a user pause is in effect (so in-flight chunk callbacks
+      // can't override the pause), but that gate must be reset here on resume.
+      if (transportObject.state !== FileModelState.REMOVED &&
+        transportObject.state !== FileModelState.COMPLETED &&
+        transportObject.state !== FileModelState.FAILED) {
+        transportObject.state = FileModelState.RUNNING
+      }
+
       if (cachePath.length === 0) {
         cachePath = `${context.cacheDir}/upload_${new Date().getTime()}_${++this._taskCounter}_${fileName}`
         try {

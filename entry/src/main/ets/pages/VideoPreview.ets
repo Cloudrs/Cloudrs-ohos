@@ -190,8 +190,10 @@ export struct VideoPreviewPage {
     AppLogger.info(TAG, 'fetch download uri')
     CloudApi.getDownloadUri(this.fileParam.fileId, {
       onSuccess: (url: string) => {
-        videoDownloadUriCache.set(this.fileParam!.fileId, url)
-        this.videoUrl = url
+        const resolvedUrl = (url.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
+          url.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? url : CloudApi.getBaseURL() + url
+        videoDownloadUriCache.set(this.fileParam!.fileId, resolvedUrl)
+        this.videoUrl = resolvedUrl
       },
       onFailure: (msg: string) => {
         AppLogger.error(TAG, `Get video download URI failed: ${msg}`)

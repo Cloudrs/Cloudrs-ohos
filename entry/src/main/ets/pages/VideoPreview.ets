@@ -6,6 +6,8 @@ import { CloudRouter } from "../utils/CloudRouter";
 import { showToast } from "../utils/ToastUtil";
 import AppLogger from "../utils/AppLogger";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
+import { window } from "@kit.ArkUI";
+import { deviceInfo } from "@kit.BasicServicesKit";
 
 const TAG: string = 'VideoPreview'
 const videoDownloadUriCache: Map<string, string> = new Map<string, string>()
@@ -21,16 +23,40 @@ export struct VideoPreviewPage {
   @State isPlaying: boolean = false
   @State isSeeking: boolean = false
   @State isFullscreen: boolean = false
+  @State controlsVisible: boolean = true
+  // 长按快进/快退方向：1 快进、-1 快退、0 未触发
+  @State holdSeekDirection: number = 0
+  // 横向滑动调节进度中
+  @State isSwipeSeeking: boolean = false
+  @State playbackRate: number = Constant.VIDEO_NORMAL_PLAY_SPEED
   @State currentTime: number = 0
   @State duration: number = 0
   private fileParam: VideoPreview | null = null
   private controller: VideoController = new VideoController()
+  private mainWindow: window.Window | null = null
+  // 2in1 为自由窗口形态，不做屏幕方向控制
+  private supportsOrientation: boolean = deviceInfo.deviceType !== '2in1'
+  private holdSeekTimer: number = -1
+  private videoAreaWidth: number = 0
+  // 松手/拖动后发起的精确 seek 目标；播放器回报追上之前忽略旧位置，避免进度条回弹
+  private pendingSeekTarget: number = -1
+  private ignoredUpdateCount: number = 0
+  private swipeSeekStartTime: number = 0
+  // 长按快退前是否在播放，松手后用于恢复
+  private holdWasPlaying: boolean = false
 
   aboutToAppear(): void {
     if (this.routeParam) {
       this.fileParam = this.routeParam
     }
+    this.prepareWindow()
     this.loadVideoUrl()
+  }
+
+  aboutToDisappear(): void {
+    this.stopHoldSeek()
+    this.setSystemBarsVisible(true)
+    this.setOrientation(window.Orientation.UNSPECIFIED)
   }
 
   build() {
@@ -40,6 +66,7 @@ export struct VideoPreviewPage {
           if (this.videoUrl.length > CloudThemeToken.zero) {
             Video({
               src: this.videoUrl,
+              currentProgressRate: this.playbackRate,
               controller: this.controller
             })
               .width('100%')
@@ -62,12 +89,25 @@ export struct VideoPreviewPage {
               })
               .onFinish(() => {
                 this.isPlaying = false
-                this.currentTime = this.duration
+                // 长按快退期间播放器可能回报结束，不要覆盖回退中的进度
+                if (this.holdSeekDirection >= 0) {
+                  this.currentTime = this.duration
+                }
               })
               .onUpdate((event) => {
-                if (!this.isSeeking) {
-                  this.currentTime = Math.min(event.time, this.getSafeDuration())
+                if (this.isSeeking) {
+                  return
                 }
+                if (this.pendingSeekTarget >= CloudThemeToken.zero) {
+                  const reachedTarget = Math.abs(event.time - this.pendingSeekTarget) <=
+                    Constant.VIDEO_SEEK_SYNC_TOLERANCE_SECONDS
+                  if (!reachedTarget && this.ignoredUpdateCount < Constant.VIDEO_SEEK_SYNC_MAX_IGNORED) {
+                    this.ignoredUpdateCount++
+                    return
+                  }
+                  this.pendingSeekTarget = -1
+                }
+                this.currentTime = Math.min(event.time, this.getSafeDuration())
               })
               .onError(() => {
                 AppLogger.warn(TAG, 'video play error')
@@ -77,8 +117,60 @@ export struct VideoPreviewPage {
                 showToast('视频播放失败')
               })
               .onClick(() => {
-                this.togglePlayback()
+                if (this.isFullscreen) {
+                  // 全屏观影时点击屏幕切换控制栏显隐
+                  this.controlsVisible = !this.controlsVisible
+                } else {
+                  this.togglePlayback()
+                }
               })
+              .onAreaChange((_oldArea: Area, newArea: Area) => {
+                this.videoAreaWidth = Number(newArea.width)
+              })
+              .gesture(
+                LongPressGesture()
+                  .onAction((event: GestureEvent) => {
+                    // 长按右半边快进、左半边快退，松手停止
+                    const touchX = event.fingerList[Constant.FIRST_ARRAY_INDEX]?.localX ?? this.videoAreaWidth
+                    this.startHoldSeek(touchX < this.videoAreaWidth / CloudThemeToken.halfDivisor ? -1 : 1)
+                  })
+                  .onActionEnd(() => {
+                    this.stopHoldSeek()
+                  })
+                  .onActionCancel(() => {
+                    this.stopHoldSeek()
+                  })
+              )
+              .gesture(
+                PanGesture({ direction: PanDirection.Horizontal })
+                  .onActionStart(() => {
+                    this.startSwipeSeek()
+                  })
+                  .onActionUpdate((event: GestureEvent) => {
+                    this.updateSwipeSeek(event.offsetX)
+                  })
+                  .onActionEnd(() => {
+                    this.finishSwipeSeek()
+                  })
+                  .onActionCancel(() => {
+                    this.finishSwipeSeek()
+                  })
+              )
+          }
+
+          if (this.holdSeekDirection !== 0 || this.isSwipeSeeking) {
+            Text(this.seekHintText())
+              .fontSize(CloudThemeToken.textSizeBody)
+              .fontColor(CloudThemeToken.onPrimary)
+              .padding({
+                left: CloudThemeToken.spacingSection,
+                right: CloudThemeToken.spacingSection,
+                top: CloudThemeToken.spacingXs,
+                bottom: CloudThemeToken.spacingXs
+              })
+              .borderRadius(CloudThemeToken.videoPreviewControlsPanelRadius)
+              .backgroundColor(CloudThemeToken.videoPreviewControlsBackground)
+              .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
           }
 
           if (this.isLoading) {
@@ -112,11 +204,12 @@ export struct VideoPreviewPage {
         .width('100%')
         .height('100%')
 
-        if (this.isFullscreen) {
+        if (this.isFullscreen && this.controlsVisible) {
           this.fullscreenCloseButton()
         }
 
-        if (this.videoUrl.length > CloudThemeToken.zero && !this.isFailed) {
+        if (this.videoUrl.length > CloudThemeToken.zero && !this.isFailed &&
+          (!this.isFullscreen || this.controlsVisible)) {
           this.videoControls()
         }
       }
@@ -251,11 +344,13 @@ export struct VideoPreviewPage {
     .margin({
       left: CloudThemeToken.spacingPage,
       right: CloudThemeToken.spacingPage,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingPage
+      // 全屏时导航条已隐藏，控制栏贴近屏幕底部
+      bottom: this.isFullscreen ? CloudThemeToken.spacingPage : this.bottomRectHeight + CloudThemeToken.spacingPage
     })
     .borderRadius(CloudThemeToken.videoPreviewControlsPanelRadius)
     .backgroundColor(CloudThemeToken.videoPreviewControlsBackground)
     .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
   @Builder fullscreenCloseButton() {
@@ -272,6 +367,8 @@ export struct VideoPreviewPage {
     }
     .width('100%')
     .height('100%')
+    .hitTestBehavior(HitTestMode.Transparent)
+    .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
   @Builder playbackButton() {
@@ -354,6 +451,156 @@ export struct VideoPreviewPage {
 
   private toggleFullscreen(): void {
     this.isFullscreen = !this.isFullscreen
+    this.controlsVisible = true
+    this.applyFullscreenWindow(this.isFullscreen)
+  }
+
+  private prepareWindow(): void {
+    const context = this.getUIContext().getHostContext()
+    if (!context) {
+      return
+    }
+    window.getLastWindow(context).then((win: window.Window) => {
+      this.mainWindow = win
+      // 视频播放期间跟随设备翻转自动切换横竖屏（尊重系统旋转锁定）
+      this.setOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED)
+    }).catch((err: Error) => {
+      AppLogger.warn(TAG, `get last window failed: ${err.message}`)
+    })
+  }
+
+  private applyFullscreenWindow(active: boolean): void {
+    this.setOrientation(active
+      ? window.Orientation.AUTO_ROTATION_LANDSCAPE_RESTRICTED
+      : window.Orientation.AUTO_ROTATION_RESTRICTED)
+    this.setSystemBarsVisible(!active)
+  }
+
+  private setOrientation(orientation: window.Orientation): void {
+    if (!this.mainWindow || !this.supportsOrientation) {
+      return
+    }
+    this.mainWindow.setPreferredOrientation(orientation).catch((err: Error) => {
+      AppLogger.warn(TAG, `setPreferredOrientation failed: ${err.message}`)
+    })
+  }
+
+  private setSystemBarsVisible(visible: boolean): void {
+    const win = this.mainWindow
+    if (!win) {
+      return
+    }
+    win.setSpecificSystemBarEnabled('status', visible, true).catch((err: Error) => {
+      AppLogger.warn(TAG, `set status bar failed: ${err.message}`)
+    })
+    win.setSpecificSystemBarEnabled('navigationIndicator', visible, true).catch((err: Error) => {
+      AppLogger.warn(TAG, `set navigation indicator failed: ${err.message}`)
+    })
+  }
+
+  private startHoldSeek(direction: number): void {
+    if (this.videoUrl.length <= CloudThemeToken.zero || this.isFailed || this.isLoading ||
+      this.holdSeekDirection !== 0) {
+      return
+    }
+    this.holdSeekDirection = direction
+    if (direction > 0) {
+      // 快进：倍速播放，画面声音真实快进
+      if (!this.isPlaying) {
+        this.isPlaying = true
+        this.controller.start()
+      }
+      this.playbackRate = Constant.VIDEO_HOLD_FAST_PLAY_SPEED
+      return
+    }
+    // 快退：暂停后逐步精确 seek，画面跟随回退
+    this.holdWasPlaying = this.isPlaying
+    if (this.isPlaying) {
+      this.isPlaying = false
+      this.controller.pause()
+    }
+    this.isSeeking = true
+    this.stepHoldSeek()
+    this.holdSeekTimer = setInterval(() => {
+      this.stepHoldSeek()
+    }, Constant.VIDEO_HOLD_SEEK_INTERVAL_MS)
+  }
+
+  private stepHoldSeek(): void {
+    const target = Math.max(CloudThemeToken.zero,
+      this.currentTime - Constant.VIDEO_HOLD_SEEK_STEP_SECONDS)
+    this.currentTime = target
+    this.controller.setCurrentTime(target, SeekMode.Accurate)
+  }
+
+  private stopHoldSeek(): void {
+    if (this.holdSeekTimer >= 0) {
+      clearInterval(this.holdSeekTimer)
+      this.holdSeekTimer = -1
+    }
+    if (this.holdSeekDirection === 0) {
+      return
+    }
+    const direction = this.holdSeekDirection
+    this.holdSeekDirection = 0
+    if (direction > 0) {
+      // 松手恢复正常倍速继续播放
+      this.playbackRate = Constant.VIDEO_NORMAL_PLAY_SPEED
+      return
+    }
+    this.isSeeking = false
+    this.commitSeek(this.currentTime)
+    if (this.holdWasPlaying) {
+      this.isPlaying = true
+      this.controller.start()
+    }
+  }
+
+  private commitSeek(target: number): void {
+    this.pendingSeekTarget = target
+    this.ignoredUpdateCount = 0
+    this.controller.setCurrentTime(target, SeekMode.Accurate)
+  }
+
+  private startSwipeSeek(): void {
+    if (this.videoUrl.length <= CloudThemeToken.zero || this.isFailed || this.isLoading ||
+      this.holdSeekDirection !== 0) {
+      return
+    }
+    this.isSwipeSeeking = true
+    this.isSeeking = true
+    this.swipeSeekStartTime = this.currentTime
+  }
+
+  private updateSwipeSeek(offsetX: number): void {
+    if (!this.isSwipeSeeking || this.videoAreaWidth <= CloudThemeToken.zero) {
+      return
+    }
+    // 滑动距离按屏宽比例映射到全片时长：滑满一屏 = 拉动整个视频
+    const deltaSeconds = offsetX / this.videoAreaWidth * this.getSafeDuration()
+    this.currentTime = Math.max(CloudThemeToken.zero,
+      Math.min(this.swipeSeekStartTime + deltaSeconds, this.getSafeDuration()))
+  }
+
+  private finishSwipeSeek(): void {
+    if (!this.isSwipeSeeking) {
+      return
+    }
+    this.isSwipeSeeking = false
+    this.isSeeking = false
+    this.commitSeek(this.currentTime)
+  }
+
+  private seekHintText(): string {
+    if (this.holdSeekDirection > 0) {
+      return `${Constant.VIDEO_HOLD_FAST_PLAY_SPEED}x 快进播放中`
+    }
+    if (this.holdSeekDirection < 0) {
+      return `快退 ${this.formatTime(this.currentTime)} / ${this.formatTime(this.duration)}`
+    }
+    const deltaSeconds = Math.round(this.currentTime - this.swipeSeekStartTime)
+    const sign = deltaSeconds >= 0 ? '+' : '-'
+    return `${sign}${Math.abs(deltaSeconds)}秒 ${this.formatTime(this.currentTime)} / ${this.formatTime(this.duration)}`
   }
 
   private onSeek(value: number, mode: SliderChangeMode): void {
@@ -364,7 +611,7 @@ export struct VideoPreviewPage {
       return
     }
     this.isSeeking = false
-    this.controller.setCurrentTime(targetTime)
+    this.commitSeek(targetTime)
   }
 
   private getSafeDuration(): number {

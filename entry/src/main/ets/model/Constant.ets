@@ -105,6 +105,18 @@ class Constant {
 
   DATE_PAD_THRESHOLD: number = 10
 
+  VIDEO_HOLD_SEEK_STEP_SECONDS: number = 2
+
+  VIDEO_HOLD_SEEK_INTERVAL_MS: number = 300
+
+  VIDEO_HOLD_FAST_PLAY_SPEED: number = 2
+
+  VIDEO_NORMAL_PLAY_SPEED: number = 1
+
+  VIDEO_SEEK_SYNC_TOLERANCE_SECONDS: number = 2
+
+  VIDEO_SEEK_SYNC_MAX_IGNORED: number = 10
+
   FIRST_ARRAY_INDEX: number = 0
 
   SYSTEM_TOP_RECT_HEIGHT: string = 'sysTopRectHeight'

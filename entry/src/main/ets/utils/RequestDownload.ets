@@ -255,6 +255,18 @@ class RequestDownload {
     await this.detachTask(id, true)
   }
 
+  async removeSystemTask(tid: string): Promise<void> {
+    if (tid.length === 0) {
+      return
+    }
+    try {
+      await request.agent.remove(tid)
+      Logger.info(TAG, `removeSystemTask ok, tid=${tid}`)
+    } catch (err) {
+      Logger.warn(TAG, `removeSystemTask failed, tid=${tid}, err=${JSON.stringify(err)}`)
+    }
+  }
+
   private async detachTask(id: string, removeSystem: boolean): Promise<void> {
     const task = this.getDownloadTask(id)
     if (!task) {

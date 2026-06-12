@@ -3402,9 +3402,22 @@ export struct TabFiles {
         requestDownload.restoreTask(record.id, ctx, record.tid, fileModel, false)
         this.downloadingCount++
       } else if (realState === FileModelState.COMPLETED) {
-        FileSystemUtil.moveFile(`${ctx.cacheDir}/${object.item.name}`, record.path, 0).catch((err: Error) => {
-          AppLogger.error(TAG, `restoreTransfers move failed: ${err}`)
-        })
+        const restoredCache = `${ctx.cacheDir}/${object.item.name}`
+        const actualSize = FileSystemUtil.getFileSize(restoredCache)
+        if (object.total > 0 && actualSize < object.total) {
+          // 系统任务声称完成但缓存大小不足（直链过期返回错误响应），按失败处理
+          AppLogger.warn(TAG,
+            `restoreTransfers: completed but size mismatch, actual=${actualSize}, expect=${object.total}, mark FAILED`)
+          object.state = FileModelState.FAILED
+          TransferDatabase.updateDownloadProgress(record.id, record.trans, FileModelState.FAILED)
+          FileSystemUtil.unlinkIfExists(restoredCache).catch((err: Error) => {
+            AppLogger.error(TAG, `restoreTransfers cleanup failed: ${err}`)
+          })
+        } else {
+          FileSystemUtil.moveFile(restoredCache, record.path, 0).catch((err: Error) => {
+            AppLogger.error(TAG, `restoreTransfers move failed: ${err}`)
+          })
+        }
       }
 
       this.downloadObjects.pushData(object)
@@ -3418,25 +3431,15 @@ export struct TabFiles {
     const record = records.find(r => r.id === object.id)
     const cachePath = `${context.cacheDir}/${object.item.name}`
     const partialBytes = FileSystemUtil.getFileSize(cachePath)
-    if (!record || record.tid.length === 0) {
-      AppLogger.warn(TAG, `restoreDownloadAndResume: no tid for id=${object.id}, re-enqueue with begins=${partialBytes}`)
-      this.downloadObjects.deleteDataByItem(object)
-      TransferDatabase.deleteDownload(object.id)
-      this.enqueueDownloadTask(context, object.item, object.path, partialBytes > 0 ? partialBytes : 0)
-      return
+    // 跨会话恢复时旧下载直链通常已过期，复用旧系统任务会把服务端的错误响应当成下载内容；
+    // 统一移除旧任务，用新直链按缓存中已下载的字节数重新续传
+    if (record && record.tid.length > 0) {
+      requestDownload.removeSystemTask(record.tid)
     }
-
-    const fileModel = this.buildDownloadFileModel(context, object.item, object.path, object.url, object)
-    requestDownload.restoreTask(object.id, context, record.tid, fileModel, true).then((ok) => {
-      if (!ok) {
-        AppLogger.warn(TAG, `restoreTask failed, fall back to re-enqueue with begins=${partialBytes}, id=${object.id}`)
-        this.downloadObjects.deleteDataByItem(object)
-        TransferDatabase.deleteDownload(object.id)
-        this.enqueueDownloadTask(context, object.item, object.path, partialBytes > 0 ? partialBytes : 0)
-      } else {
-        this.downloadingCount++
-      }
-    })
+    AppLogger.info(TAG, `restoreDownloadAndResume: re-enqueue id=${object.id} with fresh url, begins=${partialBytes}`)
+    this.downloadObjects.deleteDataByItem(object)
+    TransferDatabase.deleteDownload(object.id)
+    this.enqueueDownloadTask(context, object.item, object.path, partialBytes > 0 ? partialBytes : 0)
   }
 
   private buildDownloadFileModel(context: common.UIAbilityContext, item: ObjectInfo,
@@ -3445,6 +3448,20 @@ export struct TabFiles {
     let lastPersistAt = 0
     let tidPersisted = ''
     return new FileModel(item.id, filePath, url, undefined, (trans, state) => {
+      if (state == FileModelState.COMPLETED) {
+        // 直链过期等场景服务端会返回小体积错误响应并正常结束请求，completed 不可盲信；
+        // 校验缓存文件实际大小，不足预期则按失败处理并清掉脏文件
+        const cachePath = `${context.cacheDir}/${object.item.name}`
+        const actualSize = FileSystemUtil.getFileSize(cachePath)
+        if (item.size > 0 && actualSize < item.size) {
+          AppLogger.warn(TAG,
+            `download completed but size mismatch, actual=${actualSize}, expect=${item.size}, id=${item.id}`)
+          FileSystemUtil.unlinkIfExists(cachePath).catch((err: Error) => {
+            AppLogger.error(TAG, `cleanup bad download failed: ${err}`)
+          })
+          state = FileModelState.FAILED
+        }
+      }
       // RequestDownload already suppresses progress callbacks while a download is paused
       // (via userPausedTids), so any RUNNING signal that reaches here is a real resume.
       // Force the state out of PAUSED/STOPPED before delegating to update(), which would

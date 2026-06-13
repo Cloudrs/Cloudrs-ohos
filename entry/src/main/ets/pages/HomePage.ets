@@ -256,11 +256,10 @@ export struct HomePage {
 
   @Builder sideBarToggleButton() {
     Button({ type: ButtonType.Normal }) {
-      Image(this.showSideBar ?
-        $r('app.media.ic_sidebar_close') : $r('app.media.ic_sidebar_open'))
-        .width(CloudThemeToken.sideBarToggleIconSize)
-        .height(CloudThemeToken.sideBarToggleIconSize)
-        .fillColor(CloudThemeToken.textPrimary)
+      SymbolGlyph(this.showSideBar ?
+        $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
+        .fontSize(CloudThemeToken.sideBarToggleIconSize)
+        .fontColor([CloudThemeToken.textPrimary])
         .draggable(false)
     }
     .width(CloudThemeToken.sideBarToggleSize)

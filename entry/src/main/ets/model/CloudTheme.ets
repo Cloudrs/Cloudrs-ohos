@@ -527,7 +527,7 @@ export class CloudThemeToken {
   static readonly sideNavGap: number = 6
   // 与标题栏图标按钮（iconButtonSize 40 / actionIconSize 22 级别）保持一致
   static readonly sideBarToggleSize: number = 40
-  static readonly sideBarToggleIconSize: number = 24
+  static readonly sideBarToggleIconSize: number = 28
   static readonly sideBarToggleRadius: number = 16
 
   static readonly sheetCenterWidth: number = 480

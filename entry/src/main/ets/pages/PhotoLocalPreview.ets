@@ -8,6 +8,8 @@ import LazyDataSource from '../utils/LazyDataSource';
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import AppLogger from '../utils/AppLogger';
+import { CloudRouter } from '../utils/CloudRouter';
+import UserPreferences from '../model/UserPreferences';
 
 const TAG: string = 'PhotoLocalPreview'
 const CHROME_ANIM_DURATION: number = 220
@@ -17,11 +19,14 @@ export struct PhotoLocalPreviewPage {
   routeParam?: PhotoLocalPreviewParam
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
   @State items: PhotoBackupItem[] = []
   @State index: number = 0
   @State backupEnabled: boolean = false
   @State itemSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource()
   @State chromeVisible: boolean = true
+  @State imageDraggable: boolean = false
+  private swiperController: SwiperController = new SwiperController()
 
   aboutToAppear(): void {
     if (this.routeParam) {
@@ -30,6 +35,8 @@ export struct PhotoLocalPreviewPage {
       this.backupEnabled = this.routeParam.backupEnabled
       this.itemSource.replaceAll(this.items)
     }
+    this.imageDraggable = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
     console.info(TAG, `preview count=${this.items.length} index=${this.index}`)
   }
 
@@ -87,7 +94,7 @@ export struct PhotoLocalPreviewPage {
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Contain)
-          .draggable(false)
+          .draggable(this.imageDraggable)
           .onError(() => { AppLogger.warn(TAG, `image load failed: ${item.name}`) })
       }
       .width('100%')
@@ -137,9 +144,82 @@ export struct PhotoLocalPreviewPage {
     .backdropBlur(18)
   }
 
+  @Builder topChrome() {
+    Row() {
+      this.closeButton()
+      Blank()
+    }
+    .width('100%')
+    .padding({
+      top: this.sysTopRectHeight + CloudThemeToken.spacingPanel,
+      left: CloudThemeToken.spacingPage,
+      right: CloudThemeToken.spacingPage
+    })
+    .position({ x: 0, y: 0 })
+    .opacity(this.chromeVisible ? 1 : 0)
+  }
+
+  @Builder closeButton() {
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      SymbolGlyph($r('sys.symbol.xmark'))
+        .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
+        .fontColor([Color.White])
+        .fontWeight(FontWeight.Medium)
+    }
+    .width(CloudThemeToken.imagePreviewArrowButtonSize)
+    .height(CloudThemeToken.imagePreviewArrowButtonSize)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .enabled(this.chromeVisible)
+    .onClick(() => {
+      CloudRouter.pop()
+    })
+  }
+
+  @Builder navArrows() {
+    if (CloudThemeToken.isWideWidth(this.windowWidthVp) && this.items.length > 1) {
+      Row() {
+        this.navArrowButton(false)
+        this.navArrowButton(true)
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingPage })
+      .justifyContent(FlexAlign.SpaceBetween)
+      .hitTestBehavior(HitTestMode.None)
+      .opacity(this.chromeVisible ? 1 : 0)
+    }
+  }
+
+  @Builder navArrowButton(isNext: boolean) {
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
+        .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
+        .fontColor([Color.White])
+        .fontWeight(FontWeight.Medium)
+    }
+    .width(CloudThemeToken.imagePreviewArrowButtonSize)
+    .height(CloudThemeToken.imagePreviewArrowButtonSize)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .enabled(this.chromeVisible && this.canNavigate(isNext))
+    .opacity(this.canNavigate(isNext) ? 1 : 0.35)
+    .onClick(() => {
+      if (isNext) {
+        this.swiperController.showNext()
+      } else {
+        this.swiperController.showPrevious()
+      }
+    })
+  }
+
+  private canNavigate(isNext: boolean): boolean {
+    return isNext ? this.index < this.items.length - 1 : this.index > 0
+  }
+
   build() {
     Stack() {
-      Swiper() {
+      Swiper(this.swiperController) {
         LazyForEach(this.itemSource, (item: PhotoBackupItem) => {
           this.slide(item)
         }, (item: PhotoBackupItem) => item.id)
@@ -153,6 +233,9 @@ export struct PhotoLocalPreviewPage {
       })
       .width('100%')
       .height('100%')
+
+      this.navArrows()
+      this.topChrome()
     }
     .width('100%')
     .height('100%')

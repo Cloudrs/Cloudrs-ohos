@@ -13,6 +13,7 @@ import { CloudThemeToken } from "../model/CloudTheme";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
 import AppLogger from "../utils/AppLogger";
+import UserPreferences from "../model/UserPreferences";
 
 const TAG: string = 'ImagePreview'
 
@@ -21,13 +22,16 @@ export struct ImagePreviewPage {
   routeParam?: ImagePreview
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0;
   @State isLoading: boolean = true;
   @State currentIndex: number = 0
   @State previewFiles: PreviewFile[] = []
   @State previewRevision: number = 0
   @State loadingIds: string[] = []
   @State failedIds: string[] = []
+  @State imageDraggable: boolean = false
   private fileParam: ImagePreview|null = null;
+  private swiperController: SwiperController = new SwiperController();
   private imagePixelMaps: Map<string, PixelMap> = new Map<string, PixelMap>();
   private imageDataMap: Map<string, ArrayBuffer> = new Map<string, ArrayBuffer>();
 
@@ -108,29 +112,37 @@ export struct ImagePreviewPage {
     this.previewFiles = this.fileParam?.previewFiles?.length ? this.fileParam.previewFiles :
       [new PreviewFile(this.fileParam?.fileName ?? '', this.fileParam?.fileId ?? '', this.fileParam?.fileExtension ?? '')]
     this.currentIndex = this.normalizeIndex(this.fileParam?.currentIndex ?? 0)
+    this.imageDraggable = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
     this.loadImageAt(this.currentIndex)
     this.prefetchAround(this.currentIndex)
   }
 
   build() {
     HdsNavigation() {
-      Swiper() {
-        ForEach(this.previewFiles, (item: PreviewFile, index: number) => {
-          this.previewItem(item, index)
-        }, (item: PreviewFile, index: number) => item.fileId + index)
+      Stack() {
+        Swiper(this.swiperController) {
+          ForEach(this.previewFiles, (item: PreviewFile, index: number) => {
+            this.previewItem(item, index)
+          }, (item: PreviewFile, index: number) => item.fileId + index)
+        }
+        .index(this.currentIndex)
+        .loop(false)
+        .indicator(false)
+        .onChange((index: number) => {
+          this.currentIndex = this.normalizeIndex(index)
+          const previewItem = this.getCurrentPreviewItem()
+          this.isLoading = previewItem ? !this.imagePixelMaps.has(previewItem.fileId) && !this.isImageFailed(previewItem.fileId) : false
+          this.loadImageAt(this.currentIndex)
+          this.prefetchAround(this.currentIndex)
+        })
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.previewBackground)
+
+        this.navArrows()
       }
-      .index(this.currentIndex)
-      .loop(false)
-      .indicator(false)
-      .onChange((index: number) => {
-        this.currentIndex = this.normalizeIndex(index)
-        const previewItem = this.getCurrentPreviewItem()
-        this.isLoading = previewItem ? !this.imagePixelMaps.has(previewItem.fileId) && !this.isImageFailed(previewItem.fileId) : false
-        this.loadImageAt(this.currentIndex)
-        this.prefetchAround(this.currentIndex)
-      })
       .width('100%')
-      .height('100%')
       .backgroundColor(CloudThemeToken.previewBackground)
       .layoutWeight(1)
 
@@ -235,6 +247,46 @@ export struct ImagePreviewPage {
     }
   }
 
+  @Builder navArrows() {
+    if (CloudThemeToken.isWideWidth(this.windowWidthVp) && this.previewFiles.length > 1) {
+      Row() {
+        this.navArrowButton(false)
+        this.navArrowButton(true)
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingPage })
+      .justifyContent(FlexAlign.SpaceBetween)
+      .hitTestBehavior(HitTestMode.None)
+    }
+  }
+
+  @Builder navArrowButton(isNext: boolean) {
+    Button({ type: ButtonType.Circle, stateEffect: false }) {
+      SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
+        .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
+        .fontColor([CloudThemeToken.onPrimary])
+        .fontWeight(FontWeight.Medium)
+    }
+    .width(CloudThemeToken.imagePreviewArrowButtonSize)
+    .height(CloudThemeToken.imagePreviewArrowButtonSize)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .enabled(this.canNavigate(isNext))
+    .opacity(this.canNavigate(isNext) ? 1 : 0.35)
+    .onClick(() => {
+      if (isNext) {
+        this.swiperController.showNext()
+      } else {
+        this.swiperController.showPrevious()
+      }
+    })
+  }
+
+  private canNavigate(isNext: boolean): boolean {
+    return isNext ? this.currentIndex < this.previewFiles.length - 1 : this.currentIndex > 0
+  }
+
   private getPreviewContentTopPadding(): number {
     return CloudThemeToken.getSafeTopInset(this.sysTopRectHeight) +
       CloudThemeToken.titleBarHeight +
@@ -248,6 +300,7 @@ export struct ImagePreviewPage {
           .width('100%')
           .height('100%')
           .objectFit(ImageFit.Contain)
+          .draggable(this.imageDraggable)
       } else if (this.isImageFailed(item.fileId)) {
         Image($r('app.media.ic_picture_damage'))
           .width(CloudThemeToken.imagePreviewErrorImageSize)

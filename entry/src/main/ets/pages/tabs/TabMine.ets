@@ -106,6 +106,7 @@ export struct TabMine {
   @State photoBackupEnabledText: string = '未开启'
   @StorageProp(PHOTO_BACKUP_ENABLED_KEY) @Watch('onPhotoBackupEnabledChanged') photoBackupEnabledMirror: boolean = false;
   @State showPhotoBackupPathSheet: boolean = false
+  @State imageDraggableEnabled: boolean = false
 
   aboutToAppear() {
     this.loadLocalPreferences()
@@ -143,6 +144,11 @@ export struct TabMine {
       Constant.UPLOAD_CONCURRENT_DEFAULT
     ) as number;
     this.uploadMaxConcurrent = this.normalizeUploadConcurrent(raw)
+    this.imageDraggableEnabled = UserPreferences.getSync(
+      Constant.USER_PREFERENCES,
+      Constant.IMAGE_DRAGGABLE_ENABLED,
+      false
+    ) as boolean
     const pbSettings = PhotoBackupSettingsStore.load();
     this.photoBackupEnabledText = pbSettings.enabled ? '已开启' : '未开启';
     PhotoBackupSettingsStore.mirror(pbSettings);
@@ -1336,9 +1342,43 @@ export struct TabMine {
     .backgroundColor(CloudThemeToken.background)
   }
 
+  @Builder settingSwitchRow(title: string, desc: string, value: boolean, onToggle: (v: boolean) => void) {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Column({ space: CloudThemeToken.spacingXs }) {
+        Text(title)
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+        Text(desc)
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Toggle({ type: ToggleType.Switch, isOn: value })
+        .selectedColor(CloudThemeToken.primary)
+        .onChange((isOn: boolean) => {
+          onToggle(isOn);
+        })
+    }
+    .width('100%')
+    .height(CloudThemeToken.rowHeight4xl)
+    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+    .alignItems(VerticalAlign.Center)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .clip(true)
+    .backgroundColor(CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+  }
+
   @Builder moreSettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
       this.rowWithSelect($r('app.string.upload_max_concurrent'))
+      this.settingSwitchRow('开启图片拖拽', '拖拽进行 AI 分析', this.imageDraggableEnabled, (v: boolean) => {
+        this.imageDraggableEnabled = v
+        UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, v)
+      })
     }
     .width('100%')
     .padding({

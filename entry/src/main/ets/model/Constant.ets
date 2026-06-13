@@ -200,6 +200,7 @@ class Constant {
   UPLOAD_CONCURRENT_MAX: number = 10;
 
   APP_THEME_MODE: string = 'app_theme_mode';
+  IMAGE_DRAGGABLE_ENABLED: string = 'image_draggable_enabled';
 
   APP_THEME_LIGHT: string = 'light';
 

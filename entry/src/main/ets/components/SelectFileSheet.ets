@@ -19,33 +19,6 @@ export struct SelectFileSheet {
 
   build() {
     Column({ space: CloudThemeToken.uploadSourceSheetGap }) {
-      Row() {
-        Text($r('app.string.upload'))
-          .fontSize(CloudThemeToken.uploadSourceTitleSize)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-
-        Button({ type: ButtonType.Normal }) {
-          Image($r('app.media.ic_xmark_bold'))
-            .width(CloudThemeToken.sheetActionIconSize)
-            .height(CloudThemeToken.sheetActionIconSize)
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.iconBoxSm)
-        .height(CloudThemeToken.iconBoxSm)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          if (this.onClose) {
-            this.onClose()
-          }
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
       Column({ space: CloudThemeToken.uploadSourceListGap }) {
         this.uploadSourceItem(
           $r('app.media.ic_upload_file_modern'),

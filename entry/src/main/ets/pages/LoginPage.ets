@@ -286,7 +286,8 @@ export struct LoginPage {
     .justifyContent(FlexAlign.Center)
     .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
       detents: [SheetSize.FIT_CONTENT],
-      showClose: false,
+      title: { title: '选择账号' },
+      showClose: true,
       backgroundColor: CloudThemeToken.background,
       preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
       width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),

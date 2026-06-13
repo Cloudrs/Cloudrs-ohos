@@ -267,7 +267,8 @@ export struct TabMine {
         .height(0)
         .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
           detents: [SheetSize.FIT_CONTENT],
-          showClose: false,
+          title: { title: '问题反馈', subtitle: '优先邮件反馈，附带日志和诊断信息方便快速定位' },
+          showClose: true,
           backgroundColor: CloudThemeToken.background,
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
@@ -278,7 +279,8 @@ export struct TabMine {
         .height(0)
         .bindSheet($$this.showLogViewerSheet, this.logViewerSheet(), {
           detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-          showClose: false,
+          title: { title: '日志与诊断', subtitle: '已脱敏 · 复制诊断会一并带上日志尾部' },
+          showClose: true,
           backgroundColor: CloudThemeToken.background,
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
@@ -304,7 +306,8 @@ export struct TabMine {
         .height(0)
         .bindSheet($$this.showSettingsSheet, this.settingsSheet(), {
           detents: [SheetSize.FIT_CONTENT],
-          showClose: false,
+          title: { title: this.getSettingsSheetTitle() },
+          showClose: true,
           backgroundColor: CloudThemeToken.background,
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
@@ -1192,10 +1195,6 @@ export struct TabMine {
 
   @Builder privacySettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
-      this.sheetHeader($r('app.string.user_privacy_secure'), () => {
-        this.closeSettingsSheet()
-      })
-
       Column({ space: CloudThemeToken.spacingXs }) {
         Text(this.currentUser)
           .fontSize(CloudThemeToken.textSizeLarge)
@@ -1314,10 +1313,6 @@ export struct TabMine {
 
   @Builder themeSettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
-      this.sheetHeader($r('app.string.user_theme_setting'), () => {
-        this.closeSettingsSheet()
-      })
-
       this.themeOptionRow(
         $r('app.string.theme_light_title'),
         $r('app.string.theme_light_desc'),
@@ -1343,10 +1338,6 @@ export struct TabMine {
 
   @Builder moreSettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
-      this.sheetHeader($r('app.string.more_setting'), () => {
-        this.closeSettingsSheet()
-      })
-
       this.rowWithSelect($r('app.string.upload_max_concurrent'))
     }
     .width('100%')
@@ -1377,29 +1368,20 @@ export struct TabMine {
     )
   }
 
-  @Builder sheetHeader(title: ResourceStr, onClose: () => void) {
-    Row() {
-      Text(title)
-        .fontSize(CloudThemeToken.textSizeTitle)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-
-      Button({ type: ButtonType.Normal }) {
-        Image($r('app.media.ic_xmark_bold'))
-          .width(CloudThemeToken.sheetActionIconSize)
-          .height(CloudThemeToken.sheetActionIconSize)
-          .fillColor(CloudThemeToken.textSecondary)
-          .draggable(false)
-      }
-      .width(CloudThemeToken.iconBoxSm)
-      .height(CloudThemeToken.iconBoxSm)
-      .borderRadius(CloudThemeToken.controlRadius)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-      .onClick(onClose)
+  private getSettingsSheetTitle(): ResourceStr {
+    if (this.showUserSwitchSheet) {
+      return '选择账号'
     }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
+    switch (this.activeSheetType) {
+      case MineSheetType.THEME:
+        return $r('app.string.user_theme_setting')
+      case MineSheetType.PRIVACY:
+        return $r('app.string.user_privacy_secure')
+      case MineSheetType.PHOTO_BACKUP:
+        return '相册备份'
+      default:
+        return $r('app.string.more_setting')
+    }
   }
 
   @Builder sheetSubHeader(title: ResourceStr, onBack: () => void, onClose: () => void) {

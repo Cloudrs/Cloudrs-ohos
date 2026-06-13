@@ -30,7 +30,6 @@ export struct LogViewerSheet {
 
   build() {
     Column({ space: CloudThemeToken.spacingPage }) {
-      this.header()
       this.actionRow()
       this.logBody()
       this.footer()
@@ -45,39 +44,6 @@ export struct LogViewerSheet {
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
-  }
-
-  @Builder header() {
-    Row() {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text('日志与诊断')
-          .fontSize(CloudThemeToken.textSizeTitle)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-        Text('已脱敏 · 复制诊断会一并带上日志尾部')
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Button({ type: ButtonType.Normal }) {
-        Image($r('app.media.ic_xmark_bold'))
-          .width(CloudThemeToken.sheetActionIconSize)
-          .height(CloudThemeToken.sheetActionIconSize)
-          .fillColor(CloudThemeToken.textSecondary)
-          .draggable(false)
-      }
-      .width(CloudThemeToken.iconBoxSm)
-      .height(CloudThemeToken.iconBoxSm)
-      .borderRadius(CloudThemeToken.controlRadius)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
-      .onClick(() => {
-        this.onClose?.();
-      })
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder actionRow() {

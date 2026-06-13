@@ -80,32 +80,6 @@ export struct PhotoBackupSettingsSheet {
 
   build() {
     Column({ space: CloudThemeToken.spacingPage }) {
-      // Header
-      Row() {
-        Text('相册备份')
-          .fontSize(CloudThemeToken.textSizeTitle)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-
-        Button({ type: ButtonType.Normal }) {
-          Image($r('app.media.ic_xmark_bold'))
-            .width(CloudThemeToken.sheetActionIconSize)
-            .height(CloudThemeToken.sheetActionIconSize)
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.iconBoxSm)
-        .height(CloudThemeToken.iconBoxSm)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          this.onClose();
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
       // Switch row: 开启自动备份
       this.switchRow(
         '开启自动备份',

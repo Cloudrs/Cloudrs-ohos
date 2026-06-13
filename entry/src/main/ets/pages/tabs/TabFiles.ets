@@ -1277,7 +1277,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showObjectDetail, this.detailBindSheet(), {
             detents: [SheetSize.FIT_CONTENT],
-            showClose: false,
+            title: { title: this.detailData.name },
+            showClose: true,
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
@@ -1295,7 +1296,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showSelectFileSheet, this.selectFileSheetBuilder(), {
             detents: [SheetSize.FIT_CONTENT],
-            showClose: false,
+            title: { title: $r('app.string.upload') },
+            showClose: true,
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
@@ -1313,7 +1315,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showInputSheet, this.inputSheetBuilder(), {
             detents: [SheetSize.FIT_CONTENT],
-            showClose: false,
+            title: { title: this.inputTitle },
+            showClose: true,
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
@@ -1332,7 +1335,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showShareSheet, this.shareSheetBuilder(), {
             detents: [SheetSize.FIT_CONTENT],
-            showClose: false,
+            title: { title: this.shareLinkText.length > 0 ? '分享链接' : '创建分享' },
+            showClose: true,
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
@@ -1354,8 +1358,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showTransportSheet, this.transportSheetBuilder(), {
             backgroundColor: CloudThemeToken.surface,
-            title: this.transportSheetTitle($r('app.string.transport_title')),
-            showClose: false,
+            title: { title: $r('app.string.transport_title') },
+            showClose: true,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onAppear: () => {
@@ -1899,9 +1903,6 @@ export struct TabFiles {
             this.clearCompletedTransfers()
           })
         }
-        this.sheetCloseButton(() => {
-          this.showTransportSheet = false
-        })
       }
     }
     .width('100%')
@@ -2055,10 +2056,6 @@ export struct TabFiles {
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .layoutWeight(1)
-
-        this.sheetCloseButton(() => {
-          this.closeInputSheet()
-        })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
@@ -2123,7 +2120,6 @@ export struct TabFiles {
 
   @Builder shareSheetBuilder() {
     Column({ space: CloudThemeToken.spacingSheetTop }) {
-      this.shareSheetHeader()
       this.shareTargetSummary()
 
       if (this.shareLinkText.length > 0) {
@@ -2185,22 +2181,6 @@ export struct TabFiles {
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
     .zIndex(1)
-  }
-
-  @Builder shareSheetHeader() {
-    Row() {
-      Text(this.shareLinkText.length > 0 ? '分享链接' : '创建分享')
-        .fontSize(CloudThemeToken.textSizeTitle)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-
-      this.sheetCloseButton(() => {
-        this.closeShareSheet()
-      })
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder shareTargetSummary() {
@@ -2560,9 +2540,6 @@ export struct TabFiles {
       Row() {
         Blank()
           .layoutWeight(1)
-        this.sheetCloseButton(() => {
-          this.closeDetailSheet()
-        })
       }
       .height(CloudThemeToken.rowHeight2xl)
       .width('100%')
@@ -2590,10 +2567,6 @@ export struct TabFiles {
         Row() {
           Blank()
             .layoutWeight(1)
-          this.sheetCloseButton(() => {
-            this.showObjectDetail = false
-            this.overLap = true
-          })
         }
         .height(CloudThemeToken.rowHeight2xl)
         .width('100%')

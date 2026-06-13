@@ -11,39 +11,6 @@ export struct FeedbackSheet {
 
   build() {
     Column({ space: CloudThemeToken.uploadSourceSheetGap }) {
-      Row() {
-        Column({ space: CloudThemeToken.spacingXs }) {
-          Text('问题反馈')
-            .fontSize(CloudThemeToken.uploadSourceTitleSize)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-          Text('优先邮件反馈，附带日志和诊断信息方便快速定位')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Button({ type: ButtonType.Normal }) {
-          Image($r('app.media.ic_xmark_bold'))
-            .width(CloudThemeToken.sheetActionIconSize)
-            .height(CloudThemeToken.sheetActionIconSize)
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.smallIconButtonSize)
-        .height(CloudThemeToken.smallIconButtonSize)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          this.onClose?.()
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
       Column({ space: CloudThemeToken.uploadSourceListGap }) {
         this.feedbackActionItem(
           $r('app.media.ic_share'),

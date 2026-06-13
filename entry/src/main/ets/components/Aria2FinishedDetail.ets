@@ -74,17 +74,6 @@ export struct Aria2FinishedDetail {
           .layoutWeight(1)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        CloudIconButton({
-          icon: $r('app.media.ic_xmark_bold'),
-          buttonSize: CloudThemeToken.iconBoxSm,
-          iconSize: CloudThemeToken.sheetActionIconSize,
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          iconColor: CloudThemeToken.textSecondary,
-          onAction: () => {
-            this.onClose?.()
-          }
-        })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)

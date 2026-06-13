@@ -82,8 +82,9 @@ export struct TabFilesHeader {
             }
           })
           .bindSheet($$this.showTransport, this.transportBuilder(), {
+            showClose: true,
             backgroundColor: CloudThemeToken.surface,
-            title: this.transportTitle($r('app.string.transport_title')),
+            title: { title: $r('app.string.transport_title') },
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onDisappear: () => {

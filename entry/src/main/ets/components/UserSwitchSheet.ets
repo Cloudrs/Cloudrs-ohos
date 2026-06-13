@@ -48,27 +48,6 @@ export struct UserSwitchSheet {
 
   build() {
     Column({ space: CloudThemeToken.spacingPage }) {
-      Row() {
-        Text('选择账号')
-          .fontSize(CloudThemeToken.textSizeTitle)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-
-        CloudIconButton({
-          icon: $r('app.media.ic_xmark_bold'),
-          buttonSize: CloudThemeToken.iconBoxSm,
-          iconSize: CloudThemeToken.sheetActionIconSize,
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          iconColor: CloudThemeToken.textSecondary,
-          onAction: () => {
-            this.onClose?.()
-          }
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
       if (this.currentUrl.length > 0) {
         Row({ space: CloudThemeToken.spacingXs }) {
           Text('当前站点')

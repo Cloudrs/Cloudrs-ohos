@@ -288,6 +288,7 @@ export struct TabRemoteDown {
         }
       })
       .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
+        showClose: true,
         detents: [SheetSize.FIT_CONTENT],
         title: {title: $r('app.string.download_offline')},
         backgroundColor: CloudThemeToken.background,
@@ -586,7 +587,8 @@ export struct TabRemoteDown {
       })
       .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
         detents: CloudThemeToken.sheetDetentsForWidth(this.sheetLayoutWidth, SheetSize.FIT_CONTENT),
-        showClose: false,
+        title: { title: '下载详情' },
+        showClose: true,
         backgroundColor: CloudThemeToken.background,
         preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
         width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),

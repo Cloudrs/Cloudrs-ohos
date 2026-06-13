@@ -170,6 +170,7 @@ export struct TabFiles {
   @State currentUrl: string = ''
   @State isMultiSelectMode: boolean = false
   @State selectedObjects: ObjectInfo[] = []
+  @State multiSelectBarHeight: number = 0
   @State shareLinks: ShareLinkInfo[] = []
   @State sharedPaths: string[] = []
   @State showShareSheet: boolean = false
@@ -342,13 +343,34 @@ export struct TabFiles {
     return item
   }
 
+  private isAllSelected(): boolean {
+    const total = this.dirDataSource.dataArray.length + this.fileDataSource.dataArray.length
+    return total > 0 && this.selectedObjects.length >= total
+  }
+
+  private toggleSelectAll(): void {
+    if (this.isAllSelected()) {
+      this.selectedObjects = []
+    } else {
+      this.selectAllVisibleObjects()
+    }
+  }
+
   private getMultiSelectTitleMenu(): HdsNavigationMenuItemOptions[] {
     return [{
       content: {
-        icon: $r('app.media.ic_selected'),
+        icon: this.isAllSelected() ? $r('sys.symbol.checkmark_square_on_square_fill') : $r('sys.symbol.checkmark_square_on_square'),
         label: '全选',
         action: () => {
-          this.selectAllVisibleObjects()
+          this.toggleSelectAll()
+        }
+      }
+    }, {
+      content: {
+        icon: $r('sys.symbol.xmark'),
+        label: '取消',
+        action: () => {
+          this.exitMultiSelectMode()
         }
       }
     }]
@@ -658,7 +680,7 @@ export struct TabFiles {
   // FAB 底部 margin：手机端浮在底部 tab bar 之上 + 间距；wide 端无 tab bar，靠 safe area 即可
   getFabBottomMargin(): number {
     const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
-    if (CloudThemeToken.isWideBreakpoint(bp)) {
+    if (this.isMultiSelectMode || CloudThemeToken.isWideBreakpoint(bp)) {
       return this.bottomRectHeight + CloudThemeToken.spacingPage
     }
     return this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin +
@@ -790,6 +812,31 @@ export struct TabFiles {
     this.selectedObjects = this.dirDataSource.dataArray.concat(this.fileDataSource.dataArray)
   }
 
+  // 当前已选 id 集合(按需从 selectedObjects 构造)
+  private currentSelectedIds(): Set<string> {
+    const s = new Set<string>()
+    this.selectedObjects.forEach((o: ObjectInfo) => s.add(o.id))
+    return s
+  }
+  // 用新的已选 id 集合刷新 selectedObjects(只保留当前显示中的项)
+  private applySelectionIds(ids: Set<string>): void {
+    const all: ObjectInfo[] = this.dirDataSource.dataArray.concat(this.fileDataSource.dataArray)
+    this.selectedObjects = all.filter((o: ObjectInfo) => ids.has(o.id))
+  }
+
+  // 鼠标框选回调(additive;未进多选时自动进入)
+  private onBoxSelect(item: ObjectInfo, isSelected: boolean): void {
+    if (!this.isMultiSelectMode) {
+      this.enterMultiSelectMode()
+    }
+    const ids = this.currentSelectedIds()
+    if (isSelected) {
+      ids.add(item.id)
+    } else {
+      ids.delete(item.id)
+    }
+    this.applySelectionIds(ids)
+  }
   private getSelectedCountText(): string {
     return `已选 ${this.selectedObjects.length} 项`
   }
@@ -1390,7 +1437,7 @@ export struct TabFiles {
         },
         menu: {
           value: this.isMultiSelectMode ? this.getMultiSelectTitleMenu() : this.getFileTitleMenu(),
-          maxCount: this.isMultiSelectMode ? 1 : 3
+          maxCount: this.isMultiSelectMode ? 2 : 3
         },
         stackBuilder: () => {
           this.fileTitleBarStack()
@@ -1547,10 +1594,23 @@ export struct TabFiles {
       offsetY: CloudThemeToken.sheetShadowOffsetY
     })
     .zIndex(CloudThemeToken.overlayZIndex)
+    .onAreaChange((_o: Area, n: Area) => {
+      this.multiSelectBarHeight = Number(n.height)
+    })
+  }
+
+@Styles multiActionPressed() {
+    .scale({ x: 0.94, y: 0.94 })
+    .opacity(0.6)
+  }
+
+  @Styles multiActionNormal() {
+    .scale({ x: 1.0, y: 1.0 })
+    .opacity(1.0)
   }
 
   @Builder multiActionButton(icon: ResourceStr, title: string, action: () => void, danger: boolean = false) {
-    Button({ type: ButtonType.Normal }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
       Column({ space: CloudThemeToken.spacingXs }) {
         Stack() {
           Image(icon)
@@ -1588,6 +1648,8 @@ export struct TabFiles {
     .height(CloudThemeToken.cardHeightSm)
     .borderRadius(CloudThemeToken.controlRadiusRoundXl)
     .backgroundColor('rgba(0, 0, 0, 0)')
+    .hoverEffect(HoverEffect.None)
+    .stateStyles({ pressed: this.multiActionPressed, normal: this.multiActionNormal })
     .enabled(this.selectedObjects.length > 0)
     .onClick(action)
     .opacity(this.selectedObjects.length > 0 ? CloudThemeToken.fullOpacity : CloudThemeToken.disabledOpacity)
@@ -2429,6 +2491,12 @@ export struct TabFiles {
             })
           })
         }
+        .id(item.id)
+        .selectable(true)
+        .selected(this.isObjectSelected(item))
+        .onSelect((isSelected: boolean) => {
+          this.onBoxSelect(item, isSelected)
+        })
         .onClick(async () => {
           this.onItemClick(item)
         })
@@ -2449,6 +2517,12 @@ export struct TabFiles {
             })
           })
         }
+        .id(item.id)
+        .selectable(true)
+        .selected(this.isObjectSelected(item))
+        .onSelect((isSelected: boolean) => {
+          this.onBoxSelect(item, isSelected)
+        })
         .onClick(async () => {
           this.onItemClick(item)
         })
@@ -2458,12 +2532,13 @@ export struct TabFiles {
         GridItem() {
           Row()
             .width('100%')
-            .height(this.tabBarHeight + CloudThemeToken.tabContentBottomGap)
+            .height((this.isMultiSelectMode ? this.multiSelectBarHeight : this.tabBarHeight) + CloudThemeToken.tabContentBottomGap)
         }
         .selectable(false)
       }, (item: number) => `bottom-spacer-${item}`)
     }
     .cachedCount(CloudThemeToken.fileGridCachedCount)
+    .multiSelectable(true)
     .maxCount(this.getGridColumns())
     .padding({
       left: CloudThemeToken.spacingCard,
@@ -2822,7 +2897,9 @@ export struct TabFiles {
     const selected = this.selectedObjects.slice()
     showCloudConfirmDialog(this.getUIContext(), {
       title: $r('app.string.delete_confirm'),
-      message: selected.map((item: ObjectInfo) => item.name).join('\n'),
+      message: selected.length === 1
+        ? selected[0].name
+        : `将删除 ${selected.length} 个项目`,
       confirmText: $r('app.string.dialog_delete'),
       onConfirm: () => {
         const src = new ObjectSrc()
@@ -3259,6 +3336,17 @@ export struct TabFiles {
           this.downloadingCount = Math.max(0, this.downloadingCount - 1)
         }
         break
+      case TransferAction.CLEAR_COMPLETED:
+        this.clearCompletedDownloads()
+        break
+    }
+  }
+
+  private clearCompletedDownloads(): void {
+    const completed = this.downloadObjects.dataArray.filter(
+      (o: TransportObject) => o.state == FileModelState.COMPLETED)
+    for (const obj of completed) {
+      this.handleDownloadAction(obj, TransferAction.CANCEL)
     }
   }
 
@@ -3286,6 +3374,17 @@ export struct TabFiles {
           this.uploadingCount = Math.max(0, this.uploadingCount - 1)
         }
         break
+      case TransferAction.CLEAR_COMPLETED:
+        this.clearCompletedUploads()
+        break
+    }
+  }
+
+  private clearCompletedUploads(): void {
+    const completed = this.uploadObjects.dataArray.filter(
+      (o: TransportObject) => o.state == FileModelState.COMPLETED)
+    for (const obj of completed) {
+      this.handleUploadAction(obj, TransferAction.CANCEL)
     }
   }
 

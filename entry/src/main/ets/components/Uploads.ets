@@ -26,6 +26,7 @@ export struct Uploads {
               this.uploadItem(item)
             }
             .bindContextMenu(this.itemMenu(item), ResponseType.RightClick)
+            .bindContextMenu(this.itemMenu(item), ResponseType.LongPress)
             .swipeAction({
               end: {
                 builder: () => { this.deleteSwipe(item) },
@@ -155,6 +156,13 @@ export struct Uploads {
           .onClick(() => {
             if (this.onAction) this.onAction(object, TransferAction.CANCEL)
           })
+        if (object.state == FileModelState.COMPLETED) {
+          MenuItem({ content: '删除所有已完成' })
+            .contentFontColor(CloudThemeToken.danger)
+            .onClick(() => {
+              if (this.onAction) this.onAction(object, TransferAction.CLEAR_COMPLETED)
+            })
+        }
       }
     }
     .width(CloudThemeToken.menuWidth)

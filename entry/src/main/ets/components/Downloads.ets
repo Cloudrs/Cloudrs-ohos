@@ -154,7 +154,7 @@ export struct Downloads {
         }
       }
       MenuItemGroup() {
-        MenuItem({ content: '取消' })
+        MenuItem({ content: object.state == FileModelState.COMPLETED ? '删除' : '取消' })
           .contentFontColor(CloudThemeToken.danger)
           .onClick(() => {
             if (this.onAction) this.onAction(object, TransferAction.CANCEL)

@@ -39,6 +39,17 @@ enum MineSheetType {
   PHOTO_BACKUP = 'photo_backup'
 }
 
+// Real lifecycle phase of the shared settings sheet, driven by its
+// onWillAppear/onAppear/onWillDisappear/onDisappear callbacks. Open/close
+// decisions are made on this phase instead of the bound flag, which stays true
+// throughout the close animation and cannot tell "stuck" apart from "closing".
+enum SettingsSheetPhase {
+  CLOSED,
+  OPENING,
+  OPEN,
+  CLOSING
+}
+
 enum MineMetricType {
   USER_ID = 'user_id',
   USER_GROUP = 'user_group',
@@ -95,6 +106,8 @@ export struct TabMine {
   @State showLogViewerSheet: boolean = false
   @State showAboutSheet: boolean = false
   @State activeSheetType: MineSheetType = MineSheetType.NONE
+  private settingsPhase: SettingsSheetPhase = SettingsSheetPhase.CLOSED
+  private reopenSettingsPending: boolean = false
   @State showMetrics: boolean = false
   @State themeMode: string = Constant.APP_THEME_LIGHT
   private scroller: Scroller = new Scroller;
@@ -317,8 +330,25 @@ export struct TabMine {
           backgroundColor: CloudThemeToken.background,
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+          onWillAppear: () => {
+            this.settingsPhase = SettingsSheetPhase.OPENING
+          },
+          onAppear: () => {
+            this.settingsPhase = SettingsSheetPhase.OPEN
+          },
+          onWillDisappear: () => {
+            this.settingsPhase = SettingsSheetPhase.CLOSING
+          },
           onDisappear: () => {
-            this.finishCloseSettingsSheet()
+            this.settingsPhase = SettingsSheetPhase.CLOSED
+            if (this.reopenSettingsPending) {
+              this.reopenSettingsPending = false
+              // Reopen on the next tick so it runs after the close flow fully
+              // settles, otherwise the re-set true gets swallowed by it.
+              setTimeout(() => { this.showSettingsSheet = true }, 50)
+            } else {
+              this.finishCloseSettingsSheet()
+            }
           }
         })
 
@@ -1089,23 +1119,13 @@ export struct TabMine {
     this.showPhotoBackupPathSheet = false
     if (type === MineSheetType.PRIVACY) {
       this.syncSystemAuthState()
-    }
-    if (type === MineSheetType.THEME) {
+      this.showPrivacySheet = true
+    } else if (type === MineSheetType.THEME) {
       this.showThemeSheet = true
-      this.showSettingsSheet = true
-      return
-    }
-    if (type === MineSheetType.MORE) {
+    } else if (type === MineSheetType.MORE) {
       this.showMoreSettingsSheet = true
-      this.showSettingsSheet = true
-      return
     }
-    if (type === MineSheetType.PHOTO_BACKUP) {
-      this.showSettingsSheet = true
-      return
-    }
-    this.showPrivacySheet = true
-    this.showSettingsSheet = true
+    this.requestShowSettingsSheet()
   }
 
   private openUserSwitchSheet(): void {
@@ -1114,7 +1134,41 @@ export struct TabMine {
     this.showThemeSheet = false
     this.showMoreSettingsSheet = false
     this.showUserSwitchSheet = true
-    this.showSettingsSheet = true
+    this.requestShowSettingsSheet()
+  }
+
+  // Drive the shared settings sheet off its real lifecycle phase instead of
+  // guessing from the bound flag. The flag stays true during the close
+  // animation, so the old self-healing (set false then true) fought the closing
+  // animation and the sheet ended up dismissed — a tap right after closing did
+  // nothing. A request that arrives mid-close is queued and replayed once
+  // onDisappear fires. Content state is already set by the callers above, so a
+  // request while already open/opening just swaps content via activeSheetType.
+  private requestShowSettingsSheet(): void {
+    // Already visible or appearing — the caller just updated the content state,
+    // the builder re-renders it; nothing else to do.
+    if (this.showSettingsSheet &&
+      (this.settingsPhase === SettingsSheetPhase.OPEN || this.settingsPhase === SettingsSheetPhase.OPENING)) {
+      this.reopenSettingsPending = false
+      return
+    }
+    // Fully closed — open directly. Guard the rare stale case (flag left true
+    // with no visible sheet) by re-triggering the binding.
+    if (this.settingsPhase === SettingsSheetPhase.CLOSED) {
+      this.reopenSettingsPending = false
+      if (this.showSettingsSheet) {
+        this.showSettingsSheet = false
+        setTimeout(() => { this.showSettingsSheet = true }, 50)
+      } else {
+        this.showSettingsSheet = true
+      }
+      return
+    }
+    // Otherwise it is closing — or was just dismissed (flag already false) but
+    // the CLOSING callback hasn't landed yet. Queue the open and replay it in
+    // onDisappear instead of fighting the close animation.
+    this.reopenSettingsPending = true
+    this.showSettingsSheet = false
   }
 
   private closeSettingsSheet(): void {
@@ -1122,9 +1176,6 @@ export struct TabMine {
   }
 
   private finishCloseSettingsSheet(): void {
-    if (this.showSettingsSheet) {
-      return
-    }
     this.showUserSwitchSheet = false
     this.showPrivacySheet = false
     this.showThemeSheet = false

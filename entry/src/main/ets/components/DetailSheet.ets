@@ -32,7 +32,6 @@ export struct DetailSheet {
   build() {
     Scroll() {
       Column({ space: CloudThemeToken.detailSheetGap }) {
-        this.header()
         this.summary()
         this.detailList()
         Blank().height(CloudThemeToken.detailSpacerHeight)
@@ -49,19 +48,6 @@ export struct DetailSheet {
     .backgroundColor(CloudThemeToken.background)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-  }
-
-  @Builder header() {
-    Row() {
-      Text($r('app.string.detail_title'))
-        .fontSize(CloudThemeToken.textSizeHeadline)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .height(CloudThemeToken.detailSheetHeaderHeight)
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder summary() {

@@ -173,7 +173,21 @@ export struct PathSelectSheet {
 
       Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
 
-        Row() {
+        Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
+          Button({ type: ButtonType.Circle }) {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(CloudThemeToken.sheetActionIconSize)
+              .fontColor([CloudThemeToken.textSecondary])
+          }
+          .width(CloudThemeToken.iconBoxSm)
+          .height(CloudThemeToken.iconBoxSm)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .onClick(() => {
+            if (this.onClose) {
+              this.onClose(false)
+            }
+          })
+
           Text($r('app.string.select_path'))
             .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
             .fontWeight(FontWeight.Bold)
@@ -184,17 +198,19 @@ export struct PathSelectSheet {
             .textOverflow({ overflow: TextOverflow.MARQUEE })
             .layoutWeight(1)
 
-          Text($r('app.string.finished'))
-            .height(CloudThemeToken.sheetConfirmHeight)
-            .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.primary)
-            .padding(CloudThemeToken.pathSheetConfirmPadding)
-            .onClick(() => {
-              if (this.onClose) {
-                this.onClose(true, this.currentPath)
-              }
-            })
+          Button({ type: ButtonType.Circle }) {
+            SymbolGlyph($r('sys.symbol.checkmark'))
+              .fontSize(CloudThemeToken.sheetActionIconSize)
+              .fontColor([CloudThemeToken.primary])
+          }
+          .width(CloudThemeToken.iconBoxSm)
+          .height(CloudThemeToken.iconBoxSm)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .onClick(() => {
+            if (this.onClose) {
+              this.onClose(true, this.currentPath)
+            }
+          })
         }
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)

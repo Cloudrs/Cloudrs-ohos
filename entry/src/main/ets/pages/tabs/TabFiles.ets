@@ -44,6 +44,68 @@ const FILE_THUMB_MAX_CONCURRENT: number = 2
 const FILE_THUMB_QUEUE_DELAY_MS: number = 500
 const FILE_SHARE_REFRESH_DELAY_MS: number = 650
 
+// Lifecycle phase of a bindSheet, driven by its
+// onWillAppear/onAppear/onWillDisappear/onDisappear callbacks.
+enum SheetPhase {
+  CLOSED,
+  OPENING,
+  OPEN,
+  CLOSING
+}
+
+// Drives a single bindSheet off its real lifecycle phase instead of the bound
+// flag (which stays true throughout the close animation). An open request that
+// arrives while the sheet is still closing is queued and replayed once it
+// finishes closing, instead of re-setting the flag mid-animation — which races
+// the close and ends up dismissing the sheet (so the tap does nothing). The
+// flag is only re-triggered (false→true) for a genuinely stale flag (true with
+// no visible sheet).
+class SheetPhaseController {
+  private phase: SheetPhase = SheetPhase.CLOSED
+  private reopenPending: boolean = false
+
+  requestOpen(getFlag: () => boolean, setFlag: (value: boolean) => void): void {
+    if (getFlag() && (this.phase === SheetPhase.OPEN || this.phase === SheetPhase.OPENING)) {
+      this.reopenPending = false
+      return
+    }
+    if (this.phase === SheetPhase.CLOSED) {
+      this.reopenPending = false
+      if (getFlag()) {
+        setFlag(false)
+        setTimeout(() => setFlag(true), 50)
+      } else {
+        setFlag(true)
+      }
+      return
+    }
+    this.reopenPending = true
+    setFlag(false)
+  }
+
+  onWillAppear(): void {
+    this.phase = SheetPhase.OPENING
+  }
+
+  onAppear(): void {
+    this.phase = SheetPhase.OPEN
+  }
+
+  onWillDisappear(): void {
+    this.phase = SheetPhase.CLOSING
+  }
+
+  onDisappear(setFlag: (value: boolean) => void, onClosed: () => void): void {
+    this.phase = SheetPhase.CLOSED
+    if (this.reopenPending) {
+      this.reopenPending = false
+      setTimeout(() => setFlag(true), 50)
+    } else {
+      onClosed()
+    }
+  }
+}
+
 PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
 PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_NAME)
 PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE_RESERVE, new Map<SortType, boolean>([
@@ -140,6 +202,12 @@ export struct TabFiles {
   @State isRefreshing:boolean = false
   @State showObjectDetail: boolean = false
   @State visibleSheetCount: number = 0
+  private detailSheetCtrl: SheetPhaseController = new SheetPhaseController()
+  private selectFileSheetCtrl: SheetPhaseController = new SheetPhaseController()
+  private inputSheetCtrl: SheetPhaseController = new SheetPhaseController()
+  private shareSheetCtrl: SheetPhaseController = new SheetPhaseController()
+  private transportSheetCtrl: SheetPhaseController = new SheetPhaseController()
+  private pathSelectSheetCtrl: SheetPhaseController = new SheetPhaseController()
   @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
   private currentPath: string = '/'
   private scrollerForList: Scroller = new Scroller()
@@ -272,17 +340,6 @@ export struct TabFiles {
     this.visibleSheetCount = Math.max(0, this.visibleSheetCount - 1)
   }
 
-  // Open a sheet flag, self-healing a stale true value (request that never
-  // produced a visible sheet) by re-triggering the two-way binding.
-  private openSheet(isStuck: boolean, setFlag: (value: boolean) => void): void {
-    if (isStuck) {
-      setFlag(false)
-      setTimeout(() => setFlag(true), 50)
-    } else {
-      setFlag(true)
-    }
-  }
-
   private getFileTitleActionBackground(): ResourceColor {
     return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudThemeToken.surfaceSubtle
   }
@@ -329,7 +386,7 @@ export struct TabFiles {
         icon: $r('app.media.ic_transport'),
         label: '传输',
         action: () => {
-          this.openSheet(this.showTransportSheet, (value: boolean) => {
+          this.transportSheetCtrl.requestOpen(() => this.showTransportSheet, (value: boolean) => {
             this.showTransportSheet = value
           })
         }
@@ -1324,17 +1381,28 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showObjectDetail, this.detailBindSheet(), {
             detents: [SheetSize.FIT_CONTENT],
-            title: { title: this.detailData.name },
+            title: { title: $r('app.string.detail_title') },
             showClose: true,
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onWillAppear: () => {
+              this.detailSheetCtrl.onWillAppear()
+            },
             onAppear: () => {
               this.markSheetVisible()
+              this.detailSheetCtrl.onAppear()
+            },
+            onWillDisappear: () => {
+              this.detailSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
               this.markSheetHidden()
-              this.showObjectDetail = false
+              this.detailSheetCtrl.onDisappear((value: boolean) => {
+                this.showObjectDetail = value
+              }, () => {
+                this.showObjectDetail = false
+              })
             }
           })
 
@@ -1348,12 +1416,23 @@ export struct TabFiles {
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onWillAppear: () => {
+              this.selectFileSheetCtrl.onWillAppear()
+            },
             onAppear: () => {
               this.markSheetVisible()
+              this.selectFileSheetCtrl.onAppear()
+            },
+            onWillDisappear: () => {
+              this.selectFileSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
               this.markSheetHidden()
-              this.showSelectFileSheet = false
+              this.selectFileSheetCtrl.onDisappear((value: boolean) => {
+                this.showSelectFileSheet = value
+              }, () => {
+                this.showSelectFileSheet = false
+              })
             }
           })
 
@@ -1367,13 +1446,24 @@ export struct TabFiles {
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onWillAppear: () => {
+              this.inputSheetCtrl.onWillAppear()
+            },
             onAppear: () => {
               this.markSheetVisible()
+              this.inputSheetCtrl.onAppear()
+            },
+            onWillDisappear: () => {
+              this.inputSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
               this.markSheetHidden()
-              this.showInputSheet = false
-              this.resetInputSheetState()
+              this.inputSheetCtrl.onDisappear((value: boolean) => {
+                this.showInputSheet = value
+              }, () => {
+                this.showInputSheet = false
+                this.resetInputSheetState()
+              })
             }
           })
 
@@ -1387,16 +1477,27 @@ export struct TabFiles {
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onWillAppear: () => {
+              this.shareSheetCtrl.onWillAppear()
+            },
             onAppear: () => {
               this.markSheetVisible()
+              this.shareSheetCtrl.onAppear()
+            },
+            onWillDisappear: () => {
+              this.shareSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
               this.markSheetHidden()
-              this.showShareSheet = false
-              this.shareTarget = null
-              this.shareLinkText = ''
-              this.sharePassword = ''
-              this.shareBusy = false
+              this.shareSheetCtrl.onDisappear((value: boolean) => {
+                this.showShareSheet = value
+              }, () => {
+                this.showShareSheet = false
+                this.shareTarget = null
+                this.shareLinkText = ''
+                this.sharePassword = ''
+                this.shareBusy = false
+              })
             }
           })
 
@@ -1409,12 +1510,23 @@ export struct TabFiles {
             showClose: true,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onWillAppear: () => {
+              this.transportSheetCtrl.onWillAppear()
+            },
             onAppear: () => {
               this.markSheetVisible()
+              this.transportSheetCtrl.onAppear()
+            },
+            onWillDisappear: () => {
+              this.transportSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
               this.markSheetHidden()
-              this.showTransportSheet = false
+              this.transportSheetCtrl.onDisappear((value: boolean) => {
+                this.showTransportSheet = value
+              }, () => {
+                this.showTransportSheet = false
+              })
             }
           })
       }
@@ -2567,12 +2679,23 @@ export struct TabFiles {
       backgroundColor: CloudThemeToken.background,
       preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
       width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+      onWillAppear: () => {
+        this.pathSelectSheetCtrl.onWillAppear()
+      },
       onAppear: () => {
         this.markSheetVisible()
+        this.pathSelectSheetCtrl.onAppear()
+      },
+      onWillDisappear: () => {
+        this.pathSelectSheetCtrl.onWillDisappear()
       },
       onDisappear: () => {
         this.markSheetHidden()
-        this.showPathSelect = false
+        this.pathSelectSheetCtrl.onDisappear((value: boolean) => {
+          this.showPathSelect = value
+        }, () => {
+          this.showPathSelect = false
+        })
       }
     })
   }
@@ -2612,55 +2735,11 @@ export struct TabFiles {
 
   @Builder detailBindSheet() {
     Column() {
-      Row() {
-        Blank()
-          .layoutWeight(1)
-      }
-      .height(CloudThemeToken.rowHeight2xl)
-      .width('100%')
-      .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingPage, top: CloudThemeToken.spacingXl })
-
       this.detailSheet()
     }
     .width('100%')
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
-  }
-
-  @Builder detailOverlay() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.overlayScrim)
-        .onClick(() => {
-          this.showObjectDetail = false
-          this.overLap = true
-        })
-
-      Column() {
-        Row() {
-          Blank()
-            .layoutWeight(1)
-        }
-        .height(CloudThemeToken.rowHeight2xl)
-        .width('100%')
-        .padding({ left: CloudThemeToken.spacingSheetHorizontal, right: CloudThemeToken.spacingPage, top: CloudThemeToken.spacingXl })
-
-        this.detailSheet()
-      }
-      .width('100%')
-      .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-      .backgroundColor(CloudThemeToken.background)
-      .shadow({
-        radius: CloudThemeToken.sheetShadowRadius,
-        color: CloudThemeToken.sheetShadow,
-        offsetY: CloudThemeToken.sheetShadowOffsetY
-      })
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
   }
 
   @Builder selectFileOverlay() {
@@ -2930,7 +3009,7 @@ export struct TabFiles {
     CloudApi.getObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
         this.detailData = new DetailData(item.name, item.type == Constant.OBJECT_DIR_TYPE, data)
-        this.openSheet(this.showObjectDetail, (value: boolean) => {
+        this.detailSheetCtrl.requestOpen(() => this.showObjectDetail, (value: boolean) => {
           this.showObjectDetail = value
         })
       },
@@ -2962,13 +3041,13 @@ export struct TabFiles {
   }
 
   private openSelectFileSheet(): void {
-    this.openSheet(this.showSelectFileSheet, (value: boolean) => {
+    this.selectFileSheetCtrl.requestOpen(() => this.showSelectFileSheet, (value: boolean) => {
       this.showSelectFileSheet = value
     })
   }
 
   private openInputSheet(): void {
-    this.openSheet(this.showInputSheet, (value: boolean) => {
+    this.inputSheetCtrl.requestOpen(() => this.showInputSheet, (value: boolean) => {
       this.showInputSheet = value
     })
   }
@@ -2980,7 +3059,7 @@ export struct TabFiles {
     this.sharePassword = ''
     this.shareExpireDays = ShareExpireDays.SEVEN_DAYS
     this.shareBusy = false
-    this.openSheet(this.showShareSheet, (value: boolean) => {
+    this.shareSheetCtrl.requestOpen(() => this.showShareSheet, (value: boolean) => {
       this.showShareSheet = value
     })
     this.refreshShareLinks()
@@ -3003,7 +3082,7 @@ export struct TabFiles {
   }
 
   private openPathSelectSheet(): void {
-    this.openSheet(this.showPathSelect, (value: boolean) => {
+    this.pathSelectSheetCtrl.requestOpen(() => this.showPathSelect, (value: boolean) => {
       this.showPathSelect = value
     })
   }

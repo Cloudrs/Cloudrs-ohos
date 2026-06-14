@@ -113,7 +113,6 @@ export struct Aria2Create {
       })
     }
     .width('100%')
-    .height('100%')
     .padding({
       left: CloudThemeToken.pagePadding,
       right: CloudThemeToken.pagePadding,

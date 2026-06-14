@@ -3,6 +3,7 @@ import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudApi } from "../model/net/CloudApi";
 import AppLogger from "../utils/AppLogger";
+import { VERSION_CODE } from 'BuildProfile';
 
 const EMAIL: string = 'wangxian@dreamflytech.com'
 const ABOUT_TAG: string = 'AboutPage'
@@ -98,7 +99,7 @@ export struct AboutPage {
 
   @Builder aboutInfo() {
     Column() {
-      this.commonInfo($r('app.string.version'), this.appVersion)
+      this.commonInfo($r('app.string.version'), `${this.appVersion}(${VERSION_CODE})`)
       Divider().strokeWidth(CloudThemeToken.lineWidth).color(CloudThemeToken.line)
       Row () {
         Text($r('app.string.about_api_version'))

@@ -13,3 +13,5 @@
 /.superpowers
 /.codegraph
 /harmonyos-debug-pipeline
+# 含本机签名凭据(密码密文 + 绝对路径),不入库;协作者参考 build-profile.json5.template
+/build-profile.json5

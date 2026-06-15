@@ -1,0 +1,72 @@
+{
+  // 模板文件:复制为 build-profile.json5 后,在 DevEco Studio 中通过
+  // File > Project Structure > Signing Configs 配置签名,凭据会自动写回本地副本。
+  // 真实的 build-profile.json5 已被 .gitignore 忽略,请勿提交真实密码 / 密钥路径。
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "release",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "",
+          "storePassword": "",
+          "keyAlias": "",
+          "keyPassword": "",
+          "signAlg": "SHA256withECDSA",
+          "profile": "",
+          "certpath": ""
+        }
+      },
+      {
+        "name": "debug",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "",
+          "storePassword": "",
+          "keyAlias": "",
+          "keyPassword": "",
+          "signAlg": "SHA256withECDSA",
+          "profile": "",
+          "certpath": ""
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "targetSdkVersion": "6.1.0(23)",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "runtimeOS": "HarmonyOS",
+        "signingConfig": "debug",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

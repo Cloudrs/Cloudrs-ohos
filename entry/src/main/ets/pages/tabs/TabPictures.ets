@@ -1,5 +1,6 @@
 import { abilityAccessCtrl, common, PermissionRequestResult, Permissions } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { connection } from '@kit.NetworkKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
@@ -50,6 +51,8 @@ function toMillis(value: number): number {
 const SWITCHER_ITEM_SIZE: number = 44;
 const SWITCHER_PADDING: number = 4;
 const SWITCHER_GAP: number = 4;
+// 网络/设置/扫描事件后，自动备份评估的防抖间隔（合并短时间内的多次网络事件）。
+const AUTO_BACKUP_DEBOUNCE_MS: number = 1500;
 
 class PhotoBackupThumbnailCache {
   static data: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -127,9 +130,18 @@ export struct TabPictures {
   private thumbnailLoadingIds: Set<string> = new Set<string>();
   private autoScanTimer: number = -1;
   private stalePhotoRefreshTimer: number = -1;
+  private mediaChangeRegistered: boolean = false;
+  private mediaChangeDebounceTimer: number = -1;
+  private mediaChangeHelper: photoAccessHelper.PhotoAccessHelper | undefined = undefined;
+  private cachedAlbumNameMap: Map<string, string> | undefined = undefined;
+  private netConnection: connection.NetConnection | undefined = undefined;
+  private netRegistered: boolean = false;
+  private autoBackupDebounceTimer: number = -1;
   @State drawerOpen: boolean = false;
   @State segment: GallerySegment = GallerySegment.TIME;
   @State galleryGroups: PhotoGroup[] = [];
+  @State isRefreshing: boolean = false;
+  @State refreshPullOffset: number = 0;
   private gridScroller: Scroller = new Scroller();
   @StorageProp(PHOTO_BACKUP_REVISION_KEY) @Watch('onSettingsRevisionChanged') settingsMirrorRevision: number = 0;
 
@@ -141,11 +153,17 @@ export struct TabPictures {
     this.loadPhotoRecords();
     this.rebuildGroups();
     this.scheduleActiveAutoScan();
+    this.syncMediaChangeRegistration();
+    this.registerNetworkListener();
+    this.scheduleAutoBackup();
   }
 
   aboutToDisappear(): void {
     this.clearAutoScanTimer();
     this.clearStalePhotoRefreshTimer();
+    this.unregisterMediaChange();
+    this.unregisterNetworkListener();
+    this.clearAutoBackupTimer();
     this.stopCompletedPreviewFlush();
     this.flushDoneIdsSave();
     this.flushPhotoRecordsSave();
@@ -154,9 +172,11 @@ export struct TabPictures {
   onActiveStateChanged(): void {
     if (!this.isActive) {
       this.clearAutoScanTimer();
+      this.unregisterMediaChange();
       return;
     }
     this.scheduleActiveAutoScan();
+    this.syncMediaChangeRegistration();
   }
 
   bindPreviewDataSources(): void {
@@ -889,6 +909,67 @@ export struct TabPictures {
     }
   }
 
+  // 媒体库变化监听：仅在「相册页可见 + 开启备份」时注册（符合隐私声明：读相册用于备份），
+  // 收到本地新增/变化通知后防抖触发一次增量扫描，让新图实时出现，无需切 tab 或等定时器。
+  private syncMediaChangeRegistration(): void {
+    const shouldListen = this.isActive && this.getSettingsEnabled();
+    if (shouldListen && !this.mediaChangeRegistered) {
+      this.registerMediaChange();
+    } else if (!shouldListen && this.mediaChangeRegistered) {
+      this.unregisterMediaChange();
+    }
+  }
+
+  private registerMediaChange(): void {
+    const context = this.getAbilityContext();
+    if (!context) {
+      return;
+    }
+    try {
+      const helper = photoAccessHelper.getPhotoAccessHelper(context);
+      helper.registerChange(photoAccessHelper.DefaultChangeUri.DEFAULT_PHOTO_URI, true, this.onMediaLibraryChange);
+      this.mediaChangeHelper = helper;
+      this.mediaChangeRegistered = true;
+      AppLogger.info(TAG, 'media change listener registered');
+    } catch (err) {
+      AppLogger.error(TAG, `registerChange failed: ${(err as Error)?.message ?? err}`);
+    }
+  }
+
+  private unregisterMediaChange(): void {
+    if (this.mediaChangeDebounceTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.mediaChangeDebounceTimer);
+      this.mediaChangeDebounceTimer = -1;
+    }
+    if (!this.mediaChangeRegistered) {
+      return;
+    }
+    try {
+      this.mediaChangeHelper?.unRegisterChange(photoAccessHelper.DefaultChangeUri.DEFAULT_PHOTO_URI);
+    } catch (err) {
+      AppLogger.error(TAG, `unRegisterChange failed: ${(err as Error)?.message ?? err}`);
+    }
+    this.mediaChangeRegistered = false;
+  }
+
+  private onMediaLibraryChange = (changeData: photoAccessHelper.ChangeData): void => {
+    if (!this.isActive || !this.getSettingsEnabled()) {
+      return;
+    }
+    // 媒体库变化后防抖做一次增量扫描，扫出新增图（不卡）。
+    // 删除的同步交给下拉刷新（全量扫描重建、可靠）：registerChange 的删除事件 type/uri
+    // 在不同设备与删除方式下不稳定，按它做轻量移除会残留缩略图、点击错位，故不在此处理。
+    if (this.mediaChangeDebounceTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.mediaChangeDebounceTimer);
+    }
+    this.mediaChangeDebounceTimer = setTimeout(() => {
+      this.mediaChangeDebounceTimer = -1;
+      if (this.isActive && this.getSettingsEnabled() && !this.isScanning && !this.isBackupRunning()) {
+        this.scanLocalPhotos(false, true);
+      }
+    }, CloudThemeToken.photoBackupAutoScanDelayMs);
+  }
+
   shouldRunActiveAutoScan(): boolean {
     if (!this.isActive || !this.getSettingsEnabled() || this.isScanning || this.isBackupRunning()) {
       return false;
@@ -900,25 +981,32 @@ export struct TabPictures {
   }
 
   async scanLocalPhotos(forceFull: boolean = true, silent: boolean = false): Promise<void> {
-    if (this.isScanning) {
+    // 备份进行中绝不扫描：避免重建图片列表、与正在上传的任务抢改状态导致待备份/上传中计数错乱。
+    if (this.isScanning || this.isBackupRunning()) {
       return;
     }
     this.isScanning = true;
-    this.backupState = PhotoBackupState.SCANNING;
-    this.permissionHint = '';
+    if (!silent) {
+      this.backupState = PhotoBackupState.SCANNING;
+      this.permissionHint = '';
+    }
     AppLogger.info(TAG, `scan start, forceFull=${forceFull}, silent=${silent}`);
     try {
       let context = this.getAbilityContext();
       if (!context) {
-        this.permissionHint = '无法获取应用上下文，请稍后重试或重新打开页面。';
-        this.backupState = PhotoBackupState.FAILED;
+        if (!silent) {
+          this.permissionHint = '无法获取应用上下文，请稍后重试或重新打开页面。';
+          this.backupState = PhotoBackupState.FAILED;
+        }
         return;
       }
       let granted = await this.ensurePhotoPermission(context);
       if (!granted) {
-        this.permissionHint = '未获得完整相册读取权限时，系统扫描可能为空。可重新授权，或使用“选择图片加入备份”。';
-        showToast('需要允许读取相册后才能扫描图片');
-        this.backupState = PhotoBackupState.FAILED;
+        if (!silent) {
+          this.permissionHint = '未获得完整相册读取权限时，系统扫描可能为空。可重新授权，或使用“选择图片加入备份”。';
+          showToast('需要允许读取相册后才能扫描图片');
+          this.backupState = PhotoBackupState.FAILED;
+        }
         return;
       }
       const previousCount = this.getPhotos().length;
@@ -926,7 +1014,9 @@ export struct TabPictures {
       let predicates: dataSharePredicates.DataSharePredicates = new dataSharePredicates.DataSharePredicates();
       const modifiedFloor = forceFull ? CloudThemeToken.zero : this.getIncrementalModifiedFloor();
       if (modifiedFloor > CloudThemeToken.zero) {
-        predicates.greaterThan(photoAccessHelper.PhotoKeys.DATE_MODIFIED, modifiedFloor);
+        // DATE_MODIFIED 在媒体库中以“秒”为单位，而 modifiedFloor 已归一为毫秒；
+        // 必须转回秒再比较，否则“秒 > 毫秒”恒为 false、增量扫描永远扫不到新图。
+        predicates.greaterThan(photoAccessHelper.PhotoKeys.DATE_MODIFIED, Math.floor(modifiedFloor / 1000));
       }
       predicates.equalTo(photoAccessHelper.PhotoKeys.PHOTO_TYPE, photoAccessHelper.PhotoType.IMAGE);
       predicates.orderByDesc(photoAccessHelper.PhotoKeys.DATE_MODIFIED);
@@ -942,14 +1032,22 @@ export struct TabPictures {
         ],
         predicates: predicates
       };
-      const albumNameByUri = await this.buildAlbumNameMap(phAccessHelper);
+      // 全量扫描才重建相册名映射（遍历所有相册、重操作）；增量扫描复用缓存，避免每次卡顿。
+      const albumNameByUri = forceFull
+        ? await this.buildAlbumNameMap(phAccessHelper)
+        : (this.cachedAlbumNameMap ?? new Map<string, string>());
+      if (forceFull) {
+        this.cachedAlbumNameMap = albumNameByUri;
+      }
       let fetchResult: photoAccessHelper.FetchResult<photoAccessHelper.PhotoAsset> =
         await phAccessHelper.getAssets(fetchOptions);
       let nextPhotos: PhotoBackupItem[] = await this.readPhotoFetchResult(fetchResult, albumNameByUri);
-      if (nextPhotos.length === 0 && forceFull) {
-        this.permissionHint = '未扫描到本地图片。如果相册中已有图片，请检查相册读取权限，或手动选择图片加入备份。';
-      } else if (forceFull && previousCount > 0 && nextPhotos.length < previousCount) {
-        this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
+      if (!silent) {
+        if (nextPhotos.length === 0 && forceFull) {
+          this.permissionHint = '未扫描到本地图片。如果相册中已有图片，请检查相册读取权限，或手动选择图片加入备份。';
+        } else if (forceFull && previousCount > 0 && nextPhotos.length < previousCount) {
+          this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
+        }
       }
       this.photos = this.mergePhotoList(nextPhotos, !forceFull);
       if (albumNameByUri.size > 0) {
@@ -962,21 +1060,24 @@ export struct TabPictures {
       if (nextPhotos.length > 0) {
         this.savePhotoRecords();
       }
+      this.scheduleAutoBackup();
       const addedCount = Math.max(this.getPhotos().length - previousCount, CloudThemeToken.zero);
       AppLogger.info(TAG, `scan ok, scanned=${nextPhotos.length}, added=${addedCount}, total=${this.getPhotos().length}`);
       if (!silent) {
         showToast(forceFull ? `已扫描到 ${this.localPhotoCount} 张本地图片` :
           (addedCount > 0 ? `已发现 ${addedCount} 张新图片` : '没有发现新图片'));
       }
-      this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
+      if (!silent) {
+        this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
+      }
     } catch (err) {
       let error = err as BusinessError;
       AppLogger.error(TAG, `scan failed: ${error.code}, ${error.message}`);
       if (!silent) {
         this.permissionHint = '相册扫描失败，请检查系统相册权限。也可以先使用“选择图片加入备份”继续备份指定图片。';
         showToast('扫描本地相册失败，请检查相册读取权限');
+        this.backupState = PhotoBackupState.FAILED;
       }
-      this.backupState = PhotoBackupState.FAILED;
     } finally {
       this.isScanning = false;
     }
@@ -1357,6 +1458,85 @@ export struct TabPictures {
     }
   }
 
+  private registerNetworkListener(): void {
+    if (this.netRegistered) {
+      return;
+    }
+    try {
+      const netCon = connection.createNetConnection();
+      netCon.on('netAvailable', () => {
+        this.scheduleAutoBackup();
+      });
+      netCon.on('netCapabilitiesChange', () => {
+        this.scheduleAutoBackup();
+      });
+      netCon.register((err: BusinessError) => {
+        if (err) {
+          AppLogger.error(TAG, `net register failed: ${err.message}`);
+        }
+      });
+      this.netConnection = netCon;
+      this.netRegistered = true;
+    } catch (err) {
+      AppLogger.error(TAG, `register network listener failed: ${(err as Error)?.message ?? err}`);
+    }
+  }
+
+  private unregisterNetworkListener(): void {
+    if (!this.netRegistered) {
+      return;
+    }
+    try {
+      this.netConnection?.unregister((err: BusinessError) => {
+        if (err) {
+          AppLogger.error(TAG, `net unregister failed: ${err.message}`);
+        }
+      });
+    } catch (err) {
+      AppLogger.error(TAG, `unregister network listener failed: ${(err as Error)?.message ?? err}`);
+    }
+    this.netConnection = undefined;
+    this.netRegistered = false;
+  }
+
+  private clearAutoBackupTimer(): void {
+    if (this.autoBackupDebounceTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.autoBackupDebounceTimer);
+      this.autoBackupDebounceTimer = -1;
+    }
+  }
+
+  // 网络可用/能力变化、设置变化、扫描到新图等事件后，防抖评估一次是否应自动开始备份。
+  private scheduleAutoBackup(): void {
+    this.clearAutoBackupTimer();
+    this.autoBackupDebounceTimer = setTimeout(() => {
+      this.autoBackupDebounceTimer = -1;
+      this.maybeAutoBackup();
+    }, AUTO_BACKUP_DEBOUNCE_MS);
+  }
+
+  // 满足 [开启备份 && 开启自动备份 && 满足网络 && 有待备份图 && 不在备份中 && 非用户手动暂停] 时自动开始备份。
+  // PAUSED 是用户主动暂停，网络恢复也不自动续；WAITING_NETWORK 是因网络暂停，满足网络时会在此自动续上。
+  private maybeAutoBackup(): void {
+    if (!this.getSettingsEnabled() || !this.getSettingsAutoBackup()) {
+      return;
+    }
+    if (this.backupState === PhotoBackupState.BACKING_UP || this.backupState === PhotoBackupState.PAUSED) {
+      return;
+    }
+    if (this.isScanning) {
+      return;
+    }
+    if (!this.canBackupNow()) {
+      return;
+    }
+    if (this.getWaitingItems().length === 0) {
+      return;
+    }
+    AppLogger.info(TAG, 'auto backup triggered');
+    this.startBackup();
+  }
+
   startBackup(retryFailedOnly: boolean = false): void {
     if (!this.getSettingsEnabled()) {
       showToast('请在「我的 - 相册备份」中开启备份或选择路径');
@@ -1614,6 +1794,8 @@ export struct TabPictures {
   onSettingsRevisionChanged(): void {
     this.loadSettings();
     this.rebuildGroups();
+    this.syncMediaChangeRegistration();
+    this.scheduleAutoBackup();
   }
 
   openLocalPreview(item: PhotoBackupItem): void {
@@ -1871,6 +2053,54 @@ export struct TabPictures {
     .justifyContent(FlexAlign.Center)
   }
 
+  // Refresh 自带的下拉提示留空（隐藏），刷新提示改用下方的浮层精确定位到标题栏下、图片上。
+  @Builder photoRefreshHint() {
+    Column()
+      .width(CloudThemeToken.zero)
+      .height(CloudThemeToken.zero)
+      .opacity(CloudThemeToken.zero)
+  }
+
+  @Builder refreshingHintOverlay() {
+    Column() {
+      Row({ space: CloudThemeToken.spacingXl }) {
+        LoadingProgress()
+          .width(CloudThemeToken.iconLg)
+          .height(CloudThemeToken.iconLg)
+          .color(CloudThemeToken.primary)
+        Text('正在刷新')
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(CloudThemeToken.textPrimary)
+      }
+      .height(CloudThemeToken.iconBoxSm)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .backgroundColor(CloudThemeToken.surface)
+      .justifyContent(FlexAlign.Center)
+    }
+    .width('100%')
+    .padding({ top: this.getGridTopInset() + CloudThemeToken.spacingPage })
+    .alignItems(HorizontalAlign.Center)
+    .justifyContent(FlexAlign.Start)
+    .opacity(this.isRefreshing ? CloudThemeToken.fullOpacity :
+      Math.min(CloudThemeToken.fullOpacity, this.refreshPullOffset / CloudThemeToken.refreshOffset))
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  private async pullToRefreshScan(): Promise<void> {
+    this.isRefreshing = true;
+    try {
+      // 下拉刷新做全量扫描：重建列表、反映本地新增/删除；silent 不弹 toast、不改备份状态。
+      await this.scanLocalPhotos(true, true);
+    } finally {
+      this.isRefreshing = false;
+    }
+  }
+
+  shouldShowPhotoRefreshHint(): boolean {
+    return this.isRefreshing || this.refreshPullOffset > CloudThemeToken.spacingSm;
+  }
+
   build() {
     HdsNavigation() {
       if (this.getPhotos().length === 0 && this.permissionHint.length > 0) {
@@ -1880,18 +2110,30 @@ export struct TabPictures {
           '扫描本地相册后，照片会显示在这里。', '扫描相册')
       } else {
         Stack({ alignContent: Alignment.TopStart }) {
-          PhotoGalleryGrid({
-            groups: this.galleryGroups,
-            backupEnabled: this.getSettingsEnabled(),
-            topInset: this.getGridTopInset(),
-            bottomInset: this.tabBarHeight,
-            scroller: this.gridScroller,
-            onScroll: (yOffset: number) => { this.onGridScroll(yOffset); },
-            onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
-            onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
-          })
-            .width('100%')
-            .height('100%')
+          Refresh({ refreshing: $$this.isRefreshing, builder: this.photoRefreshHint }) {
+            PhotoGalleryGrid({
+              groups: this.galleryGroups,
+              backupEnabled: this.getSettingsEnabled(),
+              topInset: this.getGridTopInset(),
+              bottomInset: this.tabBarHeight,
+              scroller: this.gridScroller,
+              onScroll: (yOffset: number) => { this.onGridScroll(yOffset); },
+              onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
+              onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
+            })
+              .width('100%')
+              .height('100%')
+          }
+          .width('100%')
+          .height('100%')
+          .pullToRefresh(true)
+          .refreshOffset(CloudThemeToken.refreshOffset)
+          .onOffsetChange((offset: number) => { this.refreshPullOffset = Math.max(CloudThemeToken.zero, offset); })
+          .onRefreshing(() => { this.pullToRefreshScan(); })
+
+          if (this.shouldShowPhotoRefreshHint()) {
+            this.refreshingHintOverlay()
+          }
 
           this.floatingSwitcher()
           this.drawerOverlay()

@@ -38,6 +38,7 @@ import {
 import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
 import { Downloads, TransferAction } from "../../components/Downloads";
 import { Uploads } from "../../components/Uploads";
+import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
 
 const TAG = 'TabFiles';
 const FILE_THUMB_MAX_CONCURRENT: number = 2
@@ -220,6 +221,8 @@ export struct TabFiles {
 
   @State downloadingCount: number = 0;
   @State uploadingCount: number = 0;
+  @State albumSaving: boolean = false;
+  @State albumSaveText: string = '';
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State showSelectFileSheet: boolean = false
@@ -1374,6 +1377,10 @@ export struct TabFiles {
 
         if (this.showFileMoreMenu) {
           this.fileMoreMenuOverlay()
+        }
+
+        if (this.albumSaving) {
+          this.albumSavingOverlay()
         }
 
         Column()
@@ -2945,6 +2952,11 @@ export struct TabFiles {
         return
       }
 
+      if (CommonUtil.isAllImages(selectedFiles.map((f: ObjectInfo) => f.name))) {
+        this.saveImagesFlow(context, selectedFiles).then(() => this.exitMultiSelectMode())
+        return
+      }
+
       const documentSaveOptions = new picker.DocumentSaveOptions()
       documentSaveOptions.pickerMode = picker.DocumentPickerMode.DOWNLOAD
       const documentPicker = new picker.DocumentViewPicker(context)
@@ -3692,11 +3704,51 @@ export struct TabFiles {
     requestDownload.downloadFileBackground(fileModel, context, begins)
   }
 
+  @Builder albumSavingOverlay() {
+    Column({ space: CloudThemeToken.spacingMd }) {
+      LoadingProgress()
+        .width(CloudThemeToken.iconButtonSize)
+        .height(CloudThemeToken.iconButtonSize)
+        .color(CloudThemeToken.onPrimary)
+      Text(this.albumSaveText)
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontColor(CloudThemeToken.onPrimary)
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor('rgba(0,0,0,0.45)')
+    .hitTestBehavior(HitTestMode.Block)
+  }
+
+  private async saveImagesFlow(context: common.UIAbilityContext, images: ObjectInfo[]): Promise<void> {
+    if (images.length === 0) {
+      return
+    }
+    this.albumSaving = true
+    this.albumSaveText = `正在保存到相册 0/${images.length}`
+    const result: SaveAlbumResult = await saveImagesToAlbum(images, context, (done: number, total: number) => {
+      this.albumSaveText = `正在保存到相册 ${done}/${total}`
+    })
+    this.albumSaving = false
+    if (result.canceled) {
+      showToast('已取消保存')
+    } else if (result.failed === 0) {
+      showToast(`已保存 ${result.success} 张到相册`)
+    } else {
+      showToast(`已保存 ${result.success} 张，${result.failed} 张失败`)
+    }
+  }
+
   itemDownload(index: number, item: ObjectInfo) {
     try {
       const context = this.getAbilityContext();
       if (!context) {
         showToast($r('app.string.get_context_failed'));
+        return;
+      }
+      if (CommonUtil.getFileType(item.name) === FileType.IMAGE) {
+        this.saveImagesFlow(context, [item]);
         return;
       }
       const documentSaveOptions = new picker.DocumentSaveOptions();

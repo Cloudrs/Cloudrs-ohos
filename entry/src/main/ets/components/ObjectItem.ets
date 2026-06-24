@@ -2,7 +2,7 @@ import { ObjectInfo } from "../model/net/ApiTypes";
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
-import { CommonUtil } from "../utils/CommonUtil";
+import { CommonUtil, FileType } from "../utils/CommonUtil";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { DateFormatUtil } from "../utils/DateFormatUtil";
 
@@ -315,7 +315,11 @@ export struct ObjectItem {
 
       if (item.type == 'file') {
         MenuItemGroup() {
-          this.commonMenuItem($r('app.string.file_download'), FileMenuType.DOWNLOAD)
+          this.commonMenuItem(
+            CommonUtil.getFileType(item.name) === FileType.IMAGE
+              ? $r('app.string.save_to_gallery')
+              : $r('app.string.file_download'),
+            FileMenuType.DOWNLOAD)
         }
       }
 

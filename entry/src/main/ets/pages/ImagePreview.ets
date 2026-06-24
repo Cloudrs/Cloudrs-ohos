@@ -14,6 +14,7 @@ import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
 import AppLogger from "../utils/AppLogger";
 import UserPreferences from "../model/UserPreferences";
+import { CommonUtil } from "../utils/CommonUtil";
 
 const TAG: string = 'ImagePreview'
 
@@ -337,8 +338,11 @@ export struct ImagePreviewPage {
         let photoType: photoAccessHelper.PhotoType = photoAccessHelper.PhotoType.IMAGE;
         let extension: string = previewItem.fileExtension;
         let phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
+        let createOption: photoAccessHelper.CreateOptions = {
+          title: CommonUtil.sanitizeAlbumTitle(previewItem.fileName)
+        };
         let assetChangeRequest: photoAccessHelper.MediaAssetChangeRequest =
-          photoAccessHelper.MediaAssetChangeRequest.createAssetRequest(context, photoType, extension);
+          photoAccessHelper.MediaAssetChangeRequest.createAssetRequest(context, photoType, extension, createOption);
         assetChangeRequest.addResource(photoAccessHelper.ResourceType.IMAGE_RESOURCE, imageData);
         await phAccessHelper.applyChanges(assetChangeRequest);
         showToast('已保存至相册')

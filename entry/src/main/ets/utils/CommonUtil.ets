@@ -209,6 +209,32 @@ export class CommonUtil {
     }
   }
 
+  /**
+   * 生成保存到相册时的标题（不含扩展名）。
+   * 规则：去扩展名 → 过滤非法字符( . \ / : * ? " ' ` < > | { } [ ] ) → 截断 255 → 为空回退 'image'。
+   */
+  static sanitizeAlbumTitle(name: string): string {
+    const dot = name.lastIndexOf('.')
+    const raw = dot >= 0 ? name.substring(0, dot) : name
+    const illegal = '.\\/:*?"\'`<>|{}[]'
+    let base = ''
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw.charAt(i)
+      if (illegal.indexOf(ch) === -1) {
+        base += ch
+      }
+    }
+    if (base.length > 255) {
+      base = base.substring(0, 255)
+    }
+    return base.length === 0 ? 'image' : base
+  }
+
+  /** 判断一组文件名是否全部为图片类型（空数组返回 false）。 */
+  static isAllImages(names: string[]): boolean {
+    return names.length > 0 && names.every((n: string) => CommonUtil.getFileType(n) === FileType.IMAGE)
+  }
+
   static getFileIconInfo(fileName: string): FileIconInfo {
     let fileExtention = CommonUtil.getFileExtention(fileName).toLowerCase()
     let lowerFileName = fileName.toLowerCase()

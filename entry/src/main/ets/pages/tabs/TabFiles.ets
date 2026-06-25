@@ -30,6 +30,7 @@ import AppLogger from "../../utils/AppLogger";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
 import UserPreferences from "../../model/UserPreferences";
+import { PhotoBackupSettingsStore } from "../../model/PhotoBackupSettingsStore";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { CloudIconButton } from "../../components/CloudIconButton";
 import {
@@ -1302,6 +1303,7 @@ export struct TabFiles {
           onSuccess: (data) => {
             this.dataSourceDelete()
             this.exitMultiSelectMode()
+            this.recordBackupRemoved(src.items.map((p: string) => this.basename(p)))
             showToast($r('app.string.move_success'))
           },
           onFailure: (msg) => {
@@ -3006,6 +3008,7 @@ export struct TabFiles {
             this.objectSelect.copyMoveObjects = selected
             this.dataSourceDelete()
             this.exitMultiSelectMode()
+            this.recordBackupRemoved(selected.filter((f: ObjectInfo) => f.type !== Constant.OBJECT_DIR_TYPE).map((f: ObjectInfo) => f.name))
             showToast($r('app.string.delete_success'))
           },
           onFailure: (msg) => {
@@ -3355,6 +3358,18 @@ export struct TabFiles {
     })
   }
 
+  // App 内从备份目录删除/移出文件后，记录文件名；相册变为活动时精确撤销这些图的已备份标记（小云朵）。
+  private recordBackupRemoved(names: string[]): void {
+    if (names.length > 0 && PhotoBackupSettingsStore.isBackupPath(this.currentPath)) {
+      PhotoBackupSettingsStore.markRemoteRemoved(names)
+    }
+  }
+
+  private basename(path: string): string {
+    const idx = path.lastIndexOf('/')
+    return idx >= 0 ? path.substring(idx + 1) : path
+  }
+
   itemDelete(index: number, item: ObjectInfo) {
     showCloudConfirmDialog(this.getUIContext(), {
       title: $r('app.string.delete_confirm'),
@@ -3369,6 +3384,7 @@ export struct TabFiles {
               this.isGridPadding = this.getFolderPaddingCount() > 0
             } else {
               this.fileDataSource.deleteData(index)
+              this.recordBackupRemoved([item.name])
             }
             showToast($r('app.string.delete_success'))
           },

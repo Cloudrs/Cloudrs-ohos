@@ -244,8 +244,10 @@ export class CloudApi {
     );
   }
 
-  static uploadLocalFile(localPath: string, remotePath: string, overwrite: boolean = false, callback?: HttpCallback<null>): void {
-    nativeUploadLocalFile(localPath, remotePath, overwrite, CloudApi.withApiLogging(`uploadLocalFile(${remotePath})`, callback));
+  static uploadLocalFile(localPath: string, remotePath: string, overwrite: boolean = false,
+    lastModifiedMs: number = 0, callback?: HttpCallback<null>): void {
+    nativeUploadLocalFile(localPath, remotePath, overwrite, lastModifiedMs,
+      CloudApi.withApiLogging(`uploadLocalFile(${remotePath})`, callback));
   }
 
   static uploadLocalFileChunk(

@@ -35,6 +35,9 @@ export struct ImagePreviewPage {
   private swiperController: SwiperController = new SwiperController();
   private imagePixelMaps: Map<string, PixelMap> = new Map<string, PixelMap>();
   private imageDataMap: Map<string, ArrayBuffer> = new Map<string, ArrayBuffer>();
+  // GIF 等动图：PixelMap 仅单帧会定格，改用临时文件的 file:// URI 交给 Image 播放动画。
+  private imageFileUris: Map<string, string> = new Map<string, string>();
+  private tempImageFiles: string[] = [];
 
   @State saveButtonOptions: SaveButtonOptions = {
     icon: SaveIconStyle.FULL_FILLED,
@@ -50,8 +53,8 @@ export struct ImagePreviewPage {
       return;
     }
 
-    if (this.imagePixelMaps.has(previewItem.fileId) || this.loadingIds.includes(previewItem.fileId)) {
-      this.isLoading = this.isCurrentIndex(index) && !this.imagePixelMaps.has(previewItem.fileId)
+    if (this.hasImage(previewItem.fileId) || this.loadingIds.includes(previewItem.fileId)) {
+      this.isLoading = this.isCurrentIndex(index) && !this.hasImage(previewItem.fileId)
       return
     }
 
@@ -73,11 +76,16 @@ export struct ImagePreviewPage {
           });
           if (resp.responseCode === Constant.HTTP_STATUS_OK) {
             const imageData = resp.result as ArrayBuffer;
-            const imageSource = image.createImageSource(imageData);
-            const pixMap = await imageSource.createPixelMap();
-            imageSource.release();
             this.imageDataMap.set(previewItem.fileId, imageData)
-            this.imagePixelMaps.set(previewItem.fileId, pixMap)
+            const animatedUri = await this.materializeAnimatedImage(previewItem, imageData)
+            if (animatedUri.length > 0) {
+              this.imageFileUris.set(previewItem.fileId, animatedUri)
+            } else {
+              const imageSource = image.createImageSource(imageData);
+              const pixMap = await imageSource.createPixelMap();
+              imageSource.release();
+              this.imagePixelMaps.set(previewItem.fileId, pixMap)
+            }
             this.markFailed(previewItem.fileId, false)
             this.previewRevision++
           } else {
@@ -117,6 +125,13 @@ export struct ImagePreviewPage {
       Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
     this.loadImageAt(this.currentIndex)
     this.prefetchAround(this.currentIndex)
+  }
+
+  aboutToDisappear(): void {
+    this.tempImageFiles.forEach((path: string) => {
+      FileSystemUtil.unlinkIfExists(path)
+    })
+    this.tempImageFiles = []
   }
 
   build() {
@@ -435,13 +450,48 @@ export struct ImagePreviewPage {
     this.loadImageAt(index + 1)
   }
 
-  private hasImage(fileId: string): boolean {
-    this.previewRevision
-    return this.imagePixelMaps.has(fileId)
+  // 仅 GIF（魔数 "GIF8"）落盘为临时文件，返回其 file:// URI 供 Image 播放动画；其余返回 '' 走单帧 PixelMap。
+  private async materializeAnimatedImage(previewItem: PreviewFile, imageData: ArrayBuffer): Promise<string> {
+    if (!this.isGifData(imageData)) {
+      return ''
+    }
+    const context = this.getAbilityContext()
+    if (!context) {
+      return ''
+    }
+    try {
+      const tempPath = `${context.cacheDir}/preview_${CommonUtil.sanitizeAlbumTitle(previewItem.fileName)}.gif`
+      await FileSystemUtil.writeArrayBuffer(tempPath, imageData)
+      if (!this.tempImageFiles.includes(tempPath)) {
+        this.tempImageFiles.push(tempPath)
+      }
+      return FileSystemUtil.getUriFromPath(tempPath)
+    } catch (err) {
+      AppLogger.error(TAG, `materialize animated image failed: ${(err as Error)?.message ?? err}`)
+      return ''
+    }
   }
 
-  private getImageSource(fileId: string): PixelMap | Resource {
+  private isGifData(data: ArrayBuffer): boolean {
+    if (data.byteLength < 4) {
+      return false
+    }
+    const head = new Uint8Array(data, 0, 4)
+    // "GIF8" → 0x47 0x49 0x46 0x38（覆盖 GIF87a / GIF89a）
+    return head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x38
+  }
+
+  private hasImage(fileId: string): boolean {
     this.previewRevision
+    return this.imagePixelMaps.has(fileId) || this.imageFileUris.has(fileId)
+  }
+
+  private getImageSource(fileId: string): PixelMap | ResourceStr {
+    this.previewRevision
+    const animatedUri = this.imageFileUris.get(fileId)
+    if (animatedUri) {
+      return animatedUri
+    }
     return this.imagePixelMaps.get(fileId) ?? $r('app.media.ic_picture_damage')
   }
 

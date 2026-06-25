@@ -84,6 +84,8 @@ export class PhotoBackupItem {
   albumName: string = ''
   width: number = 0
   height: number = 0
+  @Trace localExists: boolean = true
+  remoteFileId: string = ''
 
   constructor(uri: string, name: string, size: number, modifiedAt: number) {
     this.uri = uri
@@ -102,6 +104,8 @@ export class PhotoBackupItem {
     item.albumName = data.albumName ?? ''
     item.width = data.width ?? 0
     item.height = data.height ?? 0
+    item.localExists = data.localExists ?? true
+    item.remoteFileId = data.remoteFileId ?? ''
     return item
   }
 
@@ -117,7 +121,9 @@ export class PhotoBackupItem {
       error: this.error,
       albumName: this.albumName,
       width: this.width,
-      height: this.height
+      height: this.height,
+      localExists: this.localExists,
+      remoteFileId: this.remoteFileId
     }
   }
 }
@@ -134,6 +140,8 @@ export interface PhotoBackupItemData {
   albumName?: string
   width?: number
   height?: number
+  localExists?: boolean
+  remoteFileId?: string
 }
 
 export class PhotoBackupPathHistory {

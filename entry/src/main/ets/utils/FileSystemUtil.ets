@@ -163,4 +163,15 @@ export class FileSystemUtil {
       throw new Error((err as Error)?.message ?? `${err}`);
     }
   }
+
+  /** 把文件 mtime 改成给定的 Unix 毫秒；非正值（0/负数）静默跳过 */
+  static setModifiedTime(path: string, mtimeMs: number): void {
+    if (mtimeMs <= 0) {
+      return;
+    }
+    try {
+      fs.utimes(path, mtimeMs);
+    } catch (_) {
+    }
+  }
 }

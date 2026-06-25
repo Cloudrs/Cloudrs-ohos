@@ -158,10 +158,11 @@ export function nativeUploadLocalFile(
   localPath: string,
   remotePath: string,
   overwrite: boolean,
+  lastModifiedMs: number,
   callback?: HttpCallback<null>
 ): void {
   if (callback?.onStart) { callback.onStart(); }
-  uploadLocalFile(localPath, remotePath, overwrite)
+  uploadLocalFile(localPath, remotePath, overwrite, lastModifiedMs)
     .then(() => callback?.onSuccess(null))
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }

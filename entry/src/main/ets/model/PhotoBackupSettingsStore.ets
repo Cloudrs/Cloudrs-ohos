@@ -10,6 +10,8 @@ let lastLoggedEnabled: boolean | undefined = undefined;
 export const PHOTO_BACKUP_ENABLED_KEY: string = 'photoBackupEnabledMirror';
 export const PHOTO_BACKUP_PATH_KEY: string = 'photoBackupPathMirror';
 export const PHOTO_BACKUP_REVISION_KEY: string = 'photoBackupSettingsRevision';
+/** App 内从备份目录删除/移出的文件名累积列表（JSON 字符串）；相册变为活动时取用，精确撤销这些图的已备份标记 */
+export const PHOTO_BACKUP_REMOVED_NAMES_KEY: string = 'photoBackupRemovedNames';
 
 export class PhotoBackupSettingsStore {
   static normalizeConcurrent(value: number): number {
@@ -74,5 +76,55 @@ export class PhotoBackupSettingsStore {
     AppStorage.setOrCreate(PHOTO_BACKUP_PATH_KEY, settings.remotePath);
     const rev = (AppStorage.get<number>(PHOTO_BACKUP_REVISION_KEY) ?? 0) + 1;
     AppStorage.setOrCreate(PHOTO_BACKUP_REVISION_KEY, rev);
+  }
+
+  /** 当前备份根路径（已归一）。从持久化设置读，始终可用，不依赖易空的 AppStorage 镜像。 */
+  static backupBasePath(): string {
+    return PhotoBackupSettingsStore.normalizeRemotePath(PhotoBackupSettingsStore.load().remotePath);
+  }
+
+  /** 给定云端目录是否就是备份目录或其子目录——文件 Tab 据此判断删/移操作是否动了备份目录 */
+  static isBackupPath(path: string): boolean {
+    if ((path ?? '').length === 0) {
+      return false;
+    }
+    const base = PhotoBackupSettingsStore.backupBasePath();
+    const target = PhotoBackupSettingsStore.normalizeRemotePath(path);
+    return target === base || target.startsWith(`${base}/`);
+  }
+
+  /** App 内从备份目录删除/移出文件后，累加文件名到待清理列表（去重）；相册变为活动时精确撤销标记。 */
+  static markRemoteRemoved(names: string[]): void {
+    if (names.length === 0) {
+      return;
+    }
+    const set: Set<string> = new Set<string>(PhotoBackupSettingsStore.readRemovedNames());
+    names.forEach((name: string) => {
+      if (name.length > 0) {
+        set.add(name);
+      }
+    });
+    AppStorage.setOrCreate(PHOTO_BACKUP_REMOVED_NAMES_KEY, JSON.stringify(Array.from(set)));
+  }
+
+  /** 相册取用并清空待清理文件名列表。 */
+  static consumeRemoteRemoved(): string[] {
+    const names = PhotoBackupSettingsStore.readRemovedNames();
+    if (names.length > 0) {
+      AppStorage.setOrCreate(PHOTO_BACKUP_REMOVED_NAMES_KEY, '');
+    }
+    return names;
+  }
+
+  private static readRemovedNames(): string[] {
+    const raw = AppStorage.get<string>(PHOTO_BACKUP_REMOVED_NAMES_KEY) ?? '';
+    if (raw.length === 0) {
+      return [];
+    }
+    try {
+      return JSON.parse(raw) as string[];
+    } catch (_) {
+      return [];
+    }
   }
 }

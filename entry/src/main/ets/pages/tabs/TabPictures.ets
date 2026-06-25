@@ -1,6 +1,6 @@
 import { abilityAccessCtrl, common, PermissionRequestResult, Permissions } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { connection } from '@kit.NetworkKit';
+import { connection, http } from '@kit.NetworkKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
@@ -26,7 +26,7 @@ import LazyDataSource from '../../utils/LazyDataSource';
 import { PhotoGalleryGrid } from '../../components/PhotoGalleryGrid';
 import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../model/PhotoGalleryModel';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
-import { PhotoLocalPreviewParam } from '../../model/Params';
+import { PhotoLocalPreviewParam, ImagePreview } from '../../model/Params';
 import { CloudRouter } from '../../utils/CloudRouter';
 import {
   HdsNavigation, HdsNavigationTitleMode, ScrollEffectType, DividerShowType, hdsMaterial
@@ -137,6 +137,7 @@ export struct TabPictures {
   private netConnection: connection.NetConnection | undefined = undefined;
   private netRegistered: boolean = false;
   private autoBackupDebounceTimer: number = -1;
+  private lastRemotePath: string = '';
   @State drawerOpen: boolean = false;
   @State segment: GallerySegment = GallerySegment.TIME;
   @State galleryGroups: PhotoGroup[] = [];
@@ -149,8 +150,10 @@ export struct TabPictures {
     this.photoBackupThumbs = PhotoBackupThumbnailCache.snapshot();
     this.bindPreviewDataSources();
     this.loadSettings();
+    this.lastRemotePath = this.normalizeRemotePath(this.getSettingsRemotePath());
     this.loadDoneIds();
     this.loadPhotoRecords();
+    this.applyPendingRemoteRemovals();
     this.rebuildGroups();
     this.scheduleActiveAutoScan();
     this.syncMediaChangeRegistration();
@@ -175,8 +178,102 @@ export struct TabPictures {
       this.unregisterMediaChange();
       return;
     }
+    this.applyPendingRemoteRemovals();
     this.scheduleActiveAutoScan();
     this.syncMediaChangeRegistration();
+  }
+
+  // 文件管理里从备份目录删/移出的文件：相册变为活动时按文件名精确撤销这些图的已备份标记。
+  // 不查云端、不全量扫描，与相册规模无关：本地仍在的图转“待备份”（可重新备份）；仅云端的图（唯一副本在云端）整条移除。
+  private applyPendingRemoteRemovals(): void {
+    const names = PhotoBackupSettingsStore.consumeRemoteRemoved();
+    if (names.length > 0) {
+      this.dropBackupMarksByNames(new Set<string>(names));
+    }
+  }
+
+  // 撤销「这些文件名」对应图的已备份标记：本地仍在 → 转“待备份”（可重新备份）；仅云端图（唯一副本在云端）→ 整条移除。
+  private dropBackupMarksByNames(removedNames: Set<string>): void {
+    let changed = false;
+    const next: PhotoBackupItem[] = [];
+    this.getPhotos().forEach((item: PhotoBackupItem) => {
+      const marked = item.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(item);
+      if (!removedNames.has(item.name) || !marked) {
+        next.push(item);
+        return;
+      }
+      this.clearDoneMark(item);
+      changed = true;
+      if (!item.localExists) {
+        return; // 仅云端图（唯一副本在云端）→ 整条移除（不 push）
+      }
+      item.status = PhotoBackupStatus.WAITING;
+      item.progress = CloudThemeToken.zero;
+      item.error = '';
+      next.push(item);
+    });
+    if (!changed) {
+      return;
+    }
+    // 重建分组刷新网格（行 key 含 status，COMPLETED→WAITING 让 key 变化、强制重建对应行刷新角标）。
+    // 触发自动补传后，补传完成会再走 markBackupItemDone → rebuildGroups 把角标刷回“已备份”。
+    this.photos = next;
+    this.saveDoneIds();
+    this.refreshPhotoStats();
+    this.rebuildGroups();
+    this.savePhotoRecords();
+  }
+
+  // 兜底：点开已备份的图时异步点查云端单文件是否还在；确认“不存在”才撤销标记。
+  // 仅在线时查；失败信息不明确（可能只是网络问题）时保守不动，避免误清触发重复上传。
+  private verifyBackupStillExists(item: PhotoBackupItem): void {
+    const marked = item.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(item);
+    if (!marked || !NetworkStateUtil.hasNetwork()) {
+      return;
+    }
+    const name = item.name;
+    const remotePath = item.remoteFileId.length > 0 ? item.remoteFileId : this.getRemoteFilePath(item);
+    CloudApi.getObjectDetail(remotePath, false, {
+      onSuccess: () => {},
+      onFailure: (msg: string) => {
+        AppLogger.info(TAG, `[verify] cloud check failed for ${name}: ${msg}`);
+        if (this.isNotFoundError(msg)) {
+          this.dropBackupMarksByNames(new Set<string>([name]));
+        }
+      }
+    });
+  }
+
+  private isNotFoundError(msg: string): boolean {
+    const m = msg.toLowerCase();
+    return m.includes('not found') || m.includes('notfound') || m.includes('not exist')
+      || m.includes('no such') || m.includes('404') || m.includes('不存在') || m.includes('找不到');
+  }
+
+  // 仅云端图预览前先点查云端：存在→打开网盘预览；已删→移除条目 + 提示（不开黑屏预览）；
+  // 离线 / 无云端 ID / 模糊失败→照常尝试打开（避免误删，由 ImagePreview 自行显示失败态）。
+  private openCloudOnlyPreview(item: PhotoBackupItem): void {
+    const name = item.name;
+    const fileId = item.remoteFileId;
+    const openPreview = (): void => {
+      CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, new ImagePreview(name, fileId, ''));
+    };
+    if (fileId.length === 0 || !NetworkStateUtil.hasNetwork()) {
+      openPreview();
+      return;
+    }
+    CloudApi.getObjectDetail(fileId, false, {
+      onSuccess: () => { openPreview(); },
+      onFailure: (msg: string) => {
+        if (this.isNotFoundError(msg)) {
+          AppLogger.info(TAG, `[verify] cloud-only gone, remove ${name}: ${msg}`);
+          this.dropBackupMarksByNames(new Set<string>([name]));
+          showToast('该图片已从云端删除');
+        } else {
+          openPreview();
+        }
+      }
+    });
   }
 
   bindPreviewDataSources(): void {
@@ -341,6 +438,10 @@ export struct TabPictures {
     }
     this.thumbnailLoadingIds.add(loadingId);
     try {
+      if (!item.localExists) {
+        await this.loadCloudThumbnail(item);
+        return;
+      }
       const size: image.Size = {
         width: CloudThemeToken.photoBackupThumbnailSize,
         height: CloudThemeToken.photoBackupThumbnailSize
@@ -367,6 +468,42 @@ export struct TabPictures {
       this.thumbnailLoadingIds.delete(loadingId);
       this.thumbnailLoadingIds.delete(item.id);
     }
+  }
+
+  // 仅云端图：用云端缩略图 url 下载成 PixelMap，复用本地缩略图的展示通道（photoBackupThumbs）。
+  private async loadCloudThumbnail(item: PhotoBackupItem): Promise<void> {
+    if (!item.remoteFileId) {
+      return;
+    }
+    const url = await this.getCloudThumbUrl(item.remoteFileId);
+    const fullUrl = (url.startsWith(Constant.PROTOCOL_HTTP_SCHEME) || url.startsWith(Constant.PROTOCOL_HTTPS_SCHEME))
+      ? url : CloudApi.getBaseURL() + url;
+    const req = http.createHttp();
+    try {
+      const resp = await req.request(fullUrl, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER
+      });
+      if (resp.responseCode === Constant.HTTP_STATUS_OK) {
+        const source = image.createImageSource(resp.result as ArrayBuffer);
+        const pixelMap = await source.createPixelMap();
+        source.release();
+        this.runInUiScope(() => {
+          this.setPhotoThumbnail(item, pixelMap);
+        });
+      }
+    } finally {
+      req.destroy();
+    }
+  }
+
+  private getCloudThumbUrl(fileId: string): Promise<string> {
+    return new Promise<string>((resolve: (url: string) => void, reject: (err: Error) => void) => {
+      CloudApi.getThumb(fileId, {
+        onSuccess: (url: string) => resolve(url),
+        onFailure: (msg: string) => reject(new Error(msg))
+      });
+    });
   }
 
   private async getPhotoAssetForThumbnail(item: PhotoBackupItem): Promise<photoAccessHelper.PhotoAsset | undefined> {
@@ -953,12 +1090,19 @@ export struct TabPictures {
   }
 
   private onMediaLibraryChange = (changeData: photoAccessHelper.ChangeData): void => {
-    if (!this.isActive || !this.getSettingsEnabled()) {
+    if (!this.getSettingsEnabled()) {
       return;
     }
-    // 媒体库变化后防抖做一次增量扫描，扫出新增图（不卡）。
-    // 删除的同步交给下拉刷新（全量扫描重建、可靠）：registerChange 的删除事件 type/uri
-    // 在不同设备与删除方式下不稳定，按它做轻量移除会残留缩略图、点击错位，故不在此处理。
+    if (changeData.type === photoAccessHelper.NotifyType.NOTIFY_REMOVE) {
+      // 删除即时处理（不受是否在相册页限制——删除事件常在切到系统相册时触发）：
+      // 已备份的转“仅云端”保留，未备份的移除。
+      this.handleRemovedUris(changeData.uris ?? []);
+      return;
+    }
+    if (!this.isActive) {
+      return;
+    }
+    // 新增/变更：防抖做一次增量扫描，扫出新增图。
     if (this.mediaChangeDebounceTimer >= CloudThemeToken.zero) {
       clearTimeout(this.mediaChangeDebounceTimer);
     }
@@ -968,6 +1112,38 @@ export struct TabPictures {
         this.scanLocalPhotos(false, true);
       }
     }, CloudThemeToken.photoBackupAutoScanDelayMs);
+  }
+
+  // 收到本地删除事件：已备份的转“仅云端”保留（缩略图/小云朵/预览走云端），未备份的从列表移除。
+  private async handleRemovedUris(uris: string[]): Promise<void> {
+    if (uris.length === 0) {
+      return;
+    }
+    const uriSet: Set<string> = new Set<string>(uris);
+    if (!this.getPhotos().some((it: PhotoBackupItem) => uriSet.has(it.uri))) {
+      return;
+    }
+    const remoteMap = await this.loadRemotePhotoMap();
+    const next: PhotoBackupItem[] = [];
+    this.getPhotos().forEach((it: PhotoBackupItem) => {
+      if (!uriSet.has(it.uri)) {
+        next.push(it);
+        return;
+      }
+      const backedUp = it.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(it);
+      if (backedUp) {
+        it.localExists = false;
+        const remote = remoteMap.get(it.name);
+        if (remote) {
+          it.remoteFileId = remote.id;
+        }
+        next.push(it);
+      }
+    });
+    this.photos = next;
+    this.refreshPhotoStats();
+    this.rebuildGroups();
+    this.savePhotoRecords();
   }
 
   shouldRunActiveAutoScan(): boolean {
@@ -1049,7 +1225,8 @@ export struct TabPictures {
           this.permissionHint = `本次系统扫描到 ${nextPhotos.length} 张，少于当前记录 ${previousCount} 张。如果数量不符合预期，请检查相册权限范围。`;
         }
       }
-      this.photos = this.mergePhotoList(nextPhotos, !forceFull);
+      const remotePhotoMap = forceFull ? await this.loadRemotePhotoMap() : undefined;
+      this.photos = this.mergePhotoList(nextPhotos, !forceFull, remotePhotoMap);
       if (albumNameByUri.size > 0) {
         this.applyAlbumNames(albumNameByUri);
       }
@@ -1240,28 +1417,120 @@ export struct TabPictures {
     return item;
   }
 
-  mergePhotoList(incoming: PhotoBackupItem[], keepExisting: boolean): PhotoBackupItem[] {
+  mergePhotoList(incoming: PhotoBackupItem[], keepExisting: boolean,
+    remoteMap?: Map<string, ObjectInfo>): PhotoBackupItem[] {
     const previousItems = this.getPhotos().slice();
     const usedPreviousIds: Set<string> = new Set<string>();
-    let merged: PhotoBackupItem[] = keepExisting ? previousItems.slice() : [];
+    const merged: PhotoBackupItem[] = keepExisting ? previousItems.slice() : [];
+
+    // O(1) 命中索引：旧实现对每张 incoming 都 findIndex 线性扫一遍 merged/previousItems，
+    // 大相册（数千张）下是 O(N²)，全量扫描会卡死主线程触发系统 appfreeze 杀进程。
+    // 改为按 uri/id/name 预建索引，命中是 O(1)，仅签名兜底在同名候选里小范围比对。
+    const mergedByUri: Map<string, number> = new Map<string, number>();
+    const mergedById: Map<string, number> = new Map<string, number>();
+    const mergedByName: Map<string, number[]> = new Map<string, number[]>();
+    const prevByUri: Map<string, number> = new Map<string, number>();
+    const prevById: Map<string, number> = new Map<string, number>();
+    const prevByName: Map<string, number[]> = new Map<string, number[]>();
+    const indexPhoto = (byUri: Map<string, number>, byId: Map<string, number>,
+      byName: Map<string, number[]>, it: PhotoBackupItem, i: number): void => {
+      if (it.uri.length > 0) {
+        byUri.set(it.uri, i);
+      }
+      if (it.id.length > 0) {
+        byId.set(it.id, i);
+      }
+      if (it.name.length > 0) {
+        const arr = byName.get(it.name);
+        if (arr) {
+          arr.push(i);
+        } else {
+          byName.set(it.name, [i]);
+        }
+      }
+    };
+    const findFast = (byUri: Map<string, number>, byId: Map<string, number>,
+      byName: Map<string, number[]>, pool: PhotoBackupItem[], item: PhotoBackupItem): number => {
+      const uriHit = byUri.get(item.uri);
+      if (uriHit !== undefined) {
+        return uriHit;
+      }
+      const idHit = byId.get(item.id);
+      if (idHit !== undefined) {
+        return idHit;
+      }
+      const candidates = byName.get(item.name);
+      if (candidates) {
+        for (const idx of candidates) {
+          if (this.isSamePhotoBySignature(pool[idx], item)) {
+            return idx;
+          }
+        }
+      }
+      return -1;
+    };
+    merged.forEach((it: PhotoBackupItem, i: number) => indexPhoto(mergedByUri, mergedById, mergedByName, it, i));
+    previousItems.forEach((it: PhotoBackupItem, i: number) => indexPhoto(prevByUri, prevById, prevByName, it, i));
+
     incoming.forEach((item: PhotoBackupItem) => {
-      const existingIndex = this.findExistingPhotoIndex(merged, item);
+      item.localExists = true;
+      const existingIndex = findFast(mergedByUri, mergedById, mergedByName, merged, item);
       if (existingIndex >= 0) {
         this.updatePhotoItemFromResolved(merged[existingIndex], item);
+        merged[existingIndex].localExists = true;
         return;
       }
       if (!keepExisting) {
-        const previousIndex = this.findExistingPhotoIndex(previousItems, item);
+        const previousIndex = findFast(prevByUri, prevById, prevByName, previousItems, item);
         if (previousIndex >= 0 && !usedPreviousIds.has(previousItems[previousIndex].id)) {
           usedPreviousIds.add(previousItems[previousIndex].id);
           const previousItem = previousItems[previousIndex];
           this.updatePhotoItemFromResolved(previousItem, item);
+          previousItem.localExists = true;
           merged.push(previousItem);
+          indexPhoto(mergedByUri, mergedById, mergedByName, previousItem, merged.length - 1);
           return;
         }
       }
       merged.push(item);
+      indexPhoto(mergedByUri, mergedById, mergedByName, item, merged.length - 1);
     });
+    // 全量扫描：本地已删但云端仍有（且已备份）的图 → 转“仅云端”保留；其余已删图移除。
+    if (!keepExisting && remoteMap) {
+      previousItems.forEach((prev: PhotoBackupItem) => {
+        if (usedPreviousIds.has(prev.id)) {
+          return;
+        }
+        const remote = remoteMap.get(prev.name);
+        if (remote && (prev.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(prev))) {
+          prev.localExists = false;
+          prev.remoteFileId = remote.id;
+          merged.push(prev);
+        }
+      });
+    }
+    // 本地还在、但已标记备份的图：若云端目录已无该名 → 远端那份被删，撤销已备份标记（小云朵消失、可重备份）。
+    // 仅在「云端目录被完整列出」时核对：getFilesInfo 单页上限 100，返回数 >= 100 说明被分页截断，
+    // 无法判断第一页之外的图是否还在云端，必须跳过——否则会把第一页之外的全部标记误清（大相册灾难）。
+    if (remoteMap && remoteMap.size > 0 && remoteMap.size < 100) {
+      let cleared = false;
+      merged.forEach((item: PhotoBackupItem) => {
+        if (!item.localExists) {
+          return;
+        }
+        const markedDone = item.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(item);
+        if (markedDone && !remoteMap.has(item.name)) {
+          this.clearDoneMark(item);
+          item.status = PhotoBackupStatus.WAITING;
+          item.progress = CloudThemeToken.zero;
+          item.error = '';
+          cleared = true;
+        }
+      });
+      if (cleared) {
+        this.scheduleDoneIdsSave();
+      }
+    }
     merged.forEach((item: PhotoBackupItem) => {
       this.applyDoneStatus(item, true);
     });
@@ -1346,6 +1615,17 @@ export struct TabPictures {
       item.status = PhotoBackupStatus.WAITING;
       item.progress = CloudThemeToken.zero;
       item.error = '';
+    }
+  }
+
+  // 撤销某张图的"已备份"标记：清当前路径 done-key 与历史遗留 id（远端那份被删时调用）。
+  // legacy id 仅默认路径才有意义；非默认路径跳过全量扫描，避免每次 O(doneIds) 开销。
+  clearDoneMark(item: PhotoBackupItem): void {
+    this.doneIds.delete(this.getDoneKey(item));
+    if (this.isDefaultBackupPath()) {
+      this.getLegacyDoneIds(item).forEach((id: string) => {
+        this.doneIds.delete(id);
+      });
     }
   }
 
@@ -1623,6 +1903,9 @@ export struct TabPictures {
       this.flushDoneIdsSave();
       this.flushPhotoRecordsSave();
       this.refreshPhotoStats();
+      // 批次完成重建一次网格：补传/备份完成的图状态变 COMPLETED 但数量未变，refreshPhotoStats 不会重建；
+      // 行 key 含 status，重建后角标即刷回“已备份”（避免“删远端→待备份→补传完成仍显待备份”）。
+      this.rebuildGroups();
       AppLogger.info(TAG, `backup batch done, waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
       if (this.uploadingPhotoCount === 0) {
         this.runInUiScope(() => {
@@ -1673,6 +1956,8 @@ export struct TabPictures {
       let fileName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
       let localPath = `${context.cacheDir}/photo_backup_${new Date().getTime()}_${fileName}`;
       await FileSystemUtil.copyUriToPathInBackground(item.uri, localPath);
+      // 拷贝出的新文件 mtime 是当下时刻；对齐回原图修改时间，让任何按 mtime 读元数据的旁路也拿到正确时间
+      FileSystemUtil.setModifiedTime(localPath, item.modifiedAt);
       return localPath;
     });
   }
@@ -1693,7 +1978,9 @@ export struct TabPictures {
 
   uploadPhoto(localPath: string, remotePath: string, item: PhotoBackupItem): Promise<void> {
     return new Promise<void>((resolve: () => void, reject: (reason: Error) => void) => {
-      CloudApi.uploadLocalFile(localPath, remotePath, false, {
+      // 把原图修改时间作为 LastModified 透传给 Cloudreve，让云端入库时间对齐原图而不是上传时刻
+      const lastModifiedMs = item.modifiedAt > 0 ? item.modifiedAt : 0;
+      CloudApi.uploadLocalFile(localPath, remotePath, false, lastModifiedMs, {
         onStart: () => {
           this.updatePhotoProgress(item, CloudThemeToken.photoBackupUploadStartProgress);
         },
@@ -1720,6 +2007,25 @@ export struct TabPictures {
         onFailure: (msg: string) => {
           console.info(TAG, `load remote photo names skipped: ${msg}`);
           resolve(new Set<string>());
+        }
+      });
+    });
+  }
+
+  // 列出备份目录的云端文件（name → ObjectInfo，含云端 fileId），供仅云端图定位/预览/缩略图使用。
+  loadRemotePhotoMap(): Promise<Map<string, ObjectInfo>> {
+    return new Promise<Map<string, ObjectInfo>>((resolve: (value: Map<string, ObjectInfo>) => void) => {
+      CloudApi.getFilesInfo(this.normalizeRemotePath(this.getSettingsRemotePath()), {
+        onSuccess: (data: DirectoryInfo) => {
+          const map = new Map<string, ObjectInfo>();
+          (data.objects ?? []).forEach((object: ObjectInfo) => {
+            map.set(object.name, object);
+          });
+          resolve(map);
+        },
+        onFailure: (msg: string) => {
+          console.info(TAG, `load remote photo map skipped: ${msg}`);
+          resolve(new Map<string, ObjectInfo>());
         }
       });
     });
@@ -1792,22 +2098,38 @@ export struct TabPictures {
   }
 
   onSettingsRevisionChanged(): void {
+    const prevRemotePath = this.lastRemotePath;
     this.loadSettings();
     this.rebuildGroups();
     this.syncMediaChangeRegistration();
     this.scheduleAutoBackup();
+    const newRemotePath = this.normalizeRemotePath(this.getSettingsRemotePath());
+    this.lastRemotePath = newRemotePath;
+    if (prevRemotePath.length > 0 && prevRemotePath !== newRemotePath) {
+      // 切换备份路径：旧“已备份”标记按新路径失效，重判标记 + 全量刷新重新关联云端。
+      this.refreshDoneStatus();
+      if (this.isActive && this.getSettingsEnabled() && !this.isScanning && !this.isBackupRunning()) {
+        this.scanLocalPhotos(true, true);
+      }
+    }
   }
 
   openLocalPreview(item: PhotoBackupItem): void {
-    const flat = this.getPhotos();
-    // Match by uri (the stable key) rather than id, which embeds size/modifiedAt
-    // and can diverge between scanned and loaded records for the same photo.
-    let idx = flat.findIndex((it: PhotoBackupItem) => it.uri === item.uri);
+    if (!item.localExists) {
+      // 仅云端图：预览必须依赖云端。先点查云端是否还在——已删则移除条目 + 提示，避免点开是黑屏。
+      this.openCloudOnlyPreview(item);
+      return;
+    }
+    // 本地图 → 本地预览即时打开（不依赖云端）；顺带异步核对云端（外部删除→清标记，本地图随后自动补传）。
+    this.verifyBackupStillExists(item);
+    // 仅在本地存在的图集内浏览。
+    const localItems = this.getPhotos().filter((it: PhotoBackupItem) => it.localExists);
+    let idx = localItems.findIndex((it: PhotoBackupItem) => it.uri === item.uri);
     if (idx < 0) {
-      idx = flat.findIndex((it: PhotoBackupItem) => it.id === item.id);
+      idx = localItems.findIndex((it: PhotoBackupItem) => it.id === item.id);
     }
     CloudRouter.push(Constant.PHOTO_LOCAL_PREVIEW_PAGE,
-      new PhotoLocalPreviewParam(flat, Math.max(idx, 0), this.getSettingsEnabled()));
+      new PhotoLocalPreviewParam(localItems, Math.max(idx, 0), this.getSettingsEnabled()));
   }
 
   retryFailedPhotos(): void {

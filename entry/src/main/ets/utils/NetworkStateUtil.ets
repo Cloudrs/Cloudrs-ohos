@@ -1,6 +1,14 @@
 import { connection } from '@kit.NetworkKit';
 
 export class NetworkStateUtil {
+  static hasNetwork(): boolean {
+    try {
+      return connection.hasDefaultNetSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
   static isWifiConnected(): boolean {
     try {
       if (!connection.hasDefaultNetSync()) {

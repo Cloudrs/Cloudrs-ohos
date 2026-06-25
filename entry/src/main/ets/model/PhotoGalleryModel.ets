@@ -194,7 +194,7 @@ export function buildRenderRows(groups: PhotoGroup[], containerWidth: number,
   const result: GalleryRenderRow[] = [];
   groups.forEach((group: PhotoGroup) => {
     const isCollapsed = collapsed.has(group.title);
-    result.push(new GalleryRenderRow(GalleryRowKind.HEADER, `h:${group.title}`,
+    result.push(new GalleryRenderRow(GalleryRowKind.HEADER, `h:${group.title}:${group.items.length}:${isCollapsed ? 1 : 0}`,
       group.title, group.items.length, isCollapsed, 0, []));
     if (isCollapsed) {
       return;
@@ -204,8 +204,13 @@ export function buildRenderRows(groups: PhotoGroup[], containerWidth: number,
     jrows.forEach((jr: JustifiedRow, jrIndex: number) => {
       const cells: GalleryCell[] = jr.widths.map((w: number, i: number) =>
         new GalleryCell(group.items[jr.startIndex + i], w, jr.height));
-      const firstId = cells.length > 0 ? cells[0].item.id : 'empty';
-      result.push(new GalleryRenderRow(GalleryRowKind.PHOTOS, `p:${group.title}:${jrIndex}:${firstId}`,
+      // Key 必须反映整行内容：每个格子的 id + 本地/云端状态。
+      // 之前只用首图 id：删图后尾部格子前移、但首图未变的行 key 不变，LazyForEach 复用旧行
+      //（旧缩略图与旧点击闭包），导致点进去是另一张，必须重启重建网格才正常。
+      const rowKey = cells.length > 0
+        ? cells.map((c: GalleryCell) => `${c.item.id}:${c.item.localExists ? 1 : 0}:${c.item.status}`).join(',')
+        : 'empty';
+      result.push(new GalleryRenderRow(GalleryRowKind.PHOTOS, `p:${group.title}:${jrIndex}:${rowKey}`,
         '', 0, false, jr.height, cells));
     });
   });

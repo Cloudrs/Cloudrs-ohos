@@ -53,6 +53,8 @@ const SWITCHER_PADDING: number = 4;
 const SWITCHER_GAP: number = 4;
 // 网络/设置/扫描事件后，自动备份评估的防抖间隔（合并短时间内的多次网络事件）。
 const AUTO_BACKUP_DEBOUNCE_MS: number = 1500;
+const BACKUP_GRID_REFRESH_MS: number = 1500;
+const GRID_SCROLL_QUIET_MS: number = 400;
 
 class PhotoBackupThumbnailCache {
   static data: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -175,6 +177,7 @@ export struct TabPictures {
   onActiveStateChanged(): void {
     if (!this.isActive) {
       this.clearAutoScanTimer();
+      this.clearBackupGridRefresh();
       this.unregisterMediaChange();
       return;
     }
@@ -1786,6 +1789,50 @@ export struct TabPictures {
     }
   }
 
+  // 备份进行中节流刷新网格：让逐张完成的图近实时显示小云朵（@Trace 经 @Prop 深拷贝不可靠，靠重建生效）。
+  // 仅相册页可见时刷新、至多约 1.5 秒一次，避免每张完成都重建造成卡顿。只重新分组、不重扫媒体、不动备份状态。
+  private backupGridRefreshTimer: number = -1;
+  private backupGridDirty: boolean = false;
+  private lastGridScrollAt: number = 0;
+  private scheduleBackupGridRefresh(): void {
+    if (!this.isActive) {
+      return;
+    }
+    this.backupGridDirty = true;
+    if (this.backupGridRefreshTimer < CloudThemeToken.zero) {
+      this.backupGridRefreshTimer = setTimeout(() => {
+        this.backupGridRefreshTimer = -1;
+        this.flushBackupGridRefresh();
+      }, BACKUP_GRID_REFRESH_MS);
+    }
+  }
+
+  // 正在滑动时不重建（重建的 @Prop 深拷贝会卡住滚动），推迟到滑动静默后再刷。
+  private flushBackupGridRefresh(): void {
+    if (!this.backupGridDirty) {
+      return;
+    }
+    if (this.isActive && new Date().getTime() - this.lastGridScrollAt < GRID_SCROLL_QUIET_MS) {
+      this.backupGridRefreshTimer = setTimeout(() => {
+        this.backupGridRefreshTimer = -1;
+        this.flushBackupGridRefresh();
+      }, GRID_SCROLL_QUIET_MS);
+      return;
+    }
+    this.backupGridDirty = false;
+    this.runInUiScope(() => {
+      this.rebuildGroups();
+    });
+  }
+
+  private clearBackupGridRefresh(): void {
+    this.backupGridDirty = false;
+    if (this.backupGridRefreshTimer >= CloudThemeToken.zero) {
+      clearTimeout(this.backupGridRefreshTimer);
+      this.backupGridRefreshTimer = -1;
+    }
+  }
+
   // 网络可用/能力变化、设置变化、扫描到新图等事件后，防抖评估一次是否应自动开始备份。
   private scheduleAutoBackup(): void {
     this.clearAutoBackupTimer();
@@ -1879,6 +1926,7 @@ export struct TabPictures {
         nextIndex++;
         await this.backupItem(targets[currentIndex], currentIndex);
         this.markBackupQueueItemDone();
+        this.scheduleBackupGridRefresh();
       }
     };
     try {
@@ -1889,6 +1937,7 @@ export struct TabPictures {
       }
       await Promise.all(workers);
       if (this.shouldPauseBackup) {
+        this.clearBackupGridRefresh();
         this.flushCompletedPreviewUpdates();
         this.runInUiScope(() => {
           this.backupState = PhotoBackupState.PAUSED;
@@ -1896,6 +1945,7 @@ export struct TabPictures {
         this.flushDoneIdsSave();
         this.flushPhotoRecordsSave();
         this.refreshPhotoStats();
+        this.rebuildGroups();
         AppLogger.info(TAG, `backup paused, waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
         return;
       }
@@ -1905,6 +1955,7 @@ export struct TabPictures {
       this.refreshPhotoStats();
       // 批次完成重建一次网格：补传/备份完成的图状态变 COMPLETED 但数量未变，refreshPhotoStats 不会重建；
       // 行 key 含 status，重建后角标即刷回“已备份”（避免“删远端→待备份→补传完成仍显待备份”）。
+      this.clearBackupGridRefresh();
       this.rebuildGroups();
       AppLogger.info(TAG, `backup batch done, waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
       if (this.uploadingPhotoCount === 0) {
@@ -2191,6 +2242,7 @@ export struct TabPictures {
 
   /** Any scroll auto-collapses the backup drawer (it only shows while stationary). */
   private onGridScroll(_yOffset: number): void {
+    this.lastGridScrollAt = new Date().getTime();
     if (this.drawerOpen) {
       this.getUIContext().animateTo({
         duration: CloudThemeToken.defaultAnimationDuration,

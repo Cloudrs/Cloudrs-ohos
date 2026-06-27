@@ -154,13 +154,17 @@ export struct TabPictures {
     this.loadSettings();
     this.lastRemotePath = this.normalizeRemotePath(this.getSettingsRemotePath());
     this.loadDoneIds();
-    this.loadPhotoRecords();
-    this.applyPendingRemoteRemovals();
-    this.rebuildGroups();
     this.scheduleActiveAutoScan();
     this.syncMediaChangeRegistration();
     this.registerNetworkListener();
-    this.scheduleAutoBackup();
+    // 解析数千条记录 + 建组较重，推到下一拍执行，避免阻塞 app 启动帧、导致刚进应用切页卡顿。
+    // 相册非默认 Tab，启动时不可见；setTimeout(0) 在用户手动点击切页前即完成加载，无感知。
+    setTimeout(() => {
+      this.loadPhotoRecords();
+      this.applyPendingRemoteRemovals();
+      this.rebuildGroups();
+      this.scheduleAutoBackup();
+    }, 0);
   }
 
   aboutToDisappear(): void {
@@ -309,6 +313,7 @@ export struct TabPictures {
       AppLogger.error(TAG, `load done ids failed: ${(err as Error)?.message ?? err}`);
       this.doneIds = new Set<string>();
     }
+    this.invalidateLegacyDoneIdPool();
     this.refreshPhotoStats();
   }
 
@@ -1600,9 +1605,9 @@ export struct TabPictures {
   }
 
   refreshDoneStatus(): void {
-    this.photos = this.getPhotos().map((item: PhotoBackupItem) => {
+    // applyDoneStatus 原地改 item.status，无需重建并重新赋值整个 photos 数组（4803 张时白白多花数十 ms）。
+    this.getPhotos().forEach((item: PhotoBackupItem) => {
       this.applyDoneStatus(item, true);
-      return item;
     });
     this.refreshPhotoStats();
   }
@@ -1629,6 +1634,7 @@ export struct TabPictures {
       this.getLegacyDoneIds(item).forEach((id: string) => {
         this.doneIds.delete(id);
       });
+      this.invalidateLegacyDoneIdPool();
     }
   }
 
@@ -1651,12 +1657,25 @@ export struct TabPictures {
     if (this.doneIds.has(item.id) || this.doneIds.has(item.uri)) {
       legacyIds.push(this.doneIds.has(item.id) ? item.id : item.uri);
     }
-    Array.from(this.doneIds).forEach((id: string) => {
-      if (!this.isPathDoneId(id) && id.startsWith(`${item.uri}_`) && legacyIds.indexOf(id) < 0) {
+    // 只遍历缓存的「非 scoped」legacy 池，而非每张照片都 Array.from 全部 doneIds。
+    // 否则 N 张 × M 个 doneId = O(N×M)（数千张时启动卡数秒）；scoped 到任意路径的 id 都不在池里。
+    this.getLegacyDoneIdPool().forEach((id: string) => {
+      if (id.startsWith(`${item.uri}_`) && legacyIds.indexOf(id) < 0) {
         legacyIds.push(id);
       }
     });
     return legacyIds;
+  }
+
+  private legacyDoneIdPool: string[] | null = null;
+  private getLegacyDoneIdPool(): string[] {
+    if (this.legacyDoneIdPool === null) {
+      this.legacyDoneIdPool = Array.from(this.doneIds).filter((id: string) => !this.isPathDoneId(id));
+    }
+    return this.legacyDoneIdPool;
+  }
+  private invalidateLegacyDoneIdPool(): void {
+    this.legacyDoneIdPool = null;
   }
 
   migrateLegacyDoneIds(): void {
@@ -1677,6 +1696,7 @@ export struct TabPictures {
       changed = true;
     });
     if (changed) {
+      this.invalidateLegacyDoneIdPool();
       this.saveDoneIds();
     }
   }

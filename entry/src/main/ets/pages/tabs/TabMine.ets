@@ -116,8 +116,6 @@ export struct TabMine {
   @State systemAuthEnabled: boolean = false
   @State systemAuthBusy: boolean = false
   private settingsRefreshTimer: number = -1
-  @State photoBackupEnabledText: string = '未开启'
-  @StorageProp(PHOTO_BACKUP_ENABLED_KEY) @Watch('onPhotoBackupEnabledChanged') photoBackupEnabledMirror: boolean = false;
   @State showPhotoBackupPathSheet: boolean = false
   @State imageDraggableEnabled: boolean = false
 
@@ -163,12 +161,8 @@ export struct TabMine {
       false
     ) as boolean
     const pbSettings = PhotoBackupSettingsStore.load();
-    this.photoBackupEnabledText = pbSettings.enabled ? '已开启' : '未开启';
+    // 把持久化的开关状态镜像进 AppStorage，供「相册备份」行的 PhotoBackupStatusText 子组件即时显示。
     PhotoBackupSettingsStore.mirror(pbSettings);
-  }
-
-  private onPhotoBackupEnabledChanged(): void {
-    this.photoBackupEnabledText = this.photoBackupEnabledMirror ? '已开启' : '未开启';
   }
 
   private loadMineData(): void {
@@ -1005,6 +999,45 @@ export struct TabMine {
     })
   }
 
+  // 「相册备份」行单独实现：状态文字用响应式子组件 PhotoBackupStatusText，
+  // 这样在设置弹窗里切换开关后，外面右侧文案能立即同步（rowWithNext 按值传参做不到）。
+  @Builder photoBackupRow() {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      Image($r('app.media.ic_externaldrive_fill'))
+        .width(CloudThemeToken.iconBoxXs)
+        .height(CloudThemeToken.iconBoxXs)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .padding(CloudThemeToken.spacingLg)
+        .fillColor(CloudThemeToken.onPrimary)
+        .backgroundColor(CloudThemeToken.settingIconPhotoBackupBackground)
+        .draggable(false)
+
+      Text('相册备份')
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+
+      PhotoBackupStatusText()
+
+      Image($r('app.media.ic_chevron_right'))
+        .width(CloudThemeToken.iconXs)
+        .height(CloudThemeToken.iconXs)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
+    }
+    .width('100%')
+    .height(CloudThemeToken.rowHeight4xl)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .clip(true)
+    .backgroundColor(CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.openSettingsSheet(MineSheetType.PHOTO_BACKUP)
+    })
+  }
+
   @Builder rowWithSelect(title: ResourceStr) {
     Row({ space: CloudThemeToken.spacingCard }) {
       Column({ space: CloudThemeToken.spacingSm }) {
@@ -1085,13 +1118,7 @@ export struct TabMine {
         () => {
           this.openSettingsSheet(MineSheetType.THEME)
         })
-      this.rowWithNext($r('app.media.ic_externaldrive_fill'),
-        CloudThemeToken.settingIconPhotoBackupBackground,
-        '相册备份',
-        this.photoBackupEnabledText,
-        () => {
-          this.openSettingsSheet(MineSheetType.PHOTO_BACKUP)
-        })
+      this.photoBackupRow()
       this.rowWithNext($r('app.media.ic_more_setting'),
         CloudThemeToken.settingIconMoreBackground,
         $r('app.string.more_setting'),
@@ -1873,5 +1900,18 @@ export struct TabMine {
         this.closeFeedbackSheet()
       }
     })
+  }
+}
+
+// 「相册备份」开关状态文字。独立子组件直接绑定 @StorageProp，开关 save() 后 AppStorage 镜像
+// 一变即重渲染——避免把动态文案按值传给 @Builder（rowWithNext）导致内部 Text 不刷新的坑。
+@Component
+struct PhotoBackupStatusText {
+  @StorageProp(PHOTO_BACKUP_ENABLED_KEY) backupEnabled: boolean = false;
+
+  build() {
+    Text(this.backupEnabled ? '已开启' : '未开启')
+      .fontSize(CloudThemeToken.textSizeBody)
+      .fontColor(CloudThemeToken.textSecondary)
   }
 }

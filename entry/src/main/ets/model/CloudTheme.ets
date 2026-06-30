@@ -410,6 +410,8 @@ export class CloudThemeToken {
   static readonly loginFooterIconPadding: number = 5
   static readonly loginPrivacyTextSize: number = 11
   static readonly loginPrivacyLinkHeight: number = 13
+  static readonly loginPrivacyCheckboxSize: number = 16
+  static readonly loginPrivacyCheckboxGap: number = 4
   static readonly photoBackupPreviewProgress: number = 65
   static readonly photoBackupPreviewDelayMs: number = 400
   static readonly photoBackupPreviewDelayStepMs: number = 120

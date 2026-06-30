@@ -74,7 +74,11 @@
     },
     {
       "name": "login_service_prefix",
-      "value": "使用Cloudrs即表示您接受我们的 "
+      "value": "我已阅读并同意 "
+    },
+    {
+      "name": "login_privacy_must_agree",
+      "value": "请先阅读并勾选同意《隐私政策》"
     },
     {
       "name": "hyperlink_app_service",
@@ -122,11 +126,11 @@
     },
     {
       "name": "image_video_write_permission",
-      "value": "用于保存图片或视频到图库。"
+      "value": "用于在云盘文件或图片预览页面，将您从 Cloudreve 云端下载的图片或视频保存到本机系统相册，以便您离线查看。"
     },
     {
       "name": "image_video_read_permission",
-      "value": "用于上传图片或视频到云上。"
+      "value": "用于在「相册」页面读取本机系统相册中的图片和视频，显示缩略图，并将您手动选择或开启自动备份的本地媒体上传至 Cloudreve 云端存储。"
     },
     {
       "name": "preview",

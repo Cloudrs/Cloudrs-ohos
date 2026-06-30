@@ -73,6 +73,7 @@ export struct LoginPage {
   @StorageProp(Constant.CLOUD_COOKIE) cookie: string = '';
   @StorageProp(Constant.CLOUD_COOKIE_EXPIRES) cookieExpires: string = '';
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
+  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State protocolIndex: number = Constant.PROTOCOL_HTTPS_INDEX
   @State protocol: string = Constant.PROTOCOL_HTTPS_SCHEME
   @State scrollHeight: number = 0;
@@ -80,6 +81,7 @@ export struct LoginPage {
   @State websiteInvalid: boolean = false;
   @State loginInvalid: boolean = false;
   @State needs2FA: boolean = false;
+  @State privacyAccepted: boolean = false;
   @State loginTitle: string|Resource = $r('app.string.website_title');
   @State websiteLogo: Resource|PixelMap = $r('app.media.cloudrs')
   @State showUserSwitchSheet: boolean = false
@@ -276,7 +278,8 @@ export struct LoginPage {
         top: CloudThemeToken.loginPageVerticalPadding,
         left: CloudThemeToken.pagePadding,
         right: CloudThemeToken.pagePadding,
-        bottom: this.keyHeight ? CloudThemeToken.zero : CloudThemeToken.loginPageVerticalPadding
+        bottom: this.keyHeight ? CloudThemeToken.zero
+          : CloudThemeToken.loginPageVerticalPadding + this.bottomRectHeight
       })
       .justifyContent(FlexAlign.SpaceBetween)
     }
@@ -368,6 +371,9 @@ export struct LoginPage {
   }
 
   private async startScanLogin(): Promise<void> {
+    if (!this.requirePrivacyAccepted()) {
+      return
+    }
     const hostContext = this.getUIContext().getHostContext()
     if (!hostContext) {
       showToastTips('扫码失败，无法获取上下文', ToastType.Error)
@@ -849,6 +855,9 @@ export struct LoginPage {
       .backgroundColor(CloudThemeToken.primary)
       .fontColor(CloudThemeToken.onPrimary)
       .onClick(() => {
+        if (!this.requirePrivacyAccepted()) {
+          return
+        }
         if (!this.websiteInvalid) {
           this.websiteTest()
         } else if (this.needs2FA) {
@@ -1053,6 +1062,10 @@ export struct LoginPage {
       currentUser: this.activeUserName,
       currentUrl: this.activeUserUrl,
       onSelect: (user: DbUserInfo) => {
+        if (!this.requirePrivacyAccepted()) {
+          this.showUserSwitchSheet = false
+          return
+        }
         if (CloudRouter.switchToUser(user.username, user.url, true)) {
           this.showUserSwitchSheet = false
           CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
@@ -1065,10 +1078,23 @@ export struct LoginPage {
   }
 
   @Builder privacyText() {
-    Flex({wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center}) {
+    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
+      Checkbox({ name: 'login_privacy', group: 'login' })
+        .select(this.privacyAccepted)
+        .selectedColor(CloudThemeToken.primary)
+        .width(CloudThemeToken.loginPrivacyCheckboxSize)
+        .height(CloudThemeToken.loginPrivacyCheckboxSize)
+        .margin({ right: CloudThemeToken.loginPrivacyCheckboxGap })
+        .onChange((value: boolean) => {
+          this.privacyAccepted = value
+        })
+
       Text($r('app.string.login_service_prefix'))
         .fontSize(CloudThemeToken.loginPrivacyTextSize)
         .fontColor(CloudThemeToken.textSecondary)
+        .onClick(() => {
+          this.privacyAccepted = !this.privacyAccepted
+        })
 
       Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_privacy")) {
       }
@@ -1076,5 +1102,13 @@ export struct LoginPage {
       .height(CloudThemeToken.loginPrivacyLinkHeight)
     }
     .width("100%")
+  }
+
+  private requirePrivacyAccepted(): boolean {
+    if (this.privacyAccepted) {
+      return true
+    }
+    showToastTips($r('app.string.login_privacy_must_agree'), ToastType.Warn)
+    return false
   }
 }

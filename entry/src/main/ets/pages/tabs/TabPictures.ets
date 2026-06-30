@@ -139,6 +139,10 @@ export struct TabPictures {
   private netConnection: connection.NetConnection | undefined = undefined;
   private netRegistered: boolean = false;
   private autoBackupDebounceTimer: number = -1;
+  private deferredLoadTimer: number = -1;
+  // 启动延后加载是否已完成。未完成前 applyPendingRemoteRemovals 不消费待移除名单，
+  // 避免 onActiveStateChanged 抢在 photos 加载前清空名单、丢失标记撤销。
+  private photosLoaded: boolean = false;
   private lastRemotePath: string = '';
   @State drawerOpen: boolean = false;
   @State segment: GallerySegment = GallerySegment.TIME;
@@ -159,7 +163,8 @@ export struct TabPictures {
     this.registerNetworkListener();
     // 解析数千条记录 + 建组较重，推到下一拍执行，避免阻塞 app 启动帧、导致刚进应用切页卡顿。
     // 相册非默认 Tab，启动时不可见；setTimeout(0) 在用户手动点击切页前即完成加载，无感知。
-    setTimeout(() => {
+    this.deferredLoadTimer = setTimeout(() => {
+      this.deferredLoadTimer = -1;
       this.loadPhotoRecords();
       this.applyPendingRemoteRemovals();
       this.rebuildGroups();
@@ -168,6 +173,10 @@ export struct TabPictures {
   }
 
   aboutToDisappear(): void {
+    if (this.deferredLoadTimer >= 0) {
+      clearTimeout(this.deferredLoadTimer);
+      this.deferredLoadTimer = -1;
+    }
     this.clearAutoScanTimer();
     this.clearStalePhotoRefreshTimer();
     this.unregisterMediaChange();
@@ -193,6 +202,11 @@ export struct TabPictures {
   // 文件管理里从备份目录删/移出的文件：相册变为活动时按文件名精确撤销这些图的已备份标记。
   // 不查云端、不全量扫描，与相册规模无关：本地仍在的图转“待备份”（可重新备份）；仅云端的图（唯一副本在云端）整条移除。
   private applyPendingRemoteRemovals(): void {
+    // 启动延后加载未完成时不消费：consumeRemoteRemoved 会清空名单，若此刻 photos 为空将丢失撤销。
+    // loadPhotoRecords 完成后会在延后块里主动再调一次，那时 photos 已就绪。
+    if (!this.photosLoaded) {
+      return;
+    }
     const names = PhotoBackupSettingsStore.consumeRemoteRemoved();
     if (names.length > 0) {
       this.dropBackupMarksByNames(new Set<string>(names));
@@ -371,6 +385,7 @@ export struct TabPictures {
       this.photos = [];
       this.refreshPhotoStats();
     }
+    this.photosLoaded = true;
   }
 
   savePhotoRecords(): void {

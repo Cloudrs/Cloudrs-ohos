@@ -31,6 +31,7 @@ import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/Cloud
 import { CloudRouter } from "../../utils/CloudRouter";
 import UserPreferences from "../../model/UserPreferences";
 import { PhotoBackupSettingsStore } from "../../model/PhotoBackupSettingsStore";
+import UploadSessionRelief, { UploadSessionSummary } from "../../utils/UploadSessionRelief";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { CloudIconButton } from "../../components/CloudIconButton";
 import {
@@ -2996,26 +2997,34 @@ export struct TabFiles {
       confirmText: $r('app.string.dialog_delete'),
       onConfirm: () => {
         const src = new ObjectSrc()
+        const filePaths: string[] = []
+        const dirPaths: string[] = []
         selected.forEach((item: ObjectInfo) => {
+          const remotePath = this.joinRemotePath(this.currentPath, item.name)
           if (item.type === Constant.OBJECT_DIR_TYPE) {
             src.dirs.push(item.id)
+            dirPaths.push(remotePath)
           } else {
             src.items.push(item.id)
+            filePaths.push(remotePath)
           }
         })
-        CloudApi.deleteObjects(src, {
-          onSuccess: () => {
-            this.objectSelect.copyMoveObjects = selected
-            this.dataSourceDelete()
-            this.exitMultiSelectMode()
-            this.recordBackupRemoved(selected.filter((f: ObjectInfo) => f.type !== Constant.OBJECT_DIR_TYPE).map((f: ObjectInfo) => f.name))
-            showToast($r('app.string.delete_success'))
-          },
-          onFailure: (msg) => {
-            AppLogger.error(TAG, '批量删除失败 msg: ' + msg)
-            showToast($r('app.string.delete_failed'))
-          }
-        })
+        const performBatchDelete = (): void => {
+          CloudApi.deleteObjects(src, {
+            onSuccess: () => {
+              this.objectSelect.copyMoveObjects = selected
+              this.dataSourceDelete()
+              this.exitMultiSelectMode()
+              this.recordBackupRemoved(selected.filter((f: ObjectInfo) => f.type !== Constant.OBJECT_DIR_TYPE).map((f: ObjectInfo) => f.name))
+              showToast($r('app.string.delete_success'))
+            },
+            onFailure: (msg) => {
+              AppLogger.error(TAG, '批量删除失败 msg: ' + msg)
+              this.tryRelieveOccupiedAndRetry(filePaths, dirPaths, performBatchDelete)
+            }
+          })
+        }
+        performBatchDelete()
       }
     })
   }
@@ -3377,21 +3386,61 @@ export struct TabFiles {
       confirmText: $r('app.string.dialog_delete'),
       onConfirm: () => {
         AppLogger.info(TAG, `delete ${item.type === Constant.OBJECT_DIR_TYPE ? 'dir' : 'file'}`)
-        CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
-          onSuccess: (data) => {
-            if (item.type == Constant.OBJECT_DIR_TYPE) {
-              this.dirDataSource.deleteData(index)
-              this.isGridPadding = this.getFolderPaddingCount() > 0
-            } else {
-              this.fileDataSource.deleteData(index)
-              this.recordBackupRemoved([item.name])
+        const remotePath = this.joinRemotePath(this.currentPath, item.name)
+        const filePaths: string[] = item.type === Constant.OBJECT_DIR_TYPE ? [] : [remotePath]
+        const dirPaths: string[] = item.type === Constant.OBJECT_DIR_TYPE ? [remotePath] : []
+        const performDelete = (): void => {
+          CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
+            onSuccess: (data) => {
+              if (item.type == Constant.OBJECT_DIR_TYPE) {
+                this.dirDataSource.deleteData(index)
+                this.isGridPadding = this.getFolderPaddingCount() > 0
+              } else {
+                this.fileDataSource.deleteData(index)
+                this.recordBackupRemoved([item.name])
+              }
+              showToast($r('app.string.delete_success'))
+            },
+            onFailure: (msg) => {
+              AppLogger.error(TAG, '删除失败 msg: ' + msg)
+              this.tryRelieveOccupiedAndRetry(filePaths, dirPaths, performDelete)
             }
-            showToast($r('app.string.delete_success'))
-          },
-          onFailure: (msg) => {
-            AppLogger.error(TAG, '删除失败 msg: ' + msg)
-            showToast($r('app.string.delete_failed'))
-          }
+          })
+        }
+        performDelete()
+      }
+    })
+  }
+
+  /** 拼服务端 remote 路径，用于跟 upload session 的 remotePath 精确/前缀比对 */
+  private joinRemotePath(dir: string, name: string): string {
+    const base = dir.endsWith('/') ? dir : dir + '/'
+    return base + name
+  }
+
+  /**
+   * 删除失败兜底：查两处 session 源（相册备份 + 文件上传）是否有匹配本次目标路径的会话；
+   * 有则弹对话框问用户是否解除占用；用户确认后逐个 deleteUploadSession + 清本地记录 + 重试删除。
+   * 无匹配 session 则回退到通用「删除失败」toast——避免把服务端其它类型的失败（权限/网络）
+   * 误导成「被占用」。文案里给出会话计数让用户明确解除的是哪批任务。
+   */
+  private tryRelieveOccupiedAndRetry(filePaths: string[], dirPaths: string[], retry: () => void): void {
+    const summary: UploadSessionSummary = UploadSessionRelief.summarize(filePaths, dirPaths)
+    if (summary.count === 0) {
+      showToast($r('app.string.delete_failed'))
+      return
+    }
+    const total = filePaths.length + dirPaths.length
+    const targetHint = total === 1 ? '该项' : `所选 ${total} 项`
+    const detail = summary.count === 1 ? '有 1 个上传会话正在占用云端位置'
+      : `有 ${summary.count} 个上传会话正在占用云端位置`
+    showCloudConfirmDialog(this.getUIContext(), {
+      title: $r('app.string.upload_occupied_title'),
+      message: `${targetHint}${detail}，解除后可继续删除`,
+      confirmText: $r('app.string.upload_occupied_relieve'),
+      onConfirm: () => {
+        UploadSessionRelief.relieve(summary, filePaths, dirPaths).then(() => {
+          retry()
         })
       }
     })

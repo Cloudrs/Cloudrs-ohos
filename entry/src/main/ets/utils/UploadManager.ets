@@ -206,6 +206,33 @@ class UploadManager {
     })
   }
 
+  /**
+   * 解除占用兜底路径专用：按 remote 路径把 pendingQueue 里未开跑的任务清掉，
+   * 并把对应 transportObject 状态置 REMOVED（也顺带让 running 任务下轮 chunk 循环退出）。
+   * 服务端 deleteUploadSession + TransferDatabase 记录 + cache 由调用方（UploadSessionRelief）
+   * 统一处理，这里只负责内存队列的清扫，避免和 relief 路径互相踩到 pendingQueue。
+   */
+  dropByRemotePath(fileSet: Set<string>, dirPrefixes: string[]): void {
+    const isMatch = (remote: string): boolean => {
+      if (fileSet.has(remote)) {
+        return true;
+      }
+      for (const prefix of dirPrefixes) {
+        if (remote === prefix || remote.startsWith(prefix + '/')) {
+          return true;
+        }
+      }
+      return false;
+    };
+    this.pendingQueue = this.pendingQueue.filter((task: UploadTask) => {
+      if (!isMatch(task.remotePath)) {
+        return true;
+      }
+      task.transportObject.state = FileModelState.REMOVED;
+      return false;
+    });
+  }
+
   cancel(transportObject: TransportObject): void {
     transportObject.state = FileModelState.REMOVED
     const records = TransferDatabase.listUploads()

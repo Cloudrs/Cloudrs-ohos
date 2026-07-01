@@ -173,6 +173,8 @@ class Constant {
 
   PHOTO_BACKUP_ITEMS = 'photoBackupItems'
 
+  PHOTO_BACKUP_SESSIONS = 'photoBackupSessions'
+
   OBJECT_DIR_TYPE = 'dir'
 
   OBJECT_FILE_TYPE = 'file'

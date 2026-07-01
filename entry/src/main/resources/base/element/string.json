@@ -253,6 +253,14 @@
       "value": "删除失败"
     },
     {
+      "name": "upload_occupied_title",
+      "value": "文件被上传占用"
+    },
+    {
+      "name": "upload_occupied_relieve",
+      "value": "解除占用并重试"
+    },
+    {
       "name": "task_download",
       "value": "下载列表"
     },

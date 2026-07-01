@@ -26,6 +26,8 @@ import LazyDataSource from '../../utils/LazyDataSource';
 import { PhotoGalleryGrid } from '../../components/PhotoGalleryGrid';
 import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../model/PhotoGalleryModel';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
+import PhotoBackupUploader, { PhotoBackupUploadResult } from '../../utils/PhotoBackupUploader';
+import PhotoBackupSessionStore from '../../model/PhotoBackupSessionStore';
 import { PhotoLocalPreviewParam, ImagePreview } from '../../model/Params';
 import { CloudRouter } from '../../utils/CloudRouter';
 import {
@@ -100,6 +102,12 @@ export struct TabPictures {
   @State backupQueueDone: number = 0;
   @State backupQueueTotal: number = 0;
   @State shouldPauseBackup: boolean = false;
+  /**
+   * 关闭备份/切换用户等场景：置 true 后，uploader 在下一个 chunk 边界抛 CANCELED，
+   * 主动 deleteUploadSession 清掉服务端占位；runBackup 出循环时统一清理 UPLOADING 状态。
+   * 与 shouldPauseBackup 的区别：pause 保 session 供 resume，cancel 会真正删 session。
+   */
+  @State shouldCancelBackup: boolean = false;
   @State permissionHint: string = '';
   @State settingsRevision: number = 0;
   @State localPhotoCount: number = 0;
@@ -168,8 +176,50 @@ export struct TabPictures {
       this.loadPhotoRecords();
       this.applyPendingRemoteRemovals();
       this.rebuildGroups();
+      this.pruneOrphanSessions();
       this.scheduleAutoBackup();
     }, 0);
+  }
+
+  /**
+   * 启动时扫 PhotoBackupSessionStore 里的历史 session，把已经不该保留的清掉：
+   * 过期 / 对应 item 已删 / 已备份完成 / 备份路径改了 —— 一律 deleteUploadSession
+   * 让服务端占位消失。这一步兜底 App 崩溃 / 被系统杀 场景积累的 orphan。
+   */
+  private async pruneOrphanSessions(): Promise<void> {
+    try {
+      const sessions = PhotoBackupSessionStore.list();
+      if (sessions.length === 0) {
+        return;
+      }
+      const now = new Date().getTime();
+      const currentBase = this.normalizeRemotePath(this.getSettingsRemotePath());
+      const photosById: Map<string, PhotoBackupItem> = new Map<string, PhotoBackupItem>();
+      this.getPhotos().forEach((it: PhotoBackupItem) => photosById.set(it.id, it));
+      const orphans: string[] = [];
+      for (const data of sessions) {
+        const expired = PhotoBackupSessionStore.isExpired(data, now);
+        const item = photosById.get(data.itemId);
+        const missingItem = !item;
+        const alreadyDone = item !== undefined && item.status === PhotoBackupStatus.COMPLETED;
+        // 拼期望的 remotePath 时，如果 currentBase 已带尾斜杠（根路径 '/'）就不再补一个，
+        // 否则会拼出 '//name' 与 sessionStore 里存的 '/name' 不匹配、把合法 session 误判为孤儿。
+        // 保持与 getRemoteFilePath 的拼接规则一致。
+        const separator = currentBase.endsWith('/') ? '' : '/';
+        const expectedRemote = item ? `${currentBase}${separator}${item.name}` : '';
+        const pathChanged = expectedRemote.length > 0 && data.remotePath !== expectedRemote;
+        if (!expired && !missingItem && !alreadyDone && !pathChanged) {
+          continue;
+        }
+        orphans.push(data.sessionId);
+        await PhotoBackupUploader.cleanupSession(data);
+      }
+      if (orphans.length > 0) {
+        AppLogger.info(TAG, `pruned ${orphans.length} orphan upload sessions`);
+      }
+    } catch (err) {
+      AppLogger.warn(TAG, `pruneOrphanSessions failed: ${(err as Error)?.message ?? err}`);
+    }
   }
 
   aboutToDisappear(): void {
@@ -185,6 +235,12 @@ export struct TabPictures {
     this.stopCompletedPreviewFlush();
     this.flushDoneIdsSave();
     this.flushPhotoRecordsSave();
+    // 页面销毁时优雅暂停：uploader 在 chunk 边界写 offset/chunkIndex 到 sessionStore，
+    // 保 session 不删。下次进来 startBackup 会从 offset 续传，避免重传浪费流量。
+    if (this.backupState === PhotoBackupState.BACKING_UP) {
+      this.shouldPauseBackup = true;
+      AppLogger.info(TAG, 'auto pause on aboutToDisappear');
+    }
   }
 
   onActiveStateChanged(): void {
@@ -1926,6 +1982,7 @@ export struct TabPictures {
     }
     this.resetBackupQueue(targets.length);
     this.shouldPauseBackup = false;
+    this.shouldCancelBackup = false;
     this.backupState = PhotoBackupState.BACKING_UP;
     AppLogger.info(TAG, `backup start, targets=${targets.length}, retryFailedOnly=${retryFailedOnly}`);
     this.runBackup(targets);
@@ -1937,7 +1994,33 @@ export struct TabPictures {
     }
     this.shouldPauseBackup = true;
     AppLogger.info(TAG, 'backup pause requested');
-    showToast('当前图片完成后暂停备份');
+    showToast('已请求暂停,当前分片上传完即停');
+  }
+
+  /**
+   * 关闭备份 / 切换用户 等场景触发的真正取消：
+   * 1) 置 shouldCancelBackup=true，uploader 在下一个 chunk 边界抛 CANCELED 并主动 deleteUploadSession
+   * 2) runBackup 结束时（或立刻调 cleanupAll）兜底清残留 session、清 UPLOADING 状态回 WAITING
+   * 与 pauseBackup 的语义差异：pause 保 session 供 resume；cancel 直接把服务端占位删干净
+   */
+  async cancelBackup(reason: string): Promise<void> {
+    if (this.backupState === PhotoBackupState.BACKING_UP) {
+      this.shouldCancelBackup = true;
+      AppLogger.info(TAG, `backup cancel requested: ${reason}`);
+    } else {
+      // 未在跑的场景：不会有 workers 主动删 session，这里同步兜底
+      AppLogger.info(TAG, `cleanup remaining sessions: ${reason}`);
+    }
+    try {
+      await PhotoBackupUploader.cleanupAll();
+    } catch (err) {
+      AppLogger.warn(TAG, `cleanupAll failed: ${(err as Error)?.message ?? err}`);
+    }
+    // UI 层把还挂在 UPLOADING 的 item 回到 WAITING（session 已在服务端被删）
+    this.getUploadingItems().forEach((it: PhotoBackupItem) => {
+      this.setPhotoStatus(it, PhotoBackupStatus.WAITING, CloudThemeToken.zero, '');
+    });
+    this.schedulePhotoRecordsSave();
   }
 
   canBackupNow(): boolean {
@@ -1956,11 +2039,15 @@ export struct TabPictures {
     let nextIndex = 0;
     const workerCount = Math.min(this.getSettingsUploadConcurrent(), targets.length);
     const runWorker = async (): Promise<void> => {
-      while (nextIndex < targets.length && !this.shouldPauseBackup) {
+      while (nextIndex < targets.length && !this.shouldPauseBackup && !this.shouldCancelBackup) {
         const currentIndex = nextIndex;
         nextIndex++;
-        await this.backupItem(targets[currentIndex], currentIndex);
-        this.markBackupQueueItemDone();
+        // backupItem 返回 true 才算真消费掉一项；因暂停/取消早退（未创建 session 也没上传）时返回 false，
+        // 不计入进度条，避免 "已备份 X/Y" 里 X 把跳过的也算上、UI 上看起来传完了实际没传。
+        const consumed = await this.backupItem(targets[currentIndex], currentIndex);
+        if (consumed) {
+          this.markBackupQueueItemDone();
+        }
         this.scheduleBackupGridRefresh();
       }
     };
@@ -1971,6 +2058,29 @@ export struct TabPictures {
         workers.push(runWorker());
       }
       await Promise.all(workers);
+      if (this.shouldCancelBackup) {
+        // 取消路径：workers 内已各自 delete session；这里兜底再扫一遍 sessionStore 确保清干净，
+        // 兼容 workers 在两次 checkInterrupt 之间被网络异常打断的 corner case。
+        try {
+          await PhotoBackupUploader.cleanupAll();
+        } catch (err) {
+          AppLogger.warn(TAG, `cleanupAll after cancel failed: ${(err as Error)?.message ?? err}`);
+        }
+        this.clearBackupGridRefresh();
+        this.flushCompletedPreviewUpdates();
+        this.getUploadingItems().forEach((it: PhotoBackupItem) => {
+          this.setPhotoStatus(it, PhotoBackupStatus.WAITING, CloudThemeToken.zero, '');
+        });
+        this.runInUiScope(() => {
+          this.backupState = PhotoBackupState.IDLE;
+        });
+        this.flushDoneIdsSave();
+        this.flushPhotoRecordsSave();
+        this.refreshPhotoStats();
+        this.rebuildGroups();
+        AppLogger.info(TAG, `backup canceled, waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
+        return;
+      }
       if (this.shouldPauseBackup) {
         this.clearBackupGridRefresh();
         this.flushCompletedPreviewUpdates();
@@ -2003,8 +2113,14 @@ export struct TabPictures {
     }
   }
 
-  async backupItem(item: PhotoBackupItem, index: number): Promise<void> {
+  async backupItem(item: PhotoBackupItem, index: number): Promise<boolean> {
     let localPath = '';
+    // 关闭/暂停请求生效后新到达的任务直接跳过：runBackup 出循环时会统一按 shouldCancelBackup
+    // 走 cleanupAll 清残留 session，避免在 backupItem 里各自 create session 后马上又要删。
+    // 返回 false 让 runWorker 不把这次跳过计入进度。
+    if (this.shouldCancelBackup || this.shouldPauseBackup) {
+      return false;
+    }
     try {
       this.setPhotoStatus(item, PhotoBackupStatus.UPLOADING, CloudThemeToken.photoBackupStartProgress);
       if (await this.remotePhotoExists(item)) {
@@ -2013,19 +2129,30 @@ export struct TabPictures {
         this.doneIds.add(this.getDoneKey(item));
         this.scheduleDoneIdsSave();
         this.schedulePhotoRecordsSave();
-        return;
+        return true;
       }
       localPath = await this.copyPhotoToCache(item);
       this.updatePhotoProgress(item, CloudThemeToken.photoBackupCopyProgress);
-      await this.uploadPhoto(localPath, this.getRemoteFilePath(item), item);
+      const result = await this.uploadPhoto(localPath, this.getRemoteFilePath(item), item);
+      if (result === PhotoBackupUploadResult.PAUSED || result === PhotoBackupUploadResult.CANCELED) {
+        // 暂停：uploader 保留 session，等下次 startBackup 从 offset 续传。
+        // 取消：uploader 已调 deleteUploadSession，服务端无残留；状态回 WAITING 供用户重新选择。
+        // 两种情况都不算真消费掉一项——不计入 markBackupQueueItemDone。
+        this.setPhotoStatus(item, PhotoBackupStatus.WAITING, CloudThemeToken.zero, '');
+        this.schedulePhotoRecordsSave();
+        return false;
+      }
       this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
       this.markRemotePhotoKnown(item);
       this.doneIds.add(this.getDoneKey(item));
       this.scheduleDoneIdsSave();
       this.schedulePhotoRecordsSave();
+      return true;
     } catch (err) {
+      // uploader 在真失败路径已 delete session；这里只负责 UI 状态
       this.setPhotoStatus(item, PhotoBackupStatus.FAILED, CloudThemeToken.zero, this.getErrorMessage(err));
       this.schedulePhotoRecordsSave();
+      return true;
     } finally {
       if (localPath.length > 0) {
         await FileSystemUtil.unlinkIfExists(localPath);
@@ -2062,22 +2189,33 @@ export struct TabPictures {
     }
   }
 
-  uploadPhoto(localPath: string, remotePath: string, item: PhotoBackupItem): Promise<void> {
-    return new Promise<void>((resolve: () => void, reject: (reason: Error) => void) => {
-      // 把原图修改时间作为 LastModified 透传给 Cloudreve，让云端入库时间对齐原图而不是上传时刻
-      const lastModifiedMs = item.modifiedAt > 0 ? item.modifiedAt : 0;
-      CloudApi.uploadLocalFile(localPath, remotePath, false, lastModifiedMs, {
-        onStart: () => {
-          this.updatePhotoProgress(item, CloudThemeToken.photoBackupUploadStartProgress);
+  uploadPhoto(localPath: string, remotePath: string, item: PhotoBackupItem): Promise<PhotoBackupUploadResult> {
+    // 把原图修改时间作为 LastModified 透传给 Cloudreve，让云端入库时间对齐原图而不是上传时刻
+    const lastModifiedMs = item.modifiedAt > 0 ? item.modifiedAt : 0;
+    const startProgress = CloudThemeToken.photoBackupUploadStartProgress;
+    const uploadRange = CloudThemeToken.percentageFull - startProgress;
+    const fileName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
+    return PhotoBackupUploader.uploadOne(
+      item.id,
+      localPath,
+      remotePath,
+      fileName,
+      item.size,
+      lastModifiedMs,
+      {
+        onSessionCreated: () => {
+          this.updatePhotoProgress(item, startProgress);
         },
-        onSuccess: () => {
-          resolve();
+        onProgress: (uploadedBytes: number) => {
+          if (item.size > 0) {
+            const percent = startProgress + Math.floor(uploadedBytes / item.size * uploadRange);
+            this.updatePhotoProgress(item, Math.min(percent, CloudThemeToken.percentageFull));
+          }
         },
-        onFailure: (message: string) => {
-          reject(new Error(message));
-        }
-      });
-    });
+        isPauseRequested: (): boolean => this.shouldPauseBackup,
+        isCancelRequested: (): boolean => this.shouldCancelBackup
+      }
+    );
   }
 
   loadRemotePhotoNameCache(): Promise<Set<string>> {
@@ -2185,14 +2323,25 @@ export struct TabPictures {
 
   onSettingsRevisionChanged(): void {
     const prevRemotePath = this.lastRemotePath;
+    const prevEnabled = this.settingsEnabled;
     this.loadSettings();
+    const enabledChangedOff = prevEnabled && !this.settingsEnabled;
     this.rebuildGroups();
     this.syncMediaChangeRegistration();
     this.scheduleAutoBackup();
     const newRemotePath = this.normalizeRemotePath(this.getSettingsRemotePath());
     this.lastRemotePath = newRemotePath;
+    if (enabledChangedOff) {
+      // 用户在设置里关闭了备份：立刻取消进行中的任务并 deleteUploadSession 清云端占位，
+      // 否则残留 session 会让备份根目录/父目录长时间删不掉（Cloudreve 视作占用）。
+      this.cancelBackup('settings disabled');
+    }
     if (prevRemotePath.length > 0 && prevRemotePath !== newRemotePath) {
       // 切换备份路径：旧“已备份”标记按新路径失效，重判标记 + 全量刷新重新关联云端。
+      // 旧路径下的 session 也要一起清（remotePath 变了，续传会指向不存在的 session）。
+      if (!enabledChangedOff) {
+        this.cancelBackup('remote path changed');
+      }
       this.refreshDoneStatus();
       if (this.isActive && this.getSettingsEnabled() && !this.isScanning && !this.isBackupRunning()) {
         this.scanLocalPhotos(true, true);

@@ -15,6 +15,18 @@ export enum PhotoBackupUploadResult {
   CANCELED = 'canceled'
 }
 
+/**
+ * Cloudreve 创建上传会话时返回"对象已存在"（overwrite=false 撞到云端同名文件）。
+ * 对相册备份来说这等价于备份目标已达成——上层的 remotePhotoExists 去重靠备份开始时
+ * 拉一次目录快照，服务端路径缓存 stale（删目录后 list 一直报 Path not exist）或
+ * 快照过期时预检会漏，把已在云端的图再推一遍。此时把 40004 当成功而不是失败，
+ * 否则一轮备份能刷出上百张假 FAILED。
+ */
+function isObjectExistedError(err: Error): boolean {
+  const msg = (err?.message ?? '').toLowerCase();
+  return msg.includes('40004') || msg.includes('object existed') || msg.includes('对象已存在');
+}
+
 export interface PhotoBackupUploadCallbacks {
   onSessionCreated?: (session: PhotoBackupSessionData) => void
   onProgress?: (uploadedBytes: number) => void
@@ -50,8 +62,22 @@ class PhotoBackupUploaderImpl {
     lastModifiedMs: number,
     callbacks?: PhotoBackupUploadCallbacks
   ): Promise<PhotoBackupUploadResult> {
-    this.throwIfInterrupted(callbacks);
-    let session = await this.resolveSession(itemId, cachePath, remotePath, fileName, total, lastModifiedMs, callbacks);
+    let session: PhotoBackupSessionData;
+    try {
+      this.throwIfInterrupted(callbacks);
+      session = await this.resolveSession(itemId, cachePath, remotePath, fileName, total, lastModifiedMs, callbacks);
+    } catch (err) {
+      if (err instanceof PhotoBackupUploadInterrupted) {
+        return err.reason;
+      }
+      if (err instanceof Error && isObjectExistedError(err)) {
+        // 云端已有同名文件：备份目标已达成，按成功处理（此时 session 未创建，无需清理）
+        AppLogger.info(TAG, `remote already has ${fileName}, treat as completed`);
+        PhotoBackupSessionStore.remove(itemId);
+        return PhotoBackupUploadResult.COMPLETED;
+      }
+      throw err instanceof Error ? err : new Error(String(err));
+    }
 
     try {
       await this.uploadByChunks(itemId, cachePath, session, total, callbacks);

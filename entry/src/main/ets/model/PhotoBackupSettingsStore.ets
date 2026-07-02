@@ -12,6 +12,8 @@ export const PHOTO_BACKUP_PATH_KEY: string = 'photoBackupPathMirror';
 export const PHOTO_BACKUP_REVISION_KEY: string = 'photoBackupSettingsRevision';
 /** App 内从备份目录删除/移出的文件名累积列表（JSON 字符串）；相册变为活动时取用，精确撤销这些图的已备份标记 */
 export const PHOTO_BACKUP_REMOVED_NAMES_KEY: string = 'photoBackupRemovedNames';
+/** App 内把备份目录本身（或其祖先目录）整个删掉的标志；相册变为活动时取用，一次性撤销全部已备份标记 */
+export const PHOTO_BACKUP_REMOVED_ALL_KEY: string = 'photoBackupRemovedAll';
 
 export class PhotoBackupSettingsStore {
   static normalizeConcurrent(value: number): number {
@@ -91,6 +93,33 @@ export class PhotoBackupSettingsStore {
     const base = PhotoBackupSettingsStore.backupBasePath();
     const target = PhotoBackupSettingsStore.normalizeRemotePath(path);
     return target === base || target.startsWith(`${base}/`);
+  }
+
+  /**
+   * isBackupPath 的反向判断：删除给定目录是否会把备份目录整个带走
+   * （目录就是备份目录本身，或是它的祖先）。文件 Tab 删目录成功后据此置全量撤销标志。
+   */
+  static coversBackupPath(dirPath: string): boolean {
+    if ((dirPath ?? '').length === 0) {
+      return false;
+    }
+    const base = PhotoBackupSettingsStore.backupBasePath();
+    const target = PhotoBackupSettingsStore.normalizeRemotePath(dirPath);
+    return base === target || base.startsWith(`${target}/`);
+  }
+
+  /** App 内把备份目录（或其祖先）整个删掉后置位；相册变为活动时取用，一次性撤销全部已备份标记。 */
+  static markRemoteRemovedAll(): void {
+    AppStorage.setOrCreate(PHOTO_BACKUP_REMOVED_ALL_KEY, true);
+  }
+
+  /** 相册取用并复位全量撤销标志。 */
+  static consumeRemoteRemovedAll(): boolean {
+    const flag = AppStorage.get<boolean>(PHOTO_BACKUP_REMOVED_ALL_KEY) ?? false;
+    if (flag) {
+      AppStorage.setOrCreate(PHOTO_BACKUP_REMOVED_ALL_KEY, false);
+    }
+    return flag;
   }
 
   /** App 内从备份目录删除/移出文件后，累加文件名到待清理列表（去重）；相册变为活动时精确撤销标记。 */

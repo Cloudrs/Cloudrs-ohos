@@ -55,6 +55,11 @@ const SWITCHER_PADDING: number = 4;
 const SWITCHER_GAP: number = 4;
 // 网络/设置/扫描事件后，自动备份评估的防抖间隔（合并短时间内的多次网络事件）。
 const AUTO_BACKUP_DEBOUNCE_MS: number = 1500;
+// 相册激活时远端目录对账的最小间隔：一次对账 = 一次目录列表请求，
+// 频繁切 Tab 不该反复打服务端；下拉刷新会绕过节流强制对账。
+const REMOTE_RECONCILE_MIN_INTERVAL_MS: number = 2 * 60 * 1000;
+// 对账保险丝：一轮 gone 超过这个数且过半标记图都 missing 时怀疑列表异常，跳过撤销。
+const RECONCILE_SUSPICIOUS_GONE_COUNT: number = 20;
 const BACKUP_GRID_REFRESH_MS: number = 1500;
 const GRID_SCROLL_QUIET_MS: number = 400;
 
@@ -152,6 +157,7 @@ export struct TabPictures {
   // 避免 onActiveStateChanged 抢在 photos 加载前清空名单、丢失标记撤销。
   private photosLoaded: boolean = false;
   private lastRemotePath: string = '';
+  private lastRemoteReconcileAt: number = 0;
   @State drawerOpen: boolean = false;
   @State segment: GallerySegment = GallerySegment.TIME;
   @State galleryGroups: PhotoGroup[] = [];
@@ -177,6 +183,10 @@ export struct TabPictures {
       this.applyPendingRemoteRemovals();
       this.rebuildGroups();
       this.pruneOrphanSessions();
+      // 启动即在相册页（或很快切过来）时，让 stale 云朵尽快对账掉；非活动时跳过，等激活再触发。
+      if (this.isActive) {
+        this.reconcileRemoteBackupMarks();
+      }
       this.scheduleAutoBackup();
     }, 0);
   }
@@ -251,6 +261,7 @@ export struct TabPictures {
       return;
     }
     this.applyPendingRemoteRemovals();
+    this.reconcileRemoteBackupMarks();
     this.scheduleActiveAutoScan();
     this.syncMediaChangeRegistration();
   }
@@ -263,10 +274,78 @@ export struct TabPictures {
     if (!this.photosLoaded) {
       return;
     }
+    // 文件 Tab 把备份目录（或其祖先）整个删掉：一次性撤销全部标记，不用等逐张点开单点核查。
+    if (PhotoBackupSettingsStore.consumeRemoteRemovedAll()) {
+      const marked = this.collectMarkedNames();
+      if (marked.length > 0) {
+        this.dropBackupMarksByNames(new Set<string>(marked));
+      }
+    }
     const names = PhotoBackupSettingsStore.consumeRemoteRemoved();
     if (names.length > 0) {
       this.dropBackupMarksByNames(new Set<string>(names));
     }
+  }
+
+  /** 所有当前带"已备份"标记（status=COMPLETED 或 done-id 命中）的照片文件名 */
+  private collectMarkedNames(): string[] {
+    return this.getPhotos()
+      .filter((item: PhotoBackupItem) => item.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(item))
+      .map((item: PhotoBackupItem) => item.name);
+  }
+
+  // 远端目录级对账：拉一次备份目录列表，把「已备份」标记但云端已不存在的图批量撤销。
+  // 覆盖网页端/其它设备把备份目录整删或删走部分文件的场景——原来只有点开单张图的
+  // 单点核查（verifyBackupStillExists），满屏 stale 云朵要逐张点才会消。
+  // 成本恒定为一次目录列表请求，与照片数量无关；节流防止频繁切 Tab 反复打服务端。
+  private reconcileRemoteBackupMarks(force: boolean = false): void {
+    if (!this.photosLoaded || this.isScanning || this.isBackupRunning()) {
+      return;
+    }
+    if (!NetworkStateUtil.hasNetwork()) {
+      return;
+    }
+    const now = new Date().getTime();
+    if (!force && now - this.lastRemoteReconcileAt < REMOTE_RECONCILE_MIN_INTERVAL_MS) {
+      return;
+    }
+    const markedNames = this.collectMarkedNames();
+    if (markedNames.length === 0) {
+      return;
+    }
+    this.lastRemoteReconcileAt = now;
+    CloudApi.getFilesInfo(this.normalizeRemotePath(this.getSettingsRemotePath()), {
+      onSuccess: (data: DirectoryInfo) => {
+        const remoteNames = new Set<string>();
+        (data.objects ?? []).forEach((object: ObjectInfo) => {
+          remoteNames.add(object.name);
+        });
+        const gone = markedNames.filter((name: string) => !remoteNames.has(name));
+        // 保险丝：列表非空但过半标记图都"不见了"（且规模不小），更可能是服务端目录列表
+        // 返回了 stale/partial 数据（实测：删目录后路径缓存不同步，list 长时间报 Path not exist
+        // 或缺一大截），此时批量撤标记会造成大面积重传。宁可这轮不对账，也不误伤。
+        // 目录被真的清空（remoteNames 为空）不拦——那是用户明确的删除意图。
+        // 即便误放过 stale 数据导致重传，create session 撞"对象已存在"也会按已备份处理，能自愈。
+        const halfMarked = Math.floor(markedNames.length / 2);
+        if (remoteNames.size > 0 && gone.length > RECONCILE_SUSPICIOUS_GONE_COUNT && gone.length > halfMarked) {
+          AppLogger.warn(TAG, `[reconcile] suspicious listing: ${gone.length}/${markedNames.length} missing but dir has ${remoteNames.size} entries, skip dropping`);
+          return;
+        }
+        if (gone.length > 0) {
+          AppLogger.info(TAG, `[reconcile] ${gone.length}/${markedNames.length} marked photos missing remotely, dropping marks`);
+          this.dropBackupMarksByNames(new Set<string>(gone));
+        }
+      },
+      onFailure: (msg: string) => {
+        if (this.isNotFoundError(msg)) {
+          // 整个备份目录已被删：全部标记撤销。其它失败（网络/权限）保守不动，避免误清触发重复上传。
+          AppLogger.info(TAG, `[reconcile] backup dir gone, dropping all ${markedNames.length} marks: ${msg}`);
+          this.dropBackupMarksByNames(new Set<string>(markedNames));
+        } else {
+          AppLogger.info(TAG, `[reconcile] skipped: ${msg}`);
+        }
+      }
+    });
   }
 
   // 撤销「这些文件名」对应图的已备份标记：本地仍在 → 转“待备份”（可重新备份）；仅云端图（唯一副本在云端）→ 整条移除。
@@ -1956,6 +2035,13 @@ export struct TabPictures {
   }
 
   startBackup(retryFailedOnly: boolean = false): void {
+    // 已有一轮在跑时绝不再叠一轮：worker 是按轮起的（每轮 uploadConcurrent 个），
+    // 叠轮会让并发翻倍（设 5 显示 10），还会 resetBackupQueue 清掉当前轮进度、
+    // shouldPauseBackup=false 抹掉用户的暂停请求。自动路径 maybeAutoBackup 已有同款守卫。
+    if (this.isBackupRunning()) {
+      showToast('备份正在进行中');
+      return;
+    }
     if (!this.getSettingsEnabled()) {
       showToast('请在「我的 - 相册备份」中开启备份或选择路径');
       return;
@@ -2108,6 +2194,11 @@ export struct TabPictures {
           this.backupState = this.waitingPhotoCount > 0 ? PhotoBackupState.IDLE : PhotoBackupState.COMPLETED;
         });
       }
+      // 本轮进行中被转入 WAITING 的图（如点了"失败·重试"）：收尾后让自动备份接上。
+      // maybeAutoBackup 自带 [autoBackup 开关/网络/BACKING_UP] 守卫，不会叠轮、不会在关自动时打扰。
+      if (this.waitingPhotoCount > 0) {
+        this.scheduleAutoBackup();
+      }
     } finally {
       this.remotePhotoNameCache = null;
     }
@@ -2229,7 +2320,9 @@ export struct TabPictures {
           resolve(names);
         },
         onFailure: (msg: string) => {
-          console.info(TAG, `load remote photo names skipped: ${msg}`);
+          // 空 Set 会让 remotePhotoExists 预检全部落空——已在云端的图将重复 create session。
+          // 有 40004 幂等兜底不会假失败，但这里必须留痕，方便定位服务端列表异常。
+          AppLogger.warn(TAG, `load remote photo names failed (dedup degraded): ${msg}`);
           resolve(new Set<string>());
         }
       });
@@ -2248,7 +2341,7 @@ export struct TabPictures {
           resolve(map);
         },
         onFailure: (msg: string) => {
-          console.info(TAG, `load remote photo map skipped: ${msg}`);
+          AppLogger.warn(TAG, `load remote photo map failed: ${msg}`);
           resolve(new Map<string, ObjectInfo>());
         }
       });
@@ -2370,6 +2463,12 @@ export struct TabPictures {
   retryFailedPhotos(): void {
     this.getFailedItems().forEach((it: PhotoBackupItem) =>
       this.setPhotoStatus(it, PhotoBackupStatus.WAITING, 0, ''));
+    // 备份进行中只做状态转换、不叠轮（startBackup 的守卫也会拒，但那条 toast 文案不贴场景）。
+    // 转成 WAITING 的图由本轮收尾时的 scheduleAutoBackup 自动接上；自动备份关闭时用户手点"立即备份"。
+    if (this.isBackupRunning()) {
+      showToast('已转入待备份，本轮备份完成后继续');
+      return;
+    }
     this.startBackup();
   }
 
@@ -2650,6 +2749,9 @@ export struct TabPictures {
     try {
       // 下拉刷新做全量扫描：重建列表、反映本地新增/删除；silent 不弹 toast、不改备份状态。
       await this.scanLocalPhotos(true, true);
+      // 手动刷新是用户明确的"给我最新状态"，远端对账绕过节流强制来一次，
+      // 让网页端删掉的备份立刻反映成"待备份"。
+      this.reconcileRemoteBackupMarks(true);
     } finally {
       this.isRefreshing = false;
     }

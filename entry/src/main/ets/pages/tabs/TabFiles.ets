@@ -3016,6 +3016,7 @@ export struct TabFiles {
               this.dataSourceDelete()
               this.exitMultiSelectMode()
               this.recordBackupRemoved(selected.filter((f: ObjectInfo) => f.type !== Constant.OBJECT_DIR_TYPE).map((f: ObjectInfo) => f.name))
+              this.recordBackupDirRemoved(dirPaths)
               showToast($r('app.string.delete_success'))
             },
             onFailure: (msg) => {
@@ -3374,6 +3375,14 @@ export struct TabFiles {
     }
   }
 
+  // App 内删掉整个目录后：若删的目录就是备份目录或其祖先，置全量撤销标志——
+  // 相册变为活动时一次性把所有"已备份"云朵撤掉，不用等逐张点开单点核查。
+  private recordBackupDirRemoved(dirPaths: string[]): void {
+    if (dirPaths.some((p: string) => PhotoBackupSettingsStore.coversBackupPath(p))) {
+      PhotoBackupSettingsStore.markRemoteRemovedAll()
+    }
+  }
+
   private basename(path: string): string {
     const idx = path.lastIndexOf('/')
     return idx >= 0 ? path.substring(idx + 1) : path
@@ -3395,6 +3404,7 @@ export struct TabFiles {
               if (item.type == Constant.OBJECT_DIR_TYPE) {
                 this.dirDataSource.deleteData(index)
                 this.isGridPadding = this.getFolderPaddingCount() > 0
+                this.recordBackupDirRemoved(dirPaths)
               } else {
                 this.fileDataSource.deleteData(index)
                 this.recordBackupRemoved([item.name])

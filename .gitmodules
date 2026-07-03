@@ -1,3 +1,3 @@
 [submodule "cloudreve-api-native"]
 	path = cloudreve-api-native
-	url = https://gitea.dreamflytech.com/wangxian/cloudreve-api-native.git
+	url = ../cloudreve-api-native.git

@@ -43,8 +43,11 @@ import { Uploads } from "../../components/Uploads";
 import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
 
 const TAG = 'TabFiles';
-const FILE_THUMB_MAX_CONCURRENT: number = 2
+const FILE_THUMB_MAX_CONCURRENT: number = 4
 const FILE_THUMB_QUEUE_DELAY_MS: number = 500
+// 队列封顶：快速滑过大量图片时只保留最近出现的请求，被丢弃的项重新上屏时
+// 会经 LazyDataSource.getData → onDataGet 再次入队，不会漏加载
+const FILE_THUMB_QUEUE_MAX: number = 64
 const FILE_SHARE_REFRESH_DELAY_MS: number = 650
 
 // Lifecycle phase of a bindSheet, driven by its
@@ -1131,6 +1134,9 @@ export struct TabFiles {
       return
     }
     this.thumbQueue.push(item)
+    if (this.thumbQueue.length > FILE_THUMB_QUEUE_MAX) {
+      this.thumbQueue.shift()
+    }
     this.scheduleThumbQueue()
   }
 
@@ -1152,7 +1158,9 @@ export struct TabFiles {
       return
     }
     while (this.activeThumbLoads < FILE_THUMB_MAX_CONCURRENT && this.thumbQueue.length > 0) {
-      const item = this.thumbQueue.shift()
+      // LIFO：最新入队的（≈当前屏幕正在显示的）优先加载，避免快速滑动后
+      // 当前页被此前滑过的几百个排队请求阻塞
+      const item = this.thumbQueue.pop()
       if (!item) {
         continue
       }

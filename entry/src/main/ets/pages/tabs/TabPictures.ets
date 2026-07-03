@@ -62,6 +62,10 @@ const REMOTE_RECONCILE_MIN_INTERVAL_MS: number = 2 * 60 * 1000;
 const RECONCILE_SUSPICIOUS_GONE_COUNT: number = 20;
 const BACKUP_GRID_REFRESH_MS: number = 1500;
 const GRID_SCROLL_QUIET_MS: number = 400;
+// 云端缩略图 LIFO 限流队列：最新出现的（≈当前屏幕）优先加载，超出上限丢最旧，
+// 被丢项重新上屏时会经 onRequestThumb/onDataGet 再次入队；本地缩略图走媒体库，不限流。
+const CLOUD_THUMB_MAX_CONCURRENT: number = 4;
+const CLOUD_THUMB_QUEUE_MAX: number = 64;
 
 class PhotoBackupThumbnailCache {
   static data: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -143,6 +147,8 @@ export struct TabPictures {
   private photoCopyQueue: Promise<void> = Promise.resolve();
   private photoAssetCache: Map<string, photoAccessHelper.PhotoAsset> = new Map<string, photoAccessHelper.PhotoAsset>();
   private thumbnailLoadingIds: Set<string> = new Set<string>();
+  private cloudThumbQueue: PhotoBackupItem[] = [];
+  private activeCloudThumbLoads: number = 0;
   private autoScanTimer: number = -1;
   private stalePhotoRefreshTimer: number = -1;
   private mediaChangeRegistered: boolean = false;
@@ -594,12 +600,12 @@ export struct TabPictures {
     if (this.hasPhotoThumbnail(item) || this.thumbnailLoadingIds.has(loadingId)) {
       return;
     }
+    if (!item.localExists) {
+      this.enqueueCloudThumbnail(item);
+      return;
+    }
     this.thumbnailLoadingIds.add(loadingId);
     try {
-      if (!item.localExists) {
-        await this.loadCloudThumbnail(item);
-        return;
-      }
       const size: image.Size = {
         width: CloudThemeToken.photoBackupThumbnailSize,
         height: CloudThemeToken.photoBackupThumbnailSize
@@ -626,6 +632,46 @@ export struct TabPictures {
       this.thumbnailLoadingIds.delete(loadingId);
       this.thumbnailLoadingIds.delete(item.id);
     }
+  }
+
+  private enqueueCloudThumbnail(item: PhotoBackupItem): void {
+    if (!item.remoteFileId) {
+      return;
+    }
+    if (this.cloudThumbQueue.find((queued: PhotoBackupItem) => queued.id === item.id)) {
+      return;
+    }
+    this.cloudThumbQueue.push(item);
+    if (this.cloudThumbQueue.length > CLOUD_THUMB_QUEUE_MAX) {
+      this.cloudThumbQueue.shift();
+    }
+    this.processCloudThumbQueue();
+  }
+
+  private processCloudThumbQueue(): void {
+    while (this.activeCloudThumbLoads < CLOUD_THUMB_MAX_CONCURRENT && this.cloudThumbQueue.length > 0) {
+      const item = this.cloudThumbQueue.pop();
+      if (!item) {
+        continue;
+      }
+      if (this.hasPhotoThumbnail(item) || this.thumbnailLoadingIds.has(item.id)) {
+        continue;
+      }
+      this.activeCloudThumbLoads++;
+      this.thumbnailLoadingIds.add(item.id);
+      this.loadCloudThumbnail(item).then(() => {
+        this.finishCloudThumbLoad(item);
+      }, (err: Error) => {
+        AppLogger.warn(TAG, `load cloud thumbnail failed: name=${item.name}, error=${err?.message ?? err}`);
+        this.finishCloudThumbLoad(item);
+      });
+    }
+  }
+
+  private finishCloudThumbLoad(item: PhotoBackupItem): void {
+    this.thumbnailLoadingIds.delete(item.id);
+    this.activeCloudThumbLoads = Math.max(0, this.activeCloudThumbLoads - 1);
+    this.processCloudThumbQueue();
   }
 
   // 仅云端图：用云端缩略图 url 下载成 PixelMap，复用本地缩略图的展示通道（photoBackupThumbs）。

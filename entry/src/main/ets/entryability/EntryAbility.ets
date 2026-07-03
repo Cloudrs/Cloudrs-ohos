@@ -8,6 +8,7 @@ import TransferDatabase from '../model/TransferDatabase';
 import UserPreferences from '../model/UserPreferences';
 import { AvatarUtil } from '../utils/AvatarUtil';
 import { AppLockUtil } from '../utils/AppLockUtil';
+import { AppBoot } from '../utils/AppBoot';
 import AppLogger from '../utils/AppLogger';
 import { VERSION_NAME } from 'BuildProfile';
 
@@ -21,49 +22,32 @@ export default class EntryAbility extends UIAbility {
   }
 
   async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
-    let windowClass: window.Window | undefined = undefined
-
-    // 全屏及获取规避区域高度
-    try {
-      windowClass = windowStage.getMainWindowSync()
-      const uiContext = windowClass.getUIContext()
-      let bottomRectHeight = windowClass
-        .getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
-        .bottomRect.height
-      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, uiContext.px2vp(bottomRectHeight))
-      let topRectHeight = windowClass
-        .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
-        .topRect.height
-      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, uiContext.px2vp(topRectHeight))
-      await this.applyImmersiveSystemBars(windowClass, Constant.APP_THEME_LIGHT)
-    } catch (err) {
-      hilog.error(0x0000, 'testTag', 'Failed to initialize window layout. Cause: %{public}s', JSON.stringify(err) ?? '');
-      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, 0)
-      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, 0)
+    const t0 = Date.now()
+    let tPrev = t0
+    const perfMark = (label: string): void => {
+      const now = Date.now()
+      hilog.info(0x0000, 'bootPerf', '%{public}s +%{public}d ms (total %{public}d ms)', label, now - tPrev, now - t0)
+      tPrev = now
     }
-    AppStorage.setOrCreate(Constant.APP_VERSION, VERSION_NAME)
-
-    // Main window is created, set main page for this ability
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
 
-    // 初始化用户加密首选项
-    UserPreferences.init(this.context, Constant.USER_PREFERENCES)
-    AppLockUtil.setMainWindow(windowClass)
-    AppLockUtil.resetSession()
-    AvatarUtil.init(this.context)
-    AppLogger.init(this.context)
-    AppLogger.info('EntryAbility', `app start, version=${VERSION_NAME}`)
-    this.logBootSnapshot(windowClass)
-    const themeMode = this.applySavedThemeMode()
-    if (windowClass) {
-      await this.applyImmersiveSystemBars(windowClass, themeMode)
+    let windowClass: window.Window | undefined = undefined
+    try {
+      windowClass = windowStage.getMainWindowSync()
+    } catch (err) {
+      hilog.error(0x0000, 'testTag', 'getMainWindowSync failed. Cause: %{public}s', JSON.stringify(err) ?? '');
     }
 
-    // 初始化用户信息数据库
-    await UserDatabase.init(this.context)
-    await TransferDatabase.init(this.context)
-    this.prepareActiveAvatarCache()
+    // 首帧前只做必须项：主题（避免暗色模式闪白）与沉浸式系统栏（不 await，IPC 与首帧并行）
+    UserPreferences.init(this.context, Constant.USER_PREFERENCES)
+    const themeMode = this.applySavedThemeMode()
+    if (windowClass) {
+      this.applyImmersiveSystemBars(windowClass, themeMode)
+    }
+    AppStorage.setOrCreate(Constant.APP_VERSION, VERSION_NAME)
+    perfMark('preLoadContent')
 
+    // 尽早 loadContent 触发首帧，其余初始化移到其后；依赖方通过 AppBoot.whenReady() 等待
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
@@ -71,6 +55,48 @@ export default class EntryAbility extends UIAbility {
       }
       hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
     });
+    perfMark('loadContent dispatched')
+
+    try {
+      this.publishWindowInsets(windowClass)
+      AppLockUtil.setMainWindow(windowClass)
+      AppLockUtil.resetSession()
+      AvatarUtil.init(this.context)
+      AppLogger.init(this.context)
+      AppLogger.info('EntryAbility', `app start, version=${VERSION_NAME}`)
+      this.logBootSnapshot(windowClass)
+      perfMark('sync init')
+      await UserDatabase.init(this.context)
+      perfMark('UserDatabase.init')
+      await TransferDatabase.init(this.context)
+      perfMark('TransferDatabase.init')
+      this.prepareActiveAvatarCache()
+    } finally {
+      AppBoot.markReady()
+      perfMark('bootReady')
+    }
+  }
+
+  private publishWindowInsets(windowClass: window.Window | undefined): void {
+    try {
+      if (!windowClass) {
+        throw new Error('main window unavailable')
+      }
+      const uiContext = windowClass.getUIContext()
+      const bottomRectHeight = windowClass
+        .getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
+        .bottomRect.height
+      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, uiContext.px2vp(bottomRectHeight))
+      const topRectHeight = windowClass
+        .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
+        .topRect.height
+      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, uiContext.px2vp(topRectHeight))
+    } catch (err) {
+      // 早期窗口可能未就绪（1300002）；Index.publishWindowSize 会兜底刷新
+      hilog.error(0x0000, 'testTag', 'Failed to initialize window layout. Cause: %{public}s', JSON.stringify(err) ?? '');
+      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, 0)
+      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, 0)
+    }
   }
 
   onWindowStageDestroy(): void {

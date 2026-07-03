@@ -3,6 +3,7 @@ import { LoginParam } from '../model/net/LoginParam';
 import { FileSearchParam, ImagePreview, PhotoLocalPreviewParam, VideoPreview } from '../model/Params';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudRouter } from '../utils/CloudRouter';
+import { AppBoot } from '../utils/AppBoot';
 import { HomePage } from './HomePage';
 import { LoginPage } from './LoginPage';
 import { ImagePreviewPage } from './ImagePreview';
@@ -55,11 +56,12 @@ struct Index {
     );
     if (!this.startPageScheduled) {
       this.startPageScheduled = true;
-      setTimeout(() => {
+      // 登录态判定依赖 UserDatabase，等首帧后的延迟初始化完成再决策启动页
+      AppBoot.whenReady().then(() => {
         if (this.pathStack.size() === 0) {
           CloudRouter.showStartPage();
         }
-      }, 0);
+      });
     }
   }
 

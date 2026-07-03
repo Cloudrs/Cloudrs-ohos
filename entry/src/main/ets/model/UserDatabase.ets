@@ -34,14 +34,19 @@ class UserDatabase {
         AppLogger.error('UserDatabase', `创建用户表失败, 错误：${JSON.stringify(err)}`)
         return
       }
-      // 迁移：为旧表添加 refresh_token 列（已存在则忽略）
-      try {
-        this.rdbStore.executeSync(`ALTER TABLE ${this.usersTable} ADD COLUMN refresh_token TEXT DEFAULT ''`)
-      } catch (_) {}
-      try {
-        this.rdbStore.executeSync(`UPDATE ${this.usersTable} SET password = '' WHERE password != ''`)
-      } catch (err) {
-        AppLogger.error('UserDatabase', `清理历史密码失败, 错误：${JSON.stringify(err)}`)
+      // 迁移按 schema 版本只执行一次，避免每次启动都抛 ALTER 异常、跑全表 UPDATE
+      const schemaVersion = 2
+      if (this.rdbStore.version < schemaVersion) {
+        // 为旧表添加 refresh_token 列（已存在则忽略）
+        try {
+          this.rdbStore.executeSync(`ALTER TABLE ${this.usersTable} ADD COLUMN refresh_token TEXT DEFAULT ''`)
+        } catch (_) {}
+        try {
+          this.rdbStore.executeSync(`UPDATE ${this.usersTable} SET password = '' WHERE password != ''`)
+        } catch (err) {
+          AppLogger.error('UserDatabase', `清理历史密码失败, 错误：${JSON.stringify(err)}`)
+        }
+        this.rdbStore.version = schemaVersion
       }
     } catch (e) {
       AppLogger.error('UserDatabase', `数据库${this.dbName}初始化失败, 错误：${e}`)

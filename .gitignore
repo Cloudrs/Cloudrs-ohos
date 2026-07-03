@@ -18,4 +18,5 @@
 # 本地临时文件 / 图标备份,不入库
 /tmp/
 # superpowers 生成的开发计划 / 设计文档,本地保留不入库
-/docs/superpowers/
+/docs/superpowers/# Claude Code 项目说明,本地保留不入库
+/CLAUDE.md

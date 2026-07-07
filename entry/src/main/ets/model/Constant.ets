@@ -3,6 +3,8 @@
  * 通用常量类
  */
 class Constant {
+  APP_DISPLAY_NAME = 'Cloudrs'
+
   USER_PREFERENCES = 'UserPreference'
 
   ACTIVE_USER_KEY = 'ActiveUser'
@@ -56,6 +58,9 @@ class Constant {
   ARIA2_MIN_UPDATE_INTERVAL_SECONDS: number = 3
 
   TOAST_DEFAULT_DURATION_MS: number = 1500
+
+  // 含路径等较长内容的提示用 3 秒，给用户留够阅读时间
+  TOAST_LONG_DURATION_MS: number = 3000
 
   TOAST_TIPS_DEFAULT_DURATION_MS: number = 3000
 
@@ -124,6 +129,8 @@ class Constant {
   APP_VERSION: string = 'appVersion'
 
   NAV_BOTTOM_RECT_HEIGHT: string = 'navBottomRectHeight'
+
+  KEYBOARD_HEIGHT_VP: string = 'keyboardHeightVp'
 
   TAB_BAR_HEIGHT: string = 'tabBarHeight'
 

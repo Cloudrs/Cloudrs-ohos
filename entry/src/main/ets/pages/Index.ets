@@ -30,6 +30,7 @@ struct Index {
   private startPageScheduled: boolean = false;
   private mainWindow: window.Window | undefined = undefined;
   private windowSizeListener: ((size: window.Size) => void) | undefined = undefined;
+  private keyboardHeightListener: ((heightPx: number) => void) | undefined = undefined;
 
   aboutToAppear(): void {
     this.setupWindowMetrics();
@@ -72,8 +73,15 @@ struct Index {
       } catch (_) {
       }
     }
+    if (this.mainWindow && this.keyboardHeightListener) {
+      try {
+        this.mainWindow.off('keyboardHeightChange', this.keyboardHeightListener);
+      } catch (_) {
+      }
+    }
     this.mainWindow = undefined;
     this.windowSizeListener = undefined;
+    this.keyboardHeightListener = undefined;
   }
 
   private setupWindowMetrics(): void {
@@ -92,6 +100,16 @@ struct Index {
         win.on('windowSizeChange', listener);
       } catch (err) {
         AppLogger.warn('Index', `register windowSizeChange failed: ${(err as Error)?.message ?? err}`);
+      }
+      // 键盘高度进 AppStorage，输入类弹窗据此手动避让（bindSheet 单挡 FIT_CONTENT 时系统避让只保证光标可见）
+      const kbListener: (heightPx: number) => void = (heightPx: number) => {
+        AppStorage.setOrCreate(Constant.KEYBOARD_HEIGHT_VP, this.getUIContext().px2vp(heightPx));
+      };
+      this.keyboardHeightListener = kbListener;
+      try {
+        win.on('keyboardHeightChange', kbListener);
+      } catch (err) {
+        AppLogger.warn('Index', `register keyboardHeightChange failed: ${(err as Error)?.message ?? err}`);
       }
     }).catch((err: Error) => {
       AppLogger.warn('Index', `getLastWindow failed: ${err.message}`);

@@ -43,6 +43,10 @@ import { Uploads } from "../../components/Uploads";
 import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
 
 const TAG = 'TabFiles';
+const INPUT_SHEET_TEXT_ID = 'tabFilesInputSheetText';
+// bindSheet onAppear（入场动画结束）之后再等一小段，确保焦点系统就绪
+const INPUT_SHEET_SELECTION_DELAY = 100;
+const DOWNLOAD_FAIL_TOAST_INTERVAL_MS = 2000;
 const FILE_THUMB_MAX_CONCURRENT: number = 4
 const FILE_THUMB_QUEUE_DELAY_MS: number = 500
 // 队列封顶：快速滑过大量图片时只保留最近出现的请求，被丢弃的项重新上屏时
@@ -194,6 +198,7 @@ export struct TabFiles {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  @StorageProp(Constant.KEYBOARD_HEIGHT_VP) keyboardHeightVp: number = 0;
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true;
   @StorageLink(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
@@ -266,6 +271,8 @@ export struct TabFiles {
   private lastHeaderScrollOffset: number = 0
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
+  private inputTextController: TextInputController = new TextInputController()
+  private lastDownloadFailToastAt: number = 0
   private inputNewPath: string = '/'
   private inputNewIsDir: boolean = true
   private thumbLoadingIds: Set<string> = new Set<string>()
@@ -1461,6 +1468,9 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             title: { title: this.inputTitle },
             showClose: true,
+            // 单挡 FIT_CONTENT 下系统避让只保证光标可见，按钮仍被键盘挡住；
+            // 改为关闭系统避让，由内容 padding 跟随键盘高度手动避让（见 inputSheetBuilder）
+            keyboardAvoidMode: SheetKeyboardAvoidMode.NONE,
             backgroundColor: CloudThemeToken.background,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
@@ -1470,6 +1480,8 @@ export struct TabFiles {
             onAppear: () => {
               this.markSheetVisible()
               this.inputSheetCtrl.onAppear()
+              // 入场动画结束后再聚焦拉起键盘，动画期间弹键盘会错过 sheet 的避让时机
+              this.applyInputSheetSelection()
             },
             onWillDisappear: () => {
               this.inputSheetCtrl.onWillDisappear()
@@ -2252,7 +2264,7 @@ export struct TabFiles {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      TextInput({ text: this.inputValue, placeholder: this.inputPlaceholder })
+      TextInput({ text: this.inputValue, placeholder: this.inputPlaceholder, controller: this.inputTextController })
         .width('100%')
         .height(CloudThemeToken.rowHeight2xl)
         .fontSize(CloudThemeToken.textSizeLarge)
@@ -2262,6 +2274,7 @@ export struct TabFiles {
         .borderRadius(CloudThemeToken.controlRadius)
         .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
         .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
+        .id(INPUT_SHEET_TEXT_ID)
         .onChange((value: string) => {
           this.inputValue = value
         })
@@ -2303,7 +2316,10 @@ export struct TabFiles {
       left: CloudThemeToken.spacingSheetHorizontal,
       right: CloudThemeToken.spacingSheetHorizontal,
       top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin + CloudThemeToken.spacingSheetBottom
+      // 键盘弹出时内容随键盘高度长高（FIT_CONTENT 面板随之抬升），收起时回落到常规底部留白
+      bottom: this.keyboardHeightVp > 0
+        ? this.keyboardHeightVp + CloudThemeToken.spacingSheetBottom
+        : this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin + CloudThemeToken.spacingSheetBottom
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
@@ -2945,6 +2961,31 @@ export struct TabFiles {
     this.openPathSelectSheet()
   }
 
+  // 沙箱/公共目录路径转为用户可读的保存位置，
+  // 如 /storage/Users/currentUser/Download/com.dreamflytech.cloudrs → 下载/Cloudrs
+  private formatDownloadDirForDisplay(path: string, stripFileName: boolean = false): string {
+    let dir = path
+    if (stripFileName) {
+      const slash = dir.lastIndexOf('/')
+      if (slash > 0) {
+        dir = dir.substring(0, slash)
+      }
+    }
+    const userPrefix = '/storage/Users/currentUser/'
+    if (dir.startsWith(userPrefix)) {
+      dir = dir.substring(userPrefix.length)
+    }
+    if (dir === 'Download' || dir.startsWith('Download/')) {
+      dir = '下载' + dir.substring('Download'.length)
+    }
+    const context = this.getAbilityContext()
+    const bundleName = context?.applicationInfo?.name ?? ''
+    if (bundleName.length > 0) {
+      dir = dir.replace(bundleName, Constant.APP_DISPLAY_NAME)
+    }
+    return dir
+  }
+
   private downloadSelectedObjects(): void {
     if (this.selectedObjects.length === 0) {
       return
@@ -2981,7 +3022,8 @@ export struct TabFiles {
           this.enqueueDownloadTask(context, item, filePath)
         })
         this.exitMultiSelectMode()
-        showToast(`已添加${selectedFiles.length}个下载任务`)
+        showToast(`已添加${selectedFiles.length}个下载任务，保存至 ${this.formatDownloadDirForDisplay(
+          FileSystemUtil.getPathFromUri(targetDirUri))}`, Constant.TOAST_LONG_DURATION_MS)
       }).catch((err: BusinessError) => {
         AppLogger.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`)
       })
@@ -3061,6 +3103,25 @@ export struct TabFiles {
     this.inputRenameIndex = index
     this.inputRenameItem = item
     this.openInputSheet()
+  }
+
+  // 入场动画结束后聚焦拉起键盘；重命名时默认只选中主文件名，
+  // 避免连扩展名一起改掉，目录或无扩展名时全选
+  private applyInputSheetSelection(): void {
+    setTimeout(() => {
+      try {
+        this.getUIContext().getFocusController().requestFocus(INPUT_SHEET_TEXT_ID)
+      } catch (err) {
+        AppLogger.warn(TAG, 'requestFocus input sheet failed: ' + JSON.stringify(err))
+      }
+      if (this.inputMode !== FileInputMode.RENAME) {
+        return
+      }
+      const isFile = this.inputRenameItem?.type !== Constant.OBJECT_DIR_TYPE
+      const dotIndex = this.inputValue.lastIndexOf('.')
+      const selectionEnd = (isFile && dotIndex > 0) ? dotIndex : this.inputValue.length
+      this.inputTextController.setTextSelection(0, selectionEnd)
+    }, INPUT_SHEET_SELECTION_DELAY)
   }
 
   itemNew(path: string, isDir: boolean) {
@@ -3776,6 +3837,12 @@ export struct TabFiles {
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, 'get download uri failed, msg: ' + msg)
+        // 批量下载时多个任务可能同时失败，节流避免连环弹窗
+        const now = new Date().getTime()
+        if (now - this.lastDownloadFailToastAt > DOWNLOAD_FAIL_TOAST_INTERVAL_MS) {
+          this.lastDownloadFailToastAt = now
+          showToast(`${item.name} 获取下载链接失败`)
+        }
       }
     })
   }
@@ -3844,6 +3911,7 @@ export struct TabFiles {
         let filePath = FileSystemUtil.getPathFromUri(documentSaveResult[Constant.FIRST_ARRAY_INDEX] + '/' + item.name);
         console.debug(TAG, 'documentViewPicker.save to file succeed and uris are:' + filePath);
         this.enqueueDownloadTask(context, item, filePath)
+        showToast(`已开始下载，保存至 ${this.formatDownloadDirForDisplay(filePath, true)}`, Constant.TOAST_LONG_DURATION_MS)
       }).catch((err: BusinessError) => {
         AppLogger.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`);
       })

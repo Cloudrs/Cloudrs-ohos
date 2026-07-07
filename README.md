@@ -22,7 +22,7 @@ Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **H
 ```
 ┌──────────────────────────────────────────┐
 │  ArkTS UI (entry)                        │
-│  · @hadss/hmrouter 页面导航               │
+│  · 自研 CloudRouter（NavPathStack）导航    │
 │  · @ObservedV2/@Trace 响应式状态          │
 │  · relationalStore + sendablePreferences │
 ├──────────────────────────────────────────┤
@@ -56,19 +56,7 @@ Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **H
 
 1. **配置签名**：复制 `build-profile.json5.template` 为 `build-profile.json5`，在 DevEco Studio 的 *File > Project Structure > Signing Configs* 中配置签名（真实签名文件已被 `.gitignore` 忽略，请勿提交）。
 
-2. **安装依赖并构建**：
-
-   ```bash
-   ohpm install
-
-   # Debug 构建
-   ./hvigorw assembleHap
-
-   # Release 构建
-   ./hvigorw assembleHap --mode release
-   ```
-
-   命令行构建时如提示 SDK 组件缺失，请将环境变量 `DEVECO_SDK_HOME` 指向 DevEco Studio 自带的 SDK 目录。
+2. **构建**：在 DevEco Studio 中打开项目，通过 *Build > Build Hap(s)/APP(s)* 构建（项目未包含 `hvigorw` 命令行包装器，使用 IDE 自带的 hvigor 集成即可）。项目无第三方 ohpm 依赖。
 
 3. **（可选）重新编译 Rust native 层**：`entry/libs/` 中已包含预编译的 `.so`，日常开发无需 Rust 环境。如需修改 native 代码，进入 `cloudreve-api-native/` 执行 `build-ohos.ps1`（依赖本地的 `cloudreve-api` crate）。
 
@@ -80,4 +68,4 @@ Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **H
 ## 致谢
 
 - [Cloudreve](https://github.com/cloudreve/Cloudreve) — 优秀的开源云存储程序
-- [@hadss/hmrouter](https://gitee.com/hadss/hmrouter)、[@pura/harmony-utils](https://gitee.com/tongyuyan/harmony-utils) 等开源组件
+- [napi-rs](https://napi.rs/)、[reqwest](https://github.com/seanmonstar/reqwest)、[tokio](https://tokio.rs/) 等 Rust 开源组件（完整列表见 [第三方组件声明](THIRD_PARTY_NOTICES.md)）

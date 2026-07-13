@@ -192,6 +192,9 @@ export struct PhotoGalleryGrid {
       bottom: this.bottomInset + CloudThemeToken.spacingPage
     })
     .cachedCount(3)
+    // List 默认按内容区(CONTENT_ONLY)裁剪,底部 padding 区域会裁掉内容;
+    // 改为按组件区域裁剪,让照片滚动时能透过悬浮 tabBar 显示(与 Grid 默认行为一致)。
+    .clipContent(ContentClipMode.BOUNDARY)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .onAreaChange((_o: Area, n: Area) => {

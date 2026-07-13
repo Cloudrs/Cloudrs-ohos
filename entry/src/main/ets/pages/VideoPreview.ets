@@ -10,8 +10,11 @@ import { window } from "@kit.ArkUI";
 import { deviceInfo } from "@kit.BasicServicesKit";
 import { harmonyShare } from "@kit.ShareKit";
 import { KnockShareUtil } from "../utils/KnockShareUtil";
+import { KeyCode } from "@kit.InputKit";
 
 const TAG: string = 'VideoPreview'
+// 键盘 ←/→ 单次快退/快进秒数(PC/2in1 外接键盘场景)
+const KEYBOARD_SEEK_STEP_SECONDS: number = 5
 const videoDownloadUriCache: Map<string, string> = new Map<string, string>()
 
 @Component
@@ -259,6 +262,24 @@ export struct VideoPreviewPage {
       .width('100%')
       .layoutWeight(1)
       .backgroundColor(CloudThemeToken.previewBackground)
+      // PC/2in1 键盘控制。←/→ 用 keyboardShortcut:不依赖焦点,挂树即响应。
+      .keyboardShortcut(FunctionKey.DPAD_LEFT, [], () => {
+        this.keyboardSeek(-KEYBOARD_SEEK_STEP_SECONDS)
+      })
+      .keyboardShortcut(FunctionKey.DPAD_RIGHT, [], () => {
+        this.keyboardSeek(KEYBOARD_SEEK_STEP_SECONDS)
+      })
+      // 空格/F 无法绑定 keyboardShortcut(字符键必须带修饰键),走 onKeyEvent,
+      // 依赖焦点:onAppear 后主动抓焦,点击视频区域焦点回到本容器。
+      .id('videoKeyRoot')
+      .focusable(true)
+      .focusOnTouch(true)
+      .onKeyEvent((event?: KeyEvent) => {
+        this.handleKeyEvent(event)
+      })
+      .onAppear(() => {
+        this.grabKeyFocus()
+      })
     }
     .width('100%')
     .height('100%')
@@ -473,6 +494,44 @@ export struct VideoPreviewPage {
       CloudThemeToken.videoPreviewControlIconSize, () => {
       this.toggleFullscreen()
     })
+  }
+
+  // 按键事件派发依赖焦点链,页面出现后把焦点主动请求到根容器上(延迟等焦点系统就绪)
+  private grabKeyFocus(): void {
+    setTimeout(() => {
+      try {
+        this.getUIContext().getFocusController().requestFocus('videoKeyRoot')
+      } catch (err) {
+        AppLogger.warn(TAG, `request key focus failed: ${(err as Error)?.message ?? err}`)
+      }
+    }, 100)
+  }
+
+  private handleKeyEvent(event?: KeyEvent): void {
+    if (!event || event.type !== KeyType.Down) {
+      return
+    }
+    switch (event.keyCode) {
+      case KeyCode.KEYCODE_SPACE:
+      case KeyCode.KEYCODE_MEDIA_PLAY_PAUSE:
+        this.togglePlayback()
+        break
+      case KeyCode.KEYCODE_F:
+        this.toggleFullscreen()
+        break
+      default:
+        break
+    }
+  }
+
+  private keyboardSeek(deltaSeconds: number): void {
+    if (this.videoUrl.length <= CloudThemeToken.zero || this.isFailed || this.isLoading) {
+      return
+    }
+    const target = Math.max(CloudThemeToken.zero,
+      Math.min(this.currentTime + deltaSeconds, this.getSafeDuration()))
+    this.currentTime = target
+    this.commitSeek(target)
   }
 
   private togglePlayback(): void {

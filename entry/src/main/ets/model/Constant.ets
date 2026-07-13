@@ -217,6 +217,10 @@ class Constant {
 
   PRIVACY_SYSTEM_AUTH_ENABLED: string = 'privacy_system_auth_enabled';
 
+  KNOCK_SHARE_USE_SHARE_LINK: string = 'knock_share_use_share_link';
+  KNOCK_SHARE_EXPIRE_DAYS: string = 'knock_share_expire_days';
+  KNOCK_SHARE_PASSWORD_ENABLED: string = 'knock_share_password_enabled';
+
   APP_FOREGROUND_TICK: string = 'appForegroundTick';
 
   APP_LOCKED: string = 'appLocked';

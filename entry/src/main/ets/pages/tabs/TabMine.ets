@@ -118,6 +118,9 @@ export struct TabMine {
   private settingsRefreshTimer: number = -1
   @State showPhotoBackupPathSheet: boolean = false
   @State imageDraggableEnabled: boolean = false
+  @State knockUseShareLink: boolean = false
+  @State knockExpireDays: number = 1
+  @State knockPasswordEnabled: boolean = false
 
   aboutToAppear() {
     this.loadLocalPreferences()
@@ -160,6 +163,12 @@ export struct TabMine {
       Constant.IMAGE_DRAGGABLE_ENABLED,
       false
     ) as boolean
+    this.knockUseShareLink = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_USE_SHARE_LINK, false) as boolean
+    this.knockExpireDays = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_EXPIRE_DAYS, 1) as number
+    this.knockPasswordEnabled = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_PASSWORD_ENABLED, false) as boolean
     const pbSettings = PhotoBackupSettingsStore.load();
     // 把持久化的开关状态镜像进 AppStorage，供「相册备份」行的 PhotoBackupStatusText 子组件即时显示。
     PhotoBackupSettingsStore.mirror(pbSettings);
@@ -1441,8 +1450,14 @@ export struct TabMine {
         })
     }
     .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+    // 固定行高会在描述换行时挤压内容,改为最小高度 + 上下留白自适应
+    .constraintSize({ minHeight: CloudThemeToken.rowHeight4xl })
+    .padding({
+      left: CloudThemeToken.spacingPanel,
+      right: CloudThemeToken.spacingPanel,
+      top: CloudThemeToken.spacingMd,
+      bottom: CloudThemeToken.spacingMd
+    })
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
@@ -1457,6 +1472,19 @@ export struct TabMine {
         this.imageDraggableEnabled = v
         UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, v)
       })
+      this.settingSwitchRow('碰一碰使用分享链接', '未下载文件以分享链接发送',
+        this.knockUseShareLink, (v: boolean) => {
+          this.knockUseShareLink = v
+          UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_USE_SHARE_LINK, v)
+        })
+      if (this.knockUseShareLink) {
+        this.knockExpireRow()
+        this.settingSwitchRow('分享链接附带提取码', '随机提取码，碰完后弹提示',
+          this.knockPasswordEnabled, (v: boolean) => {
+            this.knockPasswordEnabled = v
+            UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_PASSWORD_ENABLED, v)
+          })
+      }
     }
     .width('100%')
     .padding({
@@ -1468,6 +1496,52 @@ export struct TabMine {
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .backgroundColor(CloudThemeToken.background)
+  }
+
+  @Builder knockExpireRow() {
+    Column({ space: CloudThemeToken.spacingMd }) {
+      Text('分享链接有效期')
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
+      Row({ space: CloudThemeToken.spacingMd }) {
+        this.knockExpireChip('1天', 1)
+        this.knockExpireChip('7天', 7)
+        this.knockExpireChip('30天', 30)
+        this.knockExpireChip('永久', 0)
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding(CloudThemeToken.spacingPanel)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .backgroundColor(CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+  }
+
+  @Builder knockExpireChip(title: string, days: number) {
+    Button({ type: ButtonType.Normal }) {
+      Text(title)
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.knockExpireDays === days ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
+        .textAlign(TextAlign.Center)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .height(CloudThemeToken.rowHeightMd)
+    .layoutWeight(1)
+    .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+    .backgroundColor(this.knockExpireDays === days ? CloudThemeToken.primary : CloudThemeToken.surface)
+    .border({
+      width: CloudThemeToken.lineWidth,
+      color: this.knockExpireDays === days ? CloudThemeToken.primary : CloudThemeToken.line
+    })
+    .onClick(() => {
+      this.knockExpireDays = days
+      UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_EXPIRE_DAYS, days)
+    })
   }
 
   private normalizeUploadConcurrent(raw: number): number {

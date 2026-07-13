@@ -5,7 +5,7 @@ import { ImagePreview, PreviewFile } from "../model/Params";
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from "@kit.MediaLibraryKit";
 import { showToast } from "../utils/ToastUtil";
-import { systemShare } from "@kit.ShareKit";
+import { harmonyShare, systemShare } from "@kit.ShareKit";
 import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
@@ -128,13 +128,63 @@ export struct ImagePreviewPage {
       Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
     this.loadImageAt(this.currentIndex)
     this.prefetchAround(this.currentIndex)
+    harmonyShare.on('knockShare', this.knockShareCallback)
   }
 
   aboutToDisappear(): void {
+    harmonyShare.off('knockShare', this.knockShareCallback)
     this.tempImageFiles.forEach((path: string) => {
       FileSystemUtil.unlinkIfExists(path)
     })
     this.tempImageFiles = []
+  }
+
+  private knockShareCallback = (sharableTarget: harmonyShare.SharableTarget): void => {
+    this.handleKnockShare(sharableTarget)
+  }
+
+  private async handleKnockShare(sharableTarget: harmonyShare.SharableTarget): Promise<void> {
+    const previewItem = this.getCurrentPreviewItem()
+    try {
+      const uri = await this.materializeCurrentImageUri()
+      if (!previewItem || uri.length === 0) {
+        // 当前图尚未加载完成,及时终止,避免对端长时间等待
+        await sharableTarget.reject(harmonyShare.SharableErrorCode.DOWNLOAD_ERROR)
+        return
+      }
+      const shareData: systemShare.SharedData = new systemShare.SharedData({
+        utd: uniformTypeDescriptor.UniformDataType.IMAGE,
+        title: previewItem.fileName,
+        uri: uri
+      })
+      await sharableTarget.share(shareData)
+    } catch (err) {
+      AppLogger.error(TAG, `knock share failed: ${(err as Error)?.message ?? err}`)
+    }
+  }
+
+  // 碰一碰分享需要文件 URI:动图直接复用已落盘的临时文件,静图把内存数据写入缓存目录。
+  private async materializeCurrentImageUri(): Promise<string> {
+    const previewItem = this.getCurrentPreviewItem()
+    if (!previewItem) {
+      return ''
+    }
+    const animatedUri = this.imageFileUris.get(previewItem.fileId)
+    if (animatedUri && animatedUri.length > 0) {
+      return animatedUri
+    }
+    const imageData = this.imageDataMap.get(previewItem.fileId)
+    const context = this.getAbilityContext()
+    if (!imageData || !context) {
+      return ''
+    }
+    const tempPath =
+      `${context.cacheDir}/knock_${CommonUtil.sanitizeAlbumTitle(previewItem.fileName)}.${previewItem.fileExtension}`
+    await FileSystemUtil.writeArrayBuffer(tempPath, imageData)
+    if (!this.tempImageFiles.includes(tempPath)) {
+      this.tempImageFiles.push(tempPath)
+    }
+    return FileSystemUtil.getUriFromPath(tempPath)
   }
 
   build() {

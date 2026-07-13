@@ -36,11 +36,14 @@ export class VideoPreview {
   fileName: string = ''
   fileId: string = ''
   fileExtension: string = ''
+  // 碰一碰创建分享链接用的规范化路径;为空则未下载场景回退分享下载直链
+  sharePath: string = ''
 
-  constructor(fileName: string, fileId: string, fileExtension: string) {
+  constructor(fileName: string, fileId: string, fileExtension: string, sharePath: string = '') {
     this.fileName = fileName
     this.fileId = fileId
     this.fileExtension = fileExtension
+    this.sharePath = sharePath
   }
 }
 

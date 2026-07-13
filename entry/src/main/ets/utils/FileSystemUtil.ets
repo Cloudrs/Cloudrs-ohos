@@ -65,6 +65,14 @@ export class FileSystemUtil {
     }
   }
 
+  static exists(path: string): boolean {
+    try {
+      return fs.accessSync(path);
+    } catch (_) {
+      return false;
+    }
+  }
+
   static async copyUriToPath(
     uri: string,
     targetPath: string,

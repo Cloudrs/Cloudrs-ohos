@@ -8,6 +8,8 @@ import AppLogger from "../utils/AppLogger";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { window } from "@kit.ArkUI";
 import { deviceInfo } from "@kit.BasicServicesKit";
+import { harmonyShare } from "@kit.ShareKit";
+import { KnockShareUtil } from "../utils/KnockShareUtil";
 
 const TAG: string = 'VideoPreview'
 const videoDownloadUriCache: Map<string, string> = new Map<string, string>()
@@ -51,12 +53,53 @@ export struct VideoPreviewPage {
     }
     this.prepareWindow()
     this.loadVideoUrl()
+    harmonyShare.on('knockShare', this.knockShareCallback)
   }
 
   aboutToDisappear(): void {
+    harmonyShare.off('knockShare', this.knockShareCallback)
     this.stopHoldSeek()
     this.setSystemBarsVisible(true)
     this.setOrientation(window.Orientation.UNSPECIFIED)
+  }
+
+  private knockShareCallback = (sharableTarget: harmonyShare.SharableTarget): void => {
+    this.handleKnockShare(sharableTarget)
+  }
+
+  // 分层策略:视频已下载完成则分享文件本体(对端存入图库),否则分享下载直链(对端浏览器在线看/下载)。
+  private async handleKnockShare(sharableTarget: harmonyShare.SharableTarget): Promise<void> {
+    try {
+      const param = this.fileParam
+      if (!param) {
+        await sharableTarget.reject(harmonyShare.SharableErrorCode.NO_CONTENT_ERROR)
+        return
+      }
+      const localUri = KnockShareUtil.findLocalDownloadUri(param.fileId)
+      if (localUri.length > 0) {
+        await sharableTarget.share(KnockShareUtil.buildFileShareData(param.fileName, localUri))
+        return
+      }
+      if (KnockShareUtil.useShareLink() && param.sharePath.length > 0) {
+        const link = await KnockShareUtil.createOrReuseShareLink(param.fileId, param.sharePath)
+        if (link) {
+          await sharableTarget.share(KnockShareUtil.buildLinkShareData(param.fileName, link.url, link.password))
+          if (link.password.length > 0) {
+            showToast(`分享链接提取码：${link.password}`)
+          }
+          return
+        }
+        // 创建分享链接失败,回退下载直链
+      }
+      if (this.videoUrl.length > 0) {
+        await sharableTarget.share(KnockShareUtil.buildLinkShareData(param.fileName, this.videoUrl))
+        return
+      }
+      // 直链尚未取到(加载中或失败),及时终止避免对端等待
+      await sharableTarget.reject(harmonyShare.SharableErrorCode.DOWNLOAD_ERROR)
+    } catch (err) {
+      AppLogger.error(TAG, `knock share failed: ${(err as Error)?.message ?? err}`)
+    }
   }
 
   build() {

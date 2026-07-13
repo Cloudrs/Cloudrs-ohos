@@ -7,6 +7,8 @@ import { DateFormatUtil } from '../utils/DateFormatUtil';
 import LazyDataSource from '../utils/LazyDataSource';
 import { common } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
+import { harmonyShare, systemShare } from '@kit.ShareKit';
+import { uniformTypeDescriptor } from '@kit.ArkData';
 import AppLogger from '../utils/AppLogger';
 import { CloudRouter } from '../utils/CloudRouter';
 import UserPreferences from '../model/UserPreferences';
@@ -41,11 +43,35 @@ export struct PhotoLocalPreviewPage {
     this.imageDraggable = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
     console.info(TAG, `preview count=${this.items.length} index=${this.index}`)
+    harmonyShare.on('knockShare', this.knockShareCallback)
   }
 
   aboutToDisappear(): void {
+    harmonyShare.off('knockShare', this.knockShareCallback)
     // Always restore system bars when leaving the immersive preview.
     this.setSystemBars(true)
+  }
+
+  private knockShareCallback = (sharableTarget: harmonyShare.SharableTarget): void => {
+    this.handleKnockShare(sharableTarget)
+  }
+
+  private async handleKnockShare(sharableTarget: harmonyShare.SharableTarget): Promise<void> {
+    const item = this.items[this.index]
+    try {
+      if (!item || item.uri.length === 0 || !item.localExists) {
+        await sharableTarget.reject(harmonyShare.SharableErrorCode.NO_CONTENT_ERROR)
+        return
+      }
+      const shareData: systemShare.SharedData = new systemShare.SharedData({
+        utd: uniformTypeDescriptor.UniformDataType.IMAGE,
+        title: item.name,
+        uri: item.uri
+      })
+      await sharableTarget.share(shareData)
+    } catch (err) {
+      AppLogger.error(TAG, `knock share failed: ${(err as Error)?.message ?? err}`)
+    }
   }
 
   private toggleChrome(): void {

@@ -16,7 +16,9 @@ import { CommonUtil, FileType } from "../../utils/CommonUtil";
 import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 import { common } from "@kit.AbilityKit";
-import { BusinessError, pasteboard, request } from "@kit.BasicServicesKit";
+import { BusinessError, deviceInfo, pasteboard, request } from "@kit.BasicServicesKit";
+import { uniformTypeDescriptor } from "@kit.ArkData";
+import { window } from "@kit.ArkUI";
 import { picker } from '@kit.CoreFileKit';
 import { TransportObject } from "../../model/TransportObject";
 import { requestDownload } from "../../utils/RequestDownload";
@@ -41,6 +43,8 @@ import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@ki
 import { Downloads, TransferAction } from "../../components/Downloads";
 import { Uploads } from "../../components/Uploads";
 import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
+import { harmonyShare, systemShare } from "@kit.ShareKit";
+import { KnockShareUtil } from "../../utils/KnockShareUtil";
 
 const TAG = 'TabFiles';
 const INPUT_SHEET_TEXT_ID = 'tabFilesInputSheetText';
@@ -220,6 +224,8 @@ export struct TabFiles {
   private transportSheetCtrl: SheetPhaseController = new SheetPhaseController()
   private pathSelectSheetCtrl: SheetPhaseController = new SheetPhaseController()
   @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
+  // 详情面板当前展示的对象,供碰一碰分享取当前文件;仅在面板注册监听期间被读取
+  private detailKnockObject: ObjectInfo | null = null
   private currentPath: string = '/'
   private scrollerForList: Scroller = new Scroller()
   @State dirDataSource: LazyDataSource<ObjectInfo> = new LazyDataSource()
@@ -822,6 +828,88 @@ export struct TabFiles {
       this.getFileList(true, '/')
       this.restoreTransfers()
     }
+    this.registerKnockReceive()
+  }
+
+  aboutToDisappear(): void {
+    this.unregisterKnockReceive()
+  }
+
+  // ---- 碰一碰沙箱接收(平板/2in1 作为接收端):手机轻碰屏幕,文件进沙箱后自动上传到当前目录 ----
+
+  private knockRecvRegistry: harmonyShare.RecvCapabilityRegistry | null = null
+
+  private async registerKnockReceive(): Promise<void> {
+    // dataReceive 仅 PC/2in1/Tablet 作为接收端支持,其他设备注册无响应,这里直接跳过
+    if (deviceInfo.deviceType !== 'tablet' && deviceInfo.deviceType !== '2in1') {
+      return
+    }
+    const context = this.getAbilityContext()
+    if (!context || this.knockRecvRegistry) {
+      return
+    }
+    try {
+      const win = await window.getLastWindow(context)
+      const registry: harmonyShare.RecvCapabilityRegistry = {
+        windowId: win.getWindowProperties().id,
+        capabilities: [
+          { utd: uniformTypeDescriptor.UniformDataType.IMAGE, maxSupportedCount: 9 },
+          { utd: uniformTypeDescriptor.UniformDataType.VIDEO, maxSupportedCount: 9 },
+          { utd: uniformTypeDescriptor.UniformDataType.FILE, maxSupportedCount: 9 }
+        ]
+      }
+      harmonyShare.on('dataReceive', registry, this.knockDataReceiveCallback)
+      this.knockRecvRegistry = registry
+      AppLogger.info(TAG, 'knock dataReceive registered')
+    } catch (err) {
+      AppLogger.warn(TAG, `register knock receive failed: ${(err as Error)?.message ?? err}`)
+    }
+  }
+
+  private unregisterKnockReceive(): void {
+    if (!this.knockRecvRegistry) {
+      return
+    }
+    try {
+      harmonyShare.off('dataReceive', this.knockRecvRegistry, this.knockDataReceiveCallback)
+    } catch (err) {
+      AppLogger.warn(TAG, `unregister knock receive failed: ${(err as Error)?.message ?? err}`)
+    }
+    this.knockRecvRegistry = null
+  }
+
+  private knockDataReceiveCallback = (receivableTarget: harmonyShare.ReceivableTarget): void => {
+    this.handleKnockDataReceive(receivableTarget)
+  }
+
+  private handleKnockDataReceive(receivableTarget: harmonyShare.ReceivableTarget): void {
+    const context = this.getAbilityContext()
+    const receiveDir = context ? KnockShareUtil.prepareReceiveDir(context.filesDir) : ''
+    if (receiveDir.length === 0) {
+      receivableTarget.reject(harmonyShare.ReceivableErrorCode.NO_RECEIVABLE_ERROR)
+      return
+    }
+    receivableTarget.receive(FileSystemUtil.getUriFromPath(receiveDir), {
+      onDataReceived: (sharedData: systemShare.SharedData) => {
+        const uris: string[] = []
+        sharedData.getRecords().forEach((record: systemShare.SharedRecord) => {
+          if (record.uri && record.uri.length > 0) {
+            uris.push(record.uri)
+          }
+        })
+        if (uris.length > 0) {
+          showToast(`碰一碰收到 ${uris.length} 个文件，开始上传`)
+          this.startUpload(uris)
+        }
+      },
+      onResult: (resultCode: harmonyShare.ShareResultCode) => {
+        if (resultCode !== harmonyShare.ShareResultCode.SHARE_SUCCESS &&
+          resultCode !== harmonyShare.ShareResultCode.CANCEL_BY_RECEIVER) {
+          AppLogger.warn(TAG, `knock receive failed, result=${resultCode}`)
+          showToast('碰一碰接收未完成')
+        }
+      }
+    })
   }
 
   private loadCurrentUser(): void {
@@ -1417,12 +1505,14 @@ export struct TabFiles {
             onAppear: () => {
               this.markSheetVisible()
               this.detailSheetCtrl.onAppear()
+              harmonyShare.on('knockShare', this.detailKnockShareCallback)
             },
             onWillDisappear: () => {
               this.detailSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
               this.markSheetHidden()
+              harmonyShare.off('knockShare', this.detailKnockShareCallback)
               this.detailSheetCtrl.onDisappear((value: boolean) => {
                 this.showObjectDetail = value
               }, () => {
@@ -2858,7 +2948,8 @@ export struct TabFiles {
       if (fileType == FileType.IMAGE) {
         CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, this.buildImagePreviewParam(item, fileExtension))
       } else if (fileType == FileType.VIDEO) {
-        CloudRouter.push(Constant.VIDEO_PREVIEW_PAGE, new VideoPreview(item.name, item.id, fileExtension))
+        CloudRouter.push(Constant.VIDEO_PREVIEW_PAGE,
+          new VideoPreview(item.name, item.id, fileExtension, this.getObjectSharePath(item)))
       } else {
         //filePreview.openPreview(getContext(), {title: item.name, uri: '', mimeType: ''})
         showToast('该类型不支持预览')
@@ -3084,6 +3175,7 @@ export struct TabFiles {
     CloudApi.getObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
         this.detailData = new DetailData(item.name, item.type == Constant.OBJECT_DIR_TYPE, data)
+        this.detailKnockObject = item
         this.detailSheetCtrl.requestOpen(() => this.showObjectDetail, (value: boolean) => {
           this.showObjectDetail = value
         })
@@ -3092,6 +3184,61 @@ export struct TabFiles {
         AppLogger.error(TAG, '获取详细信息失败 msg: ' + msg)
         showToast($r('app.string.get_detail_failed'))
       }
+    })
+  }
+
+  private detailKnockShareCallback = (sharableTarget: harmonyShare.SharableTarget): void => {
+    this.handleDetailKnockShare(sharableTarget)
+  }
+
+  // 详情面板打开期间的碰一碰分享,分层策略:已下载文件分享本体,未下载分享下载直链(对端浏览器在线看/下载)。
+  private async handleDetailKnockShare(sharableTarget: harmonyShare.SharableTarget): Promise<void> {
+    try {
+      const item = this.detailKnockObject
+      if (!item || item.type === Constant.OBJECT_DIR_TYPE) {
+        await sharableTarget.clarifyNonShare({ message: '文件夹不支持碰一碰分享' })
+        return
+      }
+      const localUri = KnockShareUtil.findLocalDownloadUri(item.id)
+      if (localUri.length > 0) {
+        await sharableTarget.share(KnockShareUtil.buildFileShareData(item.name, localUri))
+        return
+      }
+      if (KnockShareUtil.useShareLink()) {
+        const link = await KnockShareUtil.createOrReuseShareLink(item.id, this.getObjectSharePath(item))
+        if (link) {
+          await sharableTarget.share(KnockShareUtil.buildLinkShareData(item.name, link.url, link.password))
+          if (link.password.length > 0) {
+            showToast(`分享链接提取码：${link.password}`)
+          }
+        } else {
+          await sharableTarget.reject(harmonyShare.SharableErrorCode.NO_INTERNET_ERROR)
+        }
+        return
+      }
+      const url = await this.fetchKnockDownloadUrl(item.id)
+      if (url.length > 0) {
+        await sharableTarget.share(KnockShareUtil.buildLinkShareData(item.name, url))
+      } else {
+        await sharableTarget.reject(harmonyShare.SharableErrorCode.NO_INTERNET_ERROR)
+      }
+    } catch (err) {
+      AppLogger.error(TAG, `detail knock share failed: ${(err as Error)?.message ?? err}`)
+    }
+  }
+
+  private fetchKnockDownloadUrl(fileId: string): Promise<string> {
+    return new Promise<string>((resolve: (value: string) => void) => {
+      CloudApi.getDownloadUri(fileId, {
+        onSuccess: (url: string) => {
+          resolve((url.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
+            url.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? url : CloudApi.getBaseURL() + url)
+        },
+        onFailure: (msg: string) => {
+          AppLogger.error(TAG, `knock share get download uri failed: ${msg}`)
+          resolve('')
+        }
+      })
     })
   }
 

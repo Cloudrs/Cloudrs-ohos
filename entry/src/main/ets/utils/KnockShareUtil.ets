@@ -13,6 +13,11 @@ export class KnockShareLink {
   password: string = ''
 }
 
+class KnockShareLinkEntry {
+  link: KnockShareLink = new KnockShareLink()
+  createdAt: number = 0
+}
+
 /**
  * 碰一碰分享的分层策略工具:
  * 已下载完成的文件分享本体(对端媒体文件进图库、其他文件进文件管理"华为分享"目录),
@@ -52,18 +57,26 @@ export class KnockShareUtil {
       Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_USE_SHARE_LINK, false) as boolean
   }
 
-  // 同一文件本次会话内复用已创建的分享链接,避免重复碰产生一堆分享记录
-  private static shareLinkCache: Map<string, KnockShareLink> = new Map<string, KnockShareLink>()
+  // 短时间内重复碰同一文件复用已创建的分享链接,避免产生一堆分享记录。
+  // 缓存键包含账号与设置项:切账号、改有效期/提取码设置后不会复用旧链接;
+  // TTL 兜底服务端分享记录被删除后缓存死链的场景。
+  private static shareLinkCache: Map<string, KnockShareLinkEntry> = new Map<string, KnockShareLinkEntry>()
+  private static readonly SHARE_LINK_TTL_MS: number = 10 * 60 * 1000
 
   static createOrReuseShareLink(fileId: string, sharePath: string): Promise<KnockShareLink | null> {
-    const cached = KnockShareUtil.shareLinkCache.get(fileId)
-    if (cached) {
-      return Promise.resolve<KnockShareLink | null>(cached)
-    }
     const expireDays = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_EXPIRE_DAYS, 1) as number
     const passwordEnabled = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_PASSWORD_ENABLED, false) as boolean
+    const activeUser = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
+    const activeUrl = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
+    const cacheKey = `${activeUrl}|${activeUser}|${fileId}|${expireDays}|${passwordEnabled ? 1 : 0}`
+    const cached = KnockShareUtil.shareLinkCache.get(cacheKey)
+    if (cached && Date.now() - cached.createdAt < KnockShareUtil.SHARE_LINK_TTL_MS) {
+      return Promise.resolve<KnockShareLink | null>(cached.link)
+    }
     const password = passwordEnabled ? KnockShareUtil.randomPassword() : ''
     return new Promise<KnockShareLink | null>((resolve: (value: KnockShareLink | null) => void) => {
       CloudApi.createShareLink(sharePath, expireDays, password, {
@@ -71,7 +84,10 @@ export class KnockShareUtil {
           const link = new KnockShareLink()
           link.url = url
           link.password = password
-          KnockShareUtil.shareLinkCache.set(fileId, link)
+          const entry = new KnockShareLinkEntry()
+          entry.link = link
+          entry.createdAt = Date.now()
+          KnockShareUtil.shareLinkCache.set(cacheKey, entry)
           resolve(link)
         },
         onFailure: () => {

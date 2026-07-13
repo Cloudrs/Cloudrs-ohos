@@ -144,9 +144,10 @@ export struct ImagePreviewPage {
   }
 
   private async handleKnockShare(sharableTarget: harmonyShare.SharableTarget): Promise<void> {
+    // 快照当前页并全程使用同一对象:落盘 await 期间用户可能滑动 Swiper
     const previewItem = this.getCurrentPreviewItem()
     try {
-      const uri = await this.materializeCurrentImageUri()
+      const uri = previewItem ? await this.materializeImageUri(previewItem) : ''
       if (!previewItem || uri.length === 0) {
         // 当前图尚未加载完成,及时终止,避免对端长时间等待
         await sharableTarget.reject(harmonyShare.SharableErrorCode.DOWNLOAD_ERROR)
@@ -164,11 +165,7 @@ export struct ImagePreviewPage {
   }
 
   // 碰一碰分享需要文件 URI:动图直接复用已落盘的临时文件,静图把内存数据写入缓存目录。
-  private async materializeCurrentImageUri(): Promise<string> {
-    const previewItem = this.getCurrentPreviewItem()
-    if (!previewItem) {
-      return ''
-    }
+  private async materializeImageUri(previewItem: PreviewFile): Promise<string> {
     const animatedUri = this.imageFileUris.get(previewItem.fileId)
     if (animatedUri && animatedUri.length > 0) {
       return animatedUri

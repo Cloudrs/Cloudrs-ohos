@@ -833,6 +833,8 @@ export struct TabFiles {
 
   aboutToDisappear(): void {
     this.unregisterKnockReceive()
+    // 兜底:组件销毁时详情面板可能未走完关闭流程,监听未及反注册
+    harmonyShare.off('knockShare', this.detailKnockShareCallback)
   }
 
   // ---- 碰一碰沙箱接收(平板/2in1 作为接收端):手机轻碰屏幕,文件进沙箱后自动上传到当前目录 ----
@@ -882,34 +884,38 @@ export struct TabFiles {
     this.handleKnockDataReceive(receivableTarget)
   }
 
-  private handleKnockDataReceive(receivableTarget: harmonyShare.ReceivableTarget): void {
-    const context = this.getAbilityContext()
-    const receiveDir = context ? KnockShareUtil.prepareReceiveDir(context.filesDir) : ''
-    if (receiveDir.length === 0) {
-      receivableTarget.reject(harmonyShare.ReceivableErrorCode.NO_RECEIVABLE_ERROR)
-      return
-    }
-    receivableTarget.receive(FileSystemUtil.getUriFromPath(receiveDir), {
-      onDataReceived: (sharedData: systemShare.SharedData) => {
-        const uris: string[] = []
-        sharedData.getRecords().forEach((record: systemShare.SharedRecord) => {
-          if (record.uri && record.uri.length > 0) {
-            uris.push(record.uri)
-          }
-        })
-        if (uris.length > 0) {
-          showToast(`碰一碰收到 ${uris.length} 个文件，开始上传`)
-          this.startUpload(uris)
-        }
-      },
-      onResult: (resultCode: harmonyShare.ShareResultCode) => {
-        if (resultCode !== harmonyShare.ShareResultCode.SHARE_SUCCESS &&
-          resultCode !== harmonyShare.ShareResultCode.CANCEL_BY_RECEIVER) {
-          AppLogger.warn(TAG, `knock receive failed, result=${resultCode}`)
-          showToast('碰一碰接收未完成')
-        }
+  private async handleKnockDataReceive(receivableTarget: harmonyShare.ReceivableTarget): Promise<void> {
+    try {
+      const context = this.getAbilityContext()
+      const receiveDir = context ? KnockShareUtil.prepareReceiveDir(context.filesDir) : ''
+      if (receiveDir.length === 0) {
+        await receivableTarget.reject(harmonyShare.ReceivableErrorCode.NO_RECEIVABLE_ERROR)
+        return
       }
-    })
+      await receivableTarget.receive(FileSystemUtil.getUriFromPath(receiveDir), {
+        onDataReceived: (sharedData: systemShare.SharedData) => {
+          const uris: string[] = []
+          sharedData.getRecords().forEach((record: systemShare.SharedRecord) => {
+            if (record.uri && record.uri.length > 0) {
+              uris.push(record.uri)
+            }
+          })
+          if (uris.length > 0) {
+            showToast(`碰一碰收到 ${uris.length} 个文件，开始上传`)
+            this.startUpload(uris)
+          }
+        },
+        onResult: (resultCode: harmonyShare.ShareResultCode) => {
+          if (resultCode !== harmonyShare.ShareResultCode.SHARE_SUCCESS &&
+            resultCode !== harmonyShare.ShareResultCode.CANCEL_BY_RECEIVER) {
+            AppLogger.warn(TAG, `knock receive failed, result=${resultCode}`)
+            showToast('碰一碰接收未完成')
+          }
+        }
+      })
+    } catch (err) {
+      AppLogger.error(TAG, `knock receive failed: ${(err as Error)?.message ?? err}`)
+    }
   }
 
   private loadCurrentUser(): void {

@@ -10,6 +10,7 @@ import { window } from '@kit.ArkUI';
 import AppLogger from '../utils/AppLogger';
 import { CloudRouter } from '../utils/CloudRouter';
 import UserPreferences from '../model/UserPreferences';
+import { ZoomableImage } from '../components/ZoomableImage';
 
 const TAG: string = 'PhotoLocalPreview'
 const CHROME_ANIM_DURATION: number = 220
@@ -26,6 +27,8 @@ export struct PhotoLocalPreviewPage {
   @State itemSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource()
   @State chromeVisible: boolean = true
   @State imageDraggable: boolean = false
+  // 当前图片处于放大状态时禁用 Swiper 翻页,把单指拖动让给图片平移。
+  @State zoomDisableSwipe: boolean = false
   private swiperController: SwiperController = new SwiperController()
 
   aboutToAppear(): void {
@@ -83,19 +86,28 @@ export struct PhotoLocalPreviewPage {
     return '待备份'
   }
 
-  @Builder slide(item: PhotoBackupItem) {
+  @Builder slide(item: PhotoBackupItem, index: number) {
     Stack({ alignContent: Alignment.Bottom }) {
       Stack() {
         LoadingProgress()
           .width(48)
           .height(48)
           .color(Color.White)
-        Image(item.uri)
+        ZoomableImage({
+          imageSource: item.uri,
+          imageDraggable: this.imageDraggable,
+          isActive: index === this.index,
+          onZoomChange: (zoomed: boolean) => {
+            if (index === this.index) {
+              this.zoomDisableSwipe = zoomed
+            }
+          },
+          // 单击切换沉浸式 chrome;放进手势组与双击缩放互斥,避免双击被误判成两次单击。
+          onSingleTap: () => { this.toggleChrome() },
+          onImageError: () => { AppLogger.warn(TAG, `image load failed: ${item.name}`) }
+        })
           .width('100%')
           .height('100%')
-          .objectFit(ImageFit.Contain)
-          .draggable(this.imageDraggable)
-          .onError(() => { AppLogger.warn(TAG, `image load failed: ${item.name}`) })
       }
       .width('100%')
       .height('100%')
@@ -108,6 +120,7 @@ export struct PhotoLocalPreviewPage {
       .opacity(this.chromeVisible ? 1 : 0)
       .translate({ y: this.chromeVisible ? 0 : 40 })
       .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
+      .onClick(() => { this.toggleChrome() })
     }
     .width('100%')
     .height('100%')
@@ -220,16 +233,19 @@ export struct PhotoLocalPreviewPage {
   build() {
     Stack() {
       Swiper(this.swiperController) {
-        LazyForEach(this.itemSource, (item: PhotoBackupItem) => {
-          this.slide(item)
+        LazyForEach(this.itemSource, (item: PhotoBackupItem, index: number) => {
+          this.slide(item, index)
         }, (item: PhotoBackupItem) => item.id)
       }
       .index(this.index)
       .loop(false)
       .indicator(false)
+      .disableSwipe(this.zoomDisableSwipe)
       .cachedCount(1)
       .onChange((i: number) => {
         this.index = i
+        // 新页总是未缩放状态;旧页重置的回调因索引已切换不会触达这里,须显式复位。
+        this.zoomDisableSwipe = false
       })
       .width('100%')
       .height('100%')
@@ -240,8 +256,5 @@ export struct PhotoLocalPreviewPage {
     .width('100%')
     .height('100%')
     .backgroundColor(Color.Black)
-    .onClick(() => {
-      this.toggleChrome()
-    })
   }
 }

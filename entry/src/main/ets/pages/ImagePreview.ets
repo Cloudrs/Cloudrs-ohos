@@ -15,6 +15,7 @@ import { CloudRouter } from "../utils/CloudRouter";
 import AppLogger from "../utils/AppLogger";
 import UserPreferences from "../model/UserPreferences";
 import { CommonUtil } from "../utils/CommonUtil";
+import { ZoomableImage } from "../components/ZoomableImage";
 
 const TAG: string = 'ImagePreview'
 
@@ -31,6 +32,8 @@ export struct ImagePreviewPage {
   @State loadingIds: string[] = []
   @State failedIds: string[] = []
   @State imageDraggable: boolean = false
+  // 当前图片处于放大状态时禁用 Swiper 翻页,把单指拖动让给图片平移。
+  @State zoomDisableSwipe: boolean = false
   private fileParam: ImagePreview|null = null;
   private swiperController: SwiperController = new SwiperController();
   private imagePixelMaps: Map<string, PixelMap> = new Map<string, PixelMap>();
@@ -145,8 +148,11 @@ export struct ImagePreviewPage {
         .index(this.currentIndex)
         .loop(false)
         .indicator(false)
+        .disableSwipe(this.zoomDisableSwipe)
         .onChange((index: number) => {
           this.currentIndex = this.normalizeIndex(index)
+          // 新页总是未缩放状态;旧页重置的回调因索引已切换不会触达这里,须显式复位。
+          this.zoomDisableSwipe = false
           const previewItem = this.getCurrentPreviewItem()
           this.isLoading = previewItem ? !this.imagePixelMaps.has(previewItem.fileId) && !this.isImageFailed(previewItem.fileId) : false
           this.loadImageAt(this.currentIndex)
@@ -312,11 +318,18 @@ export struct ImagePreviewPage {
   @Builder previewItem(item: PreviewFile, index: number) {
     Column() {
       if (this.hasImage(item.fileId)) {
-        Image(this.getImageSource(item.fileId))
+        ZoomableImage({
+          imageSource: this.getImageSource(item.fileId),
+          imageDraggable: this.imageDraggable,
+          isActive: this.isCurrentIndex(index),
+          onZoomChange: (zoomed: boolean) => {
+            if (this.isCurrentIndex(index)) {
+              this.zoomDisableSwipe = zoomed
+            }
+          }
+        })
           .width('100%')
           .height('100%')
-          .objectFit(ImageFit.Contain)
-          .draggable(this.imageDraggable)
       } else if (this.isImageFailed(item.fileId)) {
         Image($r('app.media.ic_picture_damage'))
           .width(CloudThemeToken.imagePreviewErrorImageSize)

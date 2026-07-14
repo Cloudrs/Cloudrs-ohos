@@ -1,6 +1,8 @@
 
 import { CloudThemeToken } from "../model/CloudTheme";
 import Constant from "../model/Constant";
+import UserPreferences from "../model/UserPreferences";
+import { visionImageAnalyzer } from "@kit.VisionKit";
 
 export enum FileType {
   IMAGE = 'image',
@@ -31,6 +33,32 @@ export interface FileIconInfo {
 }
 
 export class CommonUtil {
+
+  /**
+   * 图片预览是否启用系统 AI 识图(长按抠主体):用户偏好开启(默认开)且设备支持主体分割。
+   * 模拟器等不支持的设备 getImageAnalyzerSupportTypes 返回空数组,自动降级为关闭。
+   */
+  static isImageAiAnalyzerEnabled(): boolean {
+    const pref = UserPreferences.getSync(
+      Constant.USER_PREFERENCES, Constant.IMAGE_AI_ANALYZER_ENABLED, true) as boolean
+    if (!pref) {
+      return false
+    }
+    try {
+      // 裸建的 ArkUI ImageAnalyzerController 未绑定 Image 时返回 null,须用 VisionKit 的控制器查询。
+      const supportTypes: ImageAnalyzerType[] | null =
+        new visionImageAnalyzer.VisionImageAnalyzerController().getImageAnalyzerSupportTypes()
+      if (!supportTypes) {
+        console.warn('CommonUtil', 'image ai analyzer supportTypes is null')
+        return false
+      }
+      console.info('CommonUtil', `image ai analyzer supportTypes=[${supportTypes.join(',')}]`)
+      return supportTypes.includes(ImageAnalyzerType.SUBJECT)
+    } catch (err) {
+      console.warn('CommonUtil', `image ai analyzer support check failed: ${(err as Error)?.message ?? err}`)
+      return false
+    }
+  }
 
   static formatBytes(bytes: number, decimals = 2): string {
     if (bytes === 0) return '0 B';

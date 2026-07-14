@@ -29,6 +29,8 @@ export struct PhotoLocalPreviewPage {
   @State itemSource: LazyDataSource<PhotoBackupItem> = new LazyDataSource()
   @State chromeVisible: boolean = true
   @State imageDraggable: boolean = false
+  // 系统 AI 识图:用户偏好开启且设备支持主体分割时,预览图长按可抠主体。
+  @State aiAnalyzerEnabled: boolean = false
   // 当前图片处于放大状态时禁用 Swiper 翻页,把单指拖动让给图片平移。
   @State zoomDisableSwipe: boolean = false
   private swiperController: SwiperController = new SwiperController()
@@ -42,6 +44,7 @@ export struct PhotoLocalPreviewPage {
     }
     this.imageDraggable = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
+    this.aiAnalyzerEnabled = CommonUtil.isImageAiAnalyzerEnabled()
     console.info(TAG, `preview count=${this.items.length} index=${this.index}`)
     harmonyShare.on('knockShare', this.knockShareCallback)
   }
@@ -122,6 +125,7 @@ export struct PhotoLocalPreviewPage {
         ZoomableImage({
           imageSource: item.uri,
           imageDraggable: this.imageDraggable,
+          enableAiAnalyzer: this.aiAnalyzerEnabled,
           isActive: index === this.index,
           onZoomChange: (zoomed: boolean) => {
             if (index === this.index) {

@@ -118,6 +118,7 @@ export struct TabMine {
   private settingsRefreshTimer: number = -1
   @State showPhotoBackupPathSheet: boolean = false
   @State imageDraggableEnabled: boolean = false
+  @State imageAiAnalyzerEnabled: boolean = true
   @State knockUseShareLink: boolean = false
   @State knockExpireDays: number = 1
   @State knockPasswordEnabled: boolean = false
@@ -162,6 +163,11 @@ export struct TabMine {
       Constant.USER_PREFERENCES,
       Constant.IMAGE_DRAGGABLE_ENABLED,
       false
+    ) as boolean
+    this.imageAiAnalyzerEnabled = UserPreferences.getSync(
+      Constant.USER_PREFERENCES,
+      Constant.IMAGE_AI_ANALYZER_ENABLED,
+      true
     ) as boolean
     this.knockUseShareLink = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_USE_SHARE_LINK, false) as boolean
@@ -1472,6 +1478,11 @@ export struct TabMine {
         this.imageDraggableEnabled = v
         UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, v)
       })
+      this.settingSwitchRow('长按图片智能识图', '预览时长按提取主体或文字',
+        this.imageAiAnalyzerEnabled, (v: boolean) => {
+          this.imageAiAnalyzerEnabled = v
+          UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.IMAGE_AI_ANALYZER_ENABLED, v)
+        })
       this.settingSwitchRow('碰一碰使用分享链接', '未下载文件以分享链接发送',
         this.knockUseShareLink, (v: boolean) => {
           this.knockUseShareLink = v

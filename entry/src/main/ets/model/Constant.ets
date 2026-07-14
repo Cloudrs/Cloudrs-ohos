@@ -210,6 +210,7 @@ class Constant {
 
   APP_THEME_MODE: string = 'app_theme_mode';
   IMAGE_DRAGGABLE_ENABLED: string = 'image_draggable_enabled';
+  IMAGE_AI_ANALYZER_ENABLED: string = 'image_ai_analyzer_enabled';
 
   APP_THEME_LIGHT: string = 'light';
 

@@ -32,6 +32,8 @@ export struct ImagePreviewPage {
   @State loadingIds: string[] = []
   @State failedIds: string[] = []
   @State imageDraggable: boolean = false
+  // 系统 AI 识图:用户偏好开启且设备支持主体分割时,预览图长按可抠主体。
+  @State aiAnalyzerEnabled: boolean = false
   // 当前图片处于放大状态时禁用 Swiper 翻页,把单指拖动让给图片平移。
   @State zoomDisableSwipe: boolean = false
   private fileParam: ImagePreview|null = null;
@@ -85,7 +87,10 @@ export struct ImagePreviewPage {
               this.imageFileUris.set(previewItem.fileId, animatedUri)
             } else {
               const imageSource = image.createImageSource(imageData);
-              const pixMap = await imageSource.createPixelMap();
+              // AI 识图(enableAnalyzer)仅支持 RGBA_8888 的 PixelMap,解码时显式指定。
+              const pixMap = await imageSource.createPixelMap({
+                desiredPixelFormat: image.PixelMapFormat.RGBA_8888
+              });
               imageSource.release();
               this.imagePixelMaps.set(previewItem.fileId, pixMap)
             }
@@ -126,6 +131,7 @@ export struct ImagePreviewPage {
     this.currentIndex = this.normalizeIndex(this.fileParam?.currentIndex ?? 0)
     this.imageDraggable = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
+    this.aiAnalyzerEnabled = CommonUtil.isImageAiAnalyzerEnabled()
     this.loadImageAt(this.currentIndex)
     this.prefetchAround(this.currentIndex)
     harmonyShare.on('knockShare', this.knockShareCallback)
@@ -368,6 +374,7 @@ export struct ImagePreviewPage {
         ZoomableImage({
           imageSource: this.getImageSource(item.fileId),
           imageDraggable: this.imageDraggable,
+          enableAiAnalyzer: this.aiAnalyzerEnabled,
           isActive: this.isCurrentIndex(index),
           onZoomChange: (zoomed: boolean) => {
             if (this.isCurrentIndex(index)) {

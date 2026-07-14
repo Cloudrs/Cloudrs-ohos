@@ -17,6 +17,8 @@ const PAN_DISTANCE_IDLE: number = 50;
 export struct ZoomableImage {
   imageSource: PixelMap | ResourceStr | undefined = undefined;
   imageDraggable: boolean = false;
+  // 系统 AI 识图(长按抠主体,动画与菜单均为系统内置);设备不支持或用户关闭时传 false。
+  enableAiAnalyzer: boolean = false;
   @Prop @Watch('onActiveChanged') isActive: boolean = false;
   onZoomChange: (zoomed: boolean) => void = () => {};
   // 单击回调与双击缩放在同一手势组内互斥判定,避免宿主页面用 onClick 时双击被当成两次单击。
@@ -37,6 +39,8 @@ export struct ZoomableImage {
   private pinchStartCenterY: number = 0;
   private componentWidth: number = 0;
   private componentHeight: number = 0;
+  // 主体分割 + 文字识别(长按选字复制);不开 OBJECT_LOOKUP(识图搜索),避免额外预分析功耗。
+  private aiOptions: ImageAIOptions = { types: [ImageAnalyzerType.SUBJECT, ImageAnalyzerType.TEXT] };
   // 图片原始宽高比,由 onComplete 获取;fit 尺寸(scale=1 时 Contain 后的显示尺寸)据此推算。
   private imageRatio: number = 0;
 
@@ -160,10 +164,11 @@ export struct ZoomableImage {
 
   build() {
     Column() {
-      Image(this.imageSource)
+      Image(this.imageSource, this.aiOptions)
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Contain)
+        .enableAnalyzer(this.enableAiAnalyzer)
         .draggable(this.imageDraggable)
         .scale({ x: this.curScale, y: this.curScale })
         .translate({ x: this.curOffsetX, y: this.curOffsetY })

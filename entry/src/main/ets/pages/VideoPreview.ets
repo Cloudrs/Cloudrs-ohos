@@ -251,7 +251,7 @@ export struct VideoPreviewPage {
         .height('100%')
 
         if (this.isFullscreen && this.controlsVisible) {
-          this.fullscreenCloseButton()
+          this.fullscreenTopBar()
         }
 
         if (this.videoUrl.length > CloudThemeToken.zero && !this.isFailed &&
@@ -294,7 +294,7 @@ export struct VideoPreviewPage {
           mainTitle: this.fileParam?.fileName ?? ''
         },
         backIcon: {
-          icon: $r('app.media.ic_xmark_bold'),
+          icon: $r('app.media.ic_back'),
           action: () => {
             CloudRouter.pop()
           }
@@ -417,17 +417,34 @@ export struct VideoPreviewPage {
     .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
-  @Builder fullscreenCloseButton() {
+  @Builder fullscreenTopBar() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Stack() {
-        this.videoControlButton($r('app.media.ic_xmark_bold'), CloudThemeToken.videoPreviewCloseIconSize, () => {
+      Row({ space: CloudThemeToken.spacingCard }) {
+        this.videoControlButton($r('app.media.ic_back'), CloudThemeToken.videoPreviewCloseIconSize, () => {
           CloudRouter.pop()
         })
+        Text(this.fileParam?.fileName ?? '')
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.onPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .wordBreak(WordBreak.BREAK_ALL)
+          // 无背景,浅色画面下靠阴影保证可读
+          .textShadow({
+            radius: CloudThemeToken.videoPreviewTitleShadowRadius,
+            color: CloudThemeToken.videoPreviewTitleShadowColor
+          })
+          .hitTestBehavior(HitTestMode.None)
       }
-        .margin({
-          left: CloudThemeToken.spacingPage,
-          top: CloudThemeToken.getSafeTopInset(this.sysTopRectHeight) + CloudThemeToken.spacingCard
-        })
+      .alignItems(VerticalAlign.Center)
+      .width('100%')
+      .padding({
+        left: CloudThemeToken.spacingPage,
+        right: CloudThemeToken.spacingPage,
+        top: CloudThemeToken.getSafeTopInset(this.sysTopRectHeight) + CloudThemeToken.spacingCard
+      })
+      .hitTestBehavior(HitTestMode.Transparent)
     }
     .width('100%')
     .height('100%')

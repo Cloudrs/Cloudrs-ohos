@@ -375,6 +375,8 @@ export class CloudThemeToken {
   static readonly videoPreviewControlIconSize: number = 18
   static readonly videoPreviewCloseIconSize: number = 18
   static readonly videoPreviewControlsPanelRadius: number = 20
+  static readonly videoPreviewTitleShadowRadius: number = 6
+  static readonly videoPreviewTitleShadowColor: ResourceColor = 'rgba(0, 0, 0, 0.6)'
   static readonly loginPageGap: number = 10
   static readonly loginPageVerticalPadding: number = 20
   static readonly loginBackRowHeight: number = 30

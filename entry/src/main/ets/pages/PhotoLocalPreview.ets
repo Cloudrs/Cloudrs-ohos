@@ -157,24 +157,17 @@ export struct PhotoLocalPreviewPage {
   }
 
   @Builder infoBar(item: PhotoBackupItem) {
-    Column({ space: CloudThemeToken.spacingXs }) {
-      Text(item.name)
-        .fontSize(CloudThemeToken.textSizeBodyPlus)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-
+    // 文件名已移到顶栏,剩余信息合并为单行,降低底栏高度
+    Row() {
       Text(`${DateFormatUtil.format(new Date(item.modifiedAt), 'yyyy/MM/dd HH:mm')} · ${CommonUtil.formatBytes(item.size)}`)
         .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor('rgba(255, 255, 255, 0.75)')
-        .width('100%')
+
+      Blank()
 
       Text(this.statusLine(item))
         .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.primary)
-        .width('100%')
     }
     .width('100%')
     .padding({
@@ -188,29 +181,42 @@ export struct PhotoLocalPreviewPage {
   }
 
   @Builder topChrome() {
-    Row() {
-      this.closeButton()
-      Blank()
+    Row({ space: CloudThemeToken.spacingCard }) {
+      this.backButton()
+      Text(this.items[this.index]?.name ?? '')
+        .fontSize(CloudThemeToken.textSizeBodyPlus)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(Color.White)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // 文件名多为无空格长串,按词边界截断会过早出省略号,改为任意字符处截断
+        .wordBreak(WordBreak.BREAK_ALL)
+        .layoutWeight(1)
+        .hitTestBehavior(HitTestMode.None)
     }
+    .alignItems(VerticalAlign.Center)
     .width('100%')
     .padding({
       top: this.sysTopRectHeight + CloudThemeToken.spacingPanel,
+      bottom: CloudThemeToken.spacingPanel,
       left: CloudThemeToken.spacingPage,
       right: CloudThemeToken.spacingPage
     })
+    .backgroundColor('rgba(0, 0, 0, 0.32)')
+    .backdropBlur(18)
     .position({ x: 0, y: 0 })
     .opacity(this.chromeVisible ? 1 : 0)
   }
 
-  @Builder closeButton() {
+  @Builder backButton() {
     Button({ type: ButtonType.Circle, stateEffect: false }) {
-      SymbolGlyph($r('sys.symbol.xmark'))
-        .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
+      SymbolGlyph($r('sys.symbol.chevron_left'))
+        .fontSize(CloudThemeToken.videoPreviewCloseIconSize)
         .fontColor([Color.White])
         .fontWeight(FontWeight.Medium)
     }
-    .width(CloudThemeToken.imagePreviewArrowButtonSize)
-    .height(CloudThemeToken.imagePreviewArrowButtonSize)
+    .width(CloudThemeToken.videoPreviewControlSize)
+    .height(CloudThemeToken.videoPreviewControlSize)
     .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
     .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
     .enabled(this.chromeVisible)

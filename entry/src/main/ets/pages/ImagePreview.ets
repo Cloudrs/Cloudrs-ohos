@@ -250,7 +250,7 @@ export struct ImagePreviewPage {
           mainTitle: this.getHeaderTitle()
         },
         backIcon: {
-          icon: $r('app.media.ic_xmark_bold'),
+          icon: $r('app.media.ic_back'),
           action: () => {
             CloudRouter.pop()
           }

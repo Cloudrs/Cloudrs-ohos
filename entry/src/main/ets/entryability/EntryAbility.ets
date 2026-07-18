@@ -10,14 +10,30 @@ import { AvatarUtil } from '../utils/AvatarUtil';
 import { AppLockUtil } from '../utils/AppLockUtil';
 import { AppBoot } from '../utils/AppBoot';
 import AppLogger from '../utils/AppLogger';
+import { CloudStatusBar } from '../utils/CloudStatusBar';
 import { VERSION_NAME } from 'BuildProfile';
 
 export default class EntryAbility extends UIAbility {
+  private windowStage: window.WindowStage | undefined = undefined
+  private readonly windowStageCloseListener = (): boolean => {
+    if (deviceInfo.deviceType !== '2in1') {
+      return false
+    }
+    this.context.hideAbility().catch((err: Error) => {
+      AppLogger.error('EntryAbility', `hide ability on window close failed: ${err.message}`)
+    })
+    return true
+  }
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    if (deviceInfo.deviceType === '2in1') {
+      CloudStatusBar.bindContext(this.context)
+    }
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
   }
 
   onDestroy(): void {
+    CloudStatusBar.dispose()
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onDestroy');
   }
 
@@ -34,6 +50,8 @@ export default class EntryAbility extends UIAbility {
     let windowClass: window.Window | undefined = undefined
     try {
       windowClass = windowStage.getMainWindowSync()
+      this.windowStage = windowStage
+      this.registerTwoInOneCloseHandler(windowStage)
     } catch (err) {
       hilog.error(0x0000, 'testTag', 'getMainWindowSync failed. Cause: %{public}s', JSON.stringify(err) ?? '');
     }
@@ -64,6 +82,11 @@ export default class EntryAbility extends UIAbility {
       AvatarUtil.init(this.context)
       AppLogger.init(this.context)
       AppLogger.info('EntryAbility', `app start, version=${VERSION_NAME}`)
+      if (deviceInfo.deviceType === '2in1') {
+        CloudStatusBar.register(this.context).catch((err: Error) => {
+          AppLogger.error('EntryAbility', `register status bar failed: ${err.message}`)
+        })
+      }
       this.logBootSnapshot(windowClass)
       perfMark('sync init')
       await UserDatabase.init(this.context)
@@ -101,8 +124,28 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     // Main window is destroyed, release UI related resources
+    if (this.windowStage && deviceInfo.deviceType === '2in1') {
+      try {
+        this.windowStage.off('windowStageClose', this.windowStageCloseListener)
+      } catch (err) {
+        AppLogger.warn('EntryAbility', `unregister windowStageClose failed: ${(err as Error)?.message ?? err}`)
+      }
+    }
+    this.windowStage = undefined
     AppLockUtil.setMainWindow(undefined)
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
+  }
+
+  private registerTwoInOneCloseHandler(windowStage: window.WindowStage): void {
+    if (deviceInfo.deviceType !== '2in1') {
+      return
+    }
+    try {
+      windowStage.on('windowStageClose', this.windowStageCloseListener)
+    } catch (err) {
+      hilog.warn(0x0000, 'testTag', 'Register windowStageClose failed. Cause: %{public}s',
+        (err as Error)?.message ?? '')
+    }
   }
 
   onForeground(): void {

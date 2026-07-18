@@ -230,6 +230,8 @@ export class CloudThemeToken {
   static readonly objectListIconSize: number = 36
   static readonly objectGridFolderIconSize: number = 40
   static readonly objectGridFileIconSize: number = 56
+  static readonly objectVideoPlayButtonSize: number = 40
+  static readonly objectVideoPlayIconSize: number = 20
   static readonly objectTextBlockHeight: number = 42
   static readonly objectChevronSize: number = 12
   static readonly objectListRowHeight: number = 58
@@ -360,8 +362,8 @@ export class CloudThemeToken {
   static readonly imagePreviewSaveTopPadding: number = 10
   static readonly imagePreviewSaveBottomPadding: number = 10
   static readonly imagePreviewSaveBottomLift: number = 24
-  static readonly imagePreviewArrowButtonSize: number = 48
-  static readonly imagePreviewArrowIconSize: number = 24
+  static readonly imagePreviewArrowButtonSize: number = 36
+  static readonly imagePreviewArrowIconSize: number = 20
   static readonly imagePreviewHeaderButtonPadding: number = 5
   static readonly imagePreviewTitleSize: number = 16
   static readonly imagePreviewHeaderPadding: number = 10

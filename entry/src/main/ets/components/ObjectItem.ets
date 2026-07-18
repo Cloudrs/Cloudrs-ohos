@@ -68,6 +68,10 @@ export struct ObjectItem {
     return this.getThumbSource(id).length > 0 || this.getThumbData(id) !== undefined
   }
 
+  isVideo(name: string): boolean {
+    return CommonUtil.getFileType(name) === FileType.VIDEO
+  }
+
   getItemIcon(name: string, isDir: boolean) {
     if (isDir) {
       return $r("app.media.ic_folder_fill")
@@ -202,6 +206,19 @@ export struct ObjectItem {
           }
           .width(CloudThemeToken.objectGridFileIconSize)
           .height(CloudThemeToken.objectGridFileIconSize)
+        }
+
+        if (this.hasThumb(item.id) && this.isVideo(item.name)) {
+          Stack({ alignContent: Alignment.Center }) {
+            SymbolGlyph($r('sys.symbol.play_fill'))
+              .fontSize(CloudThemeToken.objectVideoPlayIconSize)
+              .fontColor([CloudThemeToken.onPrimary])
+          }
+          .width(CloudThemeToken.objectVideoPlayButtonSize)
+          .height(CloudThemeToken.objectVideoPlayButtonSize)
+          .borderRadius(CloudThemeToken.objectVideoPlayButtonSize / CloudThemeToken.halfDivisor)
+          .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+          .hitTestBehavior(HitTestMode.None)
         }
 
         if (this.shared && this.hasThumb(item.id)) {

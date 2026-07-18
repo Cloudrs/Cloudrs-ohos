@@ -15,6 +15,8 @@ import { KeyCode } from "@kit.InputKit";
 const TAG: string = 'VideoPreview'
 // 键盘 ←/→ 单次快退/快进秒数(PC/2in1 外接键盘场景)
 const KEYBOARD_SEEK_STEP_SECONDS: number = 5
+// 等待双击识别完成后再执行 2in1 鼠标单击动作，避免双击先触发暂停
+const MOUSE_DOUBLE_CLICK_DELAY_MS: number = 300
 const videoDownloadUriCache: Map<string, string> = new Map<string, string>()
 
 @Component
@@ -48,7 +50,13 @@ export struct VideoPreviewPage {
   private mainWindow: window.Window | null = null
   // 2in1 为自由窗口形态，不做屏幕方向控制
   private supportsOrientation: boolean = deviceInfo.deviceType !== '2in1'
+  // 仅当视频全屏主动放大了 PC 窗口时，退出才恢复原来的浮窗尺寸
+  private shouldRecoverWindowAfterFullscreen: boolean = false
+  // 原本已最大化的窗口退出视频全屏时，只退出沉浸展现，不改变窗口尺寸
+  private shouldExitPcImmersiveAfterFullscreen: boolean = false
   private holdSeekTimer: number = -1
+  private mouseSingleClickTimer: number = -1
+  private lastMouseDoubleClickAt: number = 0
   private videoAreaWidth: number = 0
   // 松手/拖动后发起的精确 seek 目标；播放器回报追上之前忽略旧位置，避免进度条回弹
   private pendingSeekTarget: number = -1
@@ -69,6 +77,7 @@ export struct VideoPreviewPage {
   aboutToDisappear(): void {
     harmonyShare.off('knockShare', this.knockShareCallback)
     this.stopHoldSeek()
+    this.cancelPendingMouseSingleClick()
     this.clearPrepareTimeout()
     // 显式停止播放，立刻掐断流媒体连接释放服务器带宽；
     // 只靠组件卸载让 AVPlayer 异步释放，服务器会继续往半死连接里灌数据
@@ -78,7 +87,9 @@ export struct VideoPreviewPage {
       AppLogger.warn(TAG, `stop on disappear failed: ${(err as Error)?.message ?? err}`)
     }
     this.setSystemBarsVisible(true)
+    this.applyPcFullscreenWindow(false)
     this.setOrientation(window.Orientation.UNSPECIFIED)
+    this.isFullscreen = false
   }
 
   // 挂载/换链后启动 prepare 看门狗：超时未起播按播放错误处理
@@ -200,13 +211,8 @@ export struct VideoPreviewPage {
       .onError(() => {
         this.handlePlayError(generation)
       })
-      .onClick(() => {
-        if (this.isFullscreen) {
-          // 全屏观影时点击屏幕切换控制栏显隐
-          this.controlsVisible = !this.controlsVisible
-        } else {
-          this.togglePlayback()
-        }
+      .onClick((event: ClickEvent) => {
+        this.handleVideoClick(event)
       })
       .onAreaChange((_oldArea: Area, newArea: Area) => {
         this.videoAreaWidth = Number(newArea.width)
@@ -615,8 +621,26 @@ export struct VideoPreviewPage {
   }
 
   @Builder fullscreenButton() {
-    this.videoControlButton(this.isFullscreen ? $r('app.media.ic_fullscreen_exit') : $r('app.media.ic_fullscreen'),
-      CloudThemeToken.videoPreviewControlIconSize, () => {
+    Button({ type: ButtonType.Circle, stateEffect: true }) {
+      SymbolGlyph(this.isFullscreen
+        ? $r('sys.symbol.arrow_down_right_and_arrow_up_left')
+        : $r('sys.symbol.arrow_up_left_and_arrow_down_right'))
+        .fontSize(CloudThemeToken.videoPreviewControlIconSize)
+        .fontColor([CloudThemeToken.onPrimary])
+        .fontWeight(FontWeight.Medium)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.videoPreviewControlSize)
+    .height(CloudThemeToken.videoPreviewControlSize)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .border({
+      width: CloudThemeToken.videoPreviewControlBorderWidth,
+      color: CloudThemeToken.videoPreviewControlBorder
+    })
+    .clip(true)
+    .onClick(() => {
       this.toggleFullscreen()
     })
   }
@@ -659,6 +683,45 @@ export struct VideoPreviewPage {
     this.commitSeek(target)
   }
 
+  private handleVideoClick(event: ClickEvent): void {
+    const isPcMouseClick = !this.supportsOrientation && event.source === SourceType.Mouse
+    if (!isPcMouseClick) {
+      this.handleVideoSingleClick()
+      return
+    }
+    const clickAt = new Date().getTime()
+    // 屏蔽系统在已判定双击后可能补发的尾随 click。
+    if (clickAt - this.lastMouseDoubleClickAt <= MOUSE_DOUBLE_CLICK_DELAY_MS) {
+      return
+    }
+    if (this.mouseSingleClickTimer >= 0) {
+      this.cancelPendingMouseSingleClick()
+      this.lastMouseDoubleClickAt = clickAt
+      this.toggleFullscreen()
+      return
+    }
+    this.mouseSingleClickTimer = setTimeout(() => {
+      this.mouseSingleClickTimer = -1
+      this.handleVideoSingleClick()
+    }, MOUSE_DOUBLE_CLICK_DELAY_MS)
+  }
+
+  private handleVideoSingleClick(): void {
+    if (this.isFullscreen) {
+      // 全屏观影时点击屏幕切换控制栏显隐
+      this.controlsVisible = !this.controlsVisible
+    } else {
+      this.togglePlayback()
+    }
+  }
+
+  private cancelPendingMouseSingleClick(): void {
+    if (this.mouseSingleClickTimer >= 0) {
+      clearTimeout(this.mouseSingleClickTimer)
+      this.mouseSingleClickTimer = -1
+    }
+  }
+
   private togglePlayback(): void {
     if (this.videoUrl.length <= CloudThemeToken.zero || this.isFailed || this.isLoading) {
       return
@@ -691,6 +754,10 @@ export struct VideoPreviewPage {
       this.mainWindow = win
       // 视频播放期间跟随设备翻转自动切换横竖屏（尊重系统旋转锁定）
       this.setOrientation(window.Orientation.AUTO_ROTATION_RESTRICTED)
+      // 窗口异步获取期间用户可能已点击全屏，补做一次窗口状态同步
+      if (this.isFullscreen) {
+        this.applyFullscreenWindow(true)
+      }
     }).catch((err: Error) => {
       AppLogger.warn(TAG, `get last window failed: ${err.message}`)
     })
@@ -701,6 +768,51 @@ export struct VideoPreviewPage {
       ? window.Orientation.AUTO_ROTATION_LANDSCAPE_RESTRICTED
       : window.Orientation.AUTO_ROTATION_RESTRICTED)
     this.setSystemBarsVisible(!active)
+    this.applyPcFullscreenWindow(active)
+  }
+
+  private applyPcFullscreenWindow(active: boolean): void {
+    const win = this.mainWindow
+    if (!win || this.supportsOrientation) {
+      return
+    }
+    if (active) {
+      // 避免重复的全屏同步把“原始为浮窗”误判成“原始已最大化”
+      if (this.shouldRecoverWindowAfterFullscreen || this.shouldExitPcImmersiveAfterFullscreen) {
+        return
+      }
+      try {
+        const status = win.getWindowStatus()
+        if (status === window.WindowStatusType.FULL_SCREEN) {
+          return
+        }
+        this.shouldRecoverWindowAfterFullscreen = status !== window.WindowStatusType.MAXIMIZE
+        this.shouldExitPcImmersiveAfterFullscreen = status === window.WindowStatusType.MAXIMIZE
+      } catch (err) {
+        this.shouldRecoverWindowAfterFullscreen = false
+        this.shouldExitPcImmersiveAfterFullscreen = false
+        AppLogger.warn(TAG, `get window status failed: ${(err as Error)?.message ?? err}`)
+      }
+      win.maximize(window.MaximizePresentation.ENTER_IMMERSIVE_DISABLE_TITLE_AND_DOCK_HOVER).catch((err: Error) => {
+        this.shouldRecoverWindowAfterFullscreen = false
+        this.shouldExitPcImmersiveAfterFullscreen = false
+        AppLogger.warn(TAG, `maximize video window failed: ${err.message}`)
+      })
+      return
+    }
+    if (this.shouldRecoverWindowAfterFullscreen) {
+      this.shouldRecoverWindowAfterFullscreen = false
+      win.recover().catch((err: Error) => {
+        AppLogger.warn(TAG, `recover video window failed: ${err.message}`)
+      })
+      return
+    }
+    if (this.shouldExitPcImmersiveAfterFullscreen) {
+      this.shouldExitPcImmersiveAfterFullscreen = false
+      win.maximize(window.MaximizePresentation.EXIT_IMMERSIVE).catch((err: Error) => {
+        AppLogger.warn(TAG, `exit video immersive window failed: ${err.message}`)
+      })
+    }
   }
 
   private setOrientation(orientation: window.Orientation): void {

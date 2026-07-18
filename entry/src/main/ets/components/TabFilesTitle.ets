@@ -210,12 +210,7 @@ export struct TabFilesTitle {
               this.onMoreClick(MoreMenuType.NEW_DIR)
             }
           })
-        MenuItem(this.commonMenu($r('app.string.more_new_file')))
-          .onClick(() => {
-            if (this.onMoreClick) {
-              this.onMoreClick(MoreMenuType.NEW_FILE)
-            }
-          })
+        // 「新建文件」入口已隐藏：App 无内置编辑器，空文件建了也写不了内容
       }
 
       MenuItemGroup() {

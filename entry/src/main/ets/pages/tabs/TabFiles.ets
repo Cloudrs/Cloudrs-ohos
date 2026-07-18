@@ -5,7 +5,8 @@ import Constant from "../../model/Constant";
 import TransferDatabase from "../../model/TransferDatabase";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { CloudApi } from "../../model/net/CloudApi";
-import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
+import { showApiFailureToast, showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
+import { ApiErrorUtil, NETWORK_ERROR_MESSAGE } from "../../utils/ApiErrorUtil";
 import { ObjectItem } from "../../components/ObjectItem";
 import { FileSearchParam, ImagePreview, PreviewFile, VideoPreview } from "../../model/Params";
 import { FileMenuType, MoreMenuType, ShowType, SortType } from "../../model/MenuModel";
@@ -279,6 +280,8 @@ export struct TabFiles {
   private inputRenameItem?: ObjectInfo = undefined
   private inputTextController: TextInputController = new TextInputController()
   private lastDownloadFailToastAt: number = 0
+  // 下载完成但尺寸不符（多为直链过期）时已自动换链重试过的任务 id，避免无限重试
+  private retriedBadDownloadIds: Set<string> = new Set<string>()
   private inputNewPath: string = '/'
   private inputNewIsDir: boolean = true
   private thumbLoadingIds: Set<string> = new Set<string>()
@@ -1305,7 +1308,7 @@ export struct TabFiles {
     })
   }
 
-  async getFileList(isRefresh: boolean, path: string) {
+  async getFileList(isRefresh: boolean, path: string, fromPullRefresh: boolean = false) {
     if (this.loadingFilePath === path) {
       return
     }
@@ -1351,10 +1354,17 @@ export struct TabFiles {
         this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = FilePageState.IDLE
         this.scheduleShareLinksRefresh()
+        if (fromPullRefresh) {
+          showToast('刷新成功')
+        }
       },
       onFailure: (msg) => {
         this.loadingFilePath = ''
-        showToastTips($r('app.string.get_failed'), ToastType.Error)
+        if (ApiErrorUtil.isNetworkMessage(msg)) {
+          showToast(NETWORK_ERROR_MESSAGE)
+        } else {
+          showToastTips($r('app.string.get_failed'), ToastType.Error)
+        }
         //决定是否重新登录
         this.isRefreshing = false
         this.refreshPullOffset = CloudThemeToken.zero
@@ -1404,7 +1414,11 @@ export struct TabFiles {
           },
           onFailure: (msg) => {
             AppLogger.error(TAG, 'copy failed, msg: ' + msg)
-            showToast($r('app.string.copy_failed'))
+            if (ApiErrorUtil.isObjectExisted(msg)) {
+              showToast('目标位置已存在同名文件或文件夹')
+            } else {
+              showApiFailureToast(msg, $r('app.string.copy_failed'))
+            }
           }
         })
       } else if (this.objectSelect.type == FileMenuType.MOVE) {
@@ -1418,7 +1432,11 @@ export struct TabFiles {
           },
           onFailure: (msg) => {
             AppLogger.error(TAG, 'move failed, msg: ' + msg)
-            showToast($r('app.string.move_failed'))
+            if (ApiErrorUtil.isObjectExisted(msg)) {
+              showToast('目标位置已存在同名文件或文件夹')
+            } else {
+              showApiFailureToast(msg, $r('app.string.move_failed'))
+            }
           }
         })
       }
@@ -1443,7 +1461,7 @@ export struct TabFiles {
             this.refreshPullOffset = Math.max(CloudThemeToken.zero, offset)
           })
           .onRefreshing(async () => {
-            await this.getFileList(true, this.currentPath);
+            await this.getFileList(true, this.currentPath, true);
           })
 
           if (this.shouldShowRefreshHint()) {
@@ -2038,10 +2056,7 @@ export struct TabFiles {
             this.closeFileMoreMenu()
             this.onMoreClick(MoreMenuType.NEW_DIR)
           })
-          this.fileMoreCommonItem($r('app.string.more_new_file'), $r('app.media.ic_doc_text_badge_arrow_up'), false, () => {
-            this.closeFileMoreMenu()
-            this.onMoreClick(MoreMenuType.NEW_FILE)
-          })
+          // 「新建文件」入口已隐藏：App 无内置编辑器，空文件建了也写不了内容
         }
 
         this.fileMoreGroupDivider()
@@ -2978,6 +2993,10 @@ export struct TabFiles {
       case FileMenuType.DIR_ENTER:
         this.onItemClick(item)
         break
+      case FileMenuType.MULTI_SELECT:
+        this.enterMultiSelectMode()
+        this.selectedObjects = [item]
+        break
       case FileMenuType.DETAIL:
         this.itemDetail(item)
         break
@@ -3188,7 +3207,7 @@ export struct TabFiles {
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, '获取详细信息失败 msg: ' + msg)
-        showToast($r('app.string.get_detail_failed'))
+        showApiFailureToast(msg, $r('app.string.get_detail_failed'))
       }
     })
   }
@@ -3570,7 +3589,11 @@ export struct TabFiles {
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, '重命名失败 msg: ' + msg)
-        showToast($r('app.string.rename_failed'))
+        if (ApiErrorUtil.isObjectExisted(msg)) {
+          showToast(`已存在同名${item.type == Constant.OBJECT_DIR_TYPE ? '文件夹' : '文件'}`)
+        } else {
+          showApiFailureToast(msg, $r('app.string.rename_failed'))
+        }
       }
     })
   }
@@ -3585,7 +3608,11 @@ export struct TabFiles {
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, '新建文件/文件夹失败 msg: ' + msg)
-        showToast(`新建${content}失败`)
+        if (ApiErrorUtil.isObjectExisted(msg)) {
+          showToast(`已存在同名${this.inputNewIsDir ? '文件夹' : '文件'}`)
+        } else {
+          showApiFailureToast(msg, `新建${content}失败`)
+        }
       }
     })
   }
@@ -3864,8 +3891,8 @@ export struct TabFiles {
       } else if (realState === FileModelState.COMPLETED) {
         const restoredCache = `${ctx.cacheDir}/${object.item.name}`
         const actualSize = FileSystemUtil.getFileSize(restoredCache)
-        if (object.total > 0 && actualSize < object.total) {
-          // 系统任务声称完成但缓存大小不足（直链过期返回错误响应），按失败处理
+        if (object.total > 0 && actualSize !== object.total) {
+          // 系统任务声称完成但缓存尺寸不符（直链过期返回错误响应），按失败处理
           AppLogger.warn(TAG,
             `restoreTransfers: completed but size mismatch, actual=${actualSize}, expect=${object.total}, mark FAILED`)
           object.state = FileModelState.FAILED
@@ -3910,16 +3937,31 @@ export struct TabFiles {
     return new FileModel(item.id, filePath, url, undefined, (trans, state) => {
       if (state == FileModelState.COMPLETED) {
         // 直链过期等场景服务端会返回小体积错误响应并正常结束请求，completed 不可盲信；
-        // 校验缓存文件实际大小，不足预期则按失败处理并清掉脏文件
+        // 校验缓存文件实际大小，尺寸不符则按失败处理并清掉脏文件
         const cachePath = `${context.cacheDir}/${object.item.name}`
         const actualSize = FileSystemUtil.getFileSize(cachePath)
-        if (item.size > 0 && actualSize < item.size) {
+        if (item.size > 0 && actualSize !== item.size) {
           AppLogger.warn(TAG,
             `download completed but size mismatch, actual=${actualSize}, expect=${item.size}, id=${item.id}`)
           FileSystemUtil.unlinkIfExists(cachePath).catch((err: Error) => {
             AppLogger.error(TAG, `cleanup bad download failed: ${err}`)
           })
+          // 大概率是直链过期被服务端塞了错误响应：自动换新直链重下一次
+          if (!this.retriedBadDownloadIds.has(item.id)) {
+            this.retriedBadDownloadIds.add(item.id)
+            AppLogger.info(TAG, `auto retry download with fresh url, id=${item.id}`)
+            this.downloadObjects.deleteDataByItem(object)
+            TransferDatabase.deleteDownload(object.id)
+            if (isCounted) {
+              this.downloadingCount = Math.max(0, this.downloadingCount - 1)
+              isCounted = false
+            }
+            this.enqueueDownloadTask(context, item, filePath, 0)
+            return
+          }
           state = FileModelState.FAILED
+        } else {
+          this.retriedBadDownloadIds.delete(item.id)
         }
       }
       // RequestDownload already suppresses progress callbacks while a download is paused
@@ -3970,7 +4012,7 @@ export struct TabFiles {
             Math.min(Constant.BACKGROUND_TASK_COMPLETE_PERCENT,
               Math.floor(begins / item.size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)) : 0
         }
-        this.downloadObjects.pushData(object)
+        this.downloadObjects.addData(0, object)
         this.downloadingCount++
 
         AppLogger.info(TAG, `enqueueDownloadTask: persisting id=${item.id}, path=${filePath}, begins=${begins}`)
@@ -3994,7 +4036,7 @@ export struct TabFiles {
         const now = new Date().getTime()
         if (now - this.lastDownloadFailToastAt > DOWNLOAD_FAIL_TOAST_INTERVAL_MS) {
           this.lastDownloadFailToastAt = now
-          showToast(`${item.name} 获取下载链接失败`)
+          showApiFailureToast(msg, `${item.name} 获取下载链接失败`)
         }
       }
     })
@@ -4004,6 +4046,17 @@ export struct TabFiles {
                                    filePath: string, url: string, object: TransportObject,
                                    begins: number = 0): void {
     const fileModel = this.buildDownloadFileModel(context, item, filePath, url, object)
+    // 直链短时效：批量下载排队久了会过期，任务真正启动时再换一条新链
+    fileModel.refreshUrl = () => new Promise<string>((resolve: (url: string) => void, reject: (err: Error) => void) => {
+      CloudApi.getDownloadUri(item.id, {
+        onSuccess: (data: string) => {
+          const fresh = (data.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
+            data.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? data : CloudApi.getBaseURL() + data
+          resolve(fresh)
+        },
+        onFailure: (msg: string) => reject(new Error(msg))
+      })
+    })
     requestDownload.downloadFileBackground(fileModel, context, begins)
   }
 
@@ -4087,9 +4140,10 @@ export struct TabFiles {
     const onTaskEnd = () => { if (this.uploadingCount > 0) this.uploadingCount--; };
 
     const existingNames = new Set<string>(this.objectsInfo.fileObjects.map(f => f.name));
-    const conflictNames = uris
+    // Set 去重：多选里出现同名文件时冲突列表不重复展示同一个名字
+    const conflictNames = Array.from(new Set(uris
       .map(uri => { try { return uploadManager.extractFileName(uri); } catch { return ''; } })
-      .filter(name => name.length > 0 && existingNames.has(name));
+      .filter(name => name.length > 0 && existingNames.has(name))));
 
     if (conflictNames.length === 0) {
       this.uploadingCount += uris.length;
@@ -4097,9 +4151,15 @@ export struct TabFiles {
       return;
     }
 
+    // 冲突过多时只展示前若干个，避免弹窗被文件名撑爆
+    const maxShown = 5
+    const conflictMessage = conflictNames.length > maxShown
+      ? conflictNames.slice(0, maxShown).join('\n') + `\n……等 ${conflictNames.length} 个文件`
+      : conflictNames.join('\n')
+
     showCloudActionDialog(this.getUIContext(), {
       title: $r('app.string.upload_conflict_title'),
-      message: conflictNames.join('\n'),
+      message: conflictMessage,
       primaryText: $r('app.string.upload_skip_existing'),
       secondaryText: $r('app.string.upload_overwrite_all'),
       onPrimary: () => {

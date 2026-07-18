@@ -86,6 +86,17 @@ class RequestDownload {
     downloadList.forEach(async (fileModel, index) => {
       const begins = this.waitBegins.get(fileModel.id) ?? 0;
       this.waitBegins.delete(fileModel.id);
+      // 直链是短时效签名链接，任务可能在等待队列里排了很久，启动前换一条新链
+      if (fileModel.refreshUrl) {
+        try {
+          const freshUrl = await fileModel.refreshUrl();
+          if (freshUrl.length > 0) {
+            fileModel.url = freshUrl;
+          }
+        } catch (err) {
+          Logger.warn(TAG, `refresh url failed, fallback to original: ${(err as Error)?.message ?? err}`);
+        }
+      }
       let downloadConfig: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
         url: fileModel.url,

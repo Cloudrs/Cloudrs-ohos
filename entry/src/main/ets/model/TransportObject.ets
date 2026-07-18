@@ -17,7 +17,7 @@ export class TransportObject {
   path: string = '';
   url: string = '';
   @Trace trans: number = 0;
-  total: number = 0;
+  @Trace total: number = 0;
   @Trace progress: number = 0;
   @Trace speed: number = 0;
   @Trace state: FileModelState = FileModelState.INITIALIZED;

@@ -184,7 +184,8 @@ class TransferDatabase {
     if (!this.rdbStore) return records
 
     const predicates = new relationalStore.RdbPredicates(this.downloadTable)
-    predicates.orderByAsc('created_at')
+    // 传输列表按创建时间倒序展示，最新任务在最上面
+    predicates.orderByDesc('created_at')
 
     let result: relationalStore.ResultSet | undefined = undefined
     try {
@@ -309,7 +310,8 @@ class TransferDatabase {
     if (!this.rdbStore) return records
 
     const predicates = new relationalStore.RdbPredicates(this.uploadTable)
-    predicates.orderByAsc('created_at')
+    // 传输列表按创建时间倒序展示，最新任务在最上面
+    predicates.orderByDesc('created_at')
 
     let result: relationalStore.ResultSet | undefined = undefined
     try {

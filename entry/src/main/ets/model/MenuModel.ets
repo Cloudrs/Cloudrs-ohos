@@ -9,6 +9,7 @@ export enum FileMenuType {
   CREATE_SHARE,
   DOWNLOAD,
   DELETE,
+  MULTI_SELECT,
 }
 
 export enum MoreMenuType {

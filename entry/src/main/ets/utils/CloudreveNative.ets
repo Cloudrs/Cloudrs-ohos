@@ -17,19 +17,20 @@ import {
   createArchive, extractArchive
 } from 'libcloudreve.so';
 import { HttpCallback } from '../model/net/ApiTypes';
+import { ApiErrorUtil } from './ApiErrorUtil';
 
 function wrap<T>(promise: Promise<T>, callback?: HttpCallback<T>): void {
   if (callback?.onStart) { callback.onStart(); }
   promise
     .then((data: T) => callback?.onSuccess(data))
-    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+    .catch((err: Error) => callback?.onFailure(ApiErrorUtil.translate(err.message ?? String(err))));
 }
 
 function wrapJson<T>(promise: Promise<string>, callback?: HttpCallback<T>): void {
   if (callback?.onStart) { callback.onStart(); }
   promise
     .then((json: string) => callback?.onSuccess(JSON.parse(json) as T))
-    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+    .catch((err: Error) => callback?.onFailure(ApiErrorUtil.translate(err.message ?? String(err))));
 }
 
 export function nativeInit(url: string, callback?: HttpCallback<string>): void {

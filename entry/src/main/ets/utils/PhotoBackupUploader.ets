@@ -5,6 +5,7 @@ import { HttpCallback, UploadRequestResponse } from '../model/net/ApiTypes';
 import { ObjectUpload } from '../model/net/ObjectParam';
 import PhotoBackupSessionStore, { PhotoBackupSessionData } from '../model/PhotoBackupSessionStore';
 import { FileSystemUtil } from './FileSystemUtil';
+import { ApiErrorUtil } from './ApiErrorUtil';
 import AppLogger from './AppLogger';
 
 const TAG: string = 'PhotoBackupUploader';
@@ -23,8 +24,7 @@ export enum PhotoBackupUploadResult {
  * 否则一轮备份能刷出上百张假 FAILED。
  */
 function isObjectExistedError(err: Error): boolean {
-  const msg = (err?.message ?? '').toLowerCase();
-  return msg.includes('40004') || msg.includes('object existed') || msg.includes('对象已存在');
+  return ApiErrorUtil.isObjectExisted(err?.message ?? '');
 }
 
 export interface PhotoBackupUploadCallbacks {

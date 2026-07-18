@@ -3,7 +3,8 @@ import { EmptyState } from "./EmptyState";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
-import { showToastTips, ToastType } from "../utils/ToastUtil";
+import { showToast, showToastTips, ToastType } from "../utils/ToastUtil";
+import { ApiErrorUtil, NETWORK_ERROR_MESSAGE } from "../utils/ApiErrorUtil";
 
 const TAG: string = 'PathSelectSheet'
 
@@ -66,7 +67,11 @@ export struct PathSelectSheet {
       onFailure: (msg) => {
         this.isLoading = false
         this.loadFailed = true
-        showToastTips($r('app.string.get_failed'), ToastType.Error)
+        if (ApiErrorUtil.isNetworkMessage(msg)) {
+          showToast(NETWORK_ERROR_MESSAGE)
+        } else {
+          showToastTips($r('app.string.get_failed'), ToastType.Error)
+        }
       }
     })
   }

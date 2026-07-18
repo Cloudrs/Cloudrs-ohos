@@ -306,6 +306,7 @@ export struct ObjectItem {
         } else {
           this.commonMenuItem($r('app.string.preview'), FileMenuType.PREVIEW)
         }
+        this.commonMenuItem($r('app.string.more_multi_select'), FileMenuType.MULTI_SELECT)
         this.commonMenuItem($r('app.string.file_details'), FileMenuType.DETAIL)
         this.commonMenuItem($r('app.string.rename'), FileMenuType.RENAME)
         this.commonMenuItem($r('app.string.copy'), FileMenuType.COPY)

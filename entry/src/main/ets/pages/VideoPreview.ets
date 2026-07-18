@@ -3,7 +3,7 @@ import { CloudThemeToken } from "../model/CloudTheme";
 import { VideoPreview } from "../model/Params";
 import { CloudApi } from "../model/net/CloudApi";
 import { CloudRouter } from "../utils/CloudRouter";
-import { showToast } from "../utils/ToastUtil";
+import { showApiFailureToast, showToast } from "../utils/ToastUtil";
 import AppLogger from "../utils/AppLogger";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { window } from "@kit.ArkUI";
@@ -25,6 +25,13 @@ export struct VideoPreviewPage {
   @State videoUrl: string = ''
   @State isLoading: boolean = true
   @State isFailed: boolean = false
+  // 自动换链重试计数；@State 供加载提示文案显示重试进度
+  @State playRetryCount: number = 0
+  // 每次挂载新直链递增；播放器异步回调只允许修改对应代次的状态
+  @State videoGeneration: number = 0
+  // prepare 超时定时器：播放器连不上流时系统要 ~30s 才报错，主动掐短
+  private prepareTimeoutTimer: number = -1
+  private videoMountAt: number = 0
   @State isPlaying: boolean = false
   @State isSeeking: boolean = false
   @State isFullscreen: boolean = false
@@ -62,8 +69,38 @@ export struct VideoPreviewPage {
   aboutToDisappear(): void {
     harmonyShare.off('knockShare', this.knockShareCallback)
     this.stopHoldSeek()
+    this.clearPrepareTimeout()
+    // 显式停止播放，立刻掐断流媒体连接释放服务器带宽；
+    // 只靠组件卸载让 AVPlayer 异步释放，服务器会继续往半死连接里灌数据
+    try {
+      this.controller.stop()
+    } catch (err) {
+      AppLogger.warn(TAG, `stop on disappear failed: ${(err as Error)?.message ?? err}`)
+    }
     this.setSystemBarsVisible(true)
     this.setOrientation(window.Orientation.UNSPECIFIED)
+  }
+
+  // 挂载/换链后启动 prepare 看门狗：超时未起播按播放错误处理
+  private armPrepareTimeout(): void {
+    this.clearPrepareTimeout()
+    this.videoMountAt = new Date().getTime()
+    const generation = this.videoGeneration
+    this.prepareTimeoutTimer = setTimeout(() => {
+      if (generation !== this.videoGeneration) {
+        return
+      }
+      this.prepareTimeoutTimer = -1
+      AppLogger.warn(TAG, `prepare timeout after ${Constant.VIDEO_PREPARE_TIMEOUT_MS}ms`)
+      this.handlePlayError(generation)
+    }, Constant.VIDEO_PREPARE_TIMEOUT_MS)
+  }
+
+  private clearPrepareTimeout(): void {
+    if (this.prepareTimeoutTimer >= 0) {
+      clearTimeout(this.prepareTimeoutTimer)
+      this.prepareTimeoutTimer = -1
+    }
   }
 
   private knockShareCallback = (sharableTarget: harmonyShare.SharableTarget): void => {
@@ -105,103 +142,112 @@ export struct VideoPreviewPage {
     }
   }
 
+  @Builder videoPlayer(generation: number) {
+    Video({
+      src: this.videoUrl,
+      currentProgressRate: this.playbackRate,
+      controller: this.controller
+    })
+      .width('100%')
+      .height('100%')
+      .objectFit(ImageFit.Contain)
+      .autoPlay(false)
+      .controls(false)
+      .onPrepared((event) => {
+        if (generation !== this.videoGeneration) {
+          return
+        }
+        this.clearPrepareTimeout()
+        AppLogger.info(TAG, `prepared in ${new Date().getTime() - this.videoMountAt}ms`)
+        this.duration = Math.max(event.duration, CloudThemeToken.zero)
+        this.isLoading = false
+        this.isPlaying = true
+        this.controller.start()
+      })
+      .onStart(() => {
+        if (generation !== this.videoGeneration) {
+          return
+        }
+        this.clearPrepareTimeout()
+        this.isPlaying = true
+        this.isLoading = false
+      })
+      .onPause(() => {
+        this.isPlaying = false
+      })
+      .onFinish(() => {
+        this.isPlaying = false
+        // 长按快退期间播放器可能回报结束，不要覆盖回退中的进度
+        if (this.holdSeekDirection >= 0) {
+          this.currentTime = this.duration
+        }
+      })
+      .onUpdate((event) => {
+        if (this.isSeeking) {
+          return
+        }
+        if (this.pendingSeekTarget >= CloudThemeToken.zero) {
+          const reachedTarget = Math.abs(event.time - this.pendingSeekTarget) <=
+            Constant.VIDEO_SEEK_SYNC_TOLERANCE_SECONDS
+          if (!reachedTarget && this.ignoredUpdateCount < Constant.VIDEO_SEEK_SYNC_MAX_IGNORED) {
+            this.ignoredUpdateCount++
+            return
+          }
+          this.pendingSeekTarget = -1
+        }
+        this.currentTime = Math.min(event.time, this.getSafeDuration())
+      })
+      .onError(() => {
+        this.handlePlayError(generation)
+      })
+      .onClick(() => {
+        if (this.isFullscreen) {
+          // 全屏观影时点击屏幕切换控制栏显隐
+          this.controlsVisible = !this.controlsVisible
+        } else {
+          this.togglePlayback()
+        }
+      })
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.videoAreaWidth = Number(newArea.width)
+      })
+      .gesture(
+        LongPressGesture()
+          .onAction((event: GestureEvent) => {
+            // 长按右半边快进、左半边快退，松手停止
+            const touchX = event.fingerList[Constant.FIRST_ARRAY_INDEX]?.localX ?? this.videoAreaWidth
+            this.startHoldSeek(touchX < this.videoAreaWidth / CloudThemeToken.halfDivisor ? -1 : 1)
+          })
+          .onActionEnd(() => {
+            this.stopHoldSeek()
+          })
+          .onActionCancel(() => {
+            this.stopHoldSeek()
+          })
+      )
+      .gesture(
+        PanGesture({ direction: PanDirection.Horizontal })
+          .onActionStart(() => {
+            this.startSwipeSeek()
+          })
+          .onActionUpdate((event: GestureEvent) => {
+            this.updateSwipeSeek(event.offsetX)
+          })
+          .onActionEnd(() => {
+            this.finishSwipeSeek()
+          })
+          .onActionCancel(() => {
+            this.finishSwipeSeek()
+          })
+      )
+  }
+
   build() {
     HdsNavigation() {
       Stack({ alignContent: Alignment.Bottom }) {
         Stack({ alignContent: Alignment.Center }) {
           if (this.videoUrl.length > CloudThemeToken.zero) {
-            Video({
-              src: this.videoUrl,
-              currentProgressRate: this.playbackRate,
-              controller: this.controller
-            })
-              .width('100%')
-              .height('100%')
-              .objectFit(ImageFit.Contain)
-              .autoPlay(false)
-              .controls(false)
-              .onPrepared((event) => {
-                this.duration = Math.max(event.duration, CloudThemeToken.zero)
-                this.isLoading = false
-                this.isPlaying = true
-                this.controller.start()
-              })
-              .onStart(() => {
-                this.isPlaying = true
-                this.isLoading = false
-              })
-              .onPause(() => {
-                this.isPlaying = false
-              })
-              .onFinish(() => {
-                this.isPlaying = false
-                // 长按快退期间播放器可能回报结束，不要覆盖回退中的进度
-                if (this.holdSeekDirection >= 0) {
-                  this.currentTime = this.duration
-                }
-              })
-              .onUpdate((event) => {
-                if (this.isSeeking) {
-                  return
-                }
-                if (this.pendingSeekTarget >= CloudThemeToken.zero) {
-                  const reachedTarget = Math.abs(event.time - this.pendingSeekTarget) <=
-                    Constant.VIDEO_SEEK_SYNC_TOLERANCE_SECONDS
-                  if (!reachedTarget && this.ignoredUpdateCount < Constant.VIDEO_SEEK_SYNC_MAX_IGNORED) {
-                    this.ignoredUpdateCount++
-                    return
-                  }
-                  this.pendingSeekTarget = -1
-                }
-                this.currentTime = Math.min(event.time, this.getSafeDuration())
-              })
-              .onError(() => {
-                AppLogger.warn(TAG, 'video play error')
-                this.isPlaying = false
-                this.isLoading = false
-                this.isFailed = true
-                showToast('视频播放失败')
-              })
-              .onClick(() => {
-                if (this.isFullscreen) {
-                  // 全屏观影时点击屏幕切换控制栏显隐
-                  this.controlsVisible = !this.controlsVisible
-                } else {
-                  this.togglePlayback()
-                }
-              })
-              .onAreaChange((_oldArea: Area, newArea: Area) => {
-                this.videoAreaWidth = Number(newArea.width)
-              })
-              .gesture(
-                LongPressGesture()
-                  .onAction((event: GestureEvent) => {
-                    // 长按右半边快进、左半边快退，松手停止
-                    const touchX = event.fingerList[Constant.FIRST_ARRAY_INDEX]?.localX ?? this.videoAreaWidth
-                    this.startHoldSeek(touchX < this.videoAreaWidth / CloudThemeToken.halfDivisor ? -1 : 1)
-                  })
-                  .onActionEnd(() => {
-                    this.stopHoldSeek()
-                  })
-                  .onActionCancel(() => {
-                    this.stopHoldSeek()
-                  })
-              )
-              .gesture(
-                PanGesture({ direction: PanDirection.Horizontal })
-                  .onActionStart(() => {
-                    this.startSwipeSeek()
-                  })
-                  .onActionUpdate((event: GestureEvent) => {
-                    this.updateSwipeSeek(event.offsetX)
-                  })
-                  .onActionEnd(() => {
-                    this.finishSwipeSeek()
-                  })
-                  .onActionCancel(() => {
-                    this.finishSwipeSeek()
-                  })
-              )
+            this.videoPlayer(this.videoGeneration)
           }
 
           if (this.holdSeekDirection !== 0 || this.isSwipeSeeking) {
@@ -225,7 +271,7 @@ export struct VideoPreviewPage {
                 .width(CloudThemeToken.iconButtonSize)
                 .height(CloudThemeToken.iconButtonSize)
                 .color(CloudThemeToken.primary)
-              Text('正在打开视频')
+              Text(this.loadingHintText())
                 .fontSize(CloudThemeToken.textSizeBody)
                 .fontColor(CloudThemeToken.onPrimary)
             }
@@ -242,6 +288,15 @@ export struct VideoPreviewPage {
               Text('视频预览失败')
                 .fontSize(CloudThemeToken.textSizeBodyPlus)
                 .fontColor(CloudThemeToken.onPrimary)
+              Button('重试')
+                .fontSize(CloudThemeToken.textSizeBody)
+                .fontColor(CloudThemeToken.onPrimary)
+                .backgroundColor(CloudThemeToken.primary)
+                .onClick(() => {
+                  this.playRetryCount = 0
+                  this.videoUrl = ''
+                  this.loadVideoUrl(true)
+                })
             }
             .alignItems(HorizontalAlign.Center)
             .justifyContent(FlexAlign.Center)
@@ -329,7 +384,7 @@ export struct VideoPreviewPage {
     .backgroundColor(CloudThemeToken.previewBackground)
   }
 
-  private loadVideoUrl(): void {
+  private loadVideoUrl(forceRefresh: boolean = false): void {
     if (!this.fileParam) {
       this.isLoading = false
       this.isFailed = true
@@ -338,11 +393,16 @@ export struct VideoPreviewPage {
 
     this.isLoading = true
     this.isFailed = false
-    const cachedUrl = videoDownloadUriCache.get(this.fileParam.fileId)
-    if (cachedUrl && cachedUrl.length > CloudThemeToken.zero) {
-      AppLogger.info(TAG, 'open from cache')
-      this.videoUrl = cachedUrl
-      return
+    if (forceRefresh) {
+      // 直链是短时效签名链接，播放失败大概率是缓存的旧链过期，强制换新链
+      videoDownloadUriCache.delete(this.fileParam.fileId)
+    } else {
+      const cachedUrl = videoDownloadUriCache.get(this.fileParam.fileId)
+      if (cachedUrl && cachedUrl.length > CloudThemeToken.zero) {
+        AppLogger.info(TAG, `open from cache, host=${this.extractHost(cachedUrl)}`)
+        this.mountVideoUrl(cachedUrl)
+        return
+      }
     }
     AppLogger.info(TAG, 'fetch download uri')
     CloudApi.getDownloadUri(this.fileParam.fileId, {
@@ -350,15 +410,63 @@ export struct VideoPreviewPage {
         const resolvedUrl = (url.startsWith(Constant.PROTOCOL_HTTP_SCHEME) ||
           url.startsWith(Constant.PROTOCOL_HTTPS_SCHEME)) ? url : CloudApi.getBaseURL() + url
         videoDownloadUriCache.set(this.fileParam!.fileId, resolvedUrl)
-        this.videoUrl = resolvedUrl
+        AppLogger.info(TAG, `got download uri, host=${this.extractHost(resolvedUrl)}`)
+        this.mountVideoUrl(resolvedUrl)
       },
       onFailure: (msg: string) => {
         AppLogger.error(TAG, `Get video download URI failed: ${msg}`)
         this.isLoading = false
         this.isFailed = true
-        showToast('获取视频地址失败')
+        showApiFailureToast(msg, '获取视频地址失败')
       }
     })
+  }
+
+  private mountVideoUrl(url: string): void {
+    this.videoGeneration++
+    this.videoUrl = url
+    this.armPrepareTimeout()
+  }
+
+  // 播放出错/prepare 超时：先自动换新直链重试，重试次数用完才落到失败态
+  private handlePlayError(generation: number): void {
+    if (generation !== this.videoGeneration) {
+      AppLogger.info(TAG, `ignore stale video callback, generation=${generation}, active=${this.videoGeneration}`)
+      return
+    }
+    this.clearPrepareTimeout()
+    this.isPlaying = false
+    if (this.isFailed) {
+      return
+    }
+    // 已在换链取新地址的路上（Video 已卸载），忽略旧实例迟到的错误回调
+    if (this.videoUrl.length === 0 && this.isLoading) {
+      return
+    }
+    const elapsed = this.videoMountAt > 0 ? new Date().getTime() - this.videoMountAt : -1
+    if (this.playRetryCount < Constant.VIDEO_PLAY_MAX_AUTO_RETRY) {
+      this.playRetryCount++
+      AppLogger.warn(TAG, `video play error after ${elapsed}ms, auto retry ${this.playRetryCount}`)
+      this.videoUrl = ''
+      this.loadVideoUrl(true)
+    } else {
+      AppLogger.warn(TAG, `video play error after ${elapsed}ms, retries exhausted`)
+      this.isLoading = false
+      this.isFailed = true
+      showToast('视频播放失败')
+    }
+  }
+
+  // 只取 host 供日志定位，不落带签名参数的完整直链
+  private extractHost(url: string): string {
+    const parts = url.split('/')
+    return parts.length > 2 ? parts[2] : url.substring(0, Math.min(url.length, 32))
+  }
+
+  private loadingHintText(): string {
+    return this.playRetryCount > 0
+      ? `加载失败，自动重试中 (${this.playRetryCount}/${Constant.VIDEO_PLAY_MAX_AUTO_RETRY})`
+      : '正在打开视频'
   }
 
   @Builder videoControls() {

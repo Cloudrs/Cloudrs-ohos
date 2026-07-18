@@ -10,6 +10,7 @@ import LazyDataSource from './LazyDataSource';
 import UserPreferences from '../model/UserPreferences';
 import Constant from '../model/Constant';
 import { FileSystemUtil } from './FileSystemUtil';
+import { ApiErrorUtil } from './ApiErrorUtil';
 import AppLogger from './AppLogger';
 import TransferDatabase, { UploadRecord } from '../model/TransferDatabase';
 
@@ -62,15 +63,17 @@ class UploadManager {
       const sep = remoteDirPath.endsWith('/') ? '' : '/';
       const remotePath = `${remoteDirPath}${sep}${fileName}`;
       const id = this.makeUploadId(remotePath);
+      // 入队即读真实大小，排队中的任务也能显示 0B/14MB 而不是 0B/0B
+      const sourceSize = FileSystemUtil.getFileSize(uri);
       const fakeItem: ObjectInfo = {
         id, name: fileName, path: remoteDirPath,
-        thumb: false, size: 0, type: 'file',
+        thumb: false, size: sourceSize > 0 ? sourceSize : 0, type: 'file',
         date: '', create_date: '', source_enabled: false
       };
       const to = new TransportObject(fakeItem, uri, remotePath, id);
       to.type = TransportType.UPLOAD;
       to.state = FileModelState.WAITING;
-      uploadObjects.pushData(to);
+      uploadObjects.addData(0, to);
 
       const now = new Date().getTime();
       TransferDatabase.upsertUpload({
@@ -86,7 +89,7 @@ class UploadManager {
         storagePolicyType: '',
         storagePolicyRelay: false,
         sessionExpiresAt: 0,
-        total: 0,
+        total: fakeItem.size,
         offset: 0,
         chunkIndex: 0,
         cachePath: '',
@@ -332,7 +335,21 @@ class UploadManager {
 
       if (!session) {
         try {
-          session = await this._createUploadSession(task.remotePath, fileName, transportObject.total, task.overwrite)
+          try {
+            session = await this._createUploadSession(task.remotePath, fileName, transportObject.total, task.overwrite)
+          } catch (firstErr) {
+            // 40004「对象已存在」且本任务之前建过会话：大概率是上次失败残留的服务端
+            // 占位文件（0KB 脏数据），删掉旧会话后重试一次，让「重试」真正可用
+            const firstMsg = (firstErr as Error)?.message ?? String(firstErr)
+            const staleRecord = TransferDatabase.listUploads().find(r => r.id === id)
+            if (ApiErrorUtil.isObjectExisted(firstMsg) && staleRecord && staleRecord.sessionId.length > 0) {
+              AppLogger.warn(TAG, `create session hit 40004, delete stale session ${staleRecord.sessionId} and retry`)
+              await this._deleteSessionQuiet(staleRecord.remotePath, staleRecord.sessionId)
+              session = await this._createUploadSession(task.remotePath, fileName, transportObject.total, task.overwrite)
+            } else {
+              throw firstErr as Error
+            }
+          }
           TransferDatabase.updateUploadSession(
             id,
             session.sessionId,
@@ -346,10 +363,18 @@ class UploadManager {
             transportObject.total
           )
         } catch (err) {
-          AppLogger.error(TAG, `create session failed: ${(err as Error)?.message ?? err}`)
-          transportObject.state = FileModelState.FAILED
-          TransferDatabase.updateUploadState(id, FileModelState.FAILED)
+          const msg = (err as Error)?.message ?? String(err)
+          AppLogger.error(TAG, `create session failed: ${msg}`)
+          // 会话尚未建立，本地缓存留着也无法续传，直接清掉
           FileSystemUtil.unlinkIfExists(cachePath)
+          if (ApiErrorUtil.isNetworkMessage(msg)) {
+            transportObject.statusText = '网络中断'
+            transportObject.state = FileModelState.PAUSED
+            TransferDatabase.updateUploadState(id, FileModelState.PAUSED)
+          } else {
+            transportObject.state = FileModelState.FAILED
+            TransferDatabase.updateUploadState(id, FileModelState.FAILED)
+          }
           this._finish(onTaskEnd)
           return
         }
@@ -376,9 +401,21 @@ class UploadManager {
         const msg = (err as Error)?.message ?? String(err)
         AppLogger.error(TAG, `upload failed: ${msg}`)
         transportObject.speed = 0
-        transportObject.state = FileModelState.FAILED
-        TransferDatabase.updateUploadState(id, FileModelState.FAILED)
-        FileSystemUtil.unlinkIfExists(cachePath)
+        if (ApiErrorUtil.isNetworkMessage(msg)) {
+          // 网络中断：保留本地缓存与服务端会话，标 PAUSED，网络恢复后点「继续」从断点续传
+          transportObject.statusText = '网络中断'
+          transportObject.state = FileModelState.PAUSED
+          TransferDatabase.updateUploadState(id, FileModelState.PAUSED)
+        } else {
+          // 真失败：删掉服务端会话，避免留下同名 0KB 占位脏文件，也保证重试能重建会话
+          transportObject.state = FileModelState.FAILED
+          TransferDatabase.updateUploadState(id, FileModelState.FAILED)
+          const record = TransferDatabase.listUploads().find(r => r.id === id)
+          if (record && record.sessionId.length > 0) {
+            await this._deleteSessionQuiet(record.remotePath, record.sessionId)
+          }
+          FileSystemUtil.unlinkIfExists(cachePath)
+        }
         this._finish(onTaskEnd)
       }
     } catch (unexpected) {
@@ -477,6 +514,22 @@ class UploadManager {
       }
     }
     return true
+  }
+
+  /** 删除服务端上传会话（连带清掉占位文件），失败只记日志不上抛。 */
+  private _deleteSessionQuiet(remotePath: string, sessionId: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      CloudApi.deleteUploadSession(remotePath, sessionId, {
+        onSuccess: () => {
+          AppLogger.info(TAG, `deleted upload session ${sessionId}`)
+          resolve()
+        },
+        onFailure: (msg: string) => {
+          AppLogger.warn(TAG, `delete upload session failed: ${msg}`)
+          resolve()
+        }
+      })
+    })
   }
 
   private _createUploadSession(

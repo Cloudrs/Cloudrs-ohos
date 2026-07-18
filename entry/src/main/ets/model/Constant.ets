@@ -122,6 +122,12 @@ class Constant {
 
   VIDEO_SEEK_SYNC_MAX_IGNORED: number = 10
 
+  // 视频播放出错时自动换新直链重试的最大次数
+  VIDEO_PLAY_MAX_AUTO_RETRY: number = 2
+
+  // Video 挂载后超过该时长仍未 onPrepared 视为失败，不陪系统等 30s 超时
+  VIDEO_PREPARE_TIMEOUT_MS: number = 15000
+
   FIRST_ARRAY_INDEX: number = 0
 
   SYSTEM_TOP_RECT_HEIGHT: string = 'sysTopRectHeight'

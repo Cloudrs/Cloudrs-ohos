@@ -15,6 +15,7 @@ import { window } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import AppLogger from '../utils/AppLogger';
+import { initToastUiContext } from '../utils/ToastUtil';
 
 @Entry
 @Component
@@ -33,6 +34,7 @@ struct Index {
   private keyboardHeightListener: ((heightPx: number) => void) | undefined = undefined;
 
   aboutToAppear(): void {
+    initToastUiContext(this.getUIContext());
     this.setupWindowMetrics();
     CloudRouter.init(
       this.pathStack,

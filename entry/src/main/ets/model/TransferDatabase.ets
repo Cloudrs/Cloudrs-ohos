@@ -51,7 +51,8 @@ class TransferDatabase {
     }
 
     try {
-      this.rdbStore = await relationalStore.getRdbStore(context, config)
+      // App 级目录，不随单个 HAP 卸载删除；老数据迁移见 StorageMigration
+      this.rdbStore = await relationalStore.getRdbStore(context.getApplicationContext(), config)
       AppLogger.info(TAG, `db ${this.dbName} ready`)
 
       const downloadSql = `CREATE TABLE IF NOT EXISTS ${this.downloadTable} (

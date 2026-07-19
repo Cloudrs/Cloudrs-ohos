@@ -14,7 +14,8 @@ class UserDatabase {
     }
 
     try {
-      this.rdbStore = await relationalStore.getRdbStore(context, config)
+      // App 级目录，不随单个 HAP 卸载删除；老数据迁移见 StorageMigration
+      this.rdbStore = await relationalStore.getRdbStore(context.getApplicationContext(), config)
       console.info('UserDatabase', `数据库${this.dbName}初始化成功`)
 
       // 建表

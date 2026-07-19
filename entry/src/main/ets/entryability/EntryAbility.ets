@@ -1,256 +1,111 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
-import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AbilityConstant, contextConstant, StartOptions, Want } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
-import Constant from '../model/Constant';
-import UserDatabase from '../model/UserDatabase';
-import TransferDatabase from '../model/TransferDatabase';
-import UserPreferences from '../model/UserPreferences';
-import { AvatarUtil } from '../utils/AvatarUtil';
-import { AppLockUtil } from '../utils/AppLockUtil';
-import { AppBoot } from '../utils/AppBoot';
 import AppLogger from '../utils/AppLogger';
 import { CloudStatusBar } from '../utils/CloudStatusBar';
-import { VERSION_NAME } from 'BuildProfile';
+import MainAbility from './MainAbility';
 
-export default class EntryAbility extends UIAbility {
-  private windowStage: window.WindowStage | undefined = undefined
-  private readonly windowStageCloseListener = (): boolean => {
-    if (deviceInfo.deviceType !== '2in1') {
-      return false
-    }
-    this.context.hideAbility().catch((err: Error) => {
-      AppLogger.error('EntryAbility', `hide ability on window close failed: ${err.message}`)
-    })
-    return true
-  }
+const TAG: string = 'EntryAbility';
+
+/**
+ * 桌面入口。Ability 名保持与线上 1.1.0 一致(EntryAbility),升级不重建桌面图标。
+ *
+ * - phone/tablet:即完整应用,全部生命周期走 MainAbility(父类)。
+ * - 2in1:仅作跳板 —— 状态栏挂接要求主界面由另一个 Ability 以
+ *   ATTACH_TO_STATUS_BAR_ITEM 拉起,这里拉起 MainAbility 后自行退出,不加载 UI。
+ */
+export default class EntryAbility extends MainAbility {
+  private readonly isTwoInOneLauncher: boolean = deviceInfo.deviceType === '2in1'
+  private launchRequested: boolean = false
+  private targetStarted: boolean = false
+  private launcherBackgrounded: boolean = false
+  private terminating: boolean = false
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    if (deviceInfo.deviceType === '2in1') {
-      CloudStatusBar.bindContext(this.context)
+    if (!this.isTwoInOneLauncher) {
+      super.onCreate(want, launchParam)
+      return
     }
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
+    AppLogger.init(this.context)
   }
 
   onDestroy(): void {
-    CloudStatusBar.dispose()
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onDestroy');
+    if (!this.isTwoInOneLauncher) {
+      super.onDestroy()
+    }
   }
 
   async onWindowStageCreate(windowStage: window.WindowStage): Promise<void> {
-    const t0 = Date.now()
-    let tPrev = t0
-    const perfMark = (label: string): void => {
-      const now = Date.now()
-      hilog.info(0x0000, 'bootPerf', '%{public}s +%{public}d ms (total %{public}d ms)', label, now - tPrev, now - t0)
-      tPrev = now
+    if (!this.isTwoInOneLauncher) {
+      await super.onWindowStageCreate(windowStage)
     }
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
-
-    let windowClass: window.Window | undefined = undefined
-    try {
-      windowClass = windowStage.getMainWindowSync()
-      this.windowStage = windowStage
-      this.registerTwoInOneCloseHandler(windowStage)
-    } catch (err) {
-      hilog.error(0x0000, 'testTag', 'getMainWindowSync failed. Cause: %{public}s', JSON.stringify(err) ?? '');
-    }
-
-    // 首帧前只做必须项：主题（避免暗色模式闪白）与沉浸式系统栏（不 await，IPC 与首帧并行）
-    UserPreferences.init(this.context, Constant.USER_PREFERENCES)
-    const themeMode = this.applySavedThemeMode()
-    if (windowClass) {
-      this.applyImmersiveSystemBars(windowClass, themeMode)
-    }
-    AppStorage.setOrCreate(Constant.APP_VERSION, VERSION_NAME)
-    perfMark('preLoadContent')
-
-    // 尽早 loadContent 触发首帧，其余初始化移到其后；依赖方通过 AppBoot.whenReady() 等待
-    windowStage.loadContent('pages/Index', (err) => {
-      if (err.code) {
-        hilog.error(0x0000, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err) ?? '');
-        return;
-      }
-      hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
-    });
-    perfMark('loadContent dispatched')
-
-    try {
-      this.publishWindowInsets(windowClass)
-      AppLockUtil.setMainWindow(windowClass)
-      AppLockUtil.resetSession()
-      AvatarUtil.init(this.context)
-      AppLogger.init(this.context)
-      AppLogger.info('EntryAbility', `app start, version=${VERSION_NAME}`)
-      if (deviceInfo.deviceType === '2in1') {
-        CloudStatusBar.register(this.context).catch((err: Error) => {
-          AppLogger.error('EntryAbility', `register status bar failed: ${err.message}`)
-        })
-      }
-      this.logBootSnapshot(windowClass)
-      perfMark('sync init')
-      await UserDatabase.init(this.context)
-      perfMark('UserDatabase.init')
-      await TransferDatabase.init(this.context)
-      perfMark('TransferDatabase.init')
-      this.prepareActiveAvatarCache()
-    } finally {
-      AppBoot.markReady()
-      perfMark('bootReady')
-    }
-  }
-
-  private publishWindowInsets(windowClass: window.Window | undefined): void {
-    try {
-      if (!windowClass) {
-        throw new Error('main window unavailable')
-      }
-      const uiContext = windowClass.getUIContext()
-      const bottomRectHeight = windowClass
-        .getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR)
-        .bottomRect.height
-      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, uiContext.px2vp(bottomRectHeight))
-      const topRectHeight = windowClass
-        .getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM)
-        .topRect.height
-      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, uiContext.px2vp(topRectHeight))
-    } catch (err) {
-      // 早期窗口可能未就绪（1300002）；Index.publishWindowSize 会兜底刷新
-      hilog.error(0x0000, 'testTag', 'Failed to initialize window layout. Cause: %{public}s', JSON.stringify(err) ?? '');
-      AppStorage.setOrCreate(Constant.NAV_BOTTOM_RECT_HEIGHT, 0)
-      AppStorage.setOrCreate(Constant.SYSTEM_TOP_RECT_HEIGHT, 0)
-    }
+    // 2in1 跳板不加载 UI,onForeground 中拉起 MainAbility 后退出
   }
 
   onWindowStageDestroy(): void {
-    // Main window is destroyed, release UI related resources
-    if (this.windowStage && deviceInfo.deviceType === '2in1') {
-      try {
-        this.windowStage.off('windowStageClose', this.windowStageCloseListener)
-      } catch (err) {
-        AppLogger.warn('EntryAbility', `unregister windowStageClose failed: ${(err as Error)?.message ?? err}`)
-      }
-    }
-    this.windowStage = undefined
-    AppLockUtil.setMainWindow(undefined)
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
-  }
-
-  private registerTwoInOneCloseHandler(windowStage: window.WindowStage): void {
-    if (deviceInfo.deviceType !== '2in1') {
-      return
-    }
-    try {
-      windowStage.on('windowStageClose', this.windowStageCloseListener)
-    } catch (err) {
-      hilog.warn(0x0000, 'testTag', 'Register windowStageClose failed. Cause: %{public}s',
-        (err as Error)?.message ?? '')
+    if (!this.isTwoInOneLauncher) {
+      super.onWindowStageDestroy()
     }
   }
 
   onForeground(): void {
-    // Ability has brought to foreground
-    AppLockUtil.syncLockPresentation();
-    const tick = AppStorage.get<number>(Constant.APP_FOREGROUND_TICK) ?? 0;
-    AppStorage.setOrCreate(Constant.APP_FOREGROUND_TICK, tick + 1);
-    AppLogger.info('EntryAbility', `foreground, tick=${tick + 1}`);
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onForeground');
+    if (!this.isTwoInOneLauncher) {
+      super.onForeground()
+      return
+    }
+    if (this.launchRequested) {
+      return
+    }
+    this.launchRequested = true
+    this.launchMainAbility().catch((err: Error) => {
+      this.launchRequested = false
+      AppLogger.error(TAG, `launch MainAbility failed: ${err.message}`)
+    })
   }
 
   onBackground(): void {
-    // Ability has back to background
-    AppLockUtil.resetSession();
-    AppLogger.info('EntryAbility', 'background');
-    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
-  }
-
-  private logBootSnapshot(windowClass: window.Window | undefined): void {
-    try {
-      const parts: string[] = [];
-      parts.push(`brand=${deviceInfo.brand}`);
-      parts.push(`model=${deviceInfo.productModel}`);
-      parts.push(`osFullName=${deviceInfo.osFullName}`);
-      parts.push(`sdkApi=${deviceInfo.sdkApiVersion}`);
-      parts.push(`deviceType=${deviceInfo.deviceType}`);
-      if (windowClass) {
-        try {
-          const props = windowClass.getWindowProperties();
-          parts.push(`window=${props.windowRect.width}x${props.windowRect.height}`);
-        } catch (_) {
-        }
-      }
-      AppLogger.info('EntryAbility', `device ${parts.join(', ')}`);
-    } catch (err) {
-      AppLogger.warn('EntryAbility', `boot snapshot failed: ${(err as Error)?.message ?? err}`);
-    }
-  }
-
-  private prepareActiveAvatarCache(): void {
-    const activeUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
-    if (!activeUser || activeUser.length === 0) {
+    if (!this.isTwoInOneLauncher) {
+      super.onBackground()
       return
     }
-    const activeUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
-    const dbUserInfo = UserDatabase.getUserInfo(activeUser, activeUrl)
-    if (!dbUserInfo) {
+    this.launcherBackgrounded = true
+    this.terminateAfterTargetStarted()
+  }
+
+  private async launchMainAbility(): Promise<void> {
+    if (CloudStatusBar.isRegistered()) {
+      await CloudStatusBar.showAbility()
+    } else {
+      await CloudStatusBar.register(this.context)
+      const options: StartOptions = {
+        processMode: contextConstant.ProcessMode.ATTACH_TO_STATUS_BAR_ITEM,
+        startupVisibility: contextConstant.StartupVisibility.STARTUP_SHOW
+      }
+      await this.context.startAbility({
+        bundleName: this.context.applicationInfo.name,
+        abilityName: 'MainAbility',
+        moduleName: this.context.abilityInfo.moduleName
+      }, options)
+    }
+    this.targetStarted = true
+    this.terminateLauncher()
+  }
+
+  private terminateAfterTargetStarted(): void {
+    if (!this.targetStarted || !this.launcherBackgrounded || this.terminating) {
       return
     }
-    try {
-      AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
-    } catch (err) {
-      hilog.warn(0x0000, 'testTag', 'Prepare active avatar cache failed. Cause: %{public}s',
-        (err as Error)?.message ?? '');
-    }
+    this.terminateLauncher()
   }
 
-  private async applyImmersiveSystemBars(windowClass: window.Window, themeMode: string): Promise<void> {
-    const useLightIcon = themeMode === Constant.APP_THEME_DARK
-    try {
-      if (deviceInfo.deviceType === '2in1') {
-        // 2in1 上隐藏窗口装饰条，由应用自绘控制
-        try {
-          windowClass.setWindowDecorVisible(false)
-          windowClass.setWindowDecorHeight(64)
-        } catch (err) {
-          hilog.warn(0x0000, 'testTag', 'setWindowDecor failed. Cause: %{public}s',
-            (err as Error)?.message ?? '')
-        }
-      } else {
-        windowClass.setWindowLayoutFullScreen(true)
-      }
-      await windowClass.setWindowSystemBarProperties({
-        statusBarColor: Constant.SYSTEM_BAR_TRANSPARENT_COLOR,
-        navigationBarColor: Constant.SYSTEM_BAR_TRANSPARENT_COLOR,
-        statusBarContentColor: useLightIcon ? Constant.SYSTEM_BAR_LIGHT_CONTENT_COLOR : Constant.SYSTEM_BAR_DARK_CONTENT_COLOR,
-        navigationBarContentColor: useLightIcon ? Constant.SYSTEM_BAR_LIGHT_CONTENT_COLOR : Constant.SYSTEM_BAR_DARK_CONTENT_COLOR,
-        isStatusBarLightIcon: useLightIcon,
-        isNavigationBarLightIcon: useLightIcon,
-        enableStatusBarAnimation: Constant.SYSTEM_BAR_ANIMATION_ENABLED,
-        enableNavigationBarAnimation: Constant.SYSTEM_BAR_ANIMATION_ENABLED
-      })
-    } catch (err) {
-      hilog.error(0x0000, 'testTag', 'Failed to apply immersive system bars. Cause: %{public}s',
-        JSON.stringify(err) ?? '');
+  private terminateLauncher(): void {
+    if (this.terminating) {
+      return
     }
-  }
-
-  private getSavedThemeMode(): string {
-    return UserPreferences.getSync(
-      Constant.USER_PREFERENCES,
-      Constant.APP_THEME_MODE,
-      Constant.APP_THEME_LIGHT
-    ) as string
-  }
-
-  applySavedThemeMode(): string {
-    const themeMode = this.getSavedThemeMode()
-    try {
-      this.context.setColorMode(themeMode === Constant.APP_THEME_DARK
-        ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
-        : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT)
-    } catch (err) {
-      hilog.error(0x0000, 'testTag', 'Failed to apply theme mode. Cause: %{public}s', JSON.stringify(err) ?? '');
-    }
-    return themeMode
+    this.terminating = true
+    this.context.terminateSelf().catch((err: Error) => {
+      this.terminating = false
+      AppLogger.error(TAG, `terminate launcher failed: ${err.message}`)
+    })
   }
 }

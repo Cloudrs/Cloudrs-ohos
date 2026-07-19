@@ -3,7 +3,7 @@
     "name": "entry",
     "type": "entry",
     "description": "$string:module_desc",
-    "mainElement": "LauncherAbility",
+    "mainElement": "EntryAbility",
     "deviceTypes": [
       "phone",
       "tablet",
@@ -41,8 +41,8 @@
     "pages": "$profile:main_pages",
     "abilities": [
       {
-        "name": "LauncherAbility",
-        "srcEntry": "./ets/entryability/LauncherAbility.ets",
+        "name": "EntryAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ets",
         "description": "$string:EntryAbility_desc",
         "icon": "$media:layered_image",
         "label": "$string:EntryAbility_label",
@@ -61,8 +61,10 @@
         ]
       },
       {
-        "name": "EntryAbility",
-        "srcEntry": "./ets/entryability/EntryAbility.ets",
+        // 2in1 真实主界面:桌面入口 EntryAbility 在 2in1 上作为跳板,
+        // 以 ATTACH_TO_STATUS_BAR_ITEM 拉起本 Ability(状态栏挂接的硬性要求)
+        "name": "MainAbility",
+        "srcEntry": "./ets/entryability/MainAbility.ets",
         "description": "$string:EntryAbility_desc",
         "icon": "$media:layered_image",
         "label": "$string:EntryAbility_label",

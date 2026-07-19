@@ -8,7 +8,8 @@ class UserPreferences {
   init(context: Context, name: string) {
     try {
       let options: sendablePreferences.Options = { name };
-      let perf = sendablePreferences.getPreferencesSync(context, options)
+      // App 级目录，不随单个 HAP 卸载删除；老数据迁移见 StorageMigration
+      let perf = sendablePreferences.getPreferencesSync(context.getApplicationContext(), options)
       this.perfMap.set(name, perf)
     } catch (e) {
       AppLogger.error('UserPrivData', `加载首选项失败, 错误: ${(e as Error)?.message ?? e}`)

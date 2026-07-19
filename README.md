@@ -56,7 +56,7 @@ Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **H
 
 1. **配置签名**：复制 `build-profile.json5.template` 为 `build-profile.json5`，在 DevEco Studio 的 *File > Project Structure > Signing Configs* 中配置签名（真实签名文件已被 `.gitignore` 忽略，请勿提交）。
 
-2. **构建**：在 DevEco Studio 中打开项目，通过 *Build > Build Hap(s)/APP(s)* 构建（项目未包含 `hvigorw` 命令行包装器，使用 IDE 自带的 hvigor 集成即可）。项目无第三方 ohpm 依赖。
+2. **构建**：在 DevEco Studio 中打开项目，通过 *Build > Build Hap(s)/APP(s)* 构建（项目未包含 `hvigorw` 命令行包装器，使用 IDE 自带的 hvigor 集成即可）。项目无第三方 ohpm 依赖。单 `entry` 模块面向手机/平板/2in1；2in1 上桌面入口 `EntryAbility` 作为跳板以状态栏模式拉起 `MainAbility`。
 
 3. **（可选）重新编译 Rust native 层**：`entry/libs/` 中已包含预编译的 `.so`，日常开发无需 Rust 环境。如需修改 native 代码，进入 `cloudreve-api-native/` 执行 `build-ohos.ps1`（依赖本地的 `cloudreve-api` crate）。
 

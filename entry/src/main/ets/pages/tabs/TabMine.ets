@@ -903,6 +903,9 @@ export struct TabMine {
           .height(CloudThemeToken.storageProgressHeight)
           .color(CloudThemeToken.primary)
           .backgroundColor(CloudThemeToken.surfaceSubtle)
+          // 胶囊型 Progress 自带按钮式交互态(hover/获焦缩放),纯展示条需屏蔽,否则 2in1 鼠标悬停时横条左右晃动
+          .focusable(false)
+          .hitTestBehavior(HitTestMode.None)
 
         Row({ space: CloudThemeToken.spacingXs }) {
           Text($r('app.string.storage_available'))

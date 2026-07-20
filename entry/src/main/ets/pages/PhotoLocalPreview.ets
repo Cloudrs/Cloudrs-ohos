@@ -211,7 +211,7 @@ export struct PhotoLocalPreviewPage {
   @Builder backButton() {
     Button({ type: ButtonType.Circle, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.chevron_left'))
-        .fontSize(CloudThemeToken.videoPreviewCloseIconSize)
+        .fontSize(CloudThemeToken.photoLocalPreviewBackIconSize)
         .fontColor([Color.White])
         .fontWeight(FontWeight.Medium)
     }

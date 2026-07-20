@@ -376,6 +376,8 @@ export class CloudThemeToken {
   static readonly videoPreviewControlSize: number = 42
   static readonly videoPreviewControlIconSize: number = 18
   static readonly videoPreviewCloseIconSize: number = 18
+  // 本地预览返回键与远程预览 HDS titleBar 返回图标(24vp)保持一致
+  static readonly photoLocalPreviewBackIconSize: number = 24
   static readonly videoPreviewControlsPanelRadius: number = 20
   static readonly videoPreviewTitleShadowRadius: number = 6
   static readonly videoPreviewTitleShadowColor: ResourceColor = 'rgba(0, 0, 0, 0.6)'

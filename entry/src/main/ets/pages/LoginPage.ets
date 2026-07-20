@@ -15,6 +15,7 @@ import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { CloudIconButton } from '../components/CloudIconButton';
 import AppLogger from '../utils/AppLogger';
+import { common } from '@kit.AbilityKit';
 
 @Extend(Row)
 function rowCommonStyle() {
@@ -67,6 +68,59 @@ interface ScanUserLike {
   group?: ScanGroupLike
 }
 
+@CustomDialog
+struct PrivacyConfirmDialog {
+  controller?: CustomDialogController
+  onAgree: () => void = () => {
+  }
+  onViewPolicy: () => void = () => {
+  }
+
+  build() {
+    Column({ space: CloudThemeToken.spacingPage }) {
+      Text($r('app.string.login_privacy_dialog_title'))
+        .fontSize(CloudThemeToken.textSizeTitle)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+
+      Text() {
+        Span($r('app.string.login_privacy_dialog_message_prefix'))
+        Span($r('app.string.login_privacy_dialog_link'))
+          .fontColor(CloudThemeToken.primary)
+          .onClick(() => {
+            this.onViewPolicy()
+          })
+        Span($r('app.string.login_privacy_dialog_message_suffix'))
+      }
+      .fontSize(CloudThemeToken.textSizeLarge)
+      .fontColor(CloudThemeToken.textPrimary)
+      .textAlign(TextAlign.Center)
+      .width('100%')
+
+      Row() {
+        Button($r('app.string.dialog_cancel'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontColor(CloudThemeToken.primary)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.controller?.close()
+          })
+        Button($r('app.string.login_privacy_dialog_agree'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontColor(CloudThemeToken.primary)
+          .layoutWeight(1)
+          .onClick(() => {
+            this.controller?.close()
+            this.onAgree()
+          })
+      }
+      .width('100%')
+    }
+    .padding(CloudThemeToken.spacingPage)
+    .width('100%')
+  }
+}
+
 @Component
 export struct LoginPage {
   routeParam?: LoginParam
@@ -97,6 +151,23 @@ export struct LoginPage {
   private readonly otpIndexes: number[] = buildOtpIndexes()
   private readonly otpInputId: string = 'loginOtpInput'
   private scanShouldAutoLogin: boolean = false
+  private pendingPrivacyAgree: (() => void) | undefined = undefined
+  private privacyDialogController: CustomDialogController = new CustomDialogController({
+    builder: PrivacyConfirmDialog({
+      onAgree: () => {
+        this.privacyAccepted = true
+        const action = this.pendingPrivacyAgree
+        this.pendingPrivacyAgree = undefined
+        if (action) {
+          action()
+        }
+      },
+      onViewPolicy: () => {
+        this.openPrivacyPolicy()
+      }
+    }),
+    autoCancel: true
+  })
 
   private isKeyboardVisible(): boolean {
     return this.keyHeight > CloudThemeToken.zero
@@ -371,7 +442,9 @@ export struct LoginPage {
   }
 
   private async startScanLogin(): Promise<void> {
-    if (!this.requirePrivacyAccepted()) {
+    if (!this.requirePrivacyAccepted(() => {
+      this.startScanLogin()
+    })) {
       return
     }
     const hostContext = this.getUIContext().getHostContext()
@@ -855,16 +928,12 @@ export struct LoginPage {
       .backgroundColor(CloudThemeToken.primary)
       .fontColor(CloudThemeToken.onPrimary)
       .onClick(() => {
-        if (!this.requirePrivacyAccepted()) {
+        if (!this.requirePrivacyAccepted(() => {
+          this.continueLoginStep()
+        })) {
           return
         }
-        if (!this.websiteInvalid) {
-          this.websiteTest()
-        } else if (this.needs2FA) {
-          this.submitOtp()
-        } else {
-          this.login()
-        }
+        this.continueLoginStep()
       })
   }
 
@@ -977,7 +1046,7 @@ export struct LoginPage {
   }
 
   @Builder showLoginInput() {
-    Column({ space: this.isKeyboardVisible() ? CloudThemeToken.loginOtpGap : CloudThemeToken.loginInputGroupGap }) {
+    Column({ space: CloudThemeToken.loginInputGroupGap }) {
       // 用户名
       Row() {
         Image($r("app.media.ic_envelope"))
@@ -1062,14 +1131,13 @@ export struct LoginPage {
       currentUser: this.activeUserName,
       currentUrl: this.activeUserUrl,
       onSelect: (user: DbUserInfo) => {
-        if (!this.requirePrivacyAccepted()) {
+        if (!this.requirePrivacyAccepted(() => {
+          this.switchToSelectedUser(user)
+        })) {
           this.showUserSwitchSheet = false
           return
         }
-        if (CloudRouter.switchToUser(user.username, user.url, true)) {
-          this.showUserSwitchSheet = false
-          CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
-        }
+        this.switchToSelectedUser(user)
       },
       onClose: () => {
         this.showUserSwitchSheet = false
@@ -1096,7 +1164,7 @@ export struct LoginPage {
           this.privacyAccepted = !this.privacyAccepted
         })
 
-      Hyperlink('https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520', $r("app.string.hyperlink_app_privacy")) {
+      Hyperlink(Constant.PRIVACY_POLICY_URL, $r("app.string.hyperlink_app_privacy")) {
       }
       .color(CloudThemeToken.primary)
       .height(CloudThemeToken.loginPrivacyLinkHeight)
@@ -1104,11 +1172,45 @@ export struct LoginPage {
     .width("100%")
   }
 
-  private requirePrivacyAccepted(): boolean {
+  private continueLoginStep(): void {
+    if (!this.websiteInvalid) {
+      this.websiteTest()
+    } else if (this.needs2FA) {
+      this.submitOtp()
+    } else {
+      this.login()
+    }
+  }
+
+  private switchToSelectedUser(user: DbUserInfo): void {
+    if (CloudRouter.switchToUser(user.username, user.url, true)) {
+      this.showUserSwitchSheet = false
+      CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
+    }
+  }
+
+  private requirePrivacyAccepted(onAgree: () => void): boolean {
     if (this.privacyAccepted) {
       return true
     }
-    showToastTips($r('app.string.login_privacy_must_agree'), ToastType.Warn)
+    this.pendingPrivacyAgree = onAgree
+    this.privacyDialogController.open()
     return false
+  }
+
+  private openPrivacyPolicy(): void {
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      showToastTips('无法打开链接', ToastType.Error)
+      return
+    }
+    (hostContext as common.UIAbilityContext).startAbility({
+      action: 'ohos.want.action.viewData',
+      uri: Constant.PRIVACY_POLICY_URL,
+      entities: ['entity.system.browsable']
+    }).catch((err: BusinessError) => {
+      AppLogger.error('LoginPage', `open privacy policy failed: ${err.code}, ${err.message}`)
+      showToastTips('无法打开浏览器', ToastType.Error)
+    })
   }
 }

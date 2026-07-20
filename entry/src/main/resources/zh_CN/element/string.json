@@ -81,6 +81,26 @@
       "value": "请先阅读并勾选同意《隐私政策》"
     },
     {
+      "name": "login_privacy_dialog_title",
+      "value": "隐私政策"
+    },
+    {
+      "name": "login_privacy_dialog_message_prefix",
+      "value": "登录前需阅读并同意"
+    },
+    {
+      "name": "login_privacy_dialog_link",
+      "value": "《隐私政策》"
+    },
+    {
+      "name": "login_privacy_dialog_message_suffix",
+      "value": "，是否同意并继续？"
+    },
+    {
+      "name": "login_privacy_dialog_agree",
+      "value": "同意并继续"
+    },
+    {
       "name": "hyperlink_app_service",
       "value": "服务条款"
     },

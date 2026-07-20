@@ -17,6 +17,8 @@ class Constant {
 
   SCAN_CANCEL_CODE: number = 1000500002
 
+  PRIVACY_POLICY_URL: string = 'https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520'
+
   IMAGE_PREVIEW_MAX_DOWNLOAD_BYTES: number = 100 * 1024 * 1024
 
   BACKGROUND_TASK_FLUSH_INTERVAL_MS: number = 2000

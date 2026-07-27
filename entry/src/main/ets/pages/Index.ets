@@ -2,7 +2,7 @@ import Constant from '../model/Constant';
 import { LoginParam } from '../model/net/LoginParam';
 import { FileSearchParam, ImagePreview, PhotoLocalPreviewParam, VideoPreview } from '../model/Params';
 import { CloudThemeToken } from '../model/CloudTheme';
-import { CloudRouter } from '../utils/CloudRouter';
+import { CloudRouter, UserSwitchResult } from '../utils/CloudRouter';
 import { AppBoot } from '../utils/AppBoot';
 import { HomePage } from './HomePage';
 import { LoginPage } from './LoginPage';
@@ -15,7 +15,9 @@ import { window } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import AppLogger from '../utils/AppLogger';
-import { initToastUiContext } from '../utils/ToastUtil';
+import { initToastUiContext, showToastTips, ToastType } from '../utils/ToastUtil';
+import { ContinuationCenter, VideoContinuationState } from '../utils/ContinuationCenter';
+import { showCloudConfirmDialog, showCloudNoticeDialog } from '../utils/CloudDialogUtil';
 
 @Entry
 @Component
@@ -57,18 +59,120 @@ struct Index {
         this.overlayPage = pageUrl;
       }
     );
+    // 热启动接续走 onNewWant，那时本组件早已建好，由中枢回调驱动恢复
+    ContinuationCenter.setRestoreHandler(() => {
+      this.restoreContinuation();
+    });
     if (!this.startPageScheduled) {
       this.startPageScheduled = true;
       // 登录态判定依赖 UserDatabase，等首帧后的延迟初始化完成再决策启动页
       AppBoot.whenReady().then(() => {
+        if (ContinuationCenter.hasPendingRestore()) {
+          this.restoreContinuation();
+          return;
+        }
         if (this.pathStack.size() === 0) {
           CloudRouter.showStartPage();
         }
+        // 冷启动接续被判不兼容：界面就绪后才告知得到
+        this.noticeContinuationIncompatible();
       });
     }
   }
 
+  /**
+   * 恢复接续过来的视频播放。
+   * 直链是短时效签名地址，不跨设备传递，这里只带 fileId 让对端自己重新取；
+   * 前提是对端已登录同一站点的同一账号。账号对不上时挂起接续、引导登录，
+   * 登录成功后由 CloudRouter.goAfterLogin 回调本方法续播。
+   */
+  /**
+   * 告知"对端版本更新、本机读不懂载荷"。
+   * 这条提示不能在 acceptPayload 当场弹——那时应用正被系统拉起、窗口还在切换，
+   * toast/弹窗都出不来，只能等界面就绪后补。
+   */
+  private noticeContinuationIncompatible(): void {
+    if (!ContinuationCenter.consumeIncompatibleNotice()) {
+      return;
+    }
+    showCloudNoticeDialog(this.getUIContext(), {
+      title: '无法接续',
+      message: '发起接续的设备上应用版本较新，请将本机应用升级到相同版本后重试。'
+    });
+  }
+
+  private restoreContinuation(): void {
+    // 热启动接续走这里，不兼容的告知也要能弹出来
+    this.noticeContinuationIncompatible();
+    const state: VideoContinuationState | undefined = ContinuationCenter.peekPendingRestore();
+    if (!state) {
+      return;
+    }
+    // 站点地址缺失时不能只按用户名匹配：UserDatabase 会退化成模糊命中，
+    // 可能切到同名的另一个站点账号，拿着本站 fileId 去别的站取直链
+    if (state.siteUrl.length === 0 || state.userName.length === 0) {
+      AppLogger.warn('Index', 'continuation payload missing account identity, give up');
+      ContinuationCenter.consumePendingRestore();
+      showToastTips('接续信息不完整，已取消接续', ToastType.Warn);
+      CloudRouter.showStartPage();
+      return;
+    }
+
+    const switchResult = CloudRouter.switchToUserSilently(state.userName, state.siteUrl);
+    if (switchResult === UserSwitchResult.Ok) {
+      ContinuationCenter.consumePendingRestore();
+      AppLogger.info('Index',
+        `restore continuation fileId=${state.fileId} time=${Math.floor(state.currentTime)}`);
+      CloudRouter.replaceRoot(Constant.HOME_PAGE);
+      CloudRouter.push(Constant.VIDEO_PREVIEW_PAGE, new VideoPreview(
+        state.fileName, state.fileId, state.fileExtension, state.sharePath,
+        state.currentTime, state.isPlaying));
+      return;
+    }
+
+    // 已引导过一轮仍对不上：用户登的是别的账号。静默保持挂起，
+    // 等他哪次切到接续来源账号再续播，别反复弹提示打扰
+    if (ContinuationCenter.isAwaitingLogin()) {
+      AppLogger.info('Index',
+        `continuation still pending: user=${state.userName} result=${switchResult}`);
+      return;
+    }
+
+    AppLogger.info('Index',
+      `continuation pending login: user=${state.userName} result=${switchResult}`);
+    ContinuationCenter.markAwaitingLogin();
+
+    // 本机已登着别的账号：不抢占它，也不能只弹个 toast 就把用户丢在原界面——
+    // 用户点了接续却什么都没发生，且无从知道该登哪个站点。明确询问，让他自己决定。
+    // （直接 replaceRoot 到登录页不行：登录页没有返回出口，返回键会直接退出应用）
+    if (CloudRouter.hasActiveSession()) {
+      CloudRouter.replaceRoot(Constant.HOME_PAGE);
+      showCloudConfirmDialog(this.getUIContext(), {
+        title: '继续播放接续内容',
+        message: `《${state.fileName}》来自账号 ${state.userName}（${state.siteUrl}）。本机当前登录的是其他账号，登录后将自动续播。`,
+        confirmText: '去登录',
+        cancelText: '暂不',
+        onConfirm: () => {
+          CloudRouter.replaceRoot(Constant.LOGIN_PAGE,
+            new LoginParam(false, Constant.HOME_PAGE, state.siteUrl, state.userName));
+        },
+        onCancel: () => {
+          ContinuationCenter.consumePendingRestore();
+        }
+      });
+      return;
+    }
+
+    showToastTips(switchResult === UserSwitchResult.Expired
+      ? '接续来源账号登录已过期，重新登录后自动续播'
+      : '接续需要先登录该账号，登录后自动续播', ToastType.Warn);
+    // 预填站点与用户名，登录成功后 goAfterLogin 会回调本方法完成续播
+    CloudRouter.replaceRoot(Constant.LOGIN_PAGE,
+      new LoginParam(false, Constant.HOME_PAGE, state.siteUrl, state.userName));
+  }
+
   aboutToDisappear(): void {
+    ContinuationCenter.setRestoreHandler(undefined);
     if (this.mainWindow && this.windowSizeListener) {
       try {
         this.mainWindow.off('windowSizeChange', this.windowSizeListener);

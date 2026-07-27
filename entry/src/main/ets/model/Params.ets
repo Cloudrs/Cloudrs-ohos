@@ -38,12 +38,18 @@ export class VideoPreview {
   fileExtension: string = ''
   // 碰一碰创建分享链接用的规范化路径;为空则未下载场景回退分享下载直链
   sharePath: string = ''
+  // 应用接续恢复用:起播位置(秒)与是否自动播放,常规打开保持 0/true
+  startTime: number = 0
+  autoPlay: boolean = true
 
-  constructor(fileName: string, fileId: string, fileExtension: string, sharePath: string = '') {
+  constructor(fileName: string, fileId: string, fileExtension: string, sharePath: string = '',
+    startTime: number = 0, autoPlay: boolean = true) {
     this.fileName = fileName
     this.fileId = fileId
     this.fileExtension = fileExtension
     this.sharePath = sharePath
+    this.startTime = startTime
+    this.autoPlay = autoPlay
   }
 }
 

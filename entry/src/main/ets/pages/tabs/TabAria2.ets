@@ -18,6 +18,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { CloudActionButton } from "../../components/CloudActionButton";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
+import { ActiveAccount } from "../../utils/ActiveAccount";
 
 const TAG: string = 'TabRemote'
 
@@ -26,6 +27,9 @@ export struct TabRemoteDown {
   @Link overLap: boolean
   @Watch('onActiveStateChanged')
   @Prop isActive: boolean = false
+  // 首页常驻，切换账号不会重建本组件，靠这个信号丢弃上一账号的离线下载/任务队列
+  @Watch('onAccountChanged')
+  @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
@@ -54,8 +58,10 @@ export struct TabRemoteDown {
   private timerId?: number = undefined
   @State showCreateSheet: boolean = false
   private initialDataRequested: boolean = false
+  private loadedAccountScope: string = ''
 
   aboutToAppear(): void {
+    this.loadedAccountScope = ActiveAccount.current()
     this.loadInitialDataIfActive()
   }
 
@@ -68,6 +74,32 @@ export struct TabRemoteDown {
       this.clearDownloadUpdateTask()
       return
     }
+    this.loadInitialDataIfActive()
+  }
+
+  /** 账号切换：丢掉上一账号的列表，重新按新账号拉取（非活动时留待切回本页再拉） */
+  private onAccountChanged(): void {
+    const scope = this.accountScope
+    if (scope.length === 0 || scope === this.loadedAccountScope) {
+      return
+    }
+    AppLogger.info(TAG, 'account switched, reset remote download lists')
+    this.loadedAccountScope = scope
+    this.clearDownloadUpdateTask()
+    this.aria2Downloading = []
+    this.totalDownloading = 0
+    this.aria2FinishedSource.clear()
+    this.totalFinished = 0
+    this.finishedPage = 1
+    this.isLastFinishedPage = false
+    this.tasksQueueSource.clear()
+    this.totalTasks = 0
+    this.tasksQueuePage = 1
+    this.isLastTasksQueuePage = false
+    this.showTaskDetailSheet = false
+    this.currentFinishedDetail = undefined
+    this.currentFinishedIndex = -1
+    this.initialDataRequested = false
     this.loadInitialDataIfActive()
   }
 

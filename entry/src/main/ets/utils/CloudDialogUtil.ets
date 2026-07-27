@@ -9,6 +9,13 @@ export interface CloudConfirmDialogOptions {
   onCancel?: () => void
 }
 
+export interface CloudNoticeDialogOptions {
+  title: ResourceStr
+  message?: ResourceStr
+  confirmText?: ResourceStr
+  onConfirm?: () => void
+}
+
 export interface CloudActionDialogOptions {
   title: ResourceStr
   message?: ResourceStr
@@ -29,6 +36,22 @@ export function showCloudActionDialog(uiContext: UIContext, options: CloudAction
     secondaryButton: {
       value: options.secondaryText,
       action: options.onSecondary
+    }
+  })
+}
+
+/** 单按钮告知型弹窗：只需用户知晓、无需选择的场景 */
+export function showCloudNoticeDialog(uiContext: UIContext, options: CloudNoticeDialogOptions): void {
+  uiContext.showAlertDialog({
+    title: options.title,
+    message: options.message ?? '',
+    confirm: {
+      value: options.confirmText ?? '知道了',
+      action: () => {
+        if (options.onConfirm) {
+          options.onConfirm()
+        }
+      }
     }
   })
 }

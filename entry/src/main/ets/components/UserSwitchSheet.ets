@@ -1,9 +1,8 @@
 import { DbUserInfo } from "../model/net/ApiTypes";
-import Constant from "../model/Constant";
 import UserDatabase from "../model/UserDatabase";
-import UserPreferences from "../model/UserPreferences";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { showCloudConfirmDialog } from "../utils/CloudDialogUtil";
+import { ActiveAccount } from "../utils/ActiveAccount";
 import { AccountAvatar } from "./AccountAvatar";
 import { CloudIconButton } from "./CloudIconButton";
 
@@ -38,8 +37,7 @@ export struct UserSwitchSheet {
       onConfirm: () => {
         UserDatabase.deleteUserInfo(user.username, user.url)
         if (this.isCurrentUser(user)) {
-          UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
-          UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY)
+          ActiveAccount.clear()
         }
         this.reloadUsers()
       }

@@ -32,6 +32,7 @@ import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import AppLogger from "../../utils/AppLogger";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
+import { ActiveAccount } from "../../utils/ActiveAccount";
 import UserPreferences from "../../model/UserPreferences";
 import { PhotoBackupSettingsStore } from "../../model/PhotoBackupSettingsStore";
 import UploadSessionRelief, { UploadSessionSummary } from "../../utils/UploadSessionRelief";
@@ -200,6 +201,9 @@ export struct TabFiles {
   @Link overLap: boolean
   @Watch('onActiveChanged')
   @Prop isActive: boolean = true
+  // 首页常驻，切换账号不会重建本组件，靠这个信号丢弃上一账号的目录数据
+  @Watch('onAccountChanged')
+  @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
@@ -292,6 +296,10 @@ export struct TabFiles {
   private shareRefreshTimer: number = -1
   private initialFileListRequested: boolean = false
   private loadingFilePath: string = ''
+  // 当前列表数据属于哪个账号，用来识别账号切换并丢弃迟到的旧账号响应
+  private loadedAccountScope: string = ''
+  // 列表在本页不可见时加载完成，缩略图请求被推迟到本页重新变为活动时
+  private thumbsDeferredUntilActive: boolean = false
 
   private onActiveChanged(): void {
     if (!this.isActive) {
@@ -302,12 +310,48 @@ export struct TabFiles {
       this.cancelScheduledShareRefresh()
       return
     }
+    // 本页不可见时加载完的列表，onDataGet 那一轮的缩略图请求被 isActive 挡掉了，
+    // 队列里什么都没有、LazyForEach 也不会自己再要一次数据。重放一次可见项回调补上，
+    // 否则用户看到的是一片占位图，得手动下拉刷新才出图。
+    if (this.thumbsDeferredUntilActive) {
+      this.thumbsDeferredUntilActive = false
+      this.applyVisibleObjects()
+    }
     if (this.thumbQueue.length > 0) {
       this.scheduleThumbQueue()
     }
     if (this.dirDataSource.totalCount() > 0 || this.fileDataSource.totalCount() > 0) {
       this.scheduleShareLinksRefresh()
     }
+  }
+
+  /**
+   * 账号切换：本组件常驻不重建，必须主动把上一账号的目录、缩略图、分享标记全部丢掉再回根目录重拉。
+   * 退出登录（scope 为空）时首页整体会被登录页替换，不用在这里空跑一次请求。
+   */
+  private onAccountChanged(): void {
+    const scope = this.accountScope
+    if (scope.length === 0 || scope === this.loadedAccountScope) {
+      return
+    }
+    AppLogger.info(TAG, `account switched, reload root directory`)
+    this.loadedAccountScope = scope
+    this.exitMultiSelectMode()
+    this.cancelScheduledShareRefresh()
+    this.shareLinks = []
+    this.sharedPaths = []
+    this.resetThumbQueue()
+    this.thumbImage = new Map()
+    this.dirDataSource.clear()
+    this.fileDataSource.clear()
+    this.objectsInfo = new DirFileInfo()
+    this.searchKeyword = ''
+    // loadCurrentUser 顺带按新账号作用域重取缩略图快照，放在清空之后
+    this.loadCurrentUser()
+    // 旧账号的请求可能还在飞，清掉在途标记并让 getFileList 走"换目录"分支，不保留旧内容
+    this.loadingFilePath = ''
+    this.currentPath = ''
+    this.getFileList(true, '/')
   }
 
   setThumbData(id: string, pixMap: PixelMap) {
@@ -819,6 +863,7 @@ export struct TabFiles {
 
   aboutToAppear() {
     this.loadCurrentUser()
+    this.loadedAccountScope = ActiveAccount.current()
     this.fileDataSource.onDataGet = (index: number, item: ObjectInfo) => {
       //console.debug(TAG, `onDataGet: index:${index}`)
       this.getThumbFile(index, item)
@@ -1328,8 +1373,13 @@ export struct TabFiles {
     }
     this.currentPath = path
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : CommonUtil.getLastDirectoryName(path)
+    // 请求发出后可能被账号切换打断，回来的是上一账号的目录，不能再往界面上写
+    const requestScope = this.loadedAccountScope
     CloudApi.getFilesInfo(path, {
       onStart: () => {
+        if (requestScope !== this.loadedAccountScope) {
+          return
+        }
         this.filePageState = shouldKeepContent ? FilePageState.IDLE : FilePageState.LOADING
         if (isRefresh && !shouldKeepContent) {
           this.dirDataSource.clear()
@@ -1342,6 +1392,10 @@ export struct TabFiles {
         }
       },
       onSuccess: (data: DirectoryInfo) => {
+        if (requestScope !== this.loadedAccountScope) {
+          AppLogger.info(TAG, 'drop file list response from previous account')
+          return
+        }
         this.loadingFilePath = ''
         if (!shouldKeepContent) {
           this.searchKeyword = ''
@@ -1350,6 +1404,8 @@ export struct TabFiles {
         this.objectsInfo = new DirFileInfo(data.parent, data.objects, data.policy)
         this.objectsInfo.sortObjects(this.sortType, this.isSortTypeReverse(this.sortType))
         this.applyVisibleObjects()
+        // 本页不可见时缩略图一律不请求（见 getThumbFile），记账等切回来再补
+        this.thumbsDeferredUntilActive = !this.isActive
         this.isRefreshing = false
         this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = FilePageState.IDLE
@@ -1359,6 +1415,9 @@ export struct TabFiles {
         }
       },
       onFailure: (msg) => {
+        if (requestScope !== this.loadedAccountScope) {
+          return
+        }
         this.loadingFilePath = ''
         if (ApiErrorUtil.isNetworkMessage(msg)) {
           showToast(NETWORK_ERROR_MESSAGE)

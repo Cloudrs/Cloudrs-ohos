@@ -3,6 +3,7 @@ import { deviceInfo } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
 import AppLogger from '../utils/AppLogger';
 import { CloudStatusBar } from '../utils/CloudStatusBar';
+import { ContinuationCenter } from '../utils/ContinuationCenter';
 import MainAbility from './MainAbility';
 
 const TAG: string = 'EntryAbility';
@@ -20,13 +21,45 @@ export default class EntryAbility extends MainAbility {
   private targetStarted: boolean = false
   private launcherBackgrounded: boolean = false
   private terminating: boolean = false
+  // 2in1 跳板扣下的接续载荷，转发给 MainAbility 后清空
+  private pendingContinueParams: Record<string, Object> | undefined = undefined
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     if (!this.isTwoInOneLauncher) {
       super.onCreate(want, launchParam)
       return
     }
+    // 2in1 跳板不加载 UI，先扣下接续载荷，onForeground 里随 MainAbility 一起拉起
+    this.captureContinueParams(want)
     AppLogger.init(this.context)
+  }
+
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    if (!this.isTwoInOneLauncher) {
+      super.onNewWant(want, launchParam)
+      return
+    }
+    this.captureContinueParams(want)
+    // 跳板此前可能已拉起过 MainAbility，放开闸门让 onForeground 再转发一次带参 want
+    this.launchRequested = false
+  }
+
+  onContinue(wantParam: Record<string, Object>): AbilityConstant.OnContinueResult {
+    if (this.isTwoInOneLauncher) {
+      // 跳板不承载 UI，2in1 上的接续由 MainAbility 发起
+      return AbilityConstant.OnContinueResult.REJECT
+    }
+    return super.onContinue(wantParam)
+  }
+
+  private captureContinueParams(want: Want): void {
+    if (!ContinuationCenter.hasPayload(want)) {
+      return
+    }
+    // 跳板与 MainAbility 同进程，载荷直接交给中枢即可；
+    // MainAbility 已在运行时根本无法再用 want 传参（startAbility 会被拒）
+    ContinuationCenter.acceptPayload(want)
+    this.pendingContinueParams = want.parameters
   }
 
   onDestroy(): void {
@@ -40,6 +73,13 @@ export default class EntryAbility extends MainAbility {
       await super.onWindowStageCreate(windowStage)
     }
     // 2in1 跳板不加载 UI,onForeground 中拉起 MainAbility 后退出
+  }
+
+  onWindowStageRestore(windowStage: window.WindowStage): void {
+    if (!this.isTwoInOneLauncher) {
+      super.onWindowStageRestore(windowStage)
+    }
+    // 2in1 跳板不加载 UI，接续参数在 onForeground 中转发给 MainAbility
   }
 
   onWindowStageDestroy(): void {
@@ -60,6 +100,8 @@ export default class EntryAbility extends MainAbility {
     this.launchMainAbility().catch((err: Error) => {
       this.launchRequested = false
       AppLogger.error(TAG, `launch MainAbility failed: ${err.message}`)
+      // 跳板不加载 UI，留在前台就是一块白屏，拉起失败也必须退场
+      this.terminateLauncher()
     })
   }
 
@@ -73,19 +115,32 @@ export default class EntryAbility extends MainAbility {
   }
 
   private async launchMainAbility(): Promise<void> {
+    const continueParams = this.pendingContinueParams
+    this.pendingContinueParams = undefined
     if (CloudStatusBar.isRegistered()) {
+      // MainAbility 已在运行：再 startAbility 会被拒（The ability is already running），
+      // 跳板就 terminateSelf 不掉，空白的跳板窗口滞留前台即表现为白屏。
+      // 载荷已在 captureContinueParams 里同进程交接，这里只需唤起并驱动恢复。
       await CloudStatusBar.showAbility()
+      if (continueParams) {
+        ContinuationCenter.notifyRestore()
+      }
     } else {
       await CloudStatusBar.register(this.context)
       const options: StartOptions = {
         processMode: contextConstant.ProcessMode.ATTACH_TO_STATUS_BAR_ITEM,
         startupVisibility: contextConstant.StartupVisibility.STARTUP_SHOW
       }
-      await this.context.startAbility({
+      const target: Want = {
         bundleName: this.context.applicationInfo.name,
         abilityName: 'MainAbility',
         moduleName: this.context.abilityInfo.moduleName
-      }, options)
+      }
+      if (continueParams) {
+        target.parameters = continueParams
+        AppLogger.info(TAG, 'forward continuation payload to MainAbility')
+      }
+      await this.context.startAbility(target, options)
     }
     this.targetStarted = true
     this.terminateLauncher()

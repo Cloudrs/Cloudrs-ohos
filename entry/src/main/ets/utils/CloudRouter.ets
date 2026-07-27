@@ -7,11 +7,20 @@ import { DbUserInfo } from '../model/net/ApiTypes';
 import { LoginParam } from '../model/net/LoginParam';
 import { CloudApi } from '../model/net/CloudApi';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { ActiveAccount } from './ActiveAccount';
 import { AppLockUtil } from './AppLockUtil';
+import { ContinuationCenter } from './ContinuationCenter';
 import { showToast, showToastTips, ToastType } from './ToastUtil';
 import AppLogger from './AppLogger';
 
 const TAG: string = 'CloudRouter'
+
+/** 账号切换结果。接续场景要按失败原因给不同提示，不能一律说"未登录" */
+export enum UserSwitchResult {
+  Ok,
+  NotFound,
+  Expired
+}
 
 export class CloudRouter {
   private static pathStack?: NavPathStack;
@@ -83,6 +92,8 @@ export class CloudRouter {
     if (targetPage !== Constant.HOME_PAGE) {
       CloudRouter.push(targetPage);
     }
+    // 接续因对端未登录而挂起时，登录成功即续播（恢复入口由 Index 注册）
+    ContinuationCenter.notifyRestore();
   }
 
   static resetToLogin(nextPage: string = Constant.HOME_PAGE): void {
@@ -91,22 +102,41 @@ export class CloudRouter {
   }
 
   static switchToUser(username: string, url?: string, showExpiredTip: boolean = true): boolean {
-    const dbUserInfo: DbUserInfo | null = UserDatabase.getUserInfo(username, url);
-    if (!dbUserInfo) {
+    const result = CloudRouter.switchToUserSilently(username, url);
+    if (result === UserSwitchResult.NotFound) {
       AppLogger.warn(TAG, `switch user not found: ${username}`);
       showToastTips('未找到该账号的登录信息', ToastType.Warn);
       return false;
     }
-
-    if (!CloudRouter.restoreUserSession(dbUserInfo, showExpiredTip)) {
-      AppLogger.warn(TAG, `switch user session restore failed: ${username}`);
+    if (result === UserSwitchResult.Expired) {
+      AppLogger.warn(TAG, `switch user session expired: ${username}`);
+      if (showExpiredTip) {
+        showToastTips('登录信息过期，重新登录!', ToastType.Warn);
+      }
       return false;
     }
-
     AppLogger.info(TAG, `switch user ok: ${username}`);
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, dbUserInfo.username);
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, dbUserInfo.url);
+    // 手动切账号也可能正好切到接续来源账号，顺势完成挂起的续播
+    ContinuationCenter.notifyRestore();
     return true;
+  }
+
+  /** 本机当前是否有可用登录态（顺带恢复该会话） */
+  static hasActiveSession(): boolean {
+    return CloudRouter.restoreCurrentSession(false);
+  }
+
+  /** 不弹任何提示的账号切换，调用方按结果自行决定文案（接续恢复用） */
+  static switchToUserSilently(username: string, url?: string): UserSwitchResult {
+    const dbUserInfo: DbUserInfo | null = UserDatabase.getUserInfo(username, url);
+    if (!dbUserInfo) {
+      return UserSwitchResult.NotFound;
+    }
+    if (!CloudRouter.restoreUserSession(dbUserInfo, false)) {
+      return UserSwitchResult.Expired;
+    }
+    ActiveAccount.apply(dbUserInfo.username, dbUserInfo.url);
+    return UserSwitchResult.Ok;
   }
 
   static pop(): void {
@@ -194,7 +224,12 @@ export class CloudRouter {
       return false;
     }
 
-    return CloudRouter.restoreUserSession(dbUserInfo, showExpiredTip);
+    if (!CloudRouter.restoreUserSession(dbUserInfo, showExpiredTip)) {
+      return false;
+    }
+    // 冷启动恢复的会话不经过 apply，这里补广播一次，保证首页建好前 AppStorage 已是当前账号
+    ActiveAccount.publishCurrent();
+    return true;
   }
 
   private static restoreUserSession(dbUserInfo: DbUserInfo, showExpiredTip: boolean): boolean {

@@ -15,6 +15,7 @@ import { common, ConfigurationConstant } from "@kit.AbilityKit";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
+import { ActiveAccount } from "../../utils/ActiveAccount";
 import { AvatarUtil } from "../../utils/AvatarUtil";
 import FeedbackUtil from "../../utils/FeedbackUtil";
 import AppLogger from "../../utils/AppLogger";
@@ -966,8 +967,7 @@ export struct TabMine {
         title: $r('app.string.logout_confim'),
         confirmText: $r('app.string.dialog_logout'),
         onConfirm: () => {
-          UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
-          UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY)
+          ActiveAccount.clear()
           CloudRouter.resetToLogin()
         }
       })
@@ -1800,8 +1800,7 @@ export struct TabMine {
       onConfirm: () => {
         AppLogger.info(TAG, 'delete current credential')
         UserDatabase.deleteUserInfo(this.currentUser, this.currentUrl)
-        UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY)
-        UserPreferences.deleteSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY)
+        ActiveAccount.clear()
         this.closeSettingsSheet()
         CloudRouter.resetToLogin()
       }

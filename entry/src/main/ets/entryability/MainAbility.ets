@@ -12,6 +12,7 @@ import { AppBoot } from '../utils/AppBoot';
 import AppLogger from '../utils/AppLogger';
 import { CloudStatusBar } from '../utils/CloudStatusBar';
 import { StorageMigration } from '../utils/StorageMigration';
+import { ContinuationCenter } from '../utils/ContinuationCenter';
 import { VERSION_NAME } from 'BuildProfile';
 
 export default class MainAbility extends UIAbility {
@@ -27,10 +28,37 @@ export default class MainAbility extends UIAbility {
   }
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    // 冷启动接续：先把载荷收下，Index 就绪后消费。
+    // 判定只认载荷不看 launchReason —— 2in1 经跳板转发过来时它已不是 CONTINUATION
+    ContinuationCenter.acceptPayload(want)
+    // 接续图标默认可见，进视频页才放开，其余页面不提供接续入口
+    ContinuationCenter.setMissionContinueState(this.context, false)
     if (deviceInfo.deviceType === '2in1') {
       CloudStatusBar.bindContext(this.context)
     }
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onCreate');
+  }
+
+  // 热启动接续：Index 已存在，收下载荷后要主动驱动恢复。
+  // 载荷被拒时也要通知——中枢可能挂了一条"版本不兼容"待告知
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    ContinuationCenter.acceptPayload(want)
+    ContinuationCenter.notifyRestore()
+  }
+
+  onContinue(wantParam: Record<string, Object>): AbilityConstant.OnContinueResult {
+    // 无可接续内容（不在视频页）：先判掉，免得给用户报无关的版本问题
+    if (!ContinuationCenter.hasVideoState()) {
+      return AbilityConstant.OnContinueResult.REJECT
+    }
+    // 对端版本读不懂当前载荷时明确报版本不匹配，而不是让它接到半截数据
+    if (!ContinuationCenter.isTargetVersionCompatible(wantParam)) {
+      return AbilityConstant.OnContinueResult.MISMATCH
+    }
+    if (!ContinuationCenter.writeTo(wantParam)) {
+      return AbilityConstant.OnContinueResult.REJECT
+    }
+    return AbilityConstant.OnContinueResult.AGREE
   }
 
   onDestroy(): void {
@@ -100,6 +128,17 @@ export default class MainAbility extends UIAbility {
       AppBoot.markReady()
       perfMark('bootReady')
     }
+  }
+
+  /**
+   * 接续启动时系统只回调本函数，不走 onWindowStageCreate，
+   * loadContent 在那边，不接管就是白屏。
+   */
+  onWindowStageRestore(windowStage: window.WindowStage): void {
+    hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onWindowStageRestore');
+    this.onWindowStageCreate(windowStage).catch((err: Error) => {
+      hilog.error(0x0000, 'testTag', 'onWindowStageRestore failed. Cause: %{public}s', err.message);
+    })
   }
 
   private publishWindowInsets(windowClass: window.Window | undefined): void {

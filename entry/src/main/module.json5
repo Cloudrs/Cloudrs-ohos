@@ -49,6 +49,8 @@
         "startWindowIcon": "$media:layered_image",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        // 应用接续：phone/tablet 上 UI 由本 Ability 承载，接续从这里发起与恢复
+        "continuable": true,
         "skills": [
           {
             "entities": [
@@ -70,7 +72,10 @@
         "label": "$string:EntryAbility_label",
         "startWindowIcon": "$media:layered_image",
         "startWindowBackground": "$color:start_window_background",
-        "exported": false
+        // 实测：跨设备接续可正常拉起 exported:false 的 Ability，无需对外暴露
+        "exported": false,
+        // 应用接续：2in1 上 UI 由本 Ability 承载，接续从这里发起与恢复
+        "continuable": true
       }
     ],
     "extensionAbilities": [

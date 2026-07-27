@@ -2,7 +2,10 @@ import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { VideoPreview } from "../model/Params";
 import { CloudApi } from "../model/net/CloudApi";
+import UserPreferences from "../model/UserPreferences";
 import { CloudRouter } from "../utils/CloudRouter";
+import { ContinuationCenter } from "../utils/ContinuationCenter";
+import { common } from "@kit.AbilityKit";
 import { showApiFailureToast, showToast } from "../utils/ToastUtil";
 import AppLogger from "../utils/AppLogger";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
@@ -64,17 +67,27 @@ export struct VideoPreviewPage {
   private swipeSeekStartTime: number = 0
   // 长按快退前是否在播放，松手后用于恢复
   private holdWasPlaying: boolean = false
+  // 接续恢复：起播位置(秒)，prepared 后 seek 过去
+  private pendingResumeTime: number = 0
+  // 接续恢复：源端处于暂停时，起播定位画面后立即暂停
+  private pendingPauseAfterStart: boolean = false
 
   aboutToAppear(): void {
     if (this.routeParam) {
       this.fileParam = this.routeParam
+      this.pendingResumeTime = Math.max(this.routeParam.startTime, CloudThemeToken.zero)
+      this.pendingPauseAfterStart = !this.routeParam.autoPlay
     }
     this.prepareWindow()
     this.loadVideoUrl()
+    this.publishContinuationState()
     harmonyShare.on('knockShare', this.knockShareCallback)
   }
 
   aboutToDisappear(): void {
+    // 离开视频页即撤下接续入口，避免在无内容可接的页面暴露接续图标
+    ContinuationCenter.clearVideoState()
+    ContinuationCenter.setMissionContinueState(this.abilityContext(), false)
     harmonyShare.off('knockShare', this.knockShareCallback)
     this.stopHoldSeek()
     this.cancelPendingMouseSingleClick()
@@ -112,6 +125,42 @@ export struct VideoPreviewPage {
       clearTimeout(this.prepareTimeoutTimer)
       this.prepareTimeoutTimer = -1
     }
+  }
+
+  private abilityContext(): common.UIAbilityContext | undefined {
+    return this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
+  }
+
+  /**
+   * 上报可接续状态并放开系统接续入口。
+   * 只带 fileId 与账号定位，不带直链 —— 直链是短时效签名地址，
+   * 跨设备传过去大概率已失效，对端自行重新获取。
+   */
+  private publishContinuationState(): void {
+    const param = this.fileParam
+    if (!param) {
+      return
+    }
+    const userName =
+      (UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string) ?? ''
+    const siteUrl =
+      (UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string) ?? ''
+    ContinuationCenter.setVideoState({
+      fileId: param.fileId,
+      fileName: param.fileName,
+      fileExtension: param.fileExtension,
+      sharePath: param.sharePath,
+      currentTime: this.currentTime,
+      isPlaying: this.isPlaying,
+      userName: userName,
+      siteUrl: siteUrl
+    })
+    ContinuationCenter.setMissionContinueState(this.abilityContext(), true)
+  }
+
+  /** 播放进度变化时同步给接续中枢，纯内存写 */
+  private reportContinuationProgress(): void {
+    ContinuationCenter.updateVideoProgress(this.currentTime, this.isPlaying)
   }
 
   private knockShareCallback = (sharableTarget: harmonyShare.SharableTarget): void => {
@@ -172,6 +221,12 @@ export struct VideoPreviewPage {
         AppLogger.info(TAG, `prepared in ${new Date().getTime() - this.videoMountAt}ms`)
         this.duration = Math.max(event.duration, CloudThemeToken.zero)
         this.isLoading = false
+        // 接续恢复：先定位再起播，画面直接落在源端的进度上
+        if (this.pendingResumeTime > CloudThemeToken.zero) {
+          this.currentTime = Math.min(this.pendingResumeTime, this.getSafeDuration())
+          this.pendingResumeTime = 0
+          this.commitSeek(this.currentTime)
+        }
         this.isPlaying = true
         this.controller.start()
       })
@@ -182,9 +237,17 @@ export struct VideoPreviewPage {
         this.clearPrepareTimeout()
         this.isPlaying = true
         this.isLoading = false
+        // 源端接续过来时是暂停态：定位画面后立刻停住
+        if (this.pendingPauseAfterStart) {
+          this.pendingPauseAfterStart = false
+          this.isPlaying = false
+          this.controller.pause()
+        }
+        this.reportContinuationProgress()
       })
       .onPause(() => {
         this.isPlaying = false
+        this.reportContinuationProgress()
       })
       .onFinish(() => {
         this.isPlaying = false
@@ -207,6 +270,7 @@ export struct VideoPreviewPage {
           this.pendingSeekTarget = -1
         }
         this.currentTime = Math.min(event.time, this.getSafeDuration())
+        this.reportContinuationProgress()
       })
       .onError(() => {
         this.handlePlayError(generation)

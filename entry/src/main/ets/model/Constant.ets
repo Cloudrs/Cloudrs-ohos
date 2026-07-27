@@ -11,6 +11,9 @@ class Constant {
 
   ACTIVE_USER_URL_KEY = 'ActiveUserUrl'
 
+  /** AppStorage：当前账号作用域(url|username)，账号切换的广播信号 */
+  ACTIVE_ACCOUNT_SCOPE: string = 'activeAccountScope'
+
   REQUEST_TIMEOUT: number = 5000
 
   HTTP_STATUS_OK: number = 200

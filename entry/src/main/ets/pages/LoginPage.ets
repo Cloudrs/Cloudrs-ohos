@@ -9,6 +9,7 @@ import { CloudApi } from '../model/net/CloudApi';
 import { image } from '@kit.ImageKit';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudRouter } from '../utils/CloudRouter';
+import { ActiveAccount } from '../utils/ActiveAccount';
 import { AvatarUtil } from '../utils/AvatarUtil';
 import { UserSwitchSheet } from '../components/UserSwitchSheet';
 import scanBarcode from '@hms.core.scan.scanBarcode';
@@ -453,8 +454,7 @@ export struct LoginPage {
       refresh_token: refreshToken,
       userinfo: data
     }
-    UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, this.username)
-    UserPrivData.putSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, dbUserInfo.url)
+    ActiveAccount.apply(this.username, dbUserInfo.url)
     UserDatabase.insertUserInfo(dbUserInfo)
     AvatarUtil.refreshDbUserAvatar(dbUserInfo).catch((err: Error) => {
       AppLogger.warn('LoginPage', `refresh avatar cache failed: ${err.message}`)

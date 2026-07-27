@@ -150,6 +150,8 @@ export struct LoginPage {
   private nextPage: string|null = Constant.HOME_PAGE
   private readonly otpIndexes: number[] = buildOtpIndexes()
   private readonly otpInputId: string = 'loginOtpInput'
+  private readonly usernameInputId: string = 'loginUsernameInput'
+  private readonly passwordInputId: string = 'loginPasswordInput'
   private scanShouldAutoLogin: boolean = false
   private pendingPrivacyAgree: (() => void) | undefined = undefined
   private privacyDialogController: CustomDialogController = new CustomDialogController({
@@ -184,6 +186,21 @@ export struct LoginPage {
         }
         AppLogger.error('LoginPage', `request OTP focus failed: ${(err as Error)?.message ?? err}`)
       }
+    }, CloudThemeToken.loginOtpFocusDelayMs)
+  }
+
+  private focusInput(inputId: string): void {
+    try {
+      this.getUIContext().getFocusController().requestFocus(inputId)
+    } catch (err) {
+      AppLogger.warn('LoginPage', `request focus ${inputId} failed: ${(err as Error)?.message ?? err}`)
+    }
+  }
+
+  // 网址校验通过后输入框才刚创建，延迟一帧再抓焦点，让外接键盘可以继续回车推进
+  private focusLoginInputLater(): void {
+    setTimeout(() => {
+      this.focusInput(this.username.length === CloudThemeToken.zero ? this.usernameInputId : this.passwordInputId)
     }, CloudThemeToken.loginOtpFocusDelayMs)
   }
 
@@ -371,7 +388,7 @@ export struct LoginPage {
     })
   }
 
-  private websiteTest(allowHttpFallback: boolean = false) {
+  private websiteTest(allowHttpFallback: boolean = false, focusNextStep: boolean = false) {
     if (this.address.length == CloudThemeToken.zero) {
       showToastTips('无效网站地址', ToastType.Error)
       return
@@ -386,11 +403,15 @@ export struct LoginPage {
               this.scanShouldAutoLogin = false
               showToastTips('已识别账号密码，正在登录', ToastType.Info)
               this.login()
+              return
+            }
+            if (focusNextStep) {
+              this.focusLoginInputLater()
             }
           },
           onFailure: (msg) => {
             console.debug('LoginPage', '站点获取配置失败 错误信息:', msg)
-            if (this.retryWebsiteTestWithHttp(allowHttpFallback)) {
+            if (this.retryWebsiteTestWithHttp(allowHttpFallback, focusNextStep)) {
               return
             }
             showToastTips('站点获取配置失败', ToastType.Error)
@@ -399,7 +420,7 @@ export struct LoginPage {
       },
       onFailure: (msg) => {
         console.debug('LoginPage', '站点请求失败 错误信息:', msg)
-        if (this.retryWebsiteTestWithHttp(allowHttpFallback)) {
+        if (this.retryWebsiteTestWithHttp(allowHttpFallback, focusNextStep)) {
           return
         }
         showToastTips('站点请求失败', ToastType.Error)
@@ -407,13 +428,13 @@ export struct LoginPage {
     })
   }
 
-  private retryWebsiteTestWithHttp(allowHttpFallback: boolean): boolean {
+  private retryWebsiteTestWithHttp(allowHttpFallback: boolean, focusNextStep: boolean): boolean {
     if (!allowHttpFallback || this.protocol !== Constant.PROTOCOL_HTTPS_SCHEME) {
       return false
     }
     this.protocolIndex = Constant.PROTOCOL_HTTP_INDEX
     this.protocol = Constant.PROTOCOL_HTTP_SCHEME
-    this.websiteTest(false)
+    this.websiteTest(false, focusNextStep)
     return true
   }
 
@@ -928,12 +949,7 @@ export struct LoginPage {
       .backgroundColor(CloudThemeToken.primary)
       .fontColor(CloudThemeToken.onPrimary)
       .onClick(() => {
-        if (!this.requirePrivacyAccepted(() => {
-          this.continueLoginStep()
-        })) {
-          return
-        }
-        this.continueLoginStep()
+        this.submitLoginStep()
       })
   }
 
@@ -985,8 +1001,12 @@ export struct LoginPage {
         .loginTextInputStyle()
         .fontColor(CloudThemeToken.textPrimary)
         .placeholderColor(CloudThemeToken.textSecondary)
+        .enterKeyType(EnterKeyType.Next)
         .onChange((value) => {
           this.address = value
+        })
+        .onSubmit(() => {
+          this.submitLoginStep()
         })
     }
     .rowCommonStyle()
@@ -1033,11 +1053,15 @@ export struct LoginPage {
           .height(CloudThemeToken.loginOtpCellHeight)
           .opacity(CloudThemeToken.invisibleOpacity)
           .defaultFocus(true)
+          .enterKeyType(EnterKeyType.Go)
           .onChange((value) => {
             this.otpCode = value
             if (value.length === CloudThemeToken.loginOtpLength) {
               this.submitOtp()
             }
+          })
+          .onSubmit(() => {
+            this.submitOtp()
           })
       }
       .width('100%')
@@ -1059,11 +1083,20 @@ export struct LoginPage {
           .draggable(false)
 
         TextInput({ placeholder: $r("app.string.login_user"), text: this.username })
+          .id(this.usernameInputId)
           .loginTextInputStyle()
           .fontColor(CloudThemeToken.textPrimary)
           .placeholderColor(CloudThemeToken.textSecondary)
+          .enterKeyType(EnterKeyType.Next)
           .onChange((value) => {
             this.username = value
+          })
+          .onSubmit(() => {
+            if (this.password.length === CloudThemeToken.zero) {
+              this.focusInput(this.passwordInputId)
+              return
+            }
+            this.submitLoginStep()
           })
       }
       .rowCommonStyle()
@@ -1080,12 +1113,17 @@ export struct LoginPage {
           .draggable(false)
 
         TextInput({ placeholder: $r("app.string.login_password"), text: this.password })
+          .id(this.passwordInputId)
           .type(InputType.Password)
           .loginTextInputStyle()
           .fontColor(CloudThemeToken.textPrimary)
           .placeholderColor(CloudThemeToken.textSecondary)
+          .enterKeyType(EnterKeyType.Go)
           .onChange((value) => {
             this.password = value
+          })
+          .onSubmit(() => {
+            this.submitLoginStep()
           })
       }
       .rowCommonStyle()
@@ -1174,12 +1212,22 @@ export struct LoginPage {
 
   private continueLoginStep(): void {
     if (!this.websiteInvalid) {
-      this.websiteTest()
+      this.websiteTest(false, true)
     } else if (this.needs2FA) {
       this.submitOtp()
     } else {
       this.login()
     }
+  }
+
+  // 继续按钮点击与输入框回车共用：先过隐私确认，再推进当前登录步骤
+  private submitLoginStep(): void {
+    if (!this.requirePrivacyAccepted(() => {
+      this.continueLoginStep()
+    })) {
+      return
+    }
+    this.continueLoginStep()
   }
 
   private switchToSelectedUser(user: DbUserInfo): void {

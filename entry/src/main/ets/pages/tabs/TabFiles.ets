@@ -32,6 +32,7 @@ import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import AppLogger from "../../utils/AppLogger";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
+import { TextPreviewEntry } from "../../utils/TextPreviewEntry";
 import { ActiveAccount } from "../../utils/ActiveAccount";
 import UserPreferences from "../../model/UserPreferences";
 import { PhotoBackupSettingsStore } from "../../model/PhotoBackupSettingsStore";
@@ -3030,6 +3031,11 @@ export struct TabFiles {
       } else if (fileType == FileType.VIDEO) {
         CloudRouter.push(Constant.VIDEO_PREVIEW_PAGE,
           new VideoPreview(item.name, item.id, fileExtension, this.getObjectSharePath(item)))
+      } else if (CommonUtil.isTextViewable(fileType)) {
+        const dirPath = this.currentPath
+        TextPreviewEntry.open(item, () => {
+          this.getFileList(true, dirPath)
+        })
       } else {
         //filePreview.openPreview(getContext(), {title: item.name, uri: '', mimeType: ''})
         showToast('该类型不支持预览')
@@ -3657,13 +3663,38 @@ export struct TabFiles {
     })
   }
 
+  /**
+   * 新建文本文件后直接打开编辑器。
+   * 服务端刚建好的文件还没回到列表里，这里用已知的路径和文件名自己拼一个
+   * ObjectInfo；大小为 0，编辑器按空文件加载。
+   */
+  private openNewTextFile(dirPath: string, fileName: string): void {
+    const sep = dirPath.endsWith('/') ? '' : '/'
+    const fullPath = `${dirPath}${sep}${fileName}`
+    const created: ObjectInfo = {
+      id: fullPath, name: fileName, path: dirPath,
+      thumb: false, size: 0, type: Constant.OBJECT_FILE_TYPE,
+      date: '', create_date: '', source_enabled: false
+    }
+    const refreshPath = this.currentPath
+    TextPreviewEntry.open(created, () => {
+      this.getFileList(true, refreshPath)
+    })
+  }
+
   private confirmNewObject(content: string): void {
     AppLogger.info(TAG, `new ${this.inputNewIsDir ? 'dir' : 'file'} under ${this.inputNewPath}`)
     CloudApi.newObject(`${this.inputNewPath}/${content}`, this.inputNewIsDir, {
       onSuccess: (data) => {
+        const createdPath = this.inputNewPath
+        const isDir = this.inputNewIsDir
         this.closeInputSheet()
         this.getFileList(true, this.currentPath)
         showToast(`新建${content}成功`)
+        // 新建的文本文件直接进编辑器：建完一个空文件却没处填内容，等于没建
+        if (!isDir && CommonUtil.isTextViewable(CommonUtil.getFileType(content))) {
+          this.openNewTextFile(createdPath, content)
+        }
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, '新建文件/文件夹失败 msg: ' + msg)

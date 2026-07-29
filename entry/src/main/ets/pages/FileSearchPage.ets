@@ -6,6 +6,7 @@ import { ObjectInfo } from "../model/net/ApiTypes";
 import { FileSearchParam, ImagePreview, PreviewFile, VideoPreview } from "../model/Params";
 import { CommonUtil, FileType } from "../utils/CommonUtil";
 import { CloudRouter } from "../utils/CloudRouter";
+import { TextPreviewEntry } from "../utils/TextPreviewEntry";
 import { showToast } from "../utils/ToastUtil";
 import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsEffect, hdsMaterial } from "@kit.UIDesignKit";
 
@@ -95,6 +96,8 @@ export struct FileSearchPage {
       CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, this.buildImagePreviewParam(item, fileExtension))
     } else if (fileType === FileType.VIDEO) {
       CloudRouter.push(Constant.VIDEO_PREVIEW_PAGE, new VideoPreview(item.name, item.id, fileExtension))
+    } else if (CommonUtil.isTextViewable(fileType)) {
+      TextPreviewEntry.open(item)
     } else {
       showToast('该类型不支持预览')
     }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium';
-import { PhotoBackupSettingsStore } from '../../../../main/ets/model/PhotoBackupSettingsStore';
+import { PhotoBackupSettingsStore } from '../../../main/ets/model/PhotoBackupSettingsStore';
 
 export default function photoBackupSettingsStoreTest() {
   describe('PhotoBackupSettingsStore', () => {

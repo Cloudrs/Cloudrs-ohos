@@ -53,6 +53,26 @@ export class VideoPreview {
   }
 }
 
+export class TextPreviewParam {
+  fileName: string = ''
+  fileId: string = ''
+  // 入口处按它拦超大文件，页面里再兜一次底，避免别处漏判
+  fileSize: number = 0
+  // 覆盖上传的目标路径（含文件名），保存时用
+  filePath: string = ''
+  // 保存成功后回调来源页刷新列表，否则列表里的大小会一直是旧的
+  onSaved?: () => void
+
+  constructor(fileName: string, fileId: string, fileSize: number,
+    filePath: string = '', onSaved?: () => void) {
+    this.fileName = fileName
+    this.fileId = fileId
+    this.fileSize = fileSize
+    this.filePath = filePath
+    this.onSaved = onSaved
+  }
+}
+
 export class PhotoLocalPreviewParam {
   items: PhotoBackupItem[] = []
   index: number = 0

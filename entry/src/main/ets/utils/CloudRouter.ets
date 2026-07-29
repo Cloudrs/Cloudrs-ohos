@@ -28,6 +28,7 @@ export class CloudRouter {
   private static overlayUpdater?: (pageUrl: string, param: Object) => void;
   private static overlayPage: string = '';
   private static homeBackHandler?: () => boolean;
+  private static exitGuard?: () => boolean;
   private static homeBackEnabled: boolean = true;
   private static backTimeStamp: number = 0;
 
@@ -140,11 +141,33 @@ export class CloudRouter {
   }
 
   static pop(): void {
+    // 有未保存内容的页面在这里拦一道，覆盖返回键、返回手势和页内返回按钮三条路径
+    if (CloudRouter.exitGuard?.()) {
+      return;
+    }
+    CloudRouter.popForced();
+  }
+
+  /** 绕过拦截直接离开，供拦截方在用户确认放弃后调用 */
+  static popForced(): void {
     if (CloudRouter.overlayPage.length > CloudThemeToken.zero) {
       CloudRouter.clearOverlay();
       return;
     }
     CloudRouter.pathStack?.pop();
+  }
+
+  /**
+   * 设置离开拦截。返回 true 表示本次离开被拦下（通常是弹了确认框）。
+   * 页面必须在 aboutToDisappear 里清掉，否则会挡住后续所有返回。
+   */
+  static setExitGuard(guard?: () => boolean): void {
+    CloudRouter.exitGuard = guard;
+  }
+
+  /** NavDestination 的 onBackPressed 用：返回 true 表示已消费本次返回 */
+  static interceptBack(): boolean {
+    return CloudRouter.exitGuard?.() === true;
   }
 
   static hasOverlay(): boolean {

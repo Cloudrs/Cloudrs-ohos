@@ -1,6 +1,6 @@
 import Constant from '../model/Constant';
 import { LoginParam } from '../model/net/LoginParam';
-import { FileSearchParam, ImagePreview, PhotoLocalPreviewParam, VideoPreview } from '../model/Params';
+import { FileSearchParam, ImagePreview, PhotoLocalPreviewParam, TextPreviewParam, VideoPreview } from '../model/Params';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudRouter, UserSwitchResult } from '../utils/CloudRouter';
 import { AppBoot } from '../utils/AppBoot';
@@ -8,6 +8,7 @@ import { HomePage } from './HomePage';
 import { LoginPage } from './LoginPage';
 import { ImagePreviewPage } from './ImagePreview';
 import { VideoPreviewPage } from './VideoPreview';
+import { TextPreviewPage } from './TextPreview';
 import { AboutPage } from './AboutPage';
 import { FileSearchPage } from './FileSearchPage';
 import { PhotoLocalPreviewPage } from './PhotoLocalPreview';
@@ -28,6 +29,7 @@ struct Index {
   @State overlayPage: string = '';
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
+  @State textPreviewParam: TextPreviewParam = new TextPreviewParam('', '', 0);
   @State fileSearchParam: FileSearchParam = new FileSearchParam();
   @State photoLocalPreviewParam: PhotoLocalPreviewParam = new PhotoLocalPreviewParam([], 0, false);
   private startPageScheduled: boolean = false;
@@ -51,6 +53,8 @@ struct Index {
           this.imagePreviewParam = param as ImagePreview;
         } else if (pageUrl === Constant.VIDEO_PREVIEW_PAGE) {
           this.videoPreviewParam = param as VideoPreview;
+        } else if (pageUrl === Constant.TEXT_PREVIEW_PAGE) {
+          this.textPreviewParam = param as TextPreviewParam;
         } else if (pageUrl === Constant.FILE_SEARCH_PAGE) {
           this.fileSearchParam = param as FileSearchParam;
         } else if (pageUrl === Constant.PHOTO_LOCAL_PREVIEW_PAGE) {
@@ -331,6 +335,15 @@ struct Index {
     } else if (this.overlayPage === Constant.VIDEO_PREVIEW_PAGE) {
       VideoPreviewPage({ routeParam: this.videoPreviewParam })
         .zIndex(CloudThemeToken.overlayZIndex)
+    } else if (this.overlayPage === Constant.TEXT_PREVIEW_PAGE) {
+      TextPreviewPage({ routeParam: this.textPreviewParam })
+        .width('100%')
+        .height('100%')
+        .transition(TransitionEffect.OPACITY
+          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
+            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.FILE_SEARCH_PAGE) {
       FileSearchPage({ routeParam: this.fileSearchParam })
         .width('100%')
@@ -384,6 +397,23 @@ struct Index {
       .width('100%')
       .height('100%')
       .backgroundColor(CloudThemeToken.previewBackground)
+    } else if (name === Constant.TEXT_PREVIEW_PAGE) {
+      NavDestination() {
+        Stack() {
+          TextPreviewPage({ routeParam: param as TextPreviewParam })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.background)
+      }
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.background)
+      // 有未保存修改时由页面拦下，overlay 形态走 Index.onBackPress → CloudRouter.pop
+      .onBackPressed(() => {
+        return CloudRouter.interceptBack();
+      })
     } else if (name === Constant.ABOUT_PAGE) {
       NavDestination() {
         Stack() {

@@ -68,13 +68,17 @@ export struct TextPreviewPage {
   // 保存前比对用的服务端基线，检测他端改动
   private baselineSize: number = -1
   private baselineUpdatedAt: string = ''
+  /** 正在进行的基线刷新；保存前要等它，否则拿旧基线比会误报冲突 */
+  private baselinePending?: Promise<void>
 
   aboutToAppear(): void {
     AppLogger.info(TAG, `open text preview, name=${this.routeParam?.fileName ?? ''}, size=${this.routeParam?.fileSize ?? 0}`)
     this.editorLanguage = CommonUtil.getEditorLanguage(this.routeParam?.fileName ?? '')
     this.editorTheme = this.resolveThemeMode()
-    this.fontSize = UserPreferences.getSync(Constant.USER_PREFERENCES,
-      Constant.TEXT_EDITOR_FONT_SIZE, Constant.TEXT_EDITOR_FONT_SIZE_DEFAULT) as number
+    // 存量偏好可能落在当前上下限之外（阈值调整过），读出来要收敛一次
+    this.fontSize = TextPreviewPage.clampFontSize(UserPreferences.getSync(
+      Constant.USER_PREFERENCES,
+      Constant.TEXT_EDITOR_FONT_SIZE, Constant.TEXT_EDITOR_FONT_SIZE_DEFAULT) as number)
     this.lineWrap = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.TEXT_EDITOR_LINE_WRAP, true) as boolean
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
@@ -345,9 +349,16 @@ export struct TextPreviewPage {
     }
   }
 
+  private static clampFontSize(size: number): number {
+    if (!Number.isFinite(size)) {
+      return Constant.TEXT_EDITOR_FONT_SIZE_DEFAULT
+    }
+    return Math.min(Constant.TEXT_EDITOR_FONT_SIZE_MAX,
+      Math.max(Constant.TEXT_EDITOR_FONT_SIZE_MIN, Math.round(size)))
+  }
+
   private applyFontSize(size: number): void {
-    this.fontSize = Math.min(Constant.TEXT_EDITOR_FONT_SIZE_MAX,
-      Math.max(Constant.TEXT_EDITOR_FONT_SIZE_MIN, size))
+    this.fontSize = TextPreviewPage.clampFontSize(size)
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.TEXT_EDITOR_FONT_SIZE, this.fontSize)
   }
 
@@ -363,12 +374,13 @@ export struct TextPreviewPage {
     }
     const decoded = TextFileCodec.decodeAs(buffer, encoding)
     if (!decoded.ok) {
-      showToast(`按 ${encoding} 解码失败`)
+      // 宁可拒绝也不显示乱码：放行的乱码会被当成可编辑内容，保存即覆盖原文件
+      showToast(`该文件不是 ${encoding} 编码，已保持原样`)
       return
     }
     this.previewMode = false
     this.editMode = false
-    this.applyDecoded(decoded)
+    this.applyDecoded(decoded, false)
     showToast(`已按 ${encoding} 重新解码`)
   }
 
@@ -453,7 +465,12 @@ export struct TextPreviewPage {
     }
   }
 
-  private applyDecoded(decoded: TextDecodeResult): void {
+  /**
+   * @param initialLoad 首次加载才决定初始视图模式。
+   *   手动切换编码时复用本方法，但那时用户已经明确要看源码，
+   *   不能再把 Markdown 拽回预览。
+   */
+  private applyDecoded(decoded: TextDecodeResult, initialLoad: boolean = true): void {
     if (!decoded.ok) {
       const isBinary = decoded.failure === TextDecodeFailure.BINARY
       AppLogger.warn(TAG, `decode failed, failure=${decoded.failure}`)
@@ -474,13 +491,15 @@ export struct TextPreviewPage {
     this.canEdit = TextFileCodec.isWritableEncoding(decoded.encoding) &&
       (this.routeParam?.fileSize ?? 0) <= Constant.TEXT_PREVIEW_MAX_BYTES
     this.loadState = TextLoadState.READY
-    // 空文件没什么可读的，多半是刚新建出来的，直接进编辑态省一次点击
-    if (this.canEdit && decoded.text.length === CloudThemeToken.zero) {
-      this.editMode = true
-      this.previewMode = false
-    } else if (this.editorLanguage === EDITOR_LANGUAGE_MARKDOWN) {
-      // Markdown 默认渲染后的样子，源码要看再切
-      this.previewMode = true
+    if (initialLoad) {
+      // 空文件没什么可读的，多半是刚新建出来的，直接进编辑态省一次点击
+      if (this.canEdit && decoded.text.length === CloudThemeToken.zero) {
+        this.editMode = true
+        this.previewMode = false
+      } else if (this.editorLanguage === EDITOR_LANGUAGE_MARKDOWN) {
+        // Markdown 默认渲染后的样子，源码要看再切
+        this.previewMode = true
+      }
     }
     // 编辑器可能已经就绪在等内容，这里自增触发下发
     this.contentRevision++
@@ -540,6 +559,14 @@ export struct TextPreviewPage {
     if (this.saving) {
       return
     }
+    // 守卫必须在这里，不能只靠按钮显隐：编辑器里的 Ctrl+S 会绕开所有 UI
+    // 直接送到这条路径上，只读文件一旦放行就会被按 UTF-8 重写。
+    if (!this.canEdit) {
+      showToast(TextFileCodec.isWritableEncoding(this.encodingLabel)
+        ? '该文件不支持编辑' : `${this.encodingLabel} 编码不支持编辑，未做任何修改`)
+      AppLogger.warn(TAG, `save rejected: canEdit=false, encoding=${this.encodingLabel}`)
+      return
+    }
     const param = this.routeParam
     if (!param || param.filePath.length === CloudThemeToken.zero) {
       showToast('缺少文件路径，无法保存')
@@ -585,7 +612,11 @@ export struct TextPreviewPage {
    * 比对服务端基线，检测打开之后是否有他端改动。
    * 拿不到详情时按"没变"处理——不能因为一次查询失败就堵住用户保存。
    */
-  private detectRemoteChange(): Promise<boolean> {
+  private async detectRemoteChange(): Promise<boolean> {
+    // 首帧基线可能还在路上，等它一下；否则这次检查会被静默跳过
+    if (this.baselinePending) {
+      await this.baselinePending
+    }
     const fileId = this.routeParam?.fileId ?? ''
     if (fileId.length === CloudThemeToken.zero || this.baselineSize < CloudThemeToken.zero) {
       return Promise.resolve(false)
@@ -626,6 +657,9 @@ export struct TextPreviewPage {
     this.dirty = false
     this.lineCount = TextFileCodec.splitLines(text).length
     TextDraftStore.clear(param.fileId)
+    // 不等它：真等下去，一旦 getObjectDetail 卡住，文件其实已保存成功，
+    // 界面却停在"保存中"、成功提示也不出来。
+    // 连续保存的误报由 detectRemoteChange 等 baselinePending 来挡。
     this.refreshBaseline()
     param.onSaved?.()
     showToast('已保存')
@@ -651,21 +685,36 @@ export struct TextPreviewPage {
     showToast(kept ? `保存失败：${message}，内容已存为本地草稿` : `保存失败：${message}`)
   }
 
-  private refreshBaseline(): void {
+  /**
+   * 拉取服务端基线。返回 Promise 以便保存前等待——
+   * 保存成功后若不等它就发起下一次保存，会拿保存前的旧基线跟新的服务端比，
+   * 结果是对着用户自己刚做的修改弹"文件已被改动"。
+   */
+  private refreshBaseline(): Promise<void> {
     const fileId = this.routeParam?.fileId ?? ''
     if (fileId.length === CloudThemeToken.zero) {
-      return
+      return Promise.resolve()
     }
-    CloudApi.getObjectDetail(fileId, false, {
-      onSuccess: (detail: ObjectDetail) => {
-        this.baselineSize = detail.size
-        this.baselineUpdatedAt = detail.updated_at
-        this.currentSize = detail.size
-      },
-      onFailure: (msg: string) => {
-        AppLogger.warn(TAG, `refresh baseline failed: ${msg}`)
-      }
+    const pending = new Promise<void>((resolve) => {
+      CloudApi.getObjectDetail(fileId, false, {
+        onSuccess: (detail: ObjectDetail) => {
+          this.baselineSize = detail.size
+          this.baselineUpdatedAt = detail.updated_at
+          this.currentSize = detail.size
+          resolve()
+        },
+        onFailure: (msg: string) => {
+          AppLogger.warn(TAG, `refresh baseline failed: ${msg}`)
+          // 基线拿不到就置为未知，让冲突检测明确跳过，
+          // 而不是留着一份过期数据去比对
+          this.baselineSize = -1
+          this.baselineUpdatedAt = ''
+          resolve()
+        }
+      })
     })
+    this.baselinePending = pending
+    return pending
   }
 
   /** 上次保存失败留下的草稿，问一次要不要接着改 */

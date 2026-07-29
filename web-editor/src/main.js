@@ -323,6 +323,11 @@ window.cmSetReadOnly = function (flag) {
 }
 
 window.cmRequestSave = function () {
+  // 只读态不该发起保存。快捷键不像工具条按钮那样能被置灰，
+  // 这里不拦的话 Ctrl+S 就成了绕过只读的后门（ArkTS 侧另有一道守卫）
+  if (view.state.readOnly) {
+    return
+  }
   try {
     bridge().saveContent(view.state.doc.toString())
   } catch (err) {

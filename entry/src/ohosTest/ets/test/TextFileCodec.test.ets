@@ -157,6 +157,41 @@ export default function textFileCodecTest() {
       expect(result.text).assertEqual('a')
     })
 
+    // 以下四条是防数据损坏的护栏：强制编码一旦放行乱码，
+    // 用户编辑保存后就会用替换字符覆盖原文件，且不可逆
+    it('decodeAs_rejectsUtf8OnGbkBytes', 0, () => {
+      const result = TextFileCodec.decodeAs(gbkBuffer('中文内容'), 'UTF-8')
+      expect(result.ok).assertFalse()
+      expect(result.failure).assertEqual(TextDecodeFailure.ENCODING_MISMATCH)
+    })
+
+    it('decodeAs_rejectsWhenBomContradictsChoice', 0, () => {
+      // 文件自带 UTF-16 LE 的 BOM，却被要求按 UTF-8 解
+      const result = TextFileCodec.decodeAs(bytesBuffer([0xFF, 0xFE, 0x61, 0x00]), 'UTF-8')
+      expect(result.ok).assertFalse()
+      expect(result.failure).assertEqual(TextDecodeFailure.ENCODING_MISMATCH)
+    })
+
+    it('decodeAs_rejectsGbkOnUtf8BomFile', 0, () => {
+      const result = TextFileCodec.decodeAs(bytesBuffer([0xEF, 0xBB, 0xBF, 0x61]), 'GBK')
+      expect(result.ok).assertFalse()
+      expect(result.failure).assertEqual(TextDecodeFailure.ENCODING_MISMATCH)
+    })
+
+    it('decodeAs_rejectsUtf8OnBomlessUtf16', 0, () => {
+      // 'ab' 的 UTF-16 LE 字节；NUL 在 UTF-8 里是合法的，
+      // 光靠 fatal 拦不住，得靠二进制探测
+      const result = TextFileCodec.decodeAs(bytesBuffer([0x61, 0x00, 0x62, 0x00]), 'UTF-8')
+      expect(result.ok).assertFalse()
+      expect(result.failure).assertEqual(TextDecodeFailure.ENCODING_MISMATCH)
+    })
+
+    it('decodeAs_stillAllowsCorrectUtf16', 0, () => {
+      const result = TextFileCodec.decodeAs(bytesBuffer([0xFF, 0xFE, 0x61, 0x00, 0x62, 0x00]), 'UTF-16 LE')
+      expect(result.ok).assertTrue()
+      expect(result.text).assertEqual('ab')
+    })
+
     it('supportedEncodings_listsSwitchableOnes', 0, () => {
       const list = TextFileCodec.supportedEncodings()
       expect(list.includes('UTF-8')).assertTrue()

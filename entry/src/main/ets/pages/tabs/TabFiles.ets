@@ -2116,7 +2116,10 @@ export struct TabFiles {
             this.closeFileMoreMenu()
             this.onMoreClick(MoreMenuType.NEW_DIR)
           })
-          // 「新建文件」入口已隐藏：App 无内置编辑器，空文件建了也写不了内容
+          this.fileMoreCommonItem($r('app.string.more_new_file'), $r('app.media.ic_doc_badge_plus'), false, () => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.NEW_FILE)
+          })
         }
 
         this.fileMoreGroupDivider()

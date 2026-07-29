@@ -258,7 +258,7 @@
     },
     {
       "name": "new_file_placeholder",
-      "value": "新文件名"
+      "value": "新文件名，如 note.md"
     },
     {
       "name": "delete_confirm",

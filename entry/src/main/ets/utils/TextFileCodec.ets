@@ -42,7 +42,9 @@ export enum TextLineEnding {
 export enum TextDecodeFailure {
   NONE = 'none',
   /** 含 NUL 字节或所有候选编码都严格解码失败，判定为非文本 */
-  BINARY = 'binary'
+  BINARY = 'binary',
+  /** 手动指定的编码与文件实际内容对不上 */
+  ENCODING_MISMATCH = 'encoding_mismatch'
 }
 
 export class TextDecodeResult {
@@ -121,19 +123,36 @@ export class TextFileCodec {
 
   /**
    * 按指定编码强行解码，供用户手动纠正探测结果。
-   * 这里不用 fatal：既然是用户点选的，就照做并把结果呈现出来，
-   * 由他自己判断对不对，比再抛一次错更有用。
+   *
+   * 必须严格校验，不能"照做并把结果呈现出来"：解码结果会参与 canEdit 判定，
+   * 一旦放行乱码，用户编辑后保存就会用替换字符覆盖掉原文件，且不可逆。
+   * 三道校验缺一不可：
+   *   1. fatal 解码——非法字节序列直接失败；
+   *   2. BOM 一致性——文件自带 BOM 却被要求按别的编码解，说明选错了；
+   *   3. 二进制探测——UTF-16 正文在 UTF-8 眼里全是合法字节（NUL 也合法），
+   *      fatal 拦不住，只能靠 NUL 探测把它挡回去。
    */
   static decodeAs(buffer: ArrayBuffer, encodingLabel: string): TextDecodeResult {
     const result = new TextDecodeResult()
     const bytes = new Uint8Array(buffer)
     const codec = TextFileCodec.codecOf(encodingLabel)
-    const decoded = TextFileCodec.tryDecode(bytes, codec, false)
-    if (decoded === undefined) {
-      result.failure = TextDecodeFailure.BINARY
+    const bom = TextFileCodec.detectBom(bytes)
+
+    if (bom.size > 0 && bom.encoding !== codec) {
+      result.failure = TextDecodeFailure.ENCODING_MISMATCH
       return result
     }
-    const bom = TextFileCodec.detectBom(bytes)
+    const isUtf16 = codec === ENCODING_UTF16LE || codec === ENCODING_UTF16BE
+    if (!isUtf16 && TextFileCodec.looksBinary(bytes)) {
+      result.failure = TextDecodeFailure.ENCODING_MISMATCH
+      return result
+    }
+
+    const decoded = TextFileCodec.tryDecode(bytes, codec, true)
+    if (decoded === undefined) {
+      result.failure = TextDecodeFailure.ENCODING_MISMATCH
+      return result
+    }
     const label = bom.size > 0 && encodingLabel === LABEL_UTF8 ? LABEL_UTF8_BOM : encodingLabel
     return TextFileCodec.finish(result, decoded, label, bom.size > 0)
   }

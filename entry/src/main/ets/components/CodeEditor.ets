@@ -178,7 +178,8 @@ export struct CodeEditor {
       .geolocationAccess(false)
       .zoomAccess(false)
       .mixedMode(MixedMode.None)
-      .horizontalScrollBarAccess(false)
+      // 关掉自动换行时全靠横向滚动，藏了滚动条就等于藏了"这里还能滑"的提示
+      .horizontalScrollBarAccess(true)
       .darkMode(WebDarkMode.Off)
       // 资源全在包内，缓存没有收益；应用升级后 URL 不变，缓存反而可能让旧的 js/css 留下来
       .cacheMode(CacheMode.None)

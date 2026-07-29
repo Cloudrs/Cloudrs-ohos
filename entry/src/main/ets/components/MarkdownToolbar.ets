@@ -108,7 +108,7 @@ export struct MarkdownToolbar {
         .layoutWeight(1)
       } else {
         Text('预览模式')
-          .fontSize(CloudThemeToken.textPreviewMetaSize)
+          .fontSize(CloudThemeToken.mdToolbarLabelSize)
           .fontColor(CloudThemeToken.textSecondary)
           .layoutWeight(1)
       }
@@ -129,7 +129,7 @@ export struct MarkdownToolbar {
         .fillColor(CloudThemeToken.primary)
         .draggable(false)
       Text(this.previewMode ? '编辑' : '预览')
-        .fontSize(CloudThemeToken.textPreviewMetaSize)
+        .fontSize(CloudThemeToken.mdToolbarLabelSize)
         .fontWeight(FontWeight.Medium)
         .fontColor(CloudThemeToken.primary)
     }

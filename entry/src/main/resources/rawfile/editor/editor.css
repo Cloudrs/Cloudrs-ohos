@@ -5,7 +5,7 @@
 
 :root {
   --cm-font-family: "HarmonyOS Sans", "Menlo", "Consolas", monospace;
-  --cm-font-size: 13px;
+  --cm-font-size: 15px;
 
   --cm-bg: #ffffff;
   --cm-fg: #182431;
@@ -70,13 +70,14 @@ html, body {
 #preview {
   height: 100%;
   overflow: auto;
-  padding: 12px 16px;
+  /* 右侧多留一点，避开竖直滚动条；底部留白让最后一行不贴边 */
+  padding: 12px 22px 28px 16px;
   box-sizing: border-box;
   color: var(--cm-fg);
   background-color: var(--cm-bg);
   font-family: -apple-system, "HarmonyOS Sans", sans-serif;
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.75;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -111,6 +112,23 @@ html, body {
   border-radius: 8px;
   overflow-x: auto;
   background-color: var(--cm-active-line);
+}
+
+/*
+ * 跟随「自动换行」设置：开启时代码块折行，不再需要横向滑动。
+ * 只用 overflow-wrap: break-word——单词优先整体换到下一行，
+ * 只有单独一行都放不下的超长 token 才会被拆开。
+ * 不要用 anywhere / break-all：那会在任意位置断字，把标识符劈成两半。
+ */
+body.wrap-code #preview pre {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* 关闭自动换行时保留横向滚动，并让触屏能顺畅拖动 */
+#preview pre {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
 }
 
 /* 代码块 + 右上角复制按钮 */

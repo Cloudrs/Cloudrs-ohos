@@ -120,7 +120,9 @@ function buildTheme() {
     },
     '.cm-content': {
       fontFamily: 'var(--cm-font-family)',
-      caretColor: 'var(--cm-caret)'
+      caretColor: 'var(--cm-caret)',
+      // 右侧留白：否则正文贴着边，还会被竖直滚动条压住最后一两个字符
+      paddingRight: '16px'
     },
     '.cm-gutters': {
       backgroundColor: 'var(--cm-gutter-bg)',
@@ -356,6 +358,9 @@ window.cmGotoLine = function () {
 window.cmSetLineWrap = function (flag) {
   const on = flag === true || flag === 'true'
   view.dispatch({ effects: wrapConf.reconfigure(on ? [EditorView.lineWrapping] : []) })
+  // 预览里的代码块同样跟随这个设置。
+  // 手机屏窄，代码块若只靠横向滚动，长行看着就是被截断了
+  document.body.classList.toggle('wrap-code', on)
 }
 
 window.cmSetFontSize = function (px) {
@@ -780,6 +785,9 @@ function boot() {
     report('error', `create editor failed: ${err}`)
     return
   }
+  // 编辑器初始就是开启换行的，body 上的标记要跟它一致，
+  // 免得 ArkTS 还没下发设置前预览代码块的表现对不上
+  document.body.classList.add('wrap-code')
   bindEditGestures()
   try {
     bridge().ready()

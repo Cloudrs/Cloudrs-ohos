@@ -29,9 +29,9 @@ class Constant {
 
   TEXT_EDITOR_FONT_SIZE: string = 'text_editor_font_size'
   TEXT_EDITOR_LINE_WRAP: string = 'text_editor_line_wrap'
-  TEXT_EDITOR_FONT_SIZE_DEFAULT: number = 13
-  TEXT_EDITOR_FONT_SIZE_MIN: number = 10
-  TEXT_EDITOR_FONT_SIZE_MAX: number = 22
+  TEXT_EDITOR_FONT_SIZE_DEFAULT: number = 15
+  TEXT_EDITOR_FONT_SIZE_MIN: number = 11
+  TEXT_EDITOR_FONT_SIZE_MAX: number = 24
   TEXT_EDITOR_FONT_SIZE_STEP: number = 1
 
   BACKGROUND_TASK_FLUSH_INTERVAL_MS: number = 2000

@@ -23,6 +23,7 @@ import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
 import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
 import LazyDataSource from '../../utils/LazyDataSource';
+import { PhotoThumbnailStore } from '../../utils/PhotoThumbnailStore';
 import { PhotoGalleryGrid } from '../../components/PhotoGalleryGrid';
 import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../model/PhotoGalleryModel';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
@@ -67,27 +68,6 @@ const GRID_SCROLL_QUIET_MS: number = 400;
 const CLOUD_THUMB_MAX_CONCURRENT: number = 4;
 const CLOUD_THUMB_QUEUE_MAX: number = 64;
 
-class PhotoBackupThumbnailCache {
-  static data: Map<string, PixelMap> = new Map<string, PixelMap>();
-
-  static snapshot(): Map<string, PixelMap> {
-    return new Map<string, PixelMap>(PhotoBackupThumbnailCache.data);
-  }
-
-  static set(id: string, pixelMap: PixelMap): void {
-    const next = new Map<string, PixelMap>(PhotoBackupThumbnailCache.data);
-    next.set(id, pixelMap);
-    while (next.size > CloudThemeToken.photoBackupThumbnailCacheLimit) {
-      const firstKey = next.keys().next().value as string | undefined;
-      if (!firstKey) {
-        break;
-      }
-      next.delete(firstKey);
-    }
-    PhotoBackupThumbnailCache.data = next;
-  }
-}
-
 @Component
 export struct TabPictures {
   @Link overLap: boolean
@@ -97,7 +77,6 @@ export struct TabPictures {
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true
-  @Provide photoBackupThumbs: Map<string, PixelMap> = new Map<string, PixelMap>();
   @State settingsEnabled: boolean = false;
   @State settingsRemotePath: string = '/Photos/Camera';
   @State settingsWifiOnly: boolean = true;
@@ -173,7 +152,6 @@ export struct TabPictures {
   @StorageProp(PHOTO_BACKUP_REVISION_KEY) @Watch('onSettingsRevisionChanged') settingsMirrorRevision: number = 0;
 
   aboutToAppear(): void {
-    this.photoBackupThumbs = PhotoBackupThumbnailCache.snapshot();
     this.bindPreviewDataSources();
     this.loadSettings();
     this.lastRemotePath = this.normalizeRemotePath(this.getSettingsRemotePath());
@@ -587,12 +565,11 @@ export struct TabPictures {
   }
 
   hasPhotoThumbnail(item: PhotoBackupItem): boolean {
-    return this.photoBackupThumbs.has(item.id);
+    return PhotoThumbnailStore.has(item.id);
   }
 
   setPhotoThumbnail(item: PhotoBackupItem, pixelMap: PixelMap): void {
-    PhotoBackupThumbnailCache.set(item.id, pixelMap);
-    this.photoBackupThumbs = PhotoBackupThumbnailCache.snapshot();
+    PhotoThumbnailStore.set(item.id, pixelMap);
   }
 
   async loadPhotoThumbnail(item: PhotoBackupItem): Promise<void> {
@@ -674,7 +651,7 @@ export struct TabPictures {
     this.processCloudThumbQueue();
   }
 
-  // 仅云端图：用云端缩略图 url 下载成 PixelMap，复用本地缩略图的展示通道（photoBackupThumbs）。
+  // 仅云端图：用云端缩略图 url 下载成 PixelMap，复用统一的缩略图 Store。
   private async loadCloudThumbnail(item: PhotoBackupItem): Promise<void> {
     if (!item.remoteFileId) {
       return;

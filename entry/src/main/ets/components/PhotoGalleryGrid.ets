@@ -10,6 +10,10 @@ import {
   PhotoBadge
 } from '../model/PhotoGalleryModel';
 import LazyDataSource from '../utils/LazyDataSource';
+import {
+  PhotoThumbnailListener,
+  PhotoThumbnailStore
+} from '../utils/PhotoThumbnailStore';
 
 const ROW_TARGET_HEIGHT: number = 112;
 const GAP: number = 3;
@@ -20,13 +24,66 @@ const BACK_TOP_ROW_THRESHOLD: number = 8;
 const FAB_SIZE: number = 46;
 const FAB_ICON_SIZE: number = 22;
 
+/**
+ * 缩略图状态下沉到单个格子。
+ *
+ * 列表滚动复用时先同步读取缓存；异步缩略图到达时只更新对应格子，
+ * 不会让整张 LazyForEach 因共享 Map 变化而重新求值。
+ */
+@Component
+struct PhotoThumbnail {
+  @Prop itemId: string = '';
+  @Prop imageWidth: number = 0;
+  @Prop imageHeight: number = 0;
+  onRequest: () => void = () => {};
+  @State pixelMap: PixelMap | undefined = undefined;
+  private subscribedId: string = '';
+  private listener: PhotoThumbnailListener = (pixelMap: PixelMap) => {
+    this.pixelMap = pixelMap;
+  };
+
+  aboutToAppear(): void {
+    this.subscribedId = this.itemId;
+    PhotoThumbnailStore.subscribe(this.subscribedId, this.listener);
+    const cached = PhotoThumbnailStore.get(this.subscribedId);
+    if (cached) {
+      this.pixelMap = cached;
+    } else {
+      this.onRequest();
+    }
+  }
+
+  aboutToDisappear(): void {
+    if (this.subscribedId.length > 0) {
+      PhotoThumbnailStore.unsubscribe(this.subscribedId, this.listener);
+      this.subscribedId = '';
+    }
+  }
+
+  build() {
+    if (this.pixelMap) {
+      Image(this.pixelMap)
+        .width(this.imageWidth)
+        .height(this.imageHeight)
+        .objectFit(ImageFit.Cover)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .draggable(false)
+    } else {
+      Column()
+        .width(this.imageWidth)
+        .height(this.imageHeight)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+    }
+  }
+}
+
 @Component
 export struct PhotoGalleryGrid {
   @Prop @Watch('onGroupsChanged') groups: PhotoGroup[] = [];
   @Prop backupEnabled: boolean = false;
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
-  @Consume photoBackupThumbs: Map<string, PixelMap>;
   onRequestThumb: (item: PhotoBackupItem) => void = () => {};
   onTapPhoto: (item: PhotoBackupItem) => void = () => {};
   onScroll: (yOffset: number) => void = () => {};
@@ -97,21 +154,12 @@ export struct PhotoGalleryGrid {
 
   @Builder photoCell(item: PhotoBackupItem, w: number, h: number) {
     Stack({ alignContent: Alignment.BottomEnd }) {
-      if (this.photoBackupThumbs.has(item.id)) {
-        Image(this.photoBackupThumbs.get(item.id))
-          .width(w)
-          .height(h)
-          .objectFit(ImageFit.Cover)
-          .borderRadius(CloudThemeToken.cardRadius)
-          .draggable(false)
-      } else {
-        Column()
-          .width(w)
-          .height(h)
-          .borderRadius(CloudThemeToken.cardRadius)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .onAppear(() => { this.onRequestThumb(item); })
-      }
+      PhotoThumbnail({
+        itemId: item.id,
+        imageWidth: w,
+        imageHeight: h,
+        onRequest: () => { this.onRequestThumb(item); }
+      })
       this.badge(item)
     }
     .width(w)

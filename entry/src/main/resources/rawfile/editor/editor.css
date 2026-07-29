@@ -1,0 +1,229 @@
+/*
+ * 编辑器配色。明暗两套变量，由 ArkTS 侧 cmSetTheme 切 data-theme。
+ * 取值对齐 CloudThemeToken 的正文/次要文字与背景，避免嵌进来像个浏览器。
+ */
+
+:root {
+  --cm-font-family: "HarmonyOS Sans", "Menlo", "Consolas", monospace;
+  --cm-font-size: 15px;
+
+  --cm-bg: #ffffff;
+  --cm-fg: #182431;
+  --cm-caret: #0a59f7;
+  --cm-selection: rgba(10, 89, 247, 0.22);
+  --cm-gutter-bg: #ffffff;
+  --cm-gutter-fg: #99a0a8;
+  --cm-active-line: rgba(10, 89, 247, 0.06);
+
+  --cm-keyword: #a626a4;
+  --cm-string: #50a14f;
+  --cm-number: #b76b01;
+  --cm-comment: #9198a1;
+  --cm-property: #4078f2;
+  --cm-type: #c18401;
+  --cm-function: #4078f2;
+  --cm-operator: #4b5259;
+  --cm-tag: #e45649;
+  --cm-heading: #0a59f7;
+  --cm-link: #0a59f7;
+  --cm-invalid: #e84026;
+}
+
+:root[data-theme="dark"] {
+  --cm-bg: #101114;
+  --cm-fg: #e5e5e5;
+  --cm-caret: #6a9eff;
+  --cm-selection: rgba(106, 158, 255, 0.28);
+  --cm-gutter-bg: #101114;
+  --cm-gutter-fg: #6b7075;
+  --cm-active-line: rgba(255, 255, 255, 0.05);
+
+  --cm-keyword: #c678dd;
+  --cm-string: #98c379;
+  --cm-number: #d19a66;
+  --cm-comment: #7f848e;
+  --cm-property: #61afef;
+  --cm-type: #e5c07b;
+  --cm-function: #61afef;
+  --cm-operator: #abb2bf;
+  --cm-tag: #e06c75;
+  --cm-heading: #6a9eff;
+  --cm-link: #6a9eff;
+  --cm-invalid: #e06c75;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--cm-bg);
+  /* 长按选中要保留，但别让整页被拖动 */
+  overscroll-behavior: none;
+}
+
+#editor {
+  height: 100%;
+}
+
+/* Markdown 预览 */
+#preview {
+  height: 100%;
+  overflow: auto;
+  /* 右侧多留一点，避开竖直滚动条；底部留白让最后一行不贴边 */
+  padding: 12px 22px 28px 16px;
+  box-sizing: border-box;
+  color: var(--cm-fg);
+  background-color: var(--cm-bg);
+  font-family: -apple-system, "HarmonyOS Sans", sans-serif;
+  font-size: 17px;
+  line-height: 1.75;
+  -webkit-text-size-adjust: 100%;
+}
+
+#preview h1, #preview h2, #preview h3,
+#preview h4, #preview h5, #preview h6 {
+  line-height: 1.35;
+  margin: 1.2em 0 0.5em;
+}
+
+#preview h1 { font-size: 1.6em; }
+#preview h2 { font-size: 1.35em; }
+#preview h3 { font-size: 1.15em; }
+#preview h1, #preview h2 {
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--cm-gutter-fg);
+}
+
+#preview p, #preview ul, #preview ol, #preview blockquote, #preview pre, #preview table {
+  margin: 0.7em 0;
+}
+
+#preview code {
+  font-family: var(--cm-font-family);
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background-color: var(--cm-active-line);
+}
+
+#preview pre {
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  background-color: var(--cm-active-line);
+}
+
+/*
+ * 跟随「自动换行」设置：开启时代码块折行，不再需要横向滑动。
+ * 只用 overflow-wrap: break-word——单词优先整体换到下一行，
+ * 只有单独一行都放不下的超长 token 才会被拆开。
+ * 不要用 anywhere / break-all：那会在任意位置断字，把标识符劈成两半。
+ */
+body.wrap-code #preview pre {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* 关闭自动换行时保留横向滚动，并让触屏能顺畅拖动 */
+#preview pre {
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+
+/* 代码块 + 右上角复制按钮 */
+.code-wrap {
+  position: relative;
+  margin: 0.7em 0;
+}
+
+.code-wrap pre {
+  margin: 0;
+  /* 给按钮让出位置，长代码首行才不会被盖住 */
+  padding-right: 42px;
+}
+
+.code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--cm-gutter-fg);
+  background-color: var(--cm-bg);
+  color: var(--cm-gutter-fg);
+  cursor: pointer;
+  /* 代码横向滚动时按钮要跟着停在原位 */
+  z-index: 1;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+/*
+ * 触屏没有 hover，默认必须可见，否则按钮永远点不到。
+ * 只有真正支持 hover 的设备（2in1 鼠标）才做"移入才显示"。
+ */
+@media (hover: hover) {
+  .code-copy {
+    opacity: 0;
+  }
+
+  .code-wrap:hover .code-copy,
+  .code-copy:focus-visible,
+  .code-copy.copied {
+    opacity: 1;
+  }
+
+  .code-copy:hover {
+    color: var(--cm-fg);
+  }
+}
+
+.code-copy:active {
+  opacity: 0.6;
+}
+
+.code-copy.copied {
+  color: var(--cm-string);
+  border-color: var(--cm-string);
+}
+
+#preview pre code {
+  padding: 0;
+  background: none;
+}
+
+#preview blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--cm-gutter-fg);
+  color: var(--cm-comment);
+}
+
+#preview table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+#preview th, #preview td {
+  padding: 6px 10px;
+  border: 1px solid var(--cm-gutter-fg);
+}
+
+#preview hr {
+  height: 1px;
+  border: none;
+  background-color: var(--cm-gutter-fg);
+}
+
+.cm-editor {
+  height: 100%;
+}
+
+.cm-editor.cm-focused {
+  outline: none;
+}

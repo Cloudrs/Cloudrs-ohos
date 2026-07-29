@@ -24,6 +24,16 @@ class Constant {
 
   IMAGE_PREVIEW_MAX_DOWNLOAD_BYTES: number = 100 * 1024 * 1024
 
+  // 文本预览走全量渲染，没有虚拟化的文本控件兜底，超过该大小不给入口
+  TEXT_PREVIEW_MAX_BYTES: number = 2 * 1024 * 1024
+
+  TEXT_EDITOR_FONT_SIZE: string = 'text_editor_font_size'
+  TEXT_EDITOR_LINE_WRAP: string = 'text_editor_line_wrap'
+  TEXT_EDITOR_FONT_SIZE_DEFAULT: number = 15
+  TEXT_EDITOR_FONT_SIZE_MIN: number = 11
+  TEXT_EDITOR_FONT_SIZE_MAX: number = 24
+  TEXT_EDITOR_FONT_SIZE_STEP: number = 1
+
   BACKGROUND_TASK_FLUSH_INTERVAL_MS: number = 2000
 
   TRANSFER_PERSIST_INTERVAL_MS: number = 2000
@@ -168,6 +178,8 @@ class Constant {
   IAMGE_PREVIEW_PAGE = 'ImagePreviewPage'
 
   VIDEO_PREVIEW_PAGE = 'VideoPreviewPage'
+
+  TEXT_PREVIEW_PAGE = 'TextPreviewPage'
 
   FILE_SEARCH_PAGE = 'FileSearchPage'
 

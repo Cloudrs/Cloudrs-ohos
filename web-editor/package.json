@@ -1,0 +1,38 @@
+{
+  "name": "cloudrs-web-editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CodeMirror 6 bundle for the Cloudrs in-app text editor. Build output is committed to entry/src/main/resources/rawfile/editor/.",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.8.1",
+    "@codemirror/lang-cpp": "6.0.3",
+    "@codemirror/lang-css": "6.3.1",
+    "@codemirror/lang-go": "6.0.1",
+    "@codemirror/lang-html": "6.4.9",
+    "@codemirror/lang-java": "6.0.2",
+    "@codemirror/lang-javascript": "6.2.4",
+    "@codemirror/lang-json": "6.0.2",
+    "@codemirror/lang-markdown": "6.3.4",
+    "@codemirror/lang-python": "6.2.1",
+    "@codemirror/lang-rust": "6.0.2",
+    "@codemirror/lang-sql": "6.9.1",
+    "@codemirror/lang-xml": "6.1.0",
+    "@codemirror/lang-yaml": "6.1.2",
+    "@codemirror/language": "6.11.3",
+    "@codemirror/legacy-modes": "6.5.2",
+    "@codemirror/search": "6.5.11",
+    "@codemirror/state": "6.5.2",
+    "@codemirror/view": "6.38.6",
+    "@lezer/highlight": "1.2.1",
+    "marked": "16.4.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "16.0.1",
+    "@rollup/plugin-terser": "0.4.4",
+    "rollup": "4.52.5"
+  }
+}

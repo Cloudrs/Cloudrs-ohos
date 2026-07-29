@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium'
-import { CommonUtil } from '../../../../main/ets/utils/CommonUtil'
+import { CommonUtil } from '../../../main/ets/utils/CommonUtil'
 
 export default function commonUtilTest() {
   describe('CommonUtil_album', () => {

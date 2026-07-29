@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { PhotoBadge, badgeForStatus, GallerySegment,
-  groupByDate, groupByAlbum, PhotoGroup, justifyRows, JustifiedRow } from '../../../../main/ets/model/PhotoGalleryModel';
-import { PhotoBackupStatus, PhotoBackupItem } from '../../../../main/ets/model/PhotoBackupModel';
+  groupByDate, groupByAlbum, PhotoGroup, justifyRows, JustifiedRow } from '../../../main/ets/model/PhotoGalleryModel';
+import { PhotoBackupStatus, PhotoBackupItem } from '../../../main/ets/model/PhotoBackupModel';
 
 export default function photoGalleryModelTest() {
   describe('PhotoGalleryModel', () => {

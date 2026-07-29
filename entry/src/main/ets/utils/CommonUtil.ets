@@ -258,6 +258,85 @@ export class CommonUtil {
     return base.length === 0 ? 'image' : base
   }
 
+  /**
+   * 是否可用内置文本查看器打开。
+   * 只放纯文本、结构化配置与源码；csv 归在 EXCEL 里，和 xls/xlsx 混用同一类型，先不放进来。
+   */
+  static isTextViewable(fileType: FileType): boolean {
+    return fileType === FileType.TXT || fileType === FileType.CONF ||
+      fileType === FileType.JSON || fileType === FileType.XML ||
+      fileType === FileType.YAML || fileType === FileType.TOML ||
+      fileType === FileType.MARKDOWN || fileType === FileType.CODE
+  }
+
+  /**
+   * 文件名 → 编辑器语法高亮的语言 id，需与 web-editor/src/main.js 的 LANGUAGES 表对齐。
+   * 认不出返回空串，编辑器按纯文本处理、不高亮。
+   */
+  static getEditorLanguage(fileName: string): string {
+    switch (CommonUtil.getFileExtention(fileName).toLowerCase()) {
+      case 'md':
+      case 'markdown':
+        return 'markdown'
+      case 'json':
+      case 'json5':
+        return 'json'
+      case 'xml':
+        return 'xml'
+      case 'html':
+      case 'htm':
+        return 'html'
+      case 'css':
+      case 'scss':
+      case 'sass':
+        return 'css'
+      case 'js':
+      case 'mjs':
+      case 'cjs':
+        return 'javascript'
+      case 'ts':
+      case 'ets':
+        return 'typescript'
+      case 'yaml':
+      case 'yml':
+        return 'yaml'
+      case 'py':
+        return 'python'
+      case 'java':
+      case 'kt':
+      case 'kts':
+        return 'java'
+      case 'c':
+      case 'h':
+      case 'cpp':
+      case 'hpp':
+      case 'cc':
+      case 'cxx':
+      case 'cs':
+        return 'cpp'
+      case 'rs':
+        return 'rust'
+      case 'go':
+        return 'go'
+      case 'sql':
+        return 'sql'
+      case 'sh':
+      case 'bash':
+      case 'zsh':
+      case 'ps1':
+      case 'bat':
+        return 'shell'
+      case 'toml':
+      case 'ini':
+      case 'conf':
+      case 'config':
+      case 'properties':
+        return 'toml'
+      default:
+        return ''
+    }
+  }
+
   /** 判断一组文件名是否全部为图片类型（空数组返回 false）。 */
   static isAllImages(names: string[]): boolean {
     return names.length > 0 && names.every((n: string) => CommonUtil.getFileType(n) === FileType.IMAGE)

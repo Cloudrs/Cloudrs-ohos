@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!--
+    只跑本地打包好的编辑器，正文内容也绝不拼进 HTML。
+    脚本/样式放行本地 scheme：rawfile 页面的来源可能被当作不透明源，
+    此时 'self' 匹配不上会把 editor.js 自己挡掉、整页白屏。
+    真正防外联的 connect-src / img-src 保持 none，原生侧还有一层网络拦截。
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' resource: file: data:; script-src 'self' resource: file:; style-src 'self' resource: file: 'unsafe-inline'; img-src 'none'; connect-src 'none'; font-src 'self' resource: file: data:">
+  <title>editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <div id="editor"></div>
+  <div id="preview" style="display:none"></div>
+  <script src="editor.js"></script>
+</body>
+</html>

@@ -18,6 +18,7 @@ import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsEffect, hdsM
 const TAG = 'FileSearchPage'
 const GLOBAL_SEARCH_CONCURRENCY = 4
 const SEARCH_HISTORY_MAX_COUNT = 10
+const REGEX_HISTORY_PREFIX = '__cloudrs_regex__:'
 
 enum FileSearchScope {
   CURRENT_DIRECTORY,
@@ -38,6 +39,7 @@ export struct FileSearchPage {
   @State results: ObjectInfo[] = []
   @State searchScope: FileSearchScope = FileSearchScope.CURRENT_DIRECTORY
   @State searchHistory: string[] = []
+  @State isRegexSearch: boolean = false
   @State isLoadingGlobalObjects: boolean = false
   @State isMultiSelectMode: boolean = false
   @State selectedObjects: ObjectInfo[] = []
@@ -57,7 +59,6 @@ export struct FileSearchPage {
     this.thumbSource = this.routeParam?.thumbSource ?? new Map<string, string>()
     this.loadSearchHistory()
     this.applySearch()
-    this.ensureGlobalObjectsLoaded()
   }
 
   aboutToDisappear(): void {
@@ -102,15 +103,29 @@ export struct FileSearchPage {
   }
 
   private applySearch(): void {
-    const keyword = this.activeSearchKeyword.trim().toLowerCase()
+    const keyword = this.activeSearchKeyword.trim()
     if (keyword.length === CloudThemeToken.zero) {
       this.results = []
       return
     }
     const source = this.searchScope === FileSearchScope.ALL_FILES ?
       this.globalObjects : this.currentObjects
+    let expression: RegExp | null = null
+    if (this.isRegexSearch) {
+      try {
+        expression = new RegExp(keyword, 'i')
+      } catch (_) {
+        this.results = []
+        return
+      }
+    }
+    const normalizedKeyword = keyword.toLowerCase()
     this.results = source.filter((item: ObjectInfo) => {
-      return !this.isDeletedObject(item) && item.name.toLowerCase().includes(keyword)
+      if (this.isDeletedObject(item)) {
+        return false
+      }
+      return expression !== null ? expression.test(item.name) :
+        item.name.toLowerCase().includes(normalizedKeyword)
     })
     if (this.isMultiSelectMode) {
       const visibleIds = new Set<string>(this.results.map((item: ObjectInfo) => item.id))
@@ -142,13 +157,15 @@ export struct FileSearchPage {
       Constant.USER_PREFERENCES, this.getSearchHistoryKey(), JSON.stringify(this.searchHistory))
   }
 
-  private recordSearchHistory(keywordValue?: string): void {
+  private recordSearchHistory(keywordValue?: string, regexValue?: boolean): void {
     const keyword = (keywordValue ?? this.activeSearchKeyword).trim()
     if (keyword.length === 0) {
       return
     }
-    const normalized = keyword.toLowerCase()
-    this.searchHistory = [keyword]
+    const regex = regexValue ?? this.isRegexSearch
+    const historyValue = regex ? `${REGEX_HISTORY_PREFIX}${keyword}` : keyword
+    const normalized = historyValue.toLowerCase()
+    this.searchHistory = [historyValue]
       .concat(this.searchHistory.filter((item: string) => item.toLowerCase() !== normalized))
       .slice(0, SEARCH_HISTORY_MAX_COUNT)
     this.saveSearchHistory()
@@ -159,8 +176,17 @@ export struct FileSearchPage {
     UserPreferences.deleteSync(Constant.USER_PREFERENCES, this.getSearchHistoryKey())
   }
 
-  private useSearchHistory(keyword: string): void {
-    this.searchKeyword = keyword
+  private isRegexHistory(value: string): boolean {
+    return value.startsWith(REGEX_HISTORY_PREFIX)
+  }
+
+  private getHistoryKeyword(value: string): string {
+    return this.isRegexHistory(value) ? value.substring(REGEX_HISTORY_PREFIX.length) : value
+  }
+
+  private useSearchHistory(value: string): void {
+    this.isRegexSearch = this.isRegexHistory(value)
+    this.searchKeyword = this.getHistoryKeyword(value)
     this.executeSearch()
   }
 
@@ -178,10 +204,18 @@ export struct FileSearchPage {
       }
       return
     }
+    if (this.isRegexSearch) {
+      try {
+        new RegExp(keyword, 'i')
+      } catch (_) {
+        showToast('正则表达式格式不正确')
+        return
+      }
+    }
     this.exitMultiSelectMode()
     this.activeSearchKeyword = keyword
-    this.recordSearchHistory(keyword)
-    this.ensureGlobalObjectsLoaded()
+    this.recordSearchHistory(keyword, this.isRegexSearch)
+    this.startGlobalSearch()
     this.applySearch()
   }
 
@@ -195,9 +229,33 @@ export struct FileSearchPage {
       this.loadGeneration += 1
       this.isLoadingGlobalObjects = false
     } else {
-      this.ensureGlobalObjectsLoaded()
+      this.startGlobalSearch()
     }
     this.applySearch()
+  }
+
+  private changeRegexSearch(enabled: boolean): void {
+    if (this.isRegexSearch === enabled) {
+      return
+    }
+    this.loadGeneration += 1
+    this.isLoadingGlobalObjects = false
+    this.isRegexSearch = enabled
+    if (this.activeSearchKeyword.trim().length > 0) {
+      this.executeSearch()
+    }
+  }
+
+  private startGlobalSearch(): void {
+    if (this.searchScope !== FileSearchScope.ALL_FILES ||
+      this.activeSearchKeyword.trim().length === 0) {
+      return
+    }
+    if (this.isRegexSearch) {
+      this.ensureGlobalObjectsLoaded()
+      return
+    }
+    this.loadServerSearch()
   }
 
   private ensureGlobalObjectsLoaded(): void {
@@ -208,6 +266,35 @@ export struct FileSearchPage {
       return
     }
     this.loadGlobalObjects()
+  }
+
+  private loadServerSearch(): void {
+    const generation = ++this.loadGeneration
+    const keyword = this.activeSearchKeyword
+    this.isLoadingGlobalObjects = true
+    this.globalObjects = []
+    this.results = []
+    CloudApi.searchFiles(keyword, '/', {
+      onSuccess: (objects: ObjectInfo[]) => {
+        if (generation !== this.loadGeneration) {
+          return
+        }
+        this.isLoadingGlobalObjects = false
+        this.globalObjects = objects
+        this.applySearch()
+      },
+      onFailure: (msg: string) => {
+        if (generation !== this.loadGeneration) {
+          return
+        }
+        AppLogger.warn(TAG, `server search unavailable, fallback to traversal: ${msg}`)
+        this.isLoadingGlobalObjects = false
+        this.globalObjectsLoaded = false
+        this.globalObjects = this.currentObjects.slice()
+        showToast('服务器搜索不可用，已切换兼容搜索')
+        this.loadGlobalObjects()
+      }
+    })
   }
 
   private isDeletedObject(item: ObjectInfo): boolean {
@@ -556,6 +643,24 @@ export struct FileSearchPage {
             })
 
           Button({ type: ButtonType.Normal }) {
+            Text('.*')
+              .fontSize(CloudThemeToken.textSizeBody)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.isRegexSearch ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
+          }
+          .width(CloudThemeToken.iconBoxXs)
+          .height(CloudThemeToken.iconBoxXs)
+          .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+          .backgroundColor(this.isRegexSearch ?
+            CloudThemeToken.primarySoft : CloudThemeToken.transparent)
+          .stateEffect(false)
+          .bindTips(this.getRegexSearchTip())
+          .accessibilityText(this.getRegexSearchTip())
+          .onClick(() => {
+            this.changeRegexSearch(!this.isRegexSearch)
+          })
+
+          Button({ type: ButtonType.Normal }) {
             Image($r('app.media.ic_global_search'))
               .width(CloudThemeToken.iconLg)
               .height(CloudThemeToken.iconLg)
@@ -654,6 +759,10 @@ export struct FileSearchPage {
       return '开启全局搜索'
     }
     return this.isLoadingGlobalObjects ? '正在全局搜索，点击关闭' : '关闭全局搜索'
+  }
+
+  private getRegexSearchTip(): string {
+    return this.isRegexSearch ? '关闭正则搜索' : '开启正则搜索'
   }
 
   @Builder resultList() {
@@ -763,21 +872,23 @@ export struct FileSearchPage {
         .alignItems(VerticalAlign.Center)
 
         Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start, alignItems: ItemAlign.Start }) {
-          ForEach(this.searchHistory, (keyword: string) => {
-            Button(keyword, { type: ButtonType.Normal })
+          ForEach(this.searchHistory, (historyValue: string) => {
+            Button(this.getHistoryKeyword(historyValue), { type: ButtonType.Normal })
               .height(CloudThemeToken.rowHeightSm)
               .fontSize(CloudThemeToken.textSizeBody)
-              .fontColor(CloudThemeToken.textPrimary)
+              .fontColor(this.isRegexHistory(historyValue) ?
+                CloudThemeToken.primary : CloudThemeToken.textPrimary)
               .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-              .backgroundColor(CloudThemeToken.surfaceSubtle)
+              .backgroundColor(this.isRegexHistory(historyValue) ?
+                CloudThemeToken.primarySoft : CloudThemeToken.surfaceSubtle)
               .margin({
                 right: CloudThemeToken.spacingXl,
                 bottom: CloudThemeToken.spacingXl
               })
               .onClick(() => {
-                this.useSearchHistory(keyword)
+                this.useSearchHistory(historyValue)
               })
-          }, (keyword: string) => keyword)
+          }, (historyValue: string) => historyValue)
         }
         .width('100%')
       }

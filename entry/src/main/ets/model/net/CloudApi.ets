@@ -20,7 +20,7 @@ import {
 import { FileType } from '../../utils/CommonUtil';
 import {
   Aria2Downloading, Aria2Finished, DirectoryInfo,
-  HttpCallback, ObjectDetail, ProgressCallback,
+  BaseResponse, HttpCallback, ObjectDetail, ProgressCallback,
   ObjectInfo, SiteConfig, UploadRequestResponse,
   UserInfo, UserSetting, UserStorage, UserTasks,
   TwoFactorCallback
@@ -28,8 +28,34 @@ import {
 import { ObjectSrc, ObjectCopy, ObjectMove, ObjectUpload } from './ObjectParam';
 import Constant from '../Constant';
 import AppLogger from '../../utils/AppLogger';
+import { http } from '@kit.NetworkKit';
 
 const CLOUD_API_TAG: string = 'CloudApi';
+const SERVER_SEARCH_PAGE_SIZE: number = 2000;
+const SERVER_SEARCH_MAX_PAGES: number = 100;
+
+interface V4SearchFile {
+  id: string;
+  name: string;
+  path: string;
+  type: number;
+  size: number;
+  created_at: string;
+  updated_at: string;
+  metadata?: Record<string, string>;
+  capability?: string;
+}
+
+interface V4SearchPagination {
+  page?: number;
+  page_size?: number;
+  next_page_token?: string;
+}
+
+interface V4SearchData {
+  files: V4SearchFile[];
+  pagination?: V4SearchPagination;
+}
 
 export class CloudApi {
   private static withApiLogging<T>(name: string, callback?: HttpCallback<T>): HttpCallback<T> | undefined {
@@ -71,6 +97,9 @@ export class CloudApi {
 
   static restoreSession(url: string, token: string, refreshToken: string, isV3: boolean): void {
     AppStorage.setOrCreate(Constant.CLOUD_BASE_URL, url);
+    AppStorage.setOrCreate(Constant.CLOUD_COOKIE,
+      isV3 ? token : `${Constant.CLOUD_V4_COOKIE_PREFIX}${token}`);
+    AppStorage.setOrCreate(Constant.CLOUD_REFRESH_TOKEN, refreshToken);
     nativeRestoreSession(url, token, refreshToken, isV3);
   }
 
@@ -161,6 +190,135 @@ export class CloudApi {
 
   static getFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
     nativeGetDirectory(path, CloudApi.withApiLogging(`getFilesInfo(${path})`, callback));
+  }
+
+  static searchFiles(keyword: string, path: string = '/', callback?: HttpCallback<ObjectInfo[]>): void {
+    callback?.onStart?.();
+    CloudApi.requestServerSearch(keyword, path)
+      .then((objects: ObjectInfo[]) => callback?.onSuccess(objects))
+      .catch((err: Error) => {
+        const message = err.message ?? String(err);
+        AppLogger.warn(CLOUD_API_TAG, `searchFiles failed: ${message}`);
+        callback?.onFailure(message);
+      });
+  }
+
+  private static async requestServerSearch(keyword: string, path: string): Promise<ObjectInfo[]> {
+    const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? '';
+    if (cookie.startsWith(Constant.CLOUD_V4_COOKIE_PREFIX)) {
+      return CloudApi.requestV4Search(keyword, path, cookie);
+    }
+    return CloudApi.requestV3Search(keyword, path, cookie);
+  }
+
+  private static async requestV3Search(keyword: string, path: string, cookie: string): Promise<ObjectInfo[]> {
+    const queryPath = path.length > 0 ? path : '/';
+    const url = `${CloudApi.getApiBaseUrl()}/api/v3/file/search/keywords/${encodeURIComponent(keyword)}` +
+      `?path=${encodeURIComponent(queryPath)}`;
+    const response = await CloudApi.requestJson<BaseResponse<DirectoryInfo>>(url, {
+      'Cookie': cookie.startsWith(Constant.CLOUD_V3_COOKIE_PREFIX) ?
+        cookie : `${Constant.CLOUD_V3_COOKIE_PREFIX}${cookie}`
+    });
+    if (response.code !== 0 || !response.data) {
+      throw new Error(response.msg || `V3 search failed (${response.code})`);
+    }
+    return response.data.objects ?? [];
+  }
+
+  private static async requestV4Search(keyword: string, path: string, cookie: string): Promise<ObjectInfo[]> {
+    const token = cookie.substring(Constant.CLOUD_V4_COOKIE_PREFIX.length);
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${token}`
+    };
+    const fileUri = CloudApi.buildV4SearchUri(path, keyword);
+    const objectsById: Map<string, ObjectInfo> = new Map<string, ObjectInfo>();
+    let page = 0;
+    let nextPageToken = '';
+
+    while (page < SERVER_SEARCH_MAX_PAGES) {
+      let url = `${CloudApi.getApiBaseUrl()}/api/v4/file?uri=${encodeURIComponent(fileUri)}` +
+        `&page=${page}&page_size=${SERVER_SEARCH_PAGE_SIZE}`;
+      if (nextPageToken.length > 0) {
+        url += `&next_page_token=${encodeURIComponent(nextPageToken)}`;
+      }
+      const response = await CloudApi.requestJson<BaseResponse<V4SearchData>>(url, headers);
+      if (response.code !== 0 || !response.data) {
+        throw new Error(response.msg || `V4 search failed (${response.code})`);
+      }
+
+      const files = response.data.files ?? [];
+      const previousSize = objectsById.size;
+      files.forEach((item: V4SearchFile) => {
+        objectsById.set(item.id, CloudApi.mapV4SearchFile(item));
+      });
+      if (files.length < SERVER_SEARCH_PAGE_SIZE || objectsById.size === previousSize) {
+        break;
+      }
+
+      nextPageToken = response.data.pagination?.next_page_token ?? '';
+      page += 1;
+    }
+    return Array.from(objectsById.values());
+  }
+
+  private static async requestJson<T>(url: string, headers: Record<string, string>): Promise<T> {
+    const request = http.createHttp();
+    try {
+      const response = await request.request(url, {
+        method: http.RequestMethod.GET,
+        header: headers,
+        expectDataType: http.HttpDataType.STRING
+      });
+      if (response.responseCode !== Constant.HTTP_STATUS_OK) {
+        throw new Error(`HTTP ${response.responseCode}`);
+      }
+      return JSON.parse(response.result as string) as T;
+    } catch (err) {
+      const message = (err as Error)?.message ?? String(err);
+      throw new Error(message);
+    } finally {
+      request.destroy();
+    }
+  }
+
+  private static getApiBaseUrl(): string {
+    const baseUrl = CloudApi.getBaseURL();
+    return baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
+  }
+
+  private static buildV4SearchUri(path: string, keyword: string): string {
+    const normalizedPath = path.length === 0 || path === '/' ? '' :
+      path.split('/').filter((segment: string) => segment.length > 0)
+        .map((segment: string) => encodeURIComponent(segment)).join('/');
+    return `cloudreve://my/${normalizedPath}?name=${encodeURIComponent(keyword)}&case_folding=true`;
+  }
+
+  private static mapV4SearchFile(item: V4SearchFile): ObjectInfo {
+    return {
+      id: item.id,
+      name: item.name,
+      path: CloudApi.getV4ParentPath(item.path),
+      thumb: item.metadata?.['thumb:disabled'] === undefined && item.type === 0,
+      size: item.size ?? 0,
+      type: item.type === 1 ? Constant.OBJECT_DIR_TYPE : Constant.OBJECT_FILE_TYPE,
+      date: item.updated_at ?? item.created_at ?? '',
+      create_date: item.created_at ?? '',
+      source_enabled: true
+    };
+  }
+
+  private static getV4ParentPath(uri: string): string {
+    const schemeIndex = uri.indexOf('://');
+    const pathStart = schemeIndex >= 0 ? uri.indexOf('/', schemeIndex + 3) : -1;
+    const encodedPath = pathStart >= 0 ? uri.substring(pathStart) : uri;
+    let decodedPath = encodedPath;
+    try {
+      decodedPath = decodeURIComponent(encodedPath);
+    } catch (_) {
+      decodedPath = encodedPath;
+    }
+    const lastSlash = decodedPath.lastIndexOf('/');
+    return lastSlash <= 0 ? '/' : decodedPath.substring(0, lastSlash);
   }
 
   static getThumb(id: string, callback?: HttpCallback<string>): void {

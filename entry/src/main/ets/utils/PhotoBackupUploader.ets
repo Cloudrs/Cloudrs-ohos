@@ -1,4 +1,3 @@
-import fs from '@ohos.file.fs';
 import Constant from '../model/Constant';
 import { CloudApi } from '../model/net/CloudApi';
 import { HttpCallback, UploadRequestResponse } from '../model/net/ApiTypes';
@@ -12,16 +11,15 @@ const TAG: string = 'PhotoBackupUploader';
 
 export enum PhotoBackupUploadResult {
   COMPLETED = 'completed',
+  EXISTS = 'exists',
   PAUSED = 'paused',
   CANCELED = 'canceled'
 }
 
 /**
  * Cloudreve 创建上传会话时返回"对象已存在"（overwrite=false 撞到云端同名文件）。
- * 对相册备份来说这等价于备份目标已达成——上层的 remotePhotoExists 去重靠备份开始时
- * 拉一次目录快照，服务端路径缓存 stale（删目录后 list 一直报 Path not exist）或
- * 快照过期时预检会漏，把已在云端的图再推一遍。此时把 40004 当成功而不是失败，
- * 否则一轮备份能刷出上百张假 FAILED。
+ * 把冲突单独返回给上层，由相册备份策略选择新的 "(n)" 文件名重试。
+ * 不能直接当成功：同名文件可能并不是同一张照片。
  */
 function isObjectExistedError(err: Error): boolean {
   return ApiErrorUtil.isObjectExisted(err?.message ?? '');
@@ -71,10 +69,9 @@ class PhotoBackupUploaderImpl {
         return err.reason;
       }
       if (err instanceof Error && isObjectExistedError(err)) {
-        // 云端已有同名文件：备份目标已达成，按成功处理（此时 session 未创建，无需清理）
-        AppLogger.info(TAG, `remote already has ${fileName}, treat as completed`);
+        AppLogger.info(TAG, `remote already has ${fileName}, request renamed retry`);
         PhotoBackupSessionStore.remove(itemId);
-        return PhotoBackupUploadResult.COMPLETED;
+        return PhotoBackupUploadResult.EXISTS;
       }
       throw err instanceof Error ? err : new Error(String(err));
     }
@@ -132,7 +129,15 @@ class PhotoBackupUploaderImpl {
     const now = new Date().getTime();
     if (existing && !PhotoBackupSessionStore.isExpired(existing, now)
         && existing.remotePath === remotePath && existing.total === total
-        && this.cacheFileExists(existing.cachePath)) {
+        && existing.sessionId.length > 0) {
+      if (existing.cachePath !== cachePath) {
+        if (existing.cachePath.length > 0) {
+          await FileSystemUtil.unlinkIfExists(existing.cachePath);
+        }
+        existing.cachePath = cachePath;
+        existing.updatedAt = now;
+        PhotoBackupSessionStore.put(existing);
+      }
       AppLogger.info(TAG, `resume session ${existing.sessionId} offset=${existing.offset} chunk=${existing.chunkIndex}`);
       return existing;
     }
@@ -260,22 +265,6 @@ class PhotoBackupUploaderImpl {
         }
       });
     });
-  }
-
-  /**
-   * fs.accessSync 在 ArkTS 里对不存在文件会抛异常（不同 API 版本行为不完全一致）。
-   * 用 try-catch 包一层保稳，异常一律视作文件不存在，让 resolveSession 走 create 新 session 分支——
-   * 而不是让整个 uploadOne 因这一次 accessSync 抛出而挂掉。
-   */
-  private cacheFileExists(path: string): boolean {
-    if (!path || path.length === 0) {
-      return false;
-    }
-    try {
-      return fs.accessSync(path);
-    } catch (_) {
-      return false;
-    }
   }
 
   private throwIfInterrupted(callbacks?: PhotoBackupUploadCallbacks,

@@ -72,6 +72,10 @@ export struct ObjectItem {
     return CommonUtil.getFileType(name) === FileType.VIDEO
   }
 
+  isUploading(item: ObjectInfo): boolean {
+    return item.metadata?.['sys:upload_session_id'] !== undefined
+  }
+
   getItemIcon(name: string, isDir: boolean) {
     if (isDir) {
       return $r("app.media.ic_folder_fill")
@@ -229,7 +233,19 @@ export struct ObjectItem {
           .height('100%')
           .padding({ top: CloudThemeToken.spacingSm, right: CloudThemeToken.spacingSm })
           .alignItems(HorizontalAlign.End)
+            .justifyContent(FlexAlign.Start)
+        }
+
+        if (this.isUploading(item)) {
+          Column() {
+            this.uploadingBadge()
+          }
+          .width('100%')
+          .height('100%')
+          .padding({ top: CloudThemeToken.spacingSm, right: CloudThemeToken.spacingSm })
+          .alignItems(HorizontalAlign.End)
           .justifyContent(FlexAlign.Start)
+          .hitTestBehavior(HitTestMode.None)
         }
       }
       .width('100%')
@@ -297,6 +313,10 @@ export struct ObjectItem {
         .height(CloudThemeToken.objectTextBlockHeight)
         .alignItems(HorizontalAlign.Start)
         .justifyContent(FlexAlign.Center)
+
+        if (this.isUploading(item)) {
+          this.uploadingBadge()
+        }
       }
       .width('100%')
       .height('100%')
@@ -409,5 +429,20 @@ export struct ObjectItem {
     .width(CloudThemeToken.iconSm)
     .height(CloudThemeToken.iconSm)
     .backgroundColor(CloudThemeToken.transparent)
+  }
+
+  @Builder uploadingBadge() {
+    Text('上传中')
+      .fontSize(CloudThemeToken.textSizeTiny)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(CloudThemeToken.onPrimary)
+      .padding({
+        left: CloudThemeToken.spacingMd,
+        right: CloudThemeToken.spacingMd,
+        top: CloudThemeToken.spacingTiny,
+        bottom: CloudThemeToken.spacingTiny
+      })
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .backgroundColor(CloudThemeToken.primary)
   }
 }

@@ -69,7 +69,8 @@ class PhotoBackupSessionStoreImpl {
 
   private persist(): void {
     const payload: PhotoBackupSessionsPayload = { sessions: Array.from(this.cache.values()) };
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_SESSIONS, JSON.stringify(payload));
+    UserPreferences.putCriticalSync(
+      Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_SESSIONS, JSON.stringify(payload));
   }
 
   get(itemId: string): PhotoBackupSessionData | undefined {

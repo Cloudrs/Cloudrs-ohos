@@ -1,10 +1,10 @@
 import {
-  DirectoryInfo, DirFileInfo, ObjectDetail, ObjectInfo, Policy, ShareLinkInfo
+  DirectoryInfo, DirFileInfo, HttpCallback, ObjectDetail, ObjectInfo, Policy, ShareLinkInfo
 } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
 import TransferDatabase from "../../model/TransferDatabase";
 import LazyDataSource from "../../utils/LazyDataSource";
-import { CloudApi } from "../../model/net/CloudApi";
+import { CloudApi, FileLockConflict } from "../../model/net/CloudApi";
 import { showApiFailureToast, showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { ApiErrorUtil, NETWORK_ERROR_MESSAGE } from "../../utils/ApiErrorUtil";
 import { ObjectItem } from "../../components/ObjectItem";
@@ -62,6 +62,7 @@ const FILE_THUMB_QUEUE_DELAY_MS: number = 500
 // 会经 LazyDataSource.getData → onDataGet 再次入队，不会漏加载
 const FILE_THUMB_QUEUE_MAX: number = 64
 const FILE_SHARE_REFRESH_DELAY_MS: number = 650
+const FILE_BATCH_MAX_CONCURRENT: number = 4
 
 // Lifecycle phase of a bindSheet, driven by its
 // onWillAppear/onAppear/onWillDisappear/onDisappear callbacks.
@@ -70,6 +71,46 @@ enum SheetPhase {
   OPENING,
   OPEN,
   CLOSING
+}
+
+interface BatchItemResult {
+  item: ObjectInfo
+  success: boolean
+  skipped: boolean
+  message: string
+  lockConflicts?: FileLockConflict[]
+}
+
+interface BatchOperationControl {
+  canceled: boolean
+  paused: boolean
+  resumeWaiters: Array<() => void>
+}
+
+interface BatchExecutionResult {
+  results: BatchItemResult[]
+  canceled: boolean
+}
+
+enum FileConflictPolicy {
+  ASK,
+  SKIP_ALL,
+  OVERWRITE_ALL
+}
+
+enum FileConflictDecision {
+  SKIP,
+  OVERWRITE
+}
+
+interface FileConflictRequest {
+  name: string
+  resolve: (decision: FileConflictDecision) => void
+}
+
+interface ServerUploadSession {
+  remotePath: string
+  sessionId: string
 }
 
 // Drives a single bindSheet off its real lifecycle phase instead of the bound
@@ -225,6 +266,26 @@ export struct TabFiles {
   @State uploadingCount: number = 0;
   @State albumSaving: boolean = false;
   @State albumSaveText: string = '';
+  @State batchOperationVisible: boolean = false
+  @State batchOperationTitle: string = ''
+  @State batchOperationTotal: number = 0
+  @State batchOperationProcessed: number = 0
+  @State batchOperationSucceeded: number = 0
+  @State batchOperationSkipped: number = 0
+  @State batchOperationFailed: number = 0
+  @State batchOperationInFlight: number = 0
+  @State batchOperationPaused: boolean = false
+  @State batchOperationCancelRequested: boolean = false
+  @State batchOperationElapsedSeconds: number = 0
+  private batchOperationRunning: boolean = false
+  private batchOperationSheetCtrl: SheetPhaseController = new SheetPhaseController()
+  private activeBatchOperationControl: BatchOperationControl | null = null
+  private batchOperationElapsedTimer: number = -1
+  @State fileConflictVisible: boolean = false
+  @State fileConflictName: string = ''
+  private fileConflictPolicy: FileConflictPolicy = FileConflictPolicy.ASK
+  private fileConflictQueue: FileConflictRequest[] = []
+  private activeFileConflict: FileConflictRequest | null = null
   @State downloadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State uploadObjects: LazyDataSource<TransportObject> = new LazyDataSource()
   @State showSelectFileSheet: boolean = false
@@ -274,6 +335,8 @@ export struct TabFiles {
   private thumbQueue: ObjectInfo[] = []
   private activeThumbLoads: number = 0
   private thumbQueueTimer: number = -1
+  // 新目录首屏按数据顺序 FIFO 加载；用户开始滚动后切到 LIFO，让当前屏优先于已经滑过的项目。
+  private prioritizeNewestThumbRequests: boolean = false
   private shareRefreshTimer: number = -1
   private initialFileListRequested: boolean = false
   private loadingFilePath: string = ''
@@ -435,9 +498,7 @@ export struct TabFiles {
         icon: $r('app.media.ic_transport'),
         label: '传输',
         action: () => {
-          this.transportSheetCtrl.requestOpen(() => this.showTransportSheet, (value: boolean) => {
-            this.showTransportSheet = value
-          })
+          this.openTransportSheet()
         }
       }
     }
@@ -447,6 +508,12 @@ export struct TabFiles {
       }
     }
     return item
+  }
+
+  private openTransportSheet(): void {
+    this.transportSheetCtrl.requestOpen(() => this.showTransportSheet, (value: boolean) => {
+      this.showTransportSheet = value
+    })
   }
 
   private isAllSelected(): boolean {
@@ -940,6 +1007,7 @@ export struct TabFiles {
     this.thumbLoadingIds.clear()
     this.thumbFailedIds.clear()
     this.activeThumbLoads = 0
+    this.prioritizeNewestThumbRequests = false
   }
 
   private cancelScheduledShareRefresh(): void {
@@ -1235,7 +1303,11 @@ export struct TabFiles {
     }
     this.thumbQueue.push(item)
     if (this.thumbQueue.length > FILE_THUMB_QUEUE_MAX) {
-      this.thumbQueue.shift()
+      if (this.prioritizeNewestThumbRequests) {
+        this.thumbQueue.shift()
+      } else {
+        this.thumbQueue.pop()
+      }
     }
     this.scheduleThumbQueue()
   }
@@ -1258,9 +1330,8 @@ export struct TabFiles {
       return
     }
     while (this.activeThumbLoads < FILE_THUMB_MAX_CONCURRENT && this.thumbQueue.length > 0) {
-      // LIFO：最新入队的（≈当前屏幕正在显示的）优先加载，避免快速滑动后
-      // 当前页被此前滑过的几百个排队请求阻塞
-      const item = this.thumbQueue.pop()
+      // 首屏还未滚动时 FIFO，保证顶部图片先出现；滚动后 LIFO，避免当前屏被旧请求阻塞。
+      const item = this.prioritizeNewestThumbRequests ? this.thumbQueue.pop() : this.thumbQueue.shift()
       if (!item) {
         continue
       }
@@ -1383,73 +1454,378 @@ export struct TabFiles {
     })
   }
 
-  dataSourceDelete() {
-    let objects = this.objectSelect.copyMoveObjects
-    if (objects.length > 1) {
-      objects.forEach((item) => {
-        if (item.type == Constant.OBJECT_DIR_TYPE) {
-          this.dirDataSource.deleteDataByItem(item)
-          this.isGridPadding = this.getFolderPaddingCount() > 0
-        } else {
-          this.fileDataSource.deleteDataByItem(item)
-        }
+  private beginBatchOperation(title: string, total: number,
+    previousSuccessCount: number = 0): BatchOperationControl {
+    const control: BatchOperationControl = {
+      canceled: false,
+      paused: false,
+      resumeWaiters: []
+    }
+    this.batchOperationTitle = title
+    this.batchOperationTotal = total
+    this.batchOperationProcessed = previousSuccessCount
+    this.batchOperationSucceeded = previousSuccessCount
+    this.batchOperationSkipped = 0
+    this.batchOperationFailed = 0
+    this.batchOperationInFlight = 0
+    this.batchOperationPaused = false
+    this.batchOperationCancelRequested = false
+    this.batchOperationElapsedSeconds = 0
+    this.activeBatchOperationControl = control
+    this.batchOperationRunning = true
+    this.batchOperationSheetCtrl.requestOpen(
+      () => this.batchOperationVisible,
+      (value: boolean) => {
+        this.batchOperationVisible = value
       })
-    } else if (this.objectSelect.index !== -1) {
-      if (objects[Constant.FIRST_ARRAY_INDEX].type == Constant.OBJECT_DIR_TYPE) {
-        this.dirDataSource.deleteData(this.objectSelect.index)
-        this.isGridPadding = this.getFolderPaddingCount() > 0
-      } else {
-        this.fileDataSource.deleteData(this.objectSelect.index)
-      }
+    if (this.batchOperationElapsedTimer >= 0) {
+      clearInterval(this.batchOperationElapsedTimer)
+    }
+    this.batchOperationElapsedTimer = setInterval(() => {
+      this.batchOperationElapsedSeconds++
+    }, 1000)
+    return control
+  }
+
+  private finishBatchOperation(control: BatchOperationControl): void {
+    if (this.activeBatchOperationControl !== control) {
+      return
+    }
+    this.batchOperationRunning = false
+    this.activeBatchOperationControl = null
+    if (this.batchOperationElapsedTimer >= 0) {
+      clearInterval(this.batchOperationElapsedTimer)
+      this.batchOperationElapsedTimer = -1
+    }
+    this.batchOperationVisible = false
+    this.batchOperationPaused = false
+    control.resumeWaiters.forEach((resume: () => void) => resume())
+    control.resumeWaiters = []
+  }
+
+  private toggleBatchOperationPause(): void {
+    const control = this.activeBatchOperationControl
+    if (!this.batchOperationVisible || !control || control.canceled) {
+      return
+    }
+    this.batchOperationPaused = !this.batchOperationPaused
+    control.paused = this.batchOperationPaused
+    if (!this.batchOperationPaused) {
+      const waiters = control.resumeWaiters
+      control.resumeWaiters = []
+      waiters.forEach((resume: () => void) => resume())
     }
   }
 
-  copyMoveObjects(dst: string) {
-    if (this.objectSelect.copyMoveObjects?.length > 0) {
-      let src: ObjectSrc = new ObjectSrc()
-      this.objectSelect.copyMoveObjects.forEach((item, index) => {
-        if (item.type == Constant.OBJECT_DIR_TYPE) {
-          src.dirs.push(item.id)
+  private cancelBatchOperation(): void {
+    const control = this.activeBatchOperationControl
+    if (!control || control.canceled) {
+      return
+    }
+    control.canceled = true
+    control.paused = false
+    this.batchOperationCancelRequested = true
+    this.batchOperationPaused = false
+    const waiters = control.resumeWaiters
+    control.resumeWaiters = []
+    waiters.forEach((resume: () => void) => resume())
+    this.cancelPendingFileConflicts()
+    // 停止派发后立即退出半模态；少量已发请求在后台收尾，完成后统一刷新页面和统计结果。
+    this.batchOperationVisible = false
+  }
+
+  private cancelPendingFileConflicts(): void {
+    const active = this.activeFileConflict
+    const queued = this.fileConflictQueue
+    this.activeFileConflict = null
+    this.fileConflictQueue = []
+    this.fileConflictVisible = false
+    this.fileConflictName = ''
+    active?.resolve(FileConflictDecision.SKIP)
+    queued.forEach((request: FileConflictRequest) => request.resolve(FileConflictDecision.SKIP))
+  }
+
+  private waitForBatchOperationResume(control: BatchOperationControl): Promise<void> {
+    if (!control.paused || control.canceled) {
+      return Promise.resolve()
+    }
+    return new Promise<void>((resolve: () => void) => {
+      control.resumeWaiters.push(resolve)
+    })
+  }
+
+  private async runBatchItems(items: ObjectInfo[], title: string,
+    operation: (item: ObjectInfo) => Promise<BatchItemResult>,
+    previousSuccessCount: number = 0): Promise<BatchExecutionResult> {
+    const control = this.beginBatchOperation(title, previousSuccessCount + items.length, previousSuccessCount)
+    const results: BatchItemResult[] = []
+    let nextIndex = 0
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < items.length) {
+        await this.waitForBatchOperationResume(control)
+        if (control.canceled) {
+          break
+        }
+        const index = nextIndex
+        nextIndex++
+        this.batchOperationInFlight++
+        let result: BatchItemResult
+        try {
+          result = await operation(items[index])
+        } catch (err) {
+          const message = (err as Error)?.message ?? String(err)
+          AppLogger.error(TAG, `batch item threw id=${items[index].id}, msg=${message}`)
+          result = { item: items[index], success: false, skipped: false, message: message }
+        }
+        this.batchOperationInFlight = Math.max(0, this.batchOperationInFlight - 1)
+        results.push(result)
+        this.batchOperationProcessed++
+        if (result.skipped) {
+          this.batchOperationSkipped++
+        } else if (result.success) {
+          this.batchOperationSucceeded++
         } else {
-          src.items.push(item.id)
+          this.batchOperationFailed++
+        }
+      }
+    }
+    const workers: Promise<void>[] = []
+    const workerCount = Math.min(FILE_BATCH_MAX_CONCURRENT, items.length)
+    for (let index = 0; index < workerCount; index++) {
+      workers.push(runWorker())
+    }
+    await Promise.all(workers)
+    this.finishBatchOperation(control)
+    return { results: results, canceled: control.canceled }
+  }
+
+  copyMoveObjects(dst: string) {
+    const items = this.objectSelect.copyMoveObjects?.slice() ?? []
+    if (items.length === 0) {
+      return
+    }
+    const type = this.objectSelect.type
+    const sourcePath = this.currentPath
+    this.runCopyMoveItems(items, type, sourcePath, dst)
+  }
+
+  private async runCopyMoveItems(items: ObjectInfo[], type: FileMenuType,
+    sourcePath: string, dst: string): Promise<void> {
+    const isCopy = type === FileMenuType.COPY
+    const title = isCopy ? '正在复制' : '正在移动'
+    const normalizedSource = sourcePath.length > 1 && sourcePath.endsWith('/') ?
+      sourcePath.substring(0, sourcePath.length - 1) : sourcePath
+    const normalizedDestination = dst.length > 1 && dst.endsWith('/') ?
+      dst.substring(0, dst.length - 1) : dst
+    if (normalizedSource === normalizedDestination) {
+      showToast(isCopy ? '不能复制到当前目录' : '文件已在当前目录')
+      return
+    }
+    this.resetFileConflictState()
+    const destinationObjects = await this.loadDestinationObjects(dst)
+    const execution = await this.runBatchItems(items, title, (item: ObjectInfo) =>
+      this.copyMoveOneItem(item, type, sourcePath, dst, destinationObjects))
+    const results = execution.results
+    const succeeded = results.filter((result: BatchItemResult) => result.success)
+      .map((result: BatchItemResult) => result.item)
+    const skipped = results.filter((result: BatchItemResult) => result.skipped)
+      .map((result: BatchItemResult) => result.item)
+    const failed = results.filter((result: BatchItemResult) => !result.success && !result.skipped)
+      .map((result: BatchItemResult) => result.item)
+    if (!isCopy && succeeded.length > 0) {
+      this.removeDeletedObjectsFromPage(succeeded)
+      this.recordBackupRemoved(
+        succeeded.filter((item: ObjectInfo) => item.type !== Constant.OBJECT_DIR_TYPE)
+          .map((item: ObjectInfo) => item.name))
+      this.recordBackupDirRemoved(
+        succeeded.filter((item: ObjectInfo) => item.type === Constant.OBJECT_DIR_TYPE)
+          .map((item: ObjectInfo) => this.joinRemotePath(sourcePath, item.name)))
+      this.getFileList(true, sourcePath)
+    }
+    const handledIds = new Set<string>(results.map((result: BatchItemResult) => result.item.id))
+    const unprocessed = items.filter((item: ObjectInfo) => !handledIds.has(item.id))
+    const remaining = skipped.concat(failed).concat(unprocessed)
+    this.selectedObjects = remaining
+    this.objectSelect.copyMoveObjects = remaining
+    if (remaining.length === 0) {
+      this.exitMultiSelectMode()
+    }
+    const action = isCopy ? '复制' : '移动'
+    showToast(execution.canceled
+      ? `已取消${action}：成功 ${succeeded.length} 项，跳过 ${skipped.length} 项，` +
+        `失败 ${failed.length} 项，未处理 ${unprocessed.length} 项`
+      : `${action}成功 ${succeeded.length} 项，跳过 ${skipped.length} 项，失败 ${failed.length} 项`)
+    this.resetFileConflictState()
+  }
+
+  private async copyMoveOneItem(item: ObjectInfo, type: FileMenuType,
+    sourcePath: string, dst: string, destinationObjects: Map<string, ObjectInfo>): Promise<BatchItemResult> {
+    const existing = destinationObjects.get(item.name)
+    if (existing) {
+      const decision = await this.requestFileConflictDecision(item.name)
+      if (decision === FileConflictDecision.SKIP) {
+        return { item: item, success: false, skipped: true, message: '已跳过同名项目' }
+      }
+      const deleteMessage = await this.deleteDestinationObject(existing)
+      if (deleteMessage.length > 0) {
+        return { item: item, success: false, skipped: false, message: deleteMessage }
+      }
+      destinationObjects.delete(item.name)
+    }
+    const firstResult = await this.executeCopyMoveItem(item, type, sourcePath, dst)
+    if (firstResult.success || !ApiErrorUtil.isObjectExisted(firstResult.message)) {
+      return firstResult
+    }
+    // 目标目录列表可能被服务端分页截断；以实际复制/移动返回的重名错误兜底，
+    // 再用服务器搜索定位目标对象，确保大目录中的冲突也能进入相同确认流程。
+    const searchedExisting = await this.findDestinationObject(item.name, dst)
+    if (!searchedExisting) {
+      return firstResult
+    }
+    const decision = await this.requestFileConflictDecision(item.name)
+    if (decision === FileConflictDecision.SKIP) {
+      return { item: item, success: false, skipped: true, message: '已跳过同名项目' }
+    }
+    const deleteMessage = await this.deleteDestinationObject(searchedExisting)
+    if (deleteMessage.length > 0) {
+      return { item: item, success: false, skipped: false, message: deleteMessage }
+    }
+    return this.executeCopyMoveItem(item, type, sourcePath, dst)
+  }
+
+  private executeCopyMoveItem(item: ObjectInfo, type: FileMenuType,
+    sourcePath: string, dst: string): Promise<BatchItemResult> {
+    return new Promise<BatchItemResult>((resolve: (result: BatchItemResult) => void) => {
+      const src = new ObjectSrc()
+      if (item.type === Constant.OBJECT_DIR_TYPE) {
+        src.dirs.push(item.id)
+      } else {
+        src.items.push(item.id)
+      }
+      const callback: HttpCallback<null> = {
+        onSuccess: (_data: null) => resolve({ item: item, success: true, skipped: false, message: '' }),
+        onFailure: (msg: string) => {
+          AppLogger.error(TAG, `${type === FileMenuType.COPY ? 'copy' : 'move'} failed id=${item.id}, msg=${msg}`)
+          resolve({ item: item, success: false, skipped: false, message: msg })
+        }
+      }
+      if (type === FileMenuType.COPY) {
+        CloudApi.copyObjects(new ObjectCopy(sourcePath, src, dst), callback)
+      } else {
+        CloudApi.moveObjects(new ObjectMove(sourcePath, src, dst), callback)
+      }
+    })
+  }
+
+  private loadDestinationObjects(path: string): Promise<Map<string, ObjectInfo>> {
+    return new Promise<Map<string, ObjectInfo>>((resolve: (value: Map<string, ObjectInfo>) => void) => {
+      CloudApi.getFilesInfo(path, {
+        onSuccess: (data: DirectoryInfo) => {
+          const objects = new Map<string, ObjectInfo>()
+          const destinationItems = data.objects ?? []
+          destinationItems.forEach((item: ObjectInfo) => objects.set(item.name, item))
+          resolve(objects)
+        },
+        onFailure: (msg: string) => {
+          AppLogger.warn(TAG, `load copy/move destination failed, conflict precheck degraded: ${msg}`)
+          resolve(new Map<string, ObjectInfo>())
         }
       })
+    })
+  }
 
-      if (this.objectSelect.type == FileMenuType.COPY) {
-        let param: ObjectCopy = new ObjectCopy(this.currentPath, src, dst)
-        CloudApi.copyObjects(param, {
-          onSuccess: (data) => {
-            showToast($r('app.string.copy_success'))
-            this.exitMultiSelectMode()
-          },
-          onFailure: (msg) => {
-            AppLogger.error(TAG, 'copy failed, msg: ' + msg)
-            if (ApiErrorUtil.isObjectExisted(msg)) {
-              showToast('目标位置已存在同名文件或文件夹')
-            } else {
-              showApiFailureToast(msg, $r('app.string.copy_failed'))
-            }
-          }
+  private deleteDestinationObject(item: ObjectInfo): Promise<string> {
+    return new Promise<string>((resolve: (message: string) => void) => {
+      CloudApi.deleteObject(item.id, item.type === Constant.OBJECT_DIR_TYPE, {
+        onSuccess: (_data: null) => resolve(''),
+        onFailure: (msg: string) => {
+          AppLogger.error(TAG, `overwrite delete destination failed id=${item.id}, msg=${msg}`)
+          resolve(`覆盖前删除目标同名项目失败：${msg}`)
+        }
+      })
+    })
+  }
+
+  private findDestinationObject(name: string, dst: string): Promise<ObjectInfo | null> {
+    return new Promise<ObjectInfo | null>((resolve: (item: ObjectInfo | null) => void) => {
+      const normalizedDst = dst.length > 1 && dst.endsWith('/') ? dst.substring(0, dst.length - 1) : dst
+      CloudApi.searchFiles(name, dst, {
+        onSuccess: (objects: ObjectInfo[]) => {
+          const found = objects.find((item: ObjectInfo) => {
+            const itemPath = item.path.length > 1 && item.path.endsWith('/') ?
+              item.path.substring(0, item.path.length - 1) : item.path
+            return item.name === name && itemPath === normalizedDst
+          })
+          resolve(found ?? null)
+        },
+        onFailure: (msg: string) => {
+          AppLogger.warn(TAG, `locate copy/move conflict failed name=${name}, msg=${msg}`)
+          resolve(null)
+        }
+      })
+    })
+  }
+
+  private resetFileConflictState(): void {
+    this.fileConflictPolicy = FileConflictPolicy.ASK
+    this.fileConflictQueue = []
+    this.activeFileConflict = null
+    this.fileConflictVisible = false
+    this.fileConflictName = ''
+  }
+
+  private requestFileConflictDecision(name: string): Promise<FileConflictDecision> {
+    if (this.fileConflictPolicy === FileConflictPolicy.SKIP_ALL) {
+      return Promise.resolve(FileConflictDecision.SKIP)
+    }
+    if (this.fileConflictPolicy === FileConflictPolicy.OVERWRITE_ALL) {
+      return Promise.resolve(FileConflictDecision.OVERWRITE)
+    }
+    return new Promise<FileConflictDecision>((resolve: (decision: FileConflictDecision) => void) => {
+      this.fileConflictQueue.push({ name: name, resolve: resolve })
+      this.showNextFileConflict()
+    })
+  }
+
+  private showNextFileConflict(): void {
+    if (this.activeFileConflict || this.fileConflictQueue.length === 0) {
+      return
+    }
+    if (this.fileConflictPolicy !== FileConflictPolicy.ASK) {
+      const decision = this.fileConflictPolicy === FileConflictPolicy.SKIP_ALL ?
+        FileConflictDecision.SKIP : FileConflictDecision.OVERWRITE
+      const queued = this.fileConflictQueue
+      this.fileConflictQueue = []
+      queued.forEach((request: FileConflictRequest) => request.resolve(decision))
+      return
+    }
+    this.activeFileConflict = this.fileConflictQueue.shift() ?? null
+    if (this.activeFileConflict) {
+      this.fileConflictName = this.activeFileConflict.name
+      // 系统进度半模态位于页面内容之上；冲突确认期间先收起，避免挡住确认层。
+      this.batchOperationVisible = false
+      this.fileConflictVisible = true
+    }
+  }
+
+  private resolveFileConflict(decision: FileConflictDecision, applyAll: boolean): void {
+    if (applyAll) {
+      this.fileConflictPolicy = decision === FileConflictDecision.SKIP ?
+        FileConflictPolicy.SKIP_ALL : FileConflictPolicy.OVERWRITE_ALL
+    }
+    const active = this.activeFileConflict
+    this.activeFileConflict = null
+    this.fileConflictVisible = false
+    this.fileConflictName = ''
+    active?.resolve(decision)
+    this.showNextFileConflict()
+    if (!this.activeFileConflict && this.fileConflictQueue.length === 0 && this.batchOperationRunning &&
+      !this.batchOperationCancelRequested) {
+      this.batchOperationSheetCtrl.requestOpen(
+        () => this.batchOperationVisible,
+        (value: boolean) => {
+          this.batchOperationVisible = value
         })
-      } else if (this.objectSelect.type == FileMenuType.MOVE) {
-        let param: ObjectMove = new ObjectMove(this.currentPath, src, dst)
-        CloudApi.moveObjects(param, {
-          onSuccess: (data) => {
-            this.dataSourceDelete()
-            this.exitMultiSelectMode()
-            this.recordBackupRemoved(src.items.map((p: string) => this.basename(p)))
-            showToast($r('app.string.move_success'))
-          },
-          onFailure: (msg) => {
-            AppLogger.error(TAG, 'move failed, msg: ' + msg)
-            if (ApiErrorUtil.isObjectExisted(msg)) {
-              showToast('目标位置已存在同名文件或文件夹')
-            } else {
-              showApiFailureToast(msg, $r('app.string.move_failed'))
-            }
-          }
-        })
-      }
     }
   }
 
@@ -1521,6 +1897,10 @@ export struct TabFiles {
 
         if (this.albumSaving) {
           this.albumSavingOverlay()
+        }
+
+        if (this.fileConflictVisible) {
+          this.fileConflictOverlay()
         }
 
         Column()
@@ -1680,6 +2060,43 @@ export struct TabFiles {
                 this.showTransportSheet = value
               }, () => {
                 this.showTransportSheet = false
+              })
+            }
+          })
+
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.batchOperationVisible, this.batchOperationSheet(), {
+            detents: [SheetSize.FIT_CONTENT],
+            title: {
+              title: this.batchOperationTitle,
+              subtitle: this.batchOperationPaused ? '任务已暂停' : '正在后台处理，请稍候'
+            },
+            showClose: false,
+            enableOutsideInteractive: false,
+            backgroundColor: CloudThemeToken.background,
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            // 批处理只能由任务完成后主动关闭，避免返回、点击蒙层或下拉误关后失去进度入口。
+            shouldDismiss: (_sheetDismiss: SheetDismiss) => {
+            },
+            onWillAppear: () => {
+              this.batchOperationSheetCtrl.onWillAppear()
+            },
+            onAppear: () => {
+              this.markSheetVisible()
+              this.batchOperationSheetCtrl.onAppear()
+            },
+            onWillDisappear: () => {
+              this.batchOperationSheetCtrl.onWillDisappear()
+            },
+            onDisappear: () => {
+              this.markSheetHidden()
+              this.batchOperationSheetCtrl.onDisappear((value: boolean) => {
+                this.batchOperationVisible = value
+              }, () => {
+                this.batchOperationVisible = false
               })
             }
           })
@@ -2822,7 +3239,10 @@ export struct TabFiles {
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: CloudThemeToken.defaultAnimationDuration})
     .scrollBarWidth(CloudThemeToken.strongLineWidth)
-    .onDidScroll(() => {
+    .onDidScroll((_scrollOffset: number, scrollState: ScrollState) => {
+      if (scrollState !== ScrollState.Idle) {
+        this.prioritizeNewestThumbRequests = true
+      }
       this.updateHeaderGlassState()
     })
     .onAreaChange((oldValue: Area, newValue: Area) => {
@@ -3092,6 +3512,8 @@ export struct TabFiles {
     this.objectSelect.copyMoveObjects = this.selectedObjects.slice()
     const onlySelected = this.selectedObjects.length === 1 ? this.selectedObjects[0] : undefined
     this.objectSelect.selectPathId = onlySelected?.type === Constant.OBJECT_DIR_TYPE ? onlySelected.id : ''
+    // 任务对象已快照到 objectSelect，先退出多选，路径选择和后续进度半模态独立展示。
+    this.exitMultiSelectMode()
     this.openPathSelectSheet()
   }
 
@@ -3125,7 +3547,9 @@ export struct TabFiles {
       return
     }
 
-    const selectedFiles = this.selectedObjects.filter((item: ObjectInfo) => item.type !== Constant.OBJECT_DIR_TYPE)
+    const selected = this.selectedObjects.slice()
+    this.exitMultiSelectMode()
+    const selectedFiles = selected.filter((item: ObjectInfo) => item.type !== Constant.OBJECT_DIR_TYPE)
     if (selectedFiles.length === 0) {
       showToast('已选择的项目中没有可下载文件')
       return
@@ -3139,7 +3563,7 @@ export struct TabFiles {
       }
 
       if (CommonUtil.isAllImages(selectedFiles.map((f: ObjectInfo) => f.name))) {
-        this.saveImagesFlow(context, selectedFiles).then(() => this.exitMultiSelectMode())
+        this.saveImagesFlow(context, selectedFiles)
         return
       }
 
@@ -3155,9 +3579,10 @@ export struct TabFiles {
           const filePath = FileSystemUtil.getPathFromUri(targetDirUri + '/' + item.name)
           this.enqueueDownloadTask(context, item, filePath)
         })
-        this.exitMultiSelectMode()
         showToast(`已添加${selectedFiles.length}个下载任务，保存至 ${this.formatDownloadDirForDisplay(
           FileSystemUtil.getPathFromUri(targetDirUri))}`, Constant.TOAST_LONG_DURATION_MS)
+        // 文件选择器退场后再拉起传输半模态，避免两个系统模态切换时丢失打开请求。
+        setTimeout(() => this.openTransportSheet(), CloudThemeToken.defaultAnimationDuration)
       }).catch((err: BusinessError) => {
         AppLogger.error(TAG, `Invoke documentViewPicker.save failed, code is ${err.code}, message is ${err.message}`)
       })
@@ -3173,6 +3598,7 @@ export struct TabFiles {
     }
 
     const selected = this.selectedObjects.slice()
+    this.exitMultiSelectMode()
     showCloudConfirmDialog(this.getUIContext(), {
       title: $r('app.string.delete_confirm'),
       message: selected.length === 1
@@ -3180,38 +3606,218 @@ export struct TabFiles {
         : `将删除 ${selected.length} 个项目`,
       confirmText: $r('app.string.dialog_delete'),
       onConfirm: () => {
-        const src = new ObjectSrc()
-        const filePaths: string[] = []
-        const dirPaths: string[] = []
-        selected.forEach((item: ObjectInfo) => {
-          const remotePath = this.joinRemotePath(this.currentPath, item.name)
-          if (item.type === Constant.OBJECT_DIR_TYPE) {
-            src.dirs.push(item.id)
-            dirPaths.push(remotePath)
-          } else {
-            src.items.push(item.id)
-            filePaths.push(remotePath)
-          }
-        })
-        const performBatchDelete = (): void => {
-          CloudApi.deleteObjects(src, {
-            onSuccess: () => {
-              this.objectSelect.copyMoveObjects = selected
-              this.dataSourceDelete()
-              this.exitMultiSelectMode()
-              this.recordBackupRemoved(selected.filter((f: ObjectInfo) => f.type !== Constant.OBJECT_DIR_TYPE).map((f: ObjectInfo) => f.name))
-              this.recordBackupDirRemoved(dirPaths)
-              showToast($r('app.string.delete_success'))
-            },
-            onFailure: (msg) => {
-              AppLogger.error(TAG, '批量删除失败 msg: ' + msg)
-              this.tryRelieveOccupiedAndRetry(filePaths, dirPaths, performBatchDelete)
-            }
-          })
-        }
-        performBatchDelete()
+        this.deleteSelectedObjectsWithResults(selected)
       }
     })
+  }
+
+  private removeDeletedObjectsFromPage(items: ObjectInfo[]): void {
+    const deletedIds = new Set<string>(items.map((item: ObjectInfo) => item.id))
+    this.dirDataSource.replaceAll(
+      this.dirDataSource.dataArray.filter((item: ObjectInfo) => !deletedIds.has(item.id)))
+    this.fileDataSource.replaceAll(
+      this.fileDataSource.dataArray.filter((item: ObjectInfo) => !deletedIds.has(item.id)))
+    this.thumbQueue = this.thumbQueue.filter((item: ObjectInfo) => !deletedIds.has(item.id))
+    this.selectedObjects = this.selectedObjects.filter((item: ObjectInfo) => !deletedIds.has(item.id))
+    this.objectSelect.copyMoveObjects =
+      this.objectSelect.copyMoveObjects.filter((item: ObjectInfo) => !deletedIds.has(item.id))
+    this.isGridPadding = this.getFolderPaddingCount() > 0
+  }
+
+  private async deleteSelectedObjectsWithResults(items: ObjectInfo[],
+    previousSuccessCount: number = 0): Promise<void> {
+    AppLogger.info(TAG, `counted batch delete start, count=${items.length}`)
+    const execution = await this.runBatchItems(items, '正在删除',
+      (item: ObjectInfo) => this.deleteObjectForCountedBatch(item), previousSuccessCount)
+    const results = execution.results
+    const deleted = results.filter((result: BatchItemResult) => result.success)
+      .map((result: BatchItemResult) => result.item)
+    const failed = results.filter((result: BatchItemResult) => !result.success)
+    const successCount = previousSuccessCount + deleted.length
+    if (deleted.length > 0) {
+      this.removeDeletedObjectsFromPage(deleted)
+      this.recordBackupRemoved(
+        deleted.filter((item: ObjectInfo) => item.type !== Constant.OBJECT_DIR_TYPE)
+          .map((item: ObjectInfo) => item.name))
+      this.recordBackupDirRemoved(
+        deleted.filter((item: ObjectInfo) => item.type === Constant.OBJECT_DIR_TYPE)
+          .map((item: ObjectInfo) => this.joinRemotePath(this.currentPath, item.name)))
+      this.getFileList(true, this.currentPath)
+    }
+    if (execution.canceled) {
+      const unprocessedCount = Math.max(0, items.length - results.length)
+      showToast(`已取消删除：成功 ${successCount} 项，失败 ${failed.length} 项，未处理 ${unprocessedCount} 项`)
+      return
+    }
+    if (failed.length === 0) {
+      this.exitMultiSelectMode()
+      showToast(`删除成功 ${successCount} 项`)
+      return
+    }
+    showToast(`删除成功 ${successCount} 项，失败 ${failed.length} 项`)
+    this.offerRelieveFailedDeleteSessions(failed, successCount)
+  }
+
+  private deleteObjectForCountedBatch(item: ObjectInfo): Promise<BatchItemResult> {
+    return new Promise<BatchItemResult>((resolve: (result: BatchItemResult) => void) => {
+      const remotePath = this.joinRemotePath(this.currentPath, item.name)
+      CloudApi.deleteObjectLockAware(item.id, item.type === Constant.OBJECT_DIR_TYPE, remotePath, {
+        onSuccess: () => {
+          resolve({ item: item, success: true, skipped: false, message: '' })
+        },
+        onFailure: (msg: string, conflicts: FileLockConflict[]) => {
+          // 批量接口可能已完成部分删除后才报错；逐项重试遇到“不存在”应按幂等成功处理。
+          const missing = this.isObjectMissingMessage(msg)
+          if (!missing) {
+            AppLogger.error(TAG, `counted delete failed id=${item.id}, msg=${msg}`)
+          }
+          resolve({
+            item: item,
+            success: missing,
+            skipped: false,
+            message: msg,
+            lockConflicts: conflicts
+          })
+        }
+      })
+    })
+  }
+
+  private offerRelieveFailedDeleteSessions(failed: BatchItemResult[], successCount: number): void {
+    const nonNetworkFailures = failed.filter((result: BatchItemResult) =>
+      !ApiErrorUtil.isNetworkMessage(result.message))
+    if (nonNetworkFailures.length === 0) {
+      return
+    }
+    const failedItems = nonNetworkFailures.map((result: BatchItemResult) => result.item)
+    const filePaths: string[] = []
+    const dirPaths: string[] = []
+    failedItems.forEach((item: ObjectInfo) => {
+      const remotePath = this.joinRemotePath(this.currentPath, item.name)
+      if (item.type === Constant.OBJECT_DIR_TYPE) {
+        dirPaths.push(remotePath)
+      } else {
+        filePaths.push(remotePath)
+      }
+    })
+    const summary: UploadSessionSummary = UploadSessionRelief.summarize(filePaths, dirPaths)
+    const serverSessions: ServerUploadSession[] = []
+    failedItems.forEach((item: ObjectInfo) => {
+      const sessionId = item.metadata?.['sys:upload_session_id'] ?? ''
+      if (sessionId.length > 0) {
+        serverSessions.push({
+          remotePath: this.joinRemotePath(this.currentPath, item.name),
+          sessionId: sessionId
+        })
+      }
+    })
+    const tokenSet = new Set<string>()
+    let hasServerLockConflict = false
+    nonNetworkFailures.forEach((result: BatchItemResult) => {
+      if (ApiErrorUtil.isLockConflict(result.message) || (result.lockConflicts?.length ?? 0) > 0) {
+        hasServerLockConflict = true
+      }
+      const conflicts = result.lockConflicts ?? []
+      conflicts.forEach((conflict: FileLockConflict) => {
+        if (conflict.token && conflict.token.length > 0) {
+          tokenSet.add(conflict.token)
+        }
+      })
+    })
+    const lockTokens = Array.from(tokenSet)
+    if (summary.count === 0 && lockTokens.length === 0 && serverSessions.length === 0) {
+      if (hasServerLockConflict) {
+        showCloudConfirmDialog(this.getUIContext(), {
+          title: $r('app.string.upload_occupied_title'),
+          message: '服务器确认文件正被上传、备份或在线编辑任务占用，但当前账号没有可解除的锁。' +
+            '请先结束占用任务，或在创建该任务的设备上取消后重试。',
+          confirmText: '知道了',
+          onConfirm: () => {}
+        })
+      }
+      return
+    }
+    const details: string[] = []
+    if (lockTokens.length > 0) {
+      details.push(`${lockTokens.length} 个云端文件锁`)
+    }
+    if (summary.count > 0) {
+      details.push(`${summary.count} 个本机未完成上传会话`)
+    }
+    if (serverSessions.length > 0) {
+      details.push(`${serverSessions.length} 个服务器上传会话`)
+    }
+    showCloudConfirmDialog(this.getUIContext(), {
+      title: $r('app.string.upload_occupied_title'),
+      message: `删除失败的 ${failedItems.length} 项中检测到${details.join('和')}。` +
+        '解除占用会终止对应的上传、备份或在线编辑任务，是否解除后重试删除？',
+      confirmText: $r('app.string.upload_occupied_relieve'),
+      onConfirm: () => {
+        this.relieveLocksAndRetry(summary, filePaths, dirPaths, lockTokens, serverSessions,
+          () => this.deleteSelectedObjectsWithResults(failedItems, successCount))
+      }
+    })
+  }
+
+  private async relieveLocksAndRetry(summary: UploadSessionSummary, filePaths: string[],
+    dirPaths: string[], lockTokens: string[], serverSessions: ServerUploadSession[],
+    retry: () => void): Promise<void> {
+    await UploadSessionRelief.relieve(summary, filePaths, dirPaths)
+    let releasedServerSessions = 0
+    if (serverSessions.length > 0) {
+      releasedServerSessions = await this.releaseServerUploadSessions(serverSessions)
+    }
+    if (lockTokens.length > 0) {
+      const unlocked = await this.unlockCloudFileLocks(lockTokens, releasedServerSessions > 0)
+      if (!unlocked && releasedServerSessions === 0) {
+        return
+      }
+    }
+    // 删除服务器上传会话会同时释放其文件锁，此时删除响应携带的旧 token 再解锁会返回 40001。
+    // 只要至少一个上传会话已成功取消，就以重试删除的结果作为最终判定。
+    retry()
+  }
+
+  private async releaseServerUploadSessions(sessions: ServerUploadSession[]): Promise<number> {
+    let releasedCount = 0
+    for (const session of sessions) {
+      await new Promise<void>((resolve: () => void) => {
+        CloudApi.deleteUploadSession(session.remotePath, session.sessionId, {
+          onSuccess: () => {
+            releasedCount++
+            AppLogger.info(TAG, `released listed upload session id=${session.sessionId}`)
+            resolve()
+          },
+          onFailure: (msg: string) => {
+            AppLogger.warn(TAG, `delete listed upload session failed id=${session.sessionId}, msg=${msg}`)
+            resolve()
+          }
+        })
+      })
+    }
+    return releasedCount
+  }
+
+  private unlockCloudFileLocks(tokens: string[], allowStaleFailure: boolean = false): Promise<boolean> {
+    return new Promise<boolean>((resolve: (unlocked: boolean) => void) => {
+      CloudApi.unlockFiles(tokens, {
+        onSuccess: () => resolve(true),
+        onFailure: (msg: string) => {
+          AppLogger.warn(TAG, `force unlock failed${allowStaleFailure ? ' after upload session release' : ''}: ${msg}`)
+          if (!allowStaleFailure) {
+            showApiFailureToast(msg, '解除文件占用失败')
+          }
+          resolve(false)
+        }
+      })
+    })
+  }
+
+  private isObjectMissingMessage(msg: string): boolean {
+    const lower = (msg ?? '').toLowerCase()
+    return lower.includes('not found') || lower.includes('notfound') ||
+      lower.includes('not exist') || lower.includes('no such') ||
+      lower.includes('404') || lower.includes('不存在') || lower.includes('找不到')
   }
 
   itemDetail(item: ObjectInfo) {
@@ -3690,22 +4296,31 @@ export struct TabFiles {
         const remotePath = this.joinRemotePath(this.currentPath, item.name)
         const filePaths: string[] = item.type === Constant.OBJECT_DIR_TYPE ? [] : [remotePath]
         const dirPaths: string[] = item.type === Constant.OBJECT_DIR_TYPE ? [remotePath] : []
+        const finishDelete = (): void => {
+          if (item.type == Constant.OBJECT_DIR_TYPE) {
+            this.dirDataSource.deleteData(index)
+            this.isGridPadding = this.getFolderPaddingCount() > 0
+            this.recordBackupDirRemoved(dirPaths)
+          } else {
+            this.fileDataSource.deleteData(index)
+            this.recordBackupRemoved([item.name])
+          }
+          this.getFileList(true, this.currentPath)
+          showToast($r('app.string.delete_success'))
+        }
         const performDelete = (): void => {
-          CloudApi.deleteObject(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
-            onSuccess: (data) => {
-              if (item.type == Constant.OBJECT_DIR_TYPE) {
-                this.dirDataSource.deleteData(index)
-                this.isGridPadding = this.getFolderPaddingCount() > 0
-                this.recordBackupDirRemoved(dirPaths)
-              } else {
-                this.fileDataSource.deleteData(index)
-                this.recordBackupRemoved([item.name])
+          CloudApi.deleteObjectLockAware(item.id, item.type == Constant.OBJECT_DIR_TYPE, remotePath, {
+            onSuccess: () => finishDelete(),
+            onFailure: (msg: string, conflicts: FileLockConflict[]) => {
+              // 取消服务器上传会话可能会一并移除尚未完成的零字节占位文件。
+              // 后续删除返回“不存在”时应按幂等成功收口，避免继续使用旧 metadata 反复弹解除占用。
+              if (this.isObjectMissingMessage(msg)) {
+                AppLogger.info(TAG, `delete target already removed after relieving upload session id=${item.id}`)
+                finishDelete()
+                return
               }
-              showToast($r('app.string.delete_success'))
-            },
-            onFailure: (msg) => {
               AppLogger.error(TAG, '删除失败 msg: ' + msg)
-              this.tryRelieveOccupiedAndRetry(filePaths, dirPaths, performDelete)
+              this.tryRelieveOccupiedAndRetry(filePaths, dirPaths, performDelete, msg, conflicts)
             }
           })
         }
@@ -3726,24 +4341,54 @@ export struct TabFiles {
    * 无匹配 session 则回退到通用「删除失败」toast——避免把服务端其它类型的失败（权限/网络）
    * 误导成「被占用」。文案里给出会话计数让用户明确解除的是哪批任务。
    */
-  private tryRelieveOccupiedAndRetry(filePaths: string[], dirPaths: string[], retry: () => void): void {
+  private tryRelieveOccupiedAndRetry(filePaths: string[], dirPaths: string[], retry: () => void,
+    failureMessage: string = '', conflicts: FileLockConflict[] = []): void {
     const summary: UploadSessionSummary = UploadSessionRelief.summarize(filePaths, dirPaths)
-    if (summary.count === 0) {
+    const serverSessions: ServerUploadSession[] = []
+    const selectedPath = filePaths.length > 0 ? filePaths[0] : (dirPaths.length > 0 ? dirPaths[0] : '')
+    const selectedName = selectedPath.length > 0 ? this.basename(selectedPath) : ''
+    const selectedItem = this.objectsInfo.objects.find((item: ObjectInfo) => item.name === selectedName)
+    const listedSessionId = selectedItem?.metadata?.['sys:upload_session_id'] ?? ''
+    if (listedSessionId.length > 0 && selectedPath.length > 0) {
+      serverSessions.push({ remotePath: selectedPath, sessionId: listedSessionId })
+    }
+    const lockTokens = Array.from(new Set<string>(conflicts
+      .filter((conflict: FileLockConflict) => !!conflict.token && conflict.token.length > 0)
+      .map((conflict: FileLockConflict) => conflict.token ?? '')))
+    const hasServerLockConflict = ApiErrorUtil.isLockConflict(failureMessage) || conflicts.length > 0
+    if (summary.count === 0 && lockTokens.length === 0 && serverSessions.length === 0) {
+      if (hasServerLockConflict) {
+        showCloudConfirmDialog(this.getUIContext(), {
+          title: $r('app.string.upload_occupied_title'),
+          message: '服务器确认该文件正被上传、备份或在线编辑任务占用，但当前账号没有可解除的锁。' +
+            '请先结束占用任务，或在创建该任务的设备上取消后重试。',
+          confirmText: '知道了',
+          onConfirm: () => {}
+        })
+        return
+      }
       showToast($r('app.string.delete_failed'))
       return
     }
     const total = filePaths.length + dirPaths.length
     const targetHint = total === 1 ? '该项' : `所选 ${total} 项`
-    const detail = summary.count === 1 ? '有 1 个上传会话正在占用云端位置'
-      : `有 ${summary.count} 个上传会话正在占用云端位置`
+    const details: string[] = []
+    if (lockTokens.length > 0) {
+      details.push(`${lockTokens.length} 个云端文件锁`)
+    }
+    if (summary.count > 0) {
+      details.push(`${summary.count} 个本机未完成上传会话`)
+    }
+    if (serverSessions.length > 0) {
+      details.push(`${serverSessions.length} 个服务器上传会话`)
+    }
     showCloudConfirmDialog(this.getUIContext(), {
       title: $r('app.string.upload_occupied_title'),
-      message: `${targetHint}${detail}，解除后可继续删除`,
+      message: `${targetHint}检测到${details.join('和')}。解除占用会终止对应的上传、备份或在线编辑任务，` +
+        '是否解除后重试删除？',
       confirmText: $r('app.string.upload_occupied_relieve'),
       onConfirm: () => {
-        UploadSessionRelief.relieve(summary, filePaths, dirPaths).then(() => {
-          retry()
-        })
+        this.relieveLocksAndRetry(summary, filePaths, dirPaths, lockTokens, serverSessions, retry)
       }
     })
   }
@@ -4104,19 +4749,255 @@ export struct TabFiles {
   }
 
   @Builder albumSavingOverlay() {
-    Column({ space: CloudThemeToken.spacingMd }) {
-      LoadingProgress()
-        .width(CloudThemeToken.iconButtonSize)
-        .height(CloudThemeToken.iconButtonSize)
-        .color(CloudThemeToken.onPrimary)
-      Text(this.albumSaveText)
+    Column() {
+      Blank()
+      Column({ space: CloudThemeToken.spacingSection }) {
+        Row()
+          .width(CloudThemeToken.iconBoxXs)
+          .height(CloudThemeToken.strongLineWidth)
+          .borderRadius(CloudThemeToken.controlRadiusRoundLg)
+          .backgroundColor(CloudThemeToken.line)
+        Row({ space: CloudThemeToken.spacingCard }) {
+          LoadingProgress()
+            .width(CloudThemeToken.iconBoxMd)
+            .height(CloudThemeToken.iconBoxMd)
+            .color(CloudThemeToken.primary)
+          Column({ space: CloudThemeToken.spacingXs }) {
+            Text('正在保存图片')
+              .fontSize(CloudThemeToken.textSizeTitle)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(CloudThemeToken.textPrimary)
+            Text(this.albumSaveText)
+              .fontSize(CloudThemeToken.textSizeBody)
+              .fontColor(CloudThemeToken.textSecondary)
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 560 })
+      .padding({
+        left: CloudThemeToken.spacingPage,
+        right: CloudThemeToken.spacingPage,
+        top: CloudThemeToken.spacingSm,
+        bottom: this.bottomRectHeight + CloudThemeToken.spacingPage
+      })
+      .borderRadius({
+        topLeft: CloudThemeToken.controlRadiusXl,
+        topRight: CloudThemeToken.controlRadiusXl
+      })
+      .backgroundColor(CloudThemeToken.surface)
+      .shadow({
+        radius: CloudThemeToken.spacingSection,
+        color: 'rgba(0,0,0,0.22)',
+        offsetX: 0,
+        offsetY: -CloudThemeToken.spacingXs
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor('rgba(0,0,0,0.24)')
+    .hitTestBehavior(HitTestMode.Block)
+  }
+
+  @Builder batchOperationSheet() {
+    Column({ space: CloudThemeToken.spacingSection }) {
+      Row() {
+        Text('处理进度')
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontColor(CloudThemeToken.textSecondary)
+        Blank()
+        Text(`${this.batchOperationProcessed} / ${this.batchOperationTotal}`)
+          .fontSize(CloudThemeToken.textSizeBodyPlus)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.primary)
+          .padding({
+            left: CloudThemeToken.spacingSm,
+            right: CloudThemeToken.spacingSm,
+            top: CloudThemeToken.spacingXs,
+            bottom: CloudThemeToken.spacingXs
+          })
+          .borderRadius(CloudThemeToken.controlRadiusRoundLg)
+          .backgroundColor(CloudThemeToken.primarySoft)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Progress({
+        value: this.batchOperationProcessed,
+        total: Math.max(this.batchOperationTotal, 1),
+        type: ProgressType.Capsule
+      })
+        .width('100%')
+        .height(CloudThemeToken.spacingSm)
+        .color(CloudThemeToken.primary)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+
+      Row({ space: CloudThemeToken.spacingSm }) {
+        this.batchOperationStat('成功', this.batchOperationSucceeded, CloudThemeToken.primary)
+        this.batchOperationStat('跳过', this.batchOperationSkipped, CloudThemeToken.textSecondary)
+        this.batchOperationStat('失败', this.batchOperationFailed,
+          this.batchOperationFailed > 0 ? CloudThemeToken.danger : CloudThemeToken.textSecondary)
+      }
+      .width('100%')
+
+      Row({ space: CloudThemeToken.spacingSm }) {
+        LoadingProgress()
+          .width(CloudThemeToken.spacingSection)
+          .height(CloudThemeToken.spacingSection)
+          .color(this.batchOperationPaused ? CloudThemeToken.textSecondary : CloudThemeToken.primary)
+          .enableLoading(!this.batchOperationPaused)
+        Text(this.batchOperationPaused
+          ? (this.batchOperationInFlight > 0
+            ? `等待 ${this.batchOperationInFlight} 个已发请求完成后暂停`
+            : '已暂停，点击继续处理剩余项目')
+          : (this.batchOperationInFlight > 0
+            ? `${this.batchOperationInFlight} 个请求正在处理中`
+            : '正在准备下一批项目'))
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+          .layoutWeight(1)
+          .maxLines(2)
+      }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+      Row({ space: CloudThemeToken.spacingCard }) {
+        Text(`已运行 ${this.batchOperationElapsedSeconds} 秒`)
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+          .layoutWeight(1)
+        Button('取消任务')
+          .height(CloudThemeToken.rowHeightLg)
+          .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.danger)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .onClick(() => {
+            this.cancelBatchOperation()
+          })
+        Button(this.batchOperationPaused ? '继续任务' : '暂停任务')
+          .height(CloudThemeToken.rowHeightLg)
+          .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.batchOperationPaused ? CloudThemeToken.onPrimary : CloudThemeToken.primary)
+          .backgroundColor(this.batchOperationPaused ? CloudThemeToken.primary : CloudThemeToken.primarySoft)
+          .onClick(() => {
+            this.toggleBatchOperationPause()
+          })
+      }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .padding({
+      left: CloudThemeToken.spacingPage,
+      right: CloudThemeToken.spacingPage,
+      top: CloudThemeToken.spacingSm,
+      // bindSheet 覆盖应用底栏，但操作按钮仍需避开系统手势条/三键导航区。
+      // 与详情、分享、路径选择等系统半模态保持同一套底部安全间距。
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    })
+  }
+
+  @Builder batchOperationStat(label: string, value: number, color: ResourceColor) {
+    Column({ space: CloudThemeToken.spacingXs }) {
+      Text(`${value}`)
         .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.onPrimary)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(color)
+      Text(label)
+        .fontSize(CloudThemeToken.textSizeSmall)
+        .fontColor(CloudThemeToken.textSecondary)
+    }
+    .layoutWeight(1)
+    .padding({
+      top: CloudThemeToken.spacingSm,
+      bottom: CloudThemeToken.spacingSm
+    })
+    .borderRadius(CloudThemeToken.controlRadius)
+    .backgroundColor(CloudThemeToken.surfaceSubtle)
+  }
+
+  @Builder fileConflictOverlay() {
+    Column() {
+      Column({ space: CloudThemeToken.spacingMd }) {
+        Text('发现同名项目')
+          .width('100%')
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
+          .textAlign(TextAlign.Start)
+
+        Text(this.fileConflictName)
+          .width('100%')
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontColor(CloudThemeToken.textPrimary)
+          .textAlign(TextAlign.Start)
+
+        Text('覆盖会先删除目标位置的同名文件或文件夹，再执行本次操作。')
+          .width('100%')
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.danger)
+          .textAlign(TextAlign.Start)
+
+        Row({ space: CloudThemeToken.spacingSm }) {
+          Button('跳过')
+            .layoutWeight(1)
+            .height(CloudThemeToken.rowHeightLg)
+            .fontColor(CloudThemeToken.textPrimary)
+            .backgroundColor(CloudThemeToken.surfaceSubtle)
+            .onClick(() => this.resolveFileConflict(FileConflictDecision.SKIP, false))
+          Button('全部跳过')
+            .layoutWeight(1)
+            .height(CloudThemeToken.rowHeightLg)
+            .fontColor(CloudThemeToken.primary)
+            .backgroundColor(CloudThemeToken.primarySoft)
+            .onClick(() => this.resolveFileConflict(FileConflictDecision.SKIP, true))
+        }
+        .width('100%')
+
+        Row({ space: CloudThemeToken.spacingSm }) {
+          Button('覆盖')
+            .layoutWeight(1)
+            .height(CloudThemeToken.rowHeightLg)
+            .fontColor(CloudThemeToken.danger)
+            .backgroundColor(CloudThemeToken.surfaceSubtle)
+            .onClick(() => this.resolveFileConflict(FileConflictDecision.OVERWRITE, false))
+          Button('全部覆盖')
+            .layoutWeight(1)
+            .height(CloudThemeToken.rowHeightLg)
+            .fontColor(CloudThemeToken.onPrimary)
+            .backgroundColor(CloudThemeToken.danger)
+            .onClick(() => this.resolveFileConflict(FileConflictDecision.OVERWRITE, true))
+        }
+        .width('100%')
+      }
+      .width('86%')
+      .constraintSize({ maxWidth: 440 })
+      .padding(CloudThemeToken.spacingCard)
+      .borderRadius(CloudThemeToken.controlRadiusLg)
+      .backgroundColor(CloudThemeToken.surface)
+      .shadow({
+        radius: CloudThemeToken.spacingMd,
+        color: 'rgba(0,0,0,0.18)',
+        offsetX: 0,
+        offsetY: CloudThemeToken.spacingXs
+      })
     }
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.Center)
-    .backgroundColor('rgba(0,0,0,0.45)')
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor('rgba(0,0,0,0.55)')
     .hitTestBehavior(HitTestMode.Block)
   }
 

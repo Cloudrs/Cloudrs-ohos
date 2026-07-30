@@ -56,7 +56,7 @@ export function groupByDate(items: PhotoBackupItem[], today: Date): PhotoGroup[]
   const order: string[] = [];
   const map: Map<string, PhotoBackupItem[]> = new Map();
   items.forEach((it: PhotoBackupItem) => {
-    const key = dateKey(it.modifiedAt);
+    const key = dateKey(it.takenAt > 0 ? it.takenAt : it.modifiedAt);
     if (!map.has(key)) {
       map.set(key, []);
       order.push(key);
@@ -65,7 +65,8 @@ export function groupByDate(items: PhotoBackupItem[], today: Date): PhotoGroup[]
   });
   return order.map((key: string) => {
     const list = map.get(key)!;
-    return new PhotoGroup(dateTitle(list[0].modifiedAt, today), list);
+    const photoTime = list[0].takenAt > 0 ? list[0].takenAt : list[0].modifiedAt;
+    return new PhotoGroup(dateTitle(photoTime, today), list);
   });
 }
 

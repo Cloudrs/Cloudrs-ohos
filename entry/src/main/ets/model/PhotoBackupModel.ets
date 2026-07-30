@@ -11,6 +11,7 @@ export enum PhotoBackupState {
   IDLE = 'idle',
   SCANNING = 'scanning',
   WAITING_NETWORK = 'waitingNetwork',
+  WAITING_SYSTEM = 'waitingSystem',
   BACKING_UP = 'backingUp',
   PAUSED = 'paused',
   COMPLETED = 'completed',
@@ -78,6 +79,7 @@ export class PhotoBackupItem {
   name: string = ''
   size: number = 0
   modifiedAt: number = 0
+  takenAt: number = 0
   @Trace status: PhotoBackupStatus = PhotoBackupStatus.WAITING
   @Trace progress: number = 0
   @Trace error: string = ''
@@ -86,17 +88,20 @@ export class PhotoBackupItem {
   height: number = 0
   @Trace localExists: boolean = true
   remoteFileId: string = ''
+  remoteName: string = ''
 
-  constructor(uri: string, name: string, size: number, modifiedAt: number) {
+  constructor(uri: string, name: string, size: number, modifiedAt: number, takenAt: number = 0) {
     this.uri = uri
     this.name = name
     this.size = size
     this.modifiedAt = modifiedAt
+    this.takenAt = takenAt > 0 ? takenAt : modifiedAt
     this.id = `${uri}_${size}_${modifiedAt}`
   }
 
   static fromData(data: PhotoBackupItemData): PhotoBackupItem {
-    let item = new PhotoBackupItem(data.uri ?? '', data.name ?? '', data.size ?? 0, data.modifiedAt ?? 0)
+    let item = new PhotoBackupItem(data.uri ?? '', data.name ?? '', data.size ?? 0,
+      data.modifiedAt ?? 0, data.takenAt ?? data.modifiedAt ?? 0)
     item.id = data.id ?? item.id
     item.status = data.status ?? PhotoBackupStatus.WAITING
     item.progress = data.progress ?? 0
@@ -106,6 +111,7 @@ export class PhotoBackupItem {
     item.height = data.height ?? 0
     item.localExists = data.localExists ?? true
     item.remoteFileId = data.remoteFileId ?? ''
+    item.remoteName = data.remoteName ?? ''
     return item
   }
 
@@ -116,6 +122,7 @@ export class PhotoBackupItem {
       name: this.name,
       size: this.size,
       modifiedAt: this.modifiedAt,
+      takenAt: this.takenAt,
       status: this.status,
       progress: this.progress,
       error: this.error,
@@ -123,7 +130,8 @@ export class PhotoBackupItem {
       width: this.width,
       height: this.height,
       localExists: this.localExists,
-      remoteFileId: this.remoteFileId
+      remoteFileId: this.remoteFileId,
+      remoteName: this.remoteName
     }
   }
 }
@@ -134,6 +142,7 @@ export interface PhotoBackupItemData {
   name?: string
   size?: number
   modifiedAt?: number
+  takenAt?: number
   status?: PhotoBackupStatus
   progress?: number
   error?: string
@@ -142,6 +151,7 @@ export interface PhotoBackupItemData {
   height?: number
   localExists?: boolean
   remoteFileId?: string
+  remoteName?: string
 }
 
 export class PhotoBackupPathHistory {

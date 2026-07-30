@@ -71,6 +71,11 @@ const GRID_SCROLL_QUIET_MS: number = 400;
 const CLOUD_THUMB_MAX_CONCURRENT: number = 4;
 const CLOUD_THUMB_QUEUE_MAX: number = 64;
 
+interface RemoteBackupTarget {
+  fileName: string
+  alreadyBackedUp: boolean
+}
+
 @Component
 export struct TabPictures {
   @Link overLap: boolean
@@ -80,6 +85,8 @@ export struct TabPictures {
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true
+  @Watch('onForegroundTickChanged')
+  @StorageProp(Constant.APP_FOREGROUND_TICK) foregroundTick: number = 0;
   @State settingsEnabled: boolean = false;
   @State settingsRemotePath: string = '/Photos/Camera';
   @State settingsWifiOnly: boolean = true;
@@ -94,6 +101,7 @@ export struct TabPictures {
   @State backupQueueTotal: number = 0;
   @State shouldPauseBackup: boolean = false;
   private pauseForNetwork: boolean = false;
+  private pauseForSystem: boolean = false;
   /**
    * 关闭备份/切换用户等场景：置 true 后，uploader 在下一个 chunk 边界抛 CANCELED，
    * 主动 deleteUploadSession 清掉服务端占位；runBackup 出循环时统一清理 UPLOADING 状态。
@@ -126,7 +134,7 @@ export struct TabPictures {
   private doneIdsSaveTimer: number = -1;
   private completedPreviewFlushTimer: number = -1;
   private pendingCompletedPreviewItems: PhotoBackupItem[] = [];
-  private remotePhotoNameCache: Set<string> | null = null;
+  private remotePhotoCache: Map<string, ObjectInfo> | null = null;
   private photoCopyQueue: Promise<void> = Promise.resolve();
   private photoAssetCache: Map<string, photoAccessHelper.PhotoAsset> = new Map<string, photoAccessHelper.PhotoAsset>();
   private thumbnailLoadingIds: Set<string> = new Set<string>();
@@ -204,7 +212,7 @@ export struct TabPictures {
         // 否则会拼出 '//name' 与 sessionStore 里存的 '/name' 不匹配、把合法 session 误判为孤儿。
         // 保持与 getRemoteFilePath 的拼接规则一致。
         const separator = currentBase.endsWith('/') ? '' : '/';
-        const expectedRemote = item ? `${currentBase}${separator}${item.name}` : '';
+        const expectedRemote = item ? `${currentBase}${separator}${this.getRemoteName(item)}` : '';
         const pathChanged = expectedRemote.length > 0 && data.remotePath !== expectedRemote;
         if (!expired && !missingItem && !alreadyDone && !pathChanged) {
           continue;
@@ -237,6 +245,7 @@ export struct TabPictures {
     // 保 session 不删。下次进来 startBackup 会从 offset 续传，避免重传浪费流量。
     if (this.backupState === PhotoBackupState.BACKING_UP) {
       this.pauseForNetwork = false;
+      this.pauseForSystem = false;
       this.shouldPauseBackup = true;
       AppLogger.info(TAG, 'auto pause on aboutToDisappear');
     }
@@ -253,6 +262,14 @@ export struct TabPictures {
     this.reconcileRemoteBackupMarks();
     this.scheduleActiveAutoScan();
     this.syncMediaChangeRegistration();
+  }
+
+  private onForegroundTickChanged(): void {
+    if (this.backupState !== PhotoBackupState.WAITING_SYSTEM) {
+      return;
+    }
+    AppLogger.info(TAG, 'foreground reached, scheduling backup recovery after background task interruption');
+    this.scheduleAutoBackup();
   }
 
   // 文件管理里从备份目录删/移出的文件：相册变为活动时按文件名精确撤销这些图的已备份标记。
@@ -280,7 +297,7 @@ export struct TabPictures {
   private collectMarkedNames(): string[] {
     return this.getPhotos()
       .filter((item: PhotoBackupItem) => item.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(item))
-      .map((item: PhotoBackupItem) => item.name);
+      .map((item: PhotoBackupItem) => this.getRemoteName(item));
   }
 
   // 远端目录级对账：拉一次备份目录列表，把「已备份」标记但云端已不存在的图批量撤销。
@@ -343,7 +360,7 @@ export struct TabPictures {
     const next: PhotoBackupItem[] = [];
     this.getPhotos().forEach((item: PhotoBackupItem) => {
       const marked = item.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(item);
-      if (!removedNames.has(item.name) || !marked) {
+      if (!removedNames.has(this.getRemoteName(item)) || !marked) {
         next.push(item);
         return;
       }
@@ -376,7 +393,7 @@ export struct TabPictures {
     if (!marked || !NetworkStateUtil.hasNetwork()) {
       return;
     }
-    const name = item.name;
+    const name = this.getRemoteName(item);
     const remotePath = item.remoteFileId.length > 0 ? item.remoteFileId : this.getRemoteFilePath(item);
     CloudApi.getObjectDetail(remotePath, false, {
       onSuccess: () => {},
@@ -492,15 +509,36 @@ export struct TabPictures {
       this.photos = data.map((item: PhotoBackupItemData) => PhotoBackupItem.fromData(item));
       // Migrate older records whose modifiedAt was stored in seconds (showed as 1970).
       let migrated = false;
+      let recoveredUploading = 0;
       this.photos.forEach((item: PhotoBackupItem) => {
-        const normalized = toMillis(item.modifiedAt);
-        if (normalized !== item.modifiedAt) {
-          item.modifiedAt = normalized;
+        const normalizedModifiedAt = toMillis(item.modifiedAt);
+        const normalizedTakenAt = toMillis(item.takenAt);
+        if (normalizedModifiedAt !== item.modifiedAt) {
+          item.modifiedAt = normalizedModifiedAt;
           migrated = true;
         }
+        if (normalizedTakenAt !== item.takenAt) {
+          item.takenAt = normalizedTakenAt;
+          migrated = true;
+        }
+        if (item.takenAt <= 0 && item.modifiedAt > 0) {
+          item.takenAt = item.modifiedAt;
+          migrated = true;
+        }
+        // 进程异常退出时不会经过 runBackup 收尾，持久化的 UPLOADING 会永久游离在待处理队列之外。
+        // 启动恢复为 WAITING；PhotoBackupSessionStore 中仍有效的 session 会在 uploadOne 内从断点续传。
+        if (item.status === PhotoBackupStatus.UPLOADING) {
+          item.status = PhotoBackupStatus.WAITING;
+          item.progress = CloudThemeToken.zero;
+          item.error = '';
+          recoveredUploading++;
+        }
       });
-      if (migrated) {
+      if (migrated || recoveredUploading > 0) {
         this.savePhotoRecords();
+      }
+      if (recoveredUploading > 0) {
+        AppLogger.info(TAG, `recovered ${recoveredUploading} interrupted uploading items to waiting`);
       }
       this.migrateLegacyDoneIds();
       this.refreshDoneStatus();
@@ -729,7 +767,10 @@ export struct TabPictures {
           photoAccessHelper.PhotoKeys.PHOTO_TYPE,
           photoAccessHelper.PhotoKeys.DISPLAY_NAME,
           photoAccessHelper.PhotoKeys.SIZE,
-          photoAccessHelper.PhotoKeys.DATE_MODIFIED
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED,
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED_MS,
+          photoAccessHelper.PhotoKeys.DATE_TAKEN,
+          photoAccessHelper.PhotoKeys.DATE_TAKEN_MS
         ],
         predicates: predicates
       };
@@ -770,7 +811,10 @@ export struct TabPictures {
           photoAccessHelper.PhotoKeys.PHOTO_TYPE,
           photoAccessHelper.PhotoKeys.DISPLAY_NAME,
           photoAccessHelper.PhotoKeys.SIZE,
-          photoAccessHelper.PhotoKeys.DATE_MODIFIED
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED,
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED_MS,
+          photoAccessHelper.PhotoKeys.DATE_TAKEN,
+          photoAccessHelper.PhotoKeys.DATE_TAKEN_MS
         ],
         predicates: predicates
       };
@@ -824,7 +868,8 @@ export struct TabPictures {
     const resolved = this.createBackupItem(asset.uri, asset.displayName,
       this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset),
       this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.WIDTH),
-      this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.HEIGHT));
+      this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.HEIGHT),
+      '', this.getPhotoAssetTakenAt(asset));
     this.updatePhotoItemFromResolved(item, resolved);
   }
 
@@ -833,7 +878,20 @@ export struct TabPictures {
   }
 
   private getPhotoAssetModifiedAt(asset: photoAccessHelper.PhotoAsset): number {
-    return toMillis((asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) as number) ?? 0);
+    const millisecondValue = Number(asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED_MS) ?? 0);
+    if (!Number.isNaN(millisecondValue) && millisecondValue > 0) {
+      return millisecondValue;
+    }
+    return toMillis(Number(asset.get(photoAccessHelper.PhotoKeys.DATE_MODIFIED) ?? 0));
+  }
+
+  private getPhotoAssetTakenAt(asset: photoAccessHelper.PhotoAsset): number {
+    const millisecondValue = Number(asset.get(photoAccessHelper.PhotoKeys.DATE_TAKEN_MS) ?? 0);
+    if (!Number.isNaN(millisecondValue) && millisecondValue > 0) {
+      return millisecondValue;
+    }
+    const legacyValue = toMillis(Number(asset.get(photoAccessHelper.PhotoKeys.DATE_TAKEN) ?? 0));
+    return legacyValue > 0 ? legacyValue : this.getPhotoAssetModifiedAt(asset);
   }
 
   private getPhotoAssetDimension(asset: photoAccessHelper.PhotoAsset, key: photoAccessHelper.PhotoKeys): number {
@@ -1132,6 +1190,9 @@ export struct TabPictures {
     if (this.backupState === PhotoBackupState.WAITING_NETWORK) {
       return this.getSettingsWifiOnly() ? '等待 Wi-Fi' : '等待网络';
     }
+    if (this.backupState === PhotoBackupState.WAITING_SYSTEM) {
+      return '后台任务已中断，等待恢复';
+    }
     if (this.backupState === PhotoBackupState.PAUSED) {
       return `已暂停 ${this.backupQueueText} 张`;
     }
@@ -1319,7 +1380,7 @@ export struct TabPictures {
       const backedUp = it.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(it);
       if (backedUp) {
         it.localExists = false;
-        const remote = remoteMap.get(it.name);
+        const remote = remoteMap.get(this.getRemoteName(it));
         if (remote) {
           it.remoteFileId = remote.id;
         }
@@ -1389,6 +1450,9 @@ export struct TabPictures {
           photoAccessHelper.PhotoKeys.DISPLAY_NAME,
           photoAccessHelper.PhotoKeys.SIZE,
           photoAccessHelper.PhotoKeys.DATE_MODIFIED,
+          photoAccessHelper.PhotoKeys.DATE_MODIFIED_MS,
+          photoAccessHelper.PhotoKeys.DATE_TAKEN,
+          photoAccessHelper.PhotoKeys.DATE_TAKEN_MS,
           photoAccessHelper.PhotoKeys.WIDTH,
           photoAccessHelper.PhotoKeys.HEIGHT
         ],
@@ -1461,7 +1525,7 @@ export struct TabPictures {
           this.getPhotoAssetSize(asset), this.getPhotoAssetModifiedAt(asset),
           this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.WIDTH),
           this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.HEIGHT),
-          albumName);
+          albumName, this.getPhotoAssetTakenAt(asset));
         this.photoAssetCache.set(item.id, asset);
         nextPhotos.push(item);
       });
@@ -1593,8 +1657,9 @@ export struct TabPictures {
   }
 
   createBackupItem(uri: string, name: string, size: number, modifiedAt: number,
-    width: number = 0, height: number = 0, albumName: string = ''): PhotoBackupItem {
-    let item = new PhotoBackupItem(uri, name.length > 0 ? name : this.getNameFromUri(uri), size, modifiedAt);
+    width: number = 0, height: number = 0, albumName: string = '', takenAt: number = 0): PhotoBackupItem {
+    let item = new PhotoBackupItem(uri, name.length > 0 ? name : this.getNameFromUri(uri),
+      size, modifiedAt, takenAt);
     item.status = this.isPhotoDone(item) ? PhotoBackupStatus.COMPLETED : PhotoBackupStatus.WAITING;
     item.progress = item.status === PhotoBackupStatus.COMPLETED ? CloudThemeToken.percentageFull : CloudThemeToken.zero;
     item.width = width > 0 ? width : 0;
@@ -1687,7 +1752,7 @@ export struct TabPictures {
         if (usedPreviousIds.has(prev.id)) {
           return;
         }
-        const remote = remoteMap.get(prev.name);
+        const remote = remoteMap.get(this.getRemoteName(prev));
         if (remote && (prev.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(prev))) {
           prev.localExists = false;
           prev.remoteFileId = remote.id;
@@ -1705,7 +1770,7 @@ export struct TabPictures {
           return;
         }
         const markedDone = item.status === PhotoBackupStatus.COMPLETED || this.isPhotoDone(item);
-        if (markedDone && !remoteMap.has(item.name)) {
+        if (markedDone && !remoteMap.has(this.getRemoteName(item))) {
           this.clearDoneMark(item);
           item.status = PhotoBackupStatus.WAITING;
           item.progress = CloudThemeToken.zero;
@@ -1720,7 +1785,9 @@ export struct TabPictures {
     merged.forEach((item: PhotoBackupItem) => {
       this.applyDoneStatus(item, true);
     });
-    merged.sort((left: PhotoBackupItem, right: PhotoBackupItem) => right.modifiedAt - left.modifiedAt);
+    merged.sort((left: PhotoBackupItem, right: PhotoBackupItem) =>
+      (right.takenAt > 0 ? right.takenAt : right.modifiedAt) -
+      (left.takenAt > 0 ? left.takenAt : left.modifiedAt));
     return merged;
   }
 
@@ -1757,6 +1824,7 @@ export struct TabPictures {
     target.name = resolved.name;
     target.size = resolved.size;
     target.modifiedAt = resolved.modifiedAt;
+    target.takenAt = resolved.takenAt;
     target.id = resolved.id;
     if (resolved.width > 0 && resolved.height > 0) {
       target.width = resolved.width;
@@ -1995,6 +2063,7 @@ export struct TabPictures {
       return;
     }
     this.pauseForNetwork = true;
+    this.pauseForSystem = false;
     this.shouldPauseBackup = true;
     AppLogger.info(TAG, 'backup pause requested because current network is not allowed');
   }
@@ -2116,6 +2185,7 @@ export struct TabPictures {
     this.resetBackupQueue(targets.length);
     this.shouldPauseBackup = false;
     this.pauseForNetwork = false;
+    this.pauseForSystem = false;
     this.shouldCancelBackup = false;
     this.backupState = PhotoBackupState.BACKING_UP;
     AppLogger.info(TAG, `backup start, targets=${targets.length}, retryFailedOnly=${retryFailedOnly}`);
@@ -2127,6 +2197,7 @@ export struct TabPictures {
       return;
     }
     this.pauseForNetwork = false;
+    this.pauseForSystem = false;
     this.shouldPauseBackup = true;
     AppLogger.info(TAG, 'backup pause requested');
     showToast('已请求暂停,当前分片上传完即停');
@@ -2185,6 +2256,7 @@ export struct TabPictures {
       return;
     }
     this.pauseForNetwork = false;
+    this.pauseForSystem = true;
     this.shouldPauseBackup = true;
     AppLogger.warn(TAG, `backup pause requested by background task: ${reason}`);
   }
@@ -2218,7 +2290,7 @@ export struct TabPictures {
       } else {
         AppLogger.warn(TAG, 'backup continues in foreground because ability context is unavailable');
       }
-      this.remotePhotoNameCache = await this.loadRemotePhotoNameCache();
+      this.remotePhotoCache = await this.loadRemotePhotoMap();
       let workers: Promise<void>[] = [];
       for (let index = CloudThemeToken.zero; index < workerCount; index++) {
         workers.push(runWorker());
@@ -2251,13 +2323,15 @@ export struct TabPictures {
         this.clearBackupGridRefresh();
         this.flushCompletedPreviewUpdates();
         this.runInUiScope(() => {
-          this.backupState = this.pauseForNetwork ? PhotoBackupState.WAITING_NETWORK : PhotoBackupState.PAUSED;
+          this.backupState = this.pauseForNetwork ? PhotoBackupState.WAITING_NETWORK :
+            (this.pauseForSystem ? PhotoBackupState.WAITING_SYSTEM : PhotoBackupState.PAUSED);
         });
         this.flushDoneIdsSave();
         this.flushPhotoRecordsSave();
         this.refreshPhotoStats();
         this.rebuildGroups();
-        AppLogger.info(TAG, `backup paused, reason=${this.pauseForNetwork ? 'network' : 'user/system'}, ` +
+        const pauseReason = this.pauseForNetwork ? 'network' : (this.pauseForSystem ? 'system' : 'user');
+        AppLogger.info(TAG, `backup paused, reason=${pauseReason}, ` +
           `waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
         if (this.pauseForNetwork && this.canBackupNow()) {
           this.scheduleAutoBackup();
@@ -2284,7 +2358,7 @@ export struct TabPictures {
         this.scheduleAutoBackup();
       }
     } finally {
-      this.remotePhotoNameCache = null;
+      this.remotePhotoCache = null;
       await PhotoBackupBackgroundTask.stop();
     }
   }
@@ -2299,9 +2373,10 @@ export struct TabPictures {
     }
     try {
       this.setPhotoStatus(item, PhotoBackupStatus.UPLOADING, CloudThemeToken.photoBackupStartProgress);
-      if (await this.remotePhotoExists(item)) {
+      await this.cleanupStaleUntrackedUpload(item);
+      let target = this.resolveRemoteBackupTarget(item);
+      if (target.alreadyBackedUp) {
         this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
-        this.markRemotePhotoKnown(item);
         this.doneIds.add(this.getDoneKey(item));
         this.scheduleDoneIdsSave();
         this.schedulePhotoRecordsSave();
@@ -2309,7 +2384,18 @@ export struct TabPictures {
       }
       localPath = await this.copyPhotoToCache(item);
       this.updatePhotoProgress(item, CloudThemeToken.photoBackupCopyProgress);
-      const result = await this.uploadPhoto(localPath, this.getRemoteFilePath(item), item);
+      let result = PhotoBackupUploadResult.EXISTS;
+      let renameAttempts = 0;
+      while (result === PhotoBackupUploadResult.EXISTS && renameAttempts < 100) {
+        result = await this.uploadPhoto(localPath, this.getRemoteFilePathByName(target.fileName), item, target.fileName);
+        if (result === PhotoBackupUploadResult.EXISTS) {
+          renameAttempts++;
+          target = this.resolveRemoteBackupTarget(item);
+        }
+      }
+      if (result === PhotoBackupUploadResult.EXISTS) {
+        throw new Error('同名照片过多，无法生成可用的备份文件名');
+      }
       if (result === PhotoBackupUploadResult.PAUSED || result === PhotoBackupUploadResult.CANCELED) {
         // 暂停：uploader 保留 session，等下次 startBackup 从 offset 续传。
         // 取消：uploader 已调 deleteUploadSession，服务端无残留；状态回 WAITING 供用户重新选择。
@@ -2319,7 +2405,7 @@ export struct TabPictures {
         return false;
       }
       this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
-      this.markRemotePhotoKnown(item);
+      this.markRemotePhotoKnown(item, target.fileName);
       this.doneIds.add(this.getDoneKey(item));
       this.scheduleDoneIdsSave();
       this.schedulePhotoRecordsSave();
@@ -2346,7 +2432,7 @@ export struct TabPictures {
       let localPath = `${context.cacheDir}/photo_backup_${new Date().getTime()}_${fileName}`;
       await FileSystemUtil.copyUriToPathInBackground(item.uri, localPath);
       // 拷贝出的新文件 mtime 是当下时刻；对齐回原图修改时间，让任何按 mtime 读元数据的旁路也拿到正确时间
-      FileSystemUtil.setModifiedTime(localPath, item.modifiedAt);
+      FileSystemUtil.setModifiedTime(localPath, item.takenAt > 0 ? item.takenAt : item.modifiedAt);
       return localPath;
     });
   }
@@ -2365,12 +2451,13 @@ export struct TabPictures {
     }
   }
 
-  uploadPhoto(localPath: string, remotePath: string, item: PhotoBackupItem): Promise<PhotoBackupUploadResult> {
+  uploadPhoto(localPath: string, remotePath: string, item: PhotoBackupItem,
+    remoteFileName: string): Promise<PhotoBackupUploadResult> {
     // 把原图修改时间作为 LastModified 透传给 Cloudreve，让云端入库时间对齐原图而不是上传时刻
-    const lastModifiedMs = item.modifiedAt > 0 ? item.modifiedAt : 0;
+    const lastModifiedMs = item.takenAt > 0 ? item.takenAt : item.modifiedAt;
     const startProgress = CloudThemeToken.photoBackupUploadStartProgress;
     const uploadRange = CloudThemeToken.percentageFull - startProgress;
-    const fileName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
+    const fileName = this.sanitizeFileName(remoteFileName);
     return PhotoBackupUploader.uploadOne(
       item.id,
       localPath,
@@ -2381,8 +2468,10 @@ export struct TabPictures {
       {
         onSessionCreated: () => {
           this.updatePhotoProgress(item, startProgress);
+          PhotoBackupBackgroundTask.notifyTransferProgress();
         },
         onProgress: (uploadedBytes: number) => {
+          PhotoBackupBackgroundTask.notifyTransferProgress();
           if (item.size > 0) {
             const percent = startProgress + Math.floor(uploadedBytes / item.size * uploadRange);
             this.updatePhotoProgress(item, Math.min(percent, CloudThemeToken.percentageFull));
@@ -2392,26 +2481,6 @@ export struct TabPictures {
         isCancelRequested: (): boolean => this.shouldCancelBackup
       }
     );
-  }
-
-  loadRemotePhotoNameCache(): Promise<Set<string>> {
-    return new Promise<Set<string>>((resolve: (value: Set<string>) => void) => {
-      CloudApi.getFilesInfo(this.normalizeRemotePath(this.getSettingsRemotePath()), {
-        onSuccess: (data: DirectoryInfo) => {
-          let names = new Set<string>();
-          (data.objects ?? []).forEach((object: ObjectInfo) => {
-            names.add(object.name);
-          });
-          resolve(names);
-        },
-        onFailure: (msg: string) => {
-          // 空 Set 会让 remotePhotoExists 预检全部落空——已在云端的图将重复 create session。
-          // 有 40004 幂等兜底不会假失败，但这里必须留痕，方便定位服务端列表异常。
-          AppLogger.warn(TAG, `load remote photo names failed (dedup degraded): ${msg}`);
-          resolve(new Set<string>());
-        }
-      });
-    });
   }
 
   // 列出备份目录的云端文件（name → ObjectInfo，含云端 fileId），供仅云端图定位/预览/缩略图使用。
@@ -2433,34 +2502,132 @@ export struct TabPictures {
     });
   }
 
-  markRemotePhotoKnown(item: PhotoBackupItem): void {
-    this.remotePhotoNameCache?.add(item.name);
+  private resolveRemoteBackupTarget(item: PhotoBackupItem): RemoteBackupTarget {
+    const storedSession = PhotoBackupSessionStore.get(item.id);
+    const now = new Date().getTime();
+    if (storedSession && !PhotoBackupSessionStore.isExpired(storedSession, now)
+      && storedSession.total === item.size && this.isSessionInCurrentBackupPath(storedSession.remotePath)) {
+      const fileName = this.getFileNameFromRemotePath(storedSession.remotePath);
+      if (fileName.length > 0) {
+        item.remoteName = fileName;
+        AppLogger.info(TAG, `prefer resumable backup session ${storedSession.sessionId} for ${fileName}`);
+        return { fileName: fileName, alreadyBackedUp: false };
+      }
+    }
+    const originalName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
+    const existing = this.remotePhotoCache?.get(originalName);
+    if (existing && existing.id.length > 0 && this.isSameRemotePhoto(existing, item)) {
+      item.remoteName = originalName;
+      item.remoteFileId = existing.id;
+      return { fileName: originalName, alreadyBackedUp: true };
+    }
+    let candidate = originalName;
+    if (existing) {
+      const dotIndex = originalName.lastIndexOf('.');
+      const hasExtension = dotIndex > 0;
+      const baseName = hasExtension ? originalName.substring(0, dotIndex) : originalName;
+      const extension = hasExtension ? originalName.substring(dotIndex) : '';
+      let suffix = 1;
+      candidate = `${baseName} (${suffix})${extension}`;
+      while (this.remotePhotoCache?.has(candidate)) {
+        suffix++;
+        candidate = `${baseName} (${suffix})${extension}`;
+      }
+    }
+    item.remoteName = candidate;
+    this.reserveRemotePhotoName(candidate, item);
+    return { fileName: candidate, alreadyBackedUp: false };
   }
 
-  remotePhotoExists(item: PhotoBackupItem): Promise<boolean> {
-    if (this.remotePhotoNameCache) {
-      return Promise.resolve(this.remotePhotoNameCache.has(item.name));
+  private async cleanupStaleUntrackedUpload(item: PhotoBackupItem): Promise<void> {
+    if (PhotoBackupSessionStore.get(item.id)) {
+      return;
     }
-    return new Promise<boolean>((resolve: (value: boolean) => void) => {
-      CloudApi.getFilesInfo(this.normalizeRemotePath(this.getSettingsRemotePath()), {
-        onSuccess: (data: DirectoryInfo) => {
-          let exists = (data.objects ?? []).some((object) => object.name === item.name);
-          resolve(exists);
-        },
-        onFailure: (msg: string) => {
-          console.info(TAG, `check remote photo exists skipped: ${msg}`);
-          resolve(false);
-        }
+    const originalName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
+    const remoteName = item.remoteName.length > 0 ? item.remoteName : originalName;
+    const remote = this.remotePhotoCache?.get(remoteName) ?? this.remotePhotoCache?.get(originalName);
+    const sessionId = remote?.metadata?.['sys:upload_session_id'] ?? '';
+    if (!remote || remote.size > 0 || sessionId.length === 0) {
+      return;
+    }
+    const createdAt = Date.parse(remote.create_date.length > 0 ? remote.create_date : remote.date);
+    const staleAgeMs = 5 * 60 * 1000;
+    if (Number.isNaN(createdAt) || new Date().getTime() - createdAt < staleAgeMs) {
+      throw new Error('检测到其他上传会话仍在进行，请稍后重试');
+    }
+    const remotePath = this.getRemoteFilePathByName(remote.name);
+    await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+      CloudApi.deleteUploadSession(remotePath, sessionId, {
+        onSuccess: () => resolve(),
+        onFailure: (msg: string) => reject(new Error(`清理中断的上传会话失败：${msg}`))
       });
+    });
+    this.remotePhotoCache?.delete(remote.name);
+    item.remoteName = originalName;
+    AppLogger.info(TAG, `cleaned stale untracked upload session ${sessionId} for ${remote.name}`);
+  }
+
+  private isSessionInCurrentBackupPath(remotePath: string): boolean {
+    const base = this.normalizeRemotePath(this.getSettingsRemotePath());
+    const prefix = base.endsWith('/') ? base : `${base}/`;
+    return remotePath.startsWith(prefix);
+  }
+
+  private getFileNameFromRemotePath(remotePath: string): string {
+    const index = remotePath.lastIndexOf('/');
+    return index >= 0 ? remotePath.substring(index + 1) : remotePath;
+  }
+
+  private isSameRemotePhoto(remote: ObjectInfo, local: PhotoBackupItem): boolean {
+    if (remote.size <= 0 || local.size <= 0 || remote.size !== local.size ||
+      (local.takenAt <= 0 && local.modifiedAt <= 0)) {
+      return false;
+    }
+    const remoteTime = Date.parse(remote.date.length > 0 ? remote.date : remote.create_date);
+    return !Number.isNaN(remoteTime) &&
+      Math.abs(remoteTime - (local.takenAt > 0 ? local.takenAt : local.modifiedAt)) <=
+        CloudThemeToken.photoBackupDateMatchToleranceMs;
+  }
+
+  private reserveRemotePhotoName(name: string, item: PhotoBackupItem): void {
+    this.remotePhotoCache?.set(name, {
+      id: '',
+      name: name,
+      path: this.normalizeRemotePath(this.getSettingsRemotePath()),
+      thumb: false,
+      size: item.size,
+      type: Constant.OBJECT_FILE_TYPE,
+      date: item.takenAt > 0 ? new Date(item.takenAt).toISOString() :
+        (item.modifiedAt > 0 ? new Date(item.modifiedAt).toISOString() : ''),
+      create_date: '',
+      source_enabled: false
     });
   }
 
+  private markRemotePhotoKnown(item: PhotoBackupItem, name: string): void {
+    item.remoteName = name;
+    this.reserveRemotePhotoName(name, item);
+    const known = this.remotePhotoCache?.get(name);
+    if (known) {
+      known.id = this.getRemoteFilePathByName(name);
+    }
+  }
+
+  private getRemoteName(item: PhotoBackupItem): string {
+    return item.remoteName.length > 0 ? item.remoteName :
+      this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
+  }
+
   getRemoteFilePath(item: PhotoBackupItem): string {
+    return this.getRemoteFilePathByName(this.getRemoteName(item));
+  }
+
+  private getRemoteFilePathByName(fileName: string): string {
     let basePath = this.normalizeRemotePath(this.getSettingsRemotePath());
     if (basePath.endsWith('/')) {
-      return `${basePath}${item.name}`;
+      return `${basePath}${fileName}`;
     }
-    return `${basePath}/${item.name}`;
+    return `${basePath}/${fileName}`;
   }
 
   sanitizeFileName(name: string): string {

@@ -33,6 +33,25 @@ class UserPreferences {
     }
   }
 
+  /**
+   * 关键状态同步落盘。用于上传 session 等进程被系统回收后仍必须恢复的数据；
+   * 普通 UI 偏好继续走异步 flush，避免把所有高频写入都变成同步 I/O。
+   */
+  putCriticalSync(name: string, key: string, value: lang.ISendable) {
+    try {
+      if (!this.perfMap.has(name)) {
+        AppLogger.error('UserPrivData', `首选项${name}尚未初始化`)
+        return
+      }
+      let perf = this.perfMap.get(name)!
+      perf.putSync(key, value)
+      perf.flushSync()
+      console.debug('UserPrivData', `同步保存首选项${name}.${key}成功`)
+    } catch (e) {
+      AppLogger.error('UserPrivData', `同步保存首选项${name}.${key}失败, 错误: ${(e as Error)?.message ?? e}`)
+    }
+  }
+
   getSync(name: string, key: string, defValue: lang.ISendable = ''): lang.ISendable | undefined {
     try {
       if (!this.perfMap.has(name)) {

@@ -170,6 +170,7 @@ export interface ObjectInfo {
   date: string;
   create_date: string;
   source_enabled: boolean;
+  metadata?: Record<string, string>;
 }
 
 export interface ShareSourceInfo {

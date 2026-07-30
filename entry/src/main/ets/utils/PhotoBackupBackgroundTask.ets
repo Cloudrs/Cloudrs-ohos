@@ -5,6 +5,8 @@ import AppLogger from './AppLogger';
 const TAG: string = 'PhotoBackupBackgroundTask';
 const INVALID_TASK_ID: number = -1;
 const WANT_AGENT_REQUEST_CODE: number = 21001;
+// 系统会移除超过 10 分钟未更新的长时任务通知；留出足够余量，避免锁屏时因调度抖动越过阈值。
+const NOTIFICATION_REFRESH_INTERVAL_MS: number = 4 * 60 * 1000;
 
 export enum PhotoBackupBackgroundInterruptReason {
   SYSTEM_CANCELED = 'system_canceled',
@@ -29,12 +31,16 @@ class PhotoBackupBackgroundTaskImpl {
   private cancelListenerRegistered: boolean = false;
   private suspendListenerRegistered: boolean = false;
   private interruptDelivered: boolean = false;
+  private notificationRefreshTimer: number = -1;
+  private lastNotificationRefreshAt: number = 0;
+  private notificationRefreshInFlight: boolean = false;
   private readonly cancelListener =
     (info: backgroundTaskManager.ContinuousTaskCancelInfo): void => {
       if (!this.matchesTask(info.id)) {
         return;
       }
       AppLogger.warn(TAG, `data transfer task canceled by system, reason=${info.reason}`);
+      this.stopNotificationRefresh();
       this.active = false;
       this.continuousTaskId = INVALID_TASK_ID;
       this.context = undefined;
@@ -75,6 +81,7 @@ class PhotoBackupBackgroundTaskImpl {
     }
     const context = this.context;
     const taskId = this.continuousTaskId;
+    this.stopNotificationRefresh();
     this.active = false;
     this.continuousTaskId = INVALID_TASK_ID;
     this.context = undefined;
@@ -99,6 +106,14 @@ class PhotoBackupBackgroundTaskImpl {
     return this.active;
   }
 
+  /**
+   * 上传进度持续变化时兜底刷新通知。正常情况下定时器负责刷新；锁屏调度延迟时，
+   * native 上传进度回调仍可在跨过刷新间隔后触发这里，避免通知超过系统 10 分钟阈值。
+   */
+  notifyTransferProgress(): void {
+    this.refreshNotificationIfDue();
+  }
+
   private async startInternal(context: common.UIAbilityContext): Promise<boolean> {
     try {
       this.registerListeners();
@@ -120,9 +135,12 @@ class PhotoBackupBackgroundTaskImpl {
       this.continuousTaskId = notification.continuousTaskId ?? INVALID_TASK_ID;
       this.active = true;
       this.interruptDelivered = false;
+      this.startNotificationRefresh();
+      this.lastNotificationRefreshAt = new Date().getTime();
       AppLogger.info(TAG, `data transfer task started, id=${this.continuousTaskId}`);
       return true;
     } catch (err) {
+      this.stopNotificationRefresh();
       this.active = false;
       this.continuousTaskId = INVALID_TASK_ID;
       this.context = undefined;
@@ -152,6 +170,55 @@ class PhotoBackupBackgroundTaskImpl {
 
   private matchesTask(id: number): boolean {
     return this.active && (this.continuousTaskId < 0 || this.continuousTaskId === id);
+  }
+
+  private startNotificationRefresh(): void {
+    this.stopNotificationRefresh();
+    this.notificationRefreshTimer = setInterval(() => {
+      this.refreshNotificationIfDue();
+    }, NOTIFICATION_REFRESH_INTERVAL_MS);
+  }
+
+  private stopNotificationRefresh(): void {
+    if (this.notificationRefreshTimer >= 0) {
+      clearInterval(this.notificationRefreshTimer);
+      this.notificationRefreshTimer = -1;
+    }
+    this.lastNotificationRefreshAt = 0;
+    this.notificationRefreshInFlight = false;
+  }
+
+  private refreshNotificationIfDue(): void {
+    if (!this.active || !this.context || this.notificationRefreshInFlight) {
+      return;
+    }
+    const now = new Date().getTime();
+    if (now - this.lastNotificationRefreshAt < NOTIFICATION_REFRESH_INTERVAL_MS) {
+      return;
+    }
+    // 先记录尝试时间，避免高频进度回调在接口失败时形成请求风暴；下一周期会继续重试。
+    this.lastNotificationRefreshAt = now;
+    this.refreshNotification();
+  }
+
+  private async refreshNotification(): Promise<void> {
+    const context = this.context;
+    if (!context || !this.active) {
+      return;
+    }
+    this.notificationRefreshInFlight = true;
+    try {
+      const notification = await backgroundTaskManager.updateBackgroundRunning(context, ['dataTransfer']);
+      // 当前 API 23 真机的字符串重载更新成功时可能返回 -1；保留 start 阶段取得的有效任务 ID。
+      if (notification.continuousTaskId !== undefined && notification.continuousTaskId >= 0) {
+        this.continuousTaskId = notification.continuousTaskId;
+      }
+      AppLogger.info(TAG, `data transfer notification refreshed, id=${this.continuousTaskId}`);
+    } catch (err) {
+      AppLogger.warn(TAG, `refresh data transfer notification failed: ${(err as Error)?.message ?? err}`);
+    } finally {
+      this.notificationRefreshInFlight = false;
+    }
   }
 
   private deliverInterrupt(reason: PhotoBackupBackgroundInterruptReason): void {

@@ -159,7 +159,8 @@ export struct PhotoLocalPreviewPage {
   @Builder infoBar(item: PhotoBackupItem) {
     // 文件名已移到顶栏,剩余信息合并为单行,降低底栏高度
     Row() {
-      Text(`${DateFormatUtil.format(new Date(item.modifiedAt), 'yyyy/MM/dd HH:mm')} · ${CommonUtil.formatBytes(item.size)}`)
+      Text(`${DateFormatUtil.format(new Date(item.takenAt > 0 ? item.takenAt : item.modifiedAt),
+        'yyyy/MM/dd HH:mm')} · ${CommonUtil.formatBytes(item.size)}`)
         .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor('rgba(255, 255, 255, 0.75)')
 

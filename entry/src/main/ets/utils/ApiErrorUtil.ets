@@ -18,6 +18,17 @@ export class ApiErrorUtil {
     return lower.includes('40004') || lower.includes('object existed') || lower.includes('对象已存在');
   }
 
+  /** Cloudreve V4 文件锁冲突（40073），常见于未结束的上传/备份会话。 */
+  static isLockConflict(msg: string): boolean {
+    const lower = (msg ?? '').toLowerCase();
+    return lower.includes('40073') ||
+      lower.includes('lock conflict') ||
+      lower.includes('locked resource') ||
+      lower.includes('文件被占用') ||
+      lower.includes('文件锁冲突') ||
+      lower.includes('资源被锁定');
+  }
+
   /** 连接类错误：DNS 解析失败、连不上、超时、发送请求失败等。 */
   static isNetworkError(msg: string): boolean {
     if (!NetworkStateUtil.hasNetwork()) {

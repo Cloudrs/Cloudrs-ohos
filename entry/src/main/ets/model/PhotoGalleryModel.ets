@@ -141,6 +141,15 @@ export function justifyRows(ratios: number[], containerWidth: number, targetHeig
 export function ratioForItem(item: PhotoBackupItem): number {
   if (item.width > 0 && item.height > 0) {
     const r = item.width / item.height;
+    const screenshotKey = `${item.albumName}/${item.name}`.toLowerCase();
+    const isScreenshot = screenshotKey.includes('screenshot') ||
+      screenshotKey.includes('截屏') || screenshotKey.includes('截图');
+    if (isScreenshot) {
+      // 手机截图通常接近 0.45，按真实比例展示会在宽屏相册里过窄。
+      // 仅提高截图类竖图的展示宽度，ImageFit.Cover 会做少量纵向裁剪；
+      // 普通照片仍保持原有 0.5 下限和布局密度。
+      return Math.min(Math.max(r, 0.9), 2.0);
+    }
     return Math.min(Math.max(r, 0.5), 2.0);
   }
   return 1;

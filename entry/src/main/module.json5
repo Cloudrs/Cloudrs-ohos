@@ -12,6 +12,8 @@
     "requestPermissions": [{
       "name": "ohos.permission.INTERNET",
     }, {
+      "name": "ohos.permission.KEEP_BACKGROUND_RUNNING",
+    }, {
       "name": "ohos.permission.GET_NETWORK_INFO",
     }, {
       "name": "ohos.permission.ACCESS_BIOMETRIC",
@@ -49,6 +51,9 @@
         "startWindowIcon": "$media:layered_image",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        "backgroundModes": [
+          "dataTransfer"
+        ],
         // 应用接续：phone/tablet 上 UI 由本 Ability 承载，接续从这里发起与恢复
         "continuable": true,
         "skills": [
@@ -74,6 +79,9 @@
         "startWindowBackground": "$color:start_window_background",
         // 实测：跨设备接续可正常拉起 exported:false 的 Ability，无需对外暴露
         "exported": false,
+        "backgroundModes": [
+          "dataTransfer"
+        ],
         // 应用接续：2in1 上 UI 由本 Ability 承载，接续从这里发起与恢复
         "continuable": true
       }

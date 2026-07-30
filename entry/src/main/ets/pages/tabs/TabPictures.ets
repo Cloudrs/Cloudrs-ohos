@@ -29,6 +29,9 @@ import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../mod
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
 import PhotoBackupUploader, { PhotoBackupUploadResult } from '../../utils/PhotoBackupUploader';
 import PhotoBackupSessionStore from '../../model/PhotoBackupSessionStore';
+import PhotoBackupBackgroundTask, {
+  PhotoBackupBackgroundInterruptReason
+} from '../../utils/PhotoBackupBackgroundTask';
 import { PhotoLocalPreviewParam, ImagePreview } from '../../model/Params';
 import { CloudRouter } from '../../utils/CloudRouter';
 import {
@@ -90,6 +93,7 @@ export struct TabPictures {
   @State backupQueueDone: number = 0;
   @State backupQueueTotal: number = 0;
   @State shouldPauseBackup: boolean = false;
+  private pauseForNetwork: boolean = false;
   /**
    * 关闭备份/切换用户等场景：置 true 后，uploader 在下一个 chunk 边界抛 CANCELED，
    * 主动 deleteUploadSession 清掉服务端占位；runBackup 出循环时统一清理 UPLOADING 状态。
@@ -232,6 +236,7 @@ export struct TabPictures {
     // 页面销毁时优雅暂停：uploader 在 chunk 边界写 offset/chunkIndex 到 sessionStore，
     // 保 session 不删。下次进来 startBackup 会从 offset 续传，避免重传浪费流量。
     if (this.backupState === PhotoBackupState.BACKING_UP) {
+      this.pauseForNetwork = false;
       this.shouldPauseBackup = true;
       AppLogger.info(TAG, 'auto pause on aboutToDisappear');
     }
@@ -1125,7 +1130,7 @@ export struct TabPictures {
       return `正在备份 ${this.backupQueueText} 张`;
     }
     if (this.backupState === PhotoBackupState.WAITING_NETWORK) {
-      return '等待 Wi-Fi';
+      return this.getSettingsWifiOnly() ? '等待 Wi-Fi' : '等待网络';
     }
     if (this.backupState === PhotoBackupState.PAUSED) {
       return `已暂停 ${this.backupQueueText} 张`;
@@ -1941,10 +1946,13 @@ export struct TabPictures {
     try {
       const netCon = connection.createNetConnection();
       netCon.on('netAvailable', () => {
-        this.scheduleAutoBackup();
+        this.onBackupNetworkChanged();
       });
       netCon.on('netCapabilitiesChange', () => {
-        this.scheduleAutoBackup();
+        this.onBackupNetworkChanged();
+      });
+      netCon.on('netLost', () => {
+        this.onBackupNetworkChanged();
       });
       netCon.register((err: BusinessError) => {
         if (err) {
@@ -1973,6 +1981,22 @@ export struct TabPictures {
     }
     this.netConnection = undefined;
     this.netRegistered = false;
+  }
+
+  private onBackupNetworkChanged(): void {
+    if (this.isBackupRunning() && !this.canBackupNow()) {
+      this.requestNetworkPause();
+    }
+    this.scheduleAutoBackup();
+  }
+
+  private requestNetworkPause(): void {
+    if (this.shouldPauseBackup) {
+      return;
+    }
+    this.pauseForNetwork = true;
+    this.shouldPauseBackup = true;
+    AppLogger.info(TAG, 'backup pause requested because current network is not allowed');
   }
 
   private clearAutoBackupTimer(): void {
@@ -2086,11 +2110,12 @@ export struct TabPictures {
     }
     if (!this.canBackupNow()) {
       this.backupState = PhotoBackupState.WAITING_NETWORK;
-      showToast('当前不是 Wi-Fi，已暂停相册备份');
+      showToast(this.getSettingsWifiOnly() ? '当前不是 Wi-Fi，已暂停相册备份' : '当前无可用网络，已暂停相册备份');
       return;
     }
     this.resetBackupQueue(targets.length);
     this.shouldPauseBackup = false;
+    this.pauseForNetwork = false;
     this.shouldCancelBackup = false;
     this.backupState = PhotoBackupState.BACKING_UP;
     AppLogger.info(TAG, `backup start, targets=${targets.length}, retryFailedOnly=${retryFailedOnly}`);
@@ -2101,6 +2126,7 @@ export struct TabPictures {
     if (this.backupState !== PhotoBackupState.BACKING_UP) {
       return;
     }
+    this.pauseForNetwork = false;
     this.shouldPauseBackup = true;
     AppLogger.info(TAG, 'backup pause requested');
     showToast('已请求暂停,当前分片上传完即停');
@@ -2133,6 +2159,9 @@ export struct TabPictures {
   }
 
   canBackupNow(): boolean {
+    if (!NetworkStateUtil.hasNetwork()) {
+      return false;
+    }
     if (!this.getSettingsWifiOnly()) {
       return true;
     }
@@ -2144,11 +2173,27 @@ export struct TabPictures {
     }
   }
 
+  private isBackupPauseRequested(): boolean {
+    if (!this.shouldPauseBackup && !this.canBackupNow()) {
+      this.requestNetworkPause();
+    }
+    return this.shouldPauseBackup;
+  }
+
+  private onBackgroundTaskInterrupted(reason: PhotoBackupBackgroundInterruptReason): void {
+    if (!this.isBackupRunning() || this.shouldCancelBackup) {
+      return;
+    }
+    this.pauseForNetwork = false;
+    this.shouldPauseBackup = true;
+    AppLogger.warn(TAG, `backup pause requested by background task: ${reason}`);
+  }
+
   async runBackup(targets: PhotoBackupItem[]): Promise<void> {
     let nextIndex = 0;
     const workerCount = Math.min(this.getSettingsUploadConcurrent(), targets.length);
     const runWorker = async (): Promise<void> => {
-      while (nextIndex < targets.length && !this.shouldPauseBackup && !this.shouldCancelBackup) {
+      while (nextIndex < targets.length && !this.shouldCancelBackup && !this.isBackupPauseRequested()) {
         const currentIndex = nextIndex;
         nextIndex++;
         // backupItem 返回 true 才算真消费掉一项；因暂停/取消早退（未创建 session 也没上传）时返回 false，
@@ -2161,6 +2206,18 @@ export struct TabPictures {
       }
     };
     try {
+      const context = this.getAbilityContext();
+      if (context) {
+        const backgroundStarted = await PhotoBackupBackgroundTask.start(context,
+          (reason: PhotoBackupBackgroundInterruptReason) => {
+            this.onBackgroundTaskInterrupted(reason);
+          });
+        if (!backgroundStarted) {
+          AppLogger.warn(TAG, 'backup continues in foreground because data transfer task could not start');
+        }
+      } else {
+        AppLogger.warn(TAG, 'backup continues in foreground because ability context is unavailable');
+      }
       this.remotePhotoNameCache = await this.loadRemotePhotoNameCache();
       let workers: Promise<void>[] = [];
       for (let index = CloudThemeToken.zero; index < workerCount; index++) {
@@ -2194,13 +2251,17 @@ export struct TabPictures {
         this.clearBackupGridRefresh();
         this.flushCompletedPreviewUpdates();
         this.runInUiScope(() => {
-          this.backupState = PhotoBackupState.PAUSED;
+          this.backupState = this.pauseForNetwork ? PhotoBackupState.WAITING_NETWORK : PhotoBackupState.PAUSED;
         });
         this.flushDoneIdsSave();
         this.flushPhotoRecordsSave();
         this.refreshPhotoStats();
         this.rebuildGroups();
-        AppLogger.info(TAG, `backup paused, waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
+        AppLogger.info(TAG, `backup paused, reason=${this.pauseForNetwork ? 'network' : 'user/system'}, ` +
+          `waiting=${this.waitingPhotoCount}, failed=${this.failedPhotoCount}`);
+        if (this.pauseForNetwork && this.canBackupNow()) {
+          this.scheduleAutoBackup();
+        }
         return;
       }
       this.flushCompletedPreviewUpdates();
@@ -2224,6 +2285,7 @@ export struct TabPictures {
       }
     } finally {
       this.remotePhotoNameCache = null;
+      await PhotoBackupBackgroundTask.stop();
     }
   }
 
@@ -2326,7 +2388,7 @@ export struct TabPictures {
             this.updatePhotoProgress(item, Math.min(percent, CloudThemeToken.percentageFull));
           }
         },
-        isPauseRequested: (): boolean => this.shouldPauseBackup,
+        isPauseRequested: (): boolean => this.isBackupPauseRequested(),
         isCancelRequested: (): boolean => this.shouldCancelBackup
       }
     );

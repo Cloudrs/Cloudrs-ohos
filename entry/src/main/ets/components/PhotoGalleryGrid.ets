@@ -15,7 +15,7 @@ import {
   PhotoThumbnailStore
 } from '../utils/PhotoThumbnailStore';
 
-const ROW_TARGET_HEIGHT: number = 112;
+const ROW_TARGET_HEIGHT: number = 144;
 const GAP: number = 3;
 const BADGE_SIZE: number = 18;
 const BADGE_MARGIN: number = 4;

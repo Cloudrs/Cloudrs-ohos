@@ -34,6 +34,8 @@ class Constant {
   TEXT_EDITOR_FONT_SIZE_MAX: number = 24
   TEXT_EDITOR_FONT_SIZE_STEP: number = 1
 
+  FILE_SEARCH_HISTORY: string = 'file_search_history'
+
   BACKGROUND_TASK_FLUSH_INTERVAL_MS: number = 2000
 
   TRANSFER_PERSIST_INTERVAL_MS: number = 2000

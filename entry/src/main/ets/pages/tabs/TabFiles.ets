@@ -513,7 +513,10 @@ export struct TabFiles {
       },
       this.showType,
       this.thumbImage,
-      this.thumbSource))
+      this.thumbSource,
+      () => {
+        this.getFileList(true, this.currentPath)
+      }))
   }
 
   private onSearchResultOpen(item: ObjectInfo): void {

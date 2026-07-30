@@ -93,13 +93,15 @@ export class FileSearchParam {
   thumbSource?: Map<string, string>
   onOpen?: (item: ObjectInfo) => void
   onMenuClick?: (item: ObjectInfo, type: FileMenuType) => void
+  onChanged?: () => void
 
   constructor(currentPath?: string, objects?: ObjectInfo[],
     onOpen?: (item: ObjectInfo) => void,
     onMenuClick?: (item: ObjectInfo, type: FileMenuType) => void,
     showType?: ShowType,
     thumbImage?: Map<string, PixelMap>,
-    thumbSource?: Map<string, string>) {
+    thumbSource?: Map<string, string>,
+    onChanged?: () => void) {
     this.currentPath = currentPath ?? '/'
     this.objects = objects ?? []
     this.showType = showType ?? ShowType.SHOW_LIST
@@ -107,5 +109,6 @@ export class FileSearchParam {
     this.thumbSource = thumbSource
     this.onOpen = onOpen
     this.onMenuClick = onMenuClick
+    this.onChanged = onChanged
   }
 }

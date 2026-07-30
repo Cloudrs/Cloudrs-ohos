@@ -37,6 +37,22 @@
       "value": "#66151B23"
     },
     {
+      "name": "cloud_search_glass",
+      "value": "#991F2937"
+    },
+    {
+      "name": "cloud_search_border_highlight",
+      "value": "#8CFFFFFF"
+    },
+    {
+      "name": "cloud_search_border_lowlight",
+      "value": "#66FFFFFF"
+    },
+    {
+      "name": "cloud_search_border_shadow",
+      "value": "#73000000"
+    },
+    {
       "name": "cloud_line",
       "value": "#2D3746"
     },

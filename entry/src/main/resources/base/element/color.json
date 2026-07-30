@@ -213,6 +213,22 @@
       "value": "#66FFFFFF"
     },
     {
+      "name": "cloud_search_glass",
+      "value": "#99EEF3F8"
+    },
+    {
+      "name": "cloud_search_border_highlight",
+      "value": "#E6FFFFFF"
+    },
+    {
+      "name": "cloud_search_border_lowlight",
+      "value": "#B3FFFFFF"
+    },
+    {
+      "name": "cloud_search_border_shadow",
+      "value": "#33182840"
+    },
+    {
       "name": "cloud_line",
       "value": "#E4EAF0"
     },

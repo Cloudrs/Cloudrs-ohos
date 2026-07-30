@@ -3,6 +3,7 @@ import { CloudBreakpoint } from '../utils/BreakpointType'
 export class CloudThemeToken {
   static readonly zero: number = 0
   static readonly lineWidth: number = 1
+  static readonly searchBorderWidth: number = 1.5
   static readonly strongLineWidth: number = 2
   static readonly halfDivisor: number = 2
   static readonly hairlinePx: number = 1
@@ -464,6 +465,10 @@ export class CloudThemeToken {
   static readonly surfaceGlassStrong: ResourceColor = $r('app.color.cloud_surface_glass_strong')
   static readonly searchFieldBackground: ResourceColor = $r('app.color.cloud_search_field_background')
   static readonly headerGlass: ResourceColor = $r('app.color.cloud_header_glass')
+  static readonly searchGlass: ResourceColor = $r('app.color.cloud_search_glass')
+  static readonly searchBorderHighlight: ResourceColor = $r('app.color.cloud_search_border_highlight')
+  static readonly searchBorderLowlight: ResourceColor = $r('app.color.cloud_search_border_lowlight')
+  static readonly searchBorderShadow: ResourceColor = $r('app.color.cloud_search_border_shadow')
   static readonly previewCloseButtonBackground: ResourceColor = $r('app.color.cloud_preview_close_background')
   static readonly previewCloseIcon: ResourceColor = $r('app.color.cloud_preview_close_icon')
   static readonly line: ResourceColor = $r('app.color.cloud_line')

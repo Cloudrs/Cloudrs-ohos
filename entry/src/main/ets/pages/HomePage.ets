@@ -360,10 +360,19 @@ export struct HomePage {
 
   @Builder mainTabsContent() {
     Stack() {
+      // 2in1 侧栏切页时保留相册组件实例，只切换可见性。
+      // TabPictures 会在 aboutToAppear 后异步加载照片记录；如果跟随条件分支销毁重建，
+      // 每次从文件页切回来都会先以空 photos 渲染“还没有本地照片”，下一拍才显示网格。
+      TabPictures({
+        overLap: this.overLap,
+        isActive: this.currentIndex === TabId.PICTURES
+      })
+        .width('100%')
+        .height('100%')
+        .visibility(this.currentIndex === TabId.PICTURES ? Visibility.Visible : Visibility.Hidden)
+
       if (this.currentIndex === TabId.FILES) {
         TabFiles({ overLap: this.overLap, isActive: true })
-      } else if (this.currentIndex === TabId.PICTURES) {
-        TabPictures({ overLap: this.overLap, isActive: true })
       } else if (this.currentIndex === TabId.REMOTE_DOWN) {
         TabRemoteDown({ overLap: this.overLap, isActive: true })
       } else if (this.currentIndex === TabId.MINE) {

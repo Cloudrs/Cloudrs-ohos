@@ -48,6 +48,8 @@ import { Uploads } from "../../components/Uploads";
 import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
 import { harmonyShare, systemShare } from "@kit.ShareKit";
 import { KnockShareUtil } from "../../utils/KnockShareUtil";
+import { FileThumbSourceCache } from "../../utils/FileThumbSourceCache";
+import { FileGridLayout } from "../../utils/FileGridLayout";
 
 const TAG = 'TabFiles';
 const INPUT_SHEET_TEXT_ID = 'tabFilesInputSheetText';
@@ -129,28 +131,6 @@ PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE_RESERVE, new Map<SortTy
   [SortType.SORT_BY_NAME, false], [SortType.SORT_BY_TYPE, false],
   [SortType.SORT_BY_TIME, false], [SortType.SORT_BY_SIZE, false],
 ]))
-
-class FileThumbSourceCache {
-  static data: Map<string, string> = new Map<string, string>()
-
-  static get(key: string): string {
-    return FileThumbSourceCache.data.get(key) ?? ''
-  }
-
-  static set(key: string, source: string): void {
-    FileThumbSourceCache.data.set(key, source)
-  }
-
-  static snapshot(scope: string): Map<string, string> {
-    const result = new Map<string, string>()
-    FileThumbSourceCache.data.forEach((source: string, key: string) => {
-      if (key.startsWith(scope)) {
-        result.set(key.substring(scope.length), source)
-      }
-    })
-    return result
-  }
-}
 
 enum FilePageState {
   IDLE = 'idle',
@@ -624,49 +604,16 @@ export struct TabFiles {
   }
 
   getGridColumns(): number {
-    if (this.showType !== ShowType.SHOW_ICON) {
-      return CloudThemeToken.singleColumnMaxCount
-    }
-    if (this.gridWidth >= CloudThemeToken.content4xlBreakpoint) {
-      return CloudThemeToken.fileGrid4xlColumns
-    }
-    if (this.gridWidth >= CloudThemeToken.content3xlBreakpoint) {
-      return CloudThemeToken.fileGrid3xlColumns
-    }
-    if (this.gridWidth >= CloudThemeToken.contentXxlBreakpoint) {
-      return CloudThemeToken.fileGridXxlColumns
-    }
-    if (this.gridWidth >= CloudThemeToken.contentXlBreakpoint) {
-      return CloudThemeToken.fileGridXlColumns
-    }
-    if (this.gridWidth >= CloudThemeToken.wideBreakpoint) {
-      return CloudThemeToken.fileGridWideColumns
-    }
-    if (this.gridWidth >= CloudThemeToken.tabletBreakpoint) {
-      return CloudThemeToken.fileGridTabletColumns
-    }
-    if (this.gridWidth >= CloudThemeToken.twoColumnBreakpoint) {
-      return CloudThemeToken.fileGridMediumColumns
-    }
-    return CloudThemeToken.fileGridPhoneColumns
+    return FileGridLayout.getColumns(this.gridWidth, this.showType)
   }
 
   getGridColumnsTemplate(): string {
-    const columns = this.getGridColumns()
-    let templates: string[] = []
-    for (let index = 0; index < columns; index++) {
-      templates.push(CloudThemeToken.singleColumnTemplate)
-    }
-    return templates.join(' ')
+    return FileGridLayout.getColumnsTemplate(this.gridWidth, this.showType)
   }
 
   getFolderPaddingCount(): number {
-    if (this.showType !== ShowType.SHOW_ICON) {
-      return CloudThemeToken.zero
-    }
-    const columns = this.getGridColumns()
-    const remainder = this.dirDataSource.totalCount() % columns
-    return remainder === 0 ? 0 : columns - remainder
+    return FileGridLayout.getPaddingCount(
+      this.dirDataSource.totalCount(), this.gridWidth, this.showType)
   }
 
   getFolderPaddingItems(): number[] {

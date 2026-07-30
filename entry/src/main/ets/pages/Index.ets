@@ -27,6 +27,7 @@ struct Index {
   @State rootPage: string = '';
   @State rootLoginParam: LoginParam = new LoginParam(false, Constant.HOME_PAGE);
   @State overlayPage: string = '';
+  @State fileSearchVisible: boolean = false;
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
   @State textPreviewParam: TextPreviewParam = new TextPreviewParam('', '', 0);
@@ -59,6 +60,11 @@ struct Index {
           this.fileSearchParam = param as FileSearchParam;
         } else if (pageUrl === Constant.PHOTO_LOCAL_PREVIEW_PAGE) {
           this.photoLocalPreviewParam = param as PhotoLocalPreviewParam;
+        }
+        if (pageUrl === Constant.FILE_SEARCH_PAGE) {
+          this.fileSearchVisible = true;
+        } else if (pageUrl.length === 0) {
+          this.fileSearchVisible = false;
         }
         this.overlayPage = pageUrl;
       }
@@ -329,6 +335,19 @@ struct Index {
   }
 
   @Builder overlayBuilder() {
+    // 搜索页作为预览的父覆盖层时保持挂载，返回预览即可恢复原关键词、
+    // 搜索范围、结果、滚动位置和多选状态。
+    if (this.fileSearchVisible) {
+      FileSearchPage({ routeParam: this.fileSearchParam })
+        .width('100%')
+        .height('100%')
+        .transition(TransitionEffect.OPACITY
+          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
+            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .zIndex(CloudThemeToken.overlayZIndex)
+    }
+
     if (this.overlayPage === Constant.IAMGE_PREVIEW_PAGE) {
       ImagePreviewPage({ routeParam: this.imagePreviewParam })
         .zIndex(CloudThemeToken.overlayZIndex)
@@ -337,15 +356,6 @@ struct Index {
         .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.TEXT_PREVIEW_PAGE) {
       TextPreviewPage({ routeParam: this.textPreviewParam })
-        .width('100%')
-        .height('100%')
-        .transition(TransitionEffect.OPACITY
-          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
-          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
-            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
-        .zIndex(CloudThemeToken.overlayZIndex)
-    } else if (this.overlayPage === Constant.FILE_SEARCH_PAGE) {
-      FileSearchPage({ routeParam: this.fileSearchParam })
         .width('100%')
         .height('100%')
         .transition(TransitionEffect.OPACITY

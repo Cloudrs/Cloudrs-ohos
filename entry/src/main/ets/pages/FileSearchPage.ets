@@ -13,12 +13,17 @@ import { ObjectSrc } from "../model/net/ObjectParam";
 import { showCloudConfirmDialog } from "../utils/CloudDialogUtil";
 import AppLogger from "../utils/AppLogger";
 import UserPreferences from "../model/UserPreferences";
+import { FileThumbSourceCache } from "../utils/FileThumbSourceCache";
+import { FileGridLayout } from "../utils/FileGridLayout";
 import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsEffect, hdsMaterial } from "@kit.UIDesignKit";
 
 const TAG = 'FileSearchPage'
 const GLOBAL_SEARCH_CONCURRENCY = 4
 const SEARCH_HISTORY_MAX_COUNT = 10
-const REGEX_HISTORY_PREFIX = '__cloudrs_regex__:'
+const LEGACY_REGEX_HISTORY_PREFIX = '__cloudrs_regex__:'
+const SEARCH_THUMB_MAX_CONCURRENT = 4
+const SEARCH_THUMB_QUEUE_DELAY_MS = 100
+const SEARCH_THUMB_QUEUE_MAX = 64
 
 enum FileSearchScope {
   CURRENT_DIRECTORY,
@@ -39,7 +44,10 @@ export struct FileSearchPage {
   @State results: ObjectInfo[] = []
   @State searchScope: FileSearchScope = FileSearchScope.CURRENT_DIRECTORY
   @State searchHistory: string[] = []
-  @State isRegexSearch: boolean = false
+  @State searchHistoryExpanded: boolean = false
+  @State searchHistoryContentWidth: number = 0
+  @State searchHistoryViewportWidth: number = 0
+  @State gridWidth: number = 0
   @State isLoadingGlobalObjects: boolean = false
   @State isMultiSelectMode: boolean = false
   @State selectedObjects: ObjectInfo[] = []
@@ -49,21 +57,150 @@ export struct FileSearchPage {
   private loadGeneration: number = 0
   private deletedObjectIds: Set<string> = new Set<string>()
   private deletedDirectoryPaths: Set<string> = new Set<string>()
+  private thumbLoadingIds: Set<string> = new Set<string>()
+  private thumbFailedIds: Set<string> = new Set<string>()
+  private thumbQueue: ObjectInfo[] = []
+  private activeThumbLoads: number = 0
+  private thumbQueueTimer: number = -1
+  private isPageActive: boolean = false
 
   aboutToAppear(): void {
+    this.isPageActive = true
     this.currentObjects = this.routeParam?.objects ?? []
     if (this.globalObjects.length === 0) {
       this.globalObjects = this.currentObjects.slice()
     }
     this.thumbImage = this.routeParam?.thumbImage ?? new Map<string, PixelMap>()
-    this.thumbSource = this.routeParam?.thumbSource ?? new Map<string, string>()
+    this.restoreThumbSources()
     this.loadSearchHistory()
     this.applySearch()
+    if (this.thumbQueue.length > 0) {
+      this.scheduleThumbQueue()
+    }
   }
 
   aboutToDisappear(): void {
+    this.isPageActive = false
     this.loadGeneration += 1
     this.isLoadingGlobalObjects = false
+    if (this.thumbQueueTimer >= 0) {
+      clearTimeout(this.thumbQueueTimer)
+      this.thumbQueueTimer = -1
+    }
+  }
+
+  private getThumbScopeKey(): string {
+    return this.accountScope.length > 0 ? `${this.accountScope}|` : ''
+  }
+
+  private getThumbCacheKey(item: ObjectInfo): string {
+    return `${this.getThumbScopeKey()}${item.id}`
+  }
+
+  private restoreThumbSources(): void {
+    const restored = new Map<string, string>()
+    this.routeParam?.thumbSource?.forEach((source: string, id: string) => {
+      restored.set(id, source)
+    })
+    const scope = this.getThumbScopeKey()
+    if (scope.length > 0) {
+      FileThumbSourceCache.snapshot(scope).forEach((source: string, id: string) => {
+        restored.set(id, source)
+      })
+    }
+    this.thumbSource = restored
+  }
+
+  private getThumbSourceData(id: string): string {
+    return this.thumbSource.get(id) ?? ''
+  }
+
+  private setThumbSourceData(item: ObjectInfo, source: string): void {
+    if (source.length === 0) {
+      return
+    }
+    const scope = this.getThumbScopeKey()
+    if (scope.length > 0) {
+      FileThumbSourceCache.set(this.getThumbCacheKey(item), source)
+    }
+    const updated = new Map<string, string>(this.thumbSource)
+    updated.set(item.id, source)
+    this.thumbSource = updated
+  }
+
+  private requestThumb(item: ObjectInfo): void {
+    if (!this.isPageActive || !item.thumb || this.thumbImage.has(item.id) ||
+      this.getThumbSourceData(item.id).length > 0) {
+      return
+    }
+    const scope = this.getThumbScopeKey()
+    const cachedSource = scope.length > 0 ? FileThumbSourceCache.get(this.getThumbCacheKey(item)) : ''
+    if (cachedSource.length > 0) {
+      this.setThumbSourceData(item, cachedSource)
+      return
+    }
+    if (this.thumbLoadingIds.has(item.id) || this.thumbFailedIds.has(item.id) ||
+      this.thumbQueue.some((queued: ObjectInfo) => queued.id === item.id)) {
+      return
+    }
+    this.thumbQueue.push(item)
+    if (this.thumbQueue.length > SEARCH_THUMB_QUEUE_MAX) {
+      this.thumbQueue.shift()
+    }
+    this.scheduleThumbQueue()
+  }
+
+  private scheduleThumbQueue(): void {
+    if (!this.isPageActive || this.thumbQueueTimer >= 0) {
+      return
+    }
+    this.thumbQueueTimer = setTimeout(() => {
+      this.thumbQueueTimer = -1
+      this.processThumbQueue()
+    }, SEARCH_THUMB_QUEUE_DELAY_MS)
+  }
+
+  private processThumbQueue(): void {
+    if (!this.isPageActive) {
+      return
+    }
+    while (this.activeThumbLoads < SEARCH_THUMB_MAX_CONCURRENT && this.thumbQueue.length > 0) {
+      const item = this.thumbQueue.pop()
+      if (!item || this.getThumbSourceData(item.id).length > 0 ||
+        this.thumbLoadingIds.has(item.id)) {
+        continue
+      }
+      this.activeThumbLoads += 1
+      this.thumbLoadingIds.add(item.id)
+      CloudApi.getThumb(item.id, {
+        onSuccess: (source: string) => {
+          if (source.length > 0) {
+            if (this.isPageActive) {
+              this.setThumbSourceData(item, source)
+            } else {
+              const scope = this.getThumbScopeKey()
+              if (scope.length > 0) {
+                FileThumbSourceCache.set(this.getThumbCacheKey(item), source)
+              }
+            }
+          }
+          this.finishThumbLoad(item)
+        },
+        onFailure: (msg: string) => {
+          this.thumbFailedIds.add(item.id)
+          AppLogger.warn(TAG, `load search thumbnail failed id=${item.id}, msg=${msg}`)
+          this.finishThumbLoad(item)
+        }
+      })
+    }
+  }
+
+  private finishThumbLoad(item: ObjectInfo): void {
+    this.thumbLoadingIds.delete(item.id)
+    this.activeThumbLoads = Math.max(0, this.activeThumbLoads - 1)
+    if (this.isPageActive) {
+      this.processThumbQueue()
+    }
   }
 
   private getTopInset(): number {
@@ -84,6 +221,24 @@ export struct FileSearchPage {
 
   private getResultFiles(): ObjectInfo[] {
     return this.results.filter((item: ObjectInfo) => item.type !== Constant.OBJECT_DIR_TYPE)
+  }
+
+  private getGridColumns(): number {
+    return FileGridLayout.getColumns(this.gridWidth, this.getShowType())
+  }
+
+  private getGridColumnsTemplate(): string {
+    return FileGridLayout.getColumnsTemplate(this.gridWidth, this.getShowType())
+  }
+
+  private getFolderPaddingItems(): number[] {
+    const count = FileGridLayout.getPaddingCount(
+      this.getResultDirs().length, this.gridWidth, this.getShowType())
+    const items: number[] = []
+    for (let index = 0; index < count; index++) {
+      items.push(index)
+    }
+    return items
   }
 
   private getSearchFieldEffect(): VisualEffect {
@@ -111,13 +266,11 @@ export struct FileSearchPage {
     const source = this.searchScope === FileSearchScope.ALL_FILES ?
       this.globalObjects : this.currentObjects
     let expression: RegExp | null = null
-    if (this.isRegexSearch) {
-      try {
-        expression = new RegExp(keyword, 'i')
-      } catch (_) {
-        this.results = []
-        return
-      }
+    try {
+      expression = this.createPatternExpression(keyword)
+    } catch (_) {
+      this.results = []
+      return
     }
     const normalizedKeyword = keyword.toLowerCase()
     this.results = source.filter((item: ObjectInfo) => {
@@ -145,6 +298,7 @@ export struct FileSearchPage {
       const parsed = JSON.parse(raw) as string[]
       this.searchHistory = parsed
         .filter((item: string) => item.trim().length > 0)
+        .map((item: string) => this.getHistoryKeyword(item))
         .slice(0, SEARCH_HISTORY_MAX_COUNT)
     } catch (err) {
       AppLogger.warn(TAG, `parse search history failed: ${(err as Error)?.message ?? err}`)
@@ -157,37 +311,51 @@ export struct FileSearchPage {
       Constant.USER_PREFERENCES, this.getSearchHistoryKey(), JSON.stringify(this.searchHistory))
   }
 
-  private recordSearchHistory(keywordValue?: string, regexValue?: boolean): void {
+  private recordSearchHistory(keywordValue?: string): void {
     const keyword = (keywordValue ?? this.activeSearchKeyword).trim()
     if (keyword.length === 0) {
       return
     }
-    const regex = regexValue ?? this.isRegexSearch
-    const historyValue = regex ? `${REGEX_HISTORY_PREFIX}${keyword}` : keyword
-    const normalized = historyValue.toLowerCase()
-    this.searchHistory = [historyValue]
+    const normalized = keyword.toLowerCase()
+    this.searchHistory = [keyword]
       .concat(this.searchHistory.filter((item: string) => item.toLowerCase() !== normalized))
       .slice(0, SEARCH_HISTORY_MAX_COUNT)
+    this.searchHistoryExpanded = false
+    this.searchHistoryContentWidth = 0
+    this.searchHistoryViewportWidth = 0
     this.saveSearchHistory()
   }
 
   private clearSearchHistory(): void {
     this.searchHistory = []
+    this.searchHistoryExpanded = false
+    this.searchHistoryContentWidth = 0
+    this.searchHistoryViewportWidth = 0
     UserPreferences.deleteSync(Constant.USER_PREFERENCES, this.getSearchHistoryKey())
   }
 
-  private isRegexHistory(value: string): boolean {
-    return value.startsWith(REGEX_HISTORY_PREFIX)
-  }
-
   private getHistoryKeyword(value: string): string {
-    return this.isRegexHistory(value) ? value.substring(REGEX_HISTORY_PREFIX.length) : value
+    return value.startsWith(LEGACY_REGEX_HISTORY_PREFIX) ?
+      value.substring(LEGACY_REGEX_HISTORY_PREFIX.length) : value
   }
 
   private useSearchHistory(value: string): void {
-    this.isRegexSearch = this.isRegexHistory(value)
     this.searchKeyword = this.getHistoryKeyword(value)
     this.executeSearch()
+  }
+
+  private shouldShowSearchHistoryToggle(): boolean {
+    return this.searchHistoryContentWidth >
+      this.searchHistoryViewportWidth + CloudThemeToken.spacingTiny
+  }
+
+  private toggleSearchHistory(): void {
+    this.getUIContext().animateTo({
+      duration: CloudThemeToken.defaultAnimationDuration,
+      curve: Curve.EaseOut
+    }, () => {
+      this.searchHistoryExpanded = !this.searchHistoryExpanded
+    })
   }
 
   private executeSearch(): void {
@@ -204,17 +372,17 @@ export struct FileSearchPage {
       }
       return
     }
-    if (this.isRegexSearch) {
+    if (this.isPatternKeyword(keyword)) {
       try {
-        new RegExp(keyword, 'i')
+        this.createPatternExpression(keyword)
       } catch (_) {
-        showToast('正则表达式格式不正确')
+        showToast('搜索表达式格式不正确')
         return
       }
     }
     this.exitMultiSelectMode()
     this.activeSearchKeyword = keyword
-    this.recordSearchHistory(keyword, this.isRegexSearch)
+    this.recordSearchHistory(keyword)
     this.startGlobalSearch()
     this.applySearch()
   }
@@ -234,28 +402,57 @@ export struct FileSearchPage {
     this.applySearch()
   }
 
-  private changeRegexSearch(enabled: boolean): void {
-    if (this.isRegexSearch === enabled) {
-      return
-    }
-    this.loadGeneration += 1
-    this.isLoadingGlobalObjects = false
-    this.isRegexSearch = enabled
-    if (this.activeSearchKeyword.trim().length > 0) {
-      this.executeSearch()
-    }
-  }
-
   private startGlobalSearch(): void {
     if (this.searchScope !== FileSearchScope.ALL_FILES ||
       this.activeSearchKeyword.trim().length === 0) {
       return
     }
-    if (this.isRegexSearch) {
+    if (this.isPatternKeyword(this.activeSearchKeyword)) {
       this.ensureGlobalObjectsLoaded()
       return
     }
     this.loadServerSearch()
+  }
+
+  private isWildcardKeyword(keyword: string): boolean {
+    return keyword.includes('*') || keyword.includes('?')
+  }
+
+  private isRegexKeyword(keyword: string): boolean {
+    const slashWrapped = keyword.length > 2 && keyword.startsWith('/') &&
+      keyword.lastIndexOf('/') > 0
+    return slashWrapped || keyword.startsWith('^') || keyword.endsWith('$') ||
+      keyword.includes('\\')
+  }
+
+  private isPatternKeyword(keyword: string): boolean {
+    return this.isWildcardKeyword(keyword) || this.isRegexKeyword(keyword)
+  }
+
+  private createPatternExpression(keyword: string): RegExp | null {
+    if (this.isRegexKeyword(keyword)) {
+      if (keyword.startsWith('/') && keyword.lastIndexOf('/') > 0) {
+        return new RegExp(keyword.substring(1, keyword.lastIndexOf('/')), 'i')
+      }
+      return new RegExp(keyword, 'i')
+    }
+    if (!this.isWildcardKeyword(keyword)) {
+      return null
+    }
+    let pattern = '^'
+    for (let index = 0; index < keyword.length; index++) {
+      const char = keyword[index]
+      if (char === '*') {
+        pattern += '.*'
+      } else if (char === '?') {
+        pattern += '.'
+      } else if ('\\^$+.|(){}[]'.includes(char)) {
+        pattern += `\\${char}`
+      } else {
+        pattern += char
+      }
+    }
+    return new RegExp(`${pattern}$`, 'i')
   }
 
   private ensureGlobalObjectsLoaded(): void {
@@ -643,24 +840,6 @@ export struct FileSearchPage {
             })
 
           Button({ type: ButtonType.Normal }) {
-            Text('.*')
-              .fontSize(CloudThemeToken.textSizeBody)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.isRegexSearch ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
-          }
-          .width(CloudThemeToken.iconBoxXs)
-          .height(CloudThemeToken.iconBoxXs)
-          .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-          .backgroundColor(this.isRegexSearch ?
-            CloudThemeToken.primarySoft : CloudThemeToken.transparent)
-          .stateEffect(false)
-          .bindTips(this.getRegexSearchTip())
-          .accessibilityText(this.getRegexSearchTip())
-          .onClick(() => {
-            this.changeRegexSearch(!this.isRegexSearch)
-          })
-
-          Button({ type: ButtonType.Normal }) {
             Image($r('app.media.ic_global_search'))
               .width(CloudThemeToken.iconLg)
               .height(CloudThemeToken.iconLg)
@@ -761,10 +940,6 @@ export struct FileSearchPage {
     return this.isLoadingGlobalObjects ? '正在全局搜索，点击关闭' : '关闭全局搜索'
   }
 
-  private getRegexSearchTip(): string {
-    return this.isRegexSearch ? '关闭正则搜索' : '开启正则搜索'
-  }
-
   @Builder resultList() {
     if (this.activeSearchKeyword.trim().length === 0) {
       this.searchHistoryPanel()
@@ -777,13 +952,13 @@ export struct FileSearchPage {
             }
           }, (item: ObjectInfo) => item.id)
 
-          if (this.getResultDirs().length % 2 !== CloudThemeToken.zero) {
+          ForEach(this.getFolderPaddingItems(), (item: number) => {
             GridItem() {
               Row()
                 .width('100%')
                 .height(CloudThemeToken.objectGridFolderHeight)
             }
-          }
+          }, (item: number) => `folder-padding-${item}`)
 
           ForEach(this.getResultFiles(), (item: ObjectInfo, index: number) => {
             GridItem() {
@@ -793,12 +968,20 @@ export struct FileSearchPage {
         }
         .width('100%')
         .height('100%')
-        .columnsTemplate('1fr 1fr')
-        .columnsGap(CloudThemeToken.spacingCard)
-        .rowsGap(CloudThemeToken.spacingCard)
+        .maxCount(this.getGridColumns())
+        .columnsTemplate(this.getGridColumnsTemplate())
+        .columnsGap(CloudThemeToken.gridGap)
+        .rowsGap(CloudThemeToken.gridGap)
         .padding({
-          left: CloudThemeToken.filesTitleHorizontalPadding,
-          right: CloudThemeToken.filesTitleHorizontalPadding
+          left: CloudThemeToken.spacingCard,
+          right: CloudThemeToken.spacingCard
+        })
+        .onAreaChange((_oldArea: Area, newArea: Area) => {
+          const width = Number(newArea.width)
+          if (!Number.isNaN(width) &&
+            Math.abs(width - this.gridWidth) >= CloudThemeToken.layoutChangeThreshold) {
+            this.gridWidth = width
+          }
         })
       } else {
         List({ space: CloudThemeToken.zero }) {
@@ -848,6 +1031,22 @@ export struct FileSearchPage {
     }
   }
 
+  @Builder searchHistoryChip(historyValue: string, compact: boolean) {
+    Button(this.getHistoryKeyword(historyValue), { type: ButtonType.Normal })
+      .height(CloudThemeToken.rowHeightSm)
+      .fontSize(CloudThemeToken.textSizeBody)
+      .fontColor(CloudThemeToken.textPrimary)
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+      .margin({
+        right: CloudThemeToken.spacingXl,
+        bottom: compact ? CloudThemeToken.zero : CloudThemeToken.spacingXl
+      })
+      .onClick(() => {
+        this.useSearchHistory(historyValue)
+      })
+  }
+
   @Builder searchHistoryPanel() {
     if (this.searchHistory.length > 0) {
       Column({ space: CloudThemeToken.spacingSection }) {
@@ -867,30 +1066,56 @@ export struct FileSearchPage {
             .onClick(() => {
               this.clearSearchHistory()
             })
+
+          if (this.shouldShowSearchHistoryToggle()) {
+            Button({ type: ButtonType.Normal }) {
+              Image($r('app.media.ic_chevron_down'))
+                .width(CloudThemeToken.iconMd)
+                .height(CloudThemeToken.iconMd)
+                .fillColor(CloudThemeToken.textSecondary)
+                .rotate({ angle: this.searchHistoryExpanded ? 180 : 0 })
+                .draggable(false)
+            }
+            .width(CloudThemeToken.iconBoxXs)
+            .height(CloudThemeToken.iconBoxXs)
+            .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+            .backgroundColor(CloudThemeToken.transparent)
+            .stateEffect(false)
+            .accessibilityText(this.searchHistoryExpanded ? '收起搜索历史' : '展开搜索历史')
+            .onClick(() => {
+              this.toggleSearchHistory()
+            })
+          }
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
 
-        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start, alignItems: ItemAlign.Start }) {
-          ForEach(this.searchHistory, (historyValue: string) => {
-            Button(this.getHistoryKeyword(historyValue), { type: ButtonType.Normal })
-              .height(CloudThemeToken.rowHeightSm)
-              .fontSize(CloudThemeToken.textSizeBody)
-              .fontColor(this.isRegexHistory(historyValue) ?
-                CloudThemeToken.primary : CloudThemeToken.textPrimary)
-              .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-              .backgroundColor(this.isRegexHistory(historyValue) ?
-                CloudThemeToken.primarySoft : CloudThemeToken.surfaceSubtle)
-              .margin({
-                right: CloudThemeToken.spacingXl,
-                bottom: CloudThemeToken.spacingXl
-              })
-              .onClick(() => {
-                this.useSearchHistory(historyValue)
-              })
-          }, (historyValue: string) => historyValue)
+        if (this.searchHistoryExpanded) {
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start, alignItems: ItemAlign.Start }) {
+            ForEach(this.searchHistory, (historyValue: string) => {
+              this.searchHistoryChip(historyValue, false)
+            }, (historyValue: string) => historyValue)
+          }
+          .width('100%')
+        } else {
+          Scroll() {
+            Row() {
+              ForEach(this.searchHistory, (historyValue: string) => {
+                this.searchHistoryChip(historyValue, true)
+              }, (historyValue: string) => historyValue)
+            }
+            .onAreaChange((_oldArea: Area, newArea: Area) => {
+              this.searchHistoryContentWidth = Number(newArea.width)
+            })
+          }
+          .width('100%')
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          .align(Alignment.Start)
+          .onAreaChange((_oldArea: Area, newArea: Area) => {
+            this.searchHistoryViewportWidth = Number(newArea.width)
+          })
         }
-        .width('100%')
       }
       .width('100%')
       .height('100%')
@@ -936,6 +1161,11 @@ export struct FileSearchPage {
         this.toggleObjectSelection(item)
       } else {
         this.dispatchOpenResult(item)
+      }
+    })
+    .onVisibleAreaChange([0.01], (isVisible: boolean) => {
+      if (isVisible) {
+        this.requestThumb(item)
       }
     })
   }

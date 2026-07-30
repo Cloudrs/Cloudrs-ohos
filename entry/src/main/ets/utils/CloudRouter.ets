@@ -27,6 +27,7 @@ export class CloudRouter {
   private static homeUpdater?: (pageUrl: string, param: Object) => void;
   private static overlayUpdater?: (pageUrl: string, param: Object) => void;
   private static overlayPage: string = '';
+  private static overlayStack: OverlayRoute[] = [];
   private static homeBackHandler?: () => boolean;
   private static exitGuard?: () => boolean;
   private static homeBackEnabled: boolean = true;
@@ -66,6 +67,7 @@ export class CloudRouter {
     }
     const routeParam = CloudRouter.getRouteParam(param);
     if (CloudRouter.overlayUpdater) {
+      CloudRouter.overlayStack.push(new OverlayRoute(pageUrl, routeParam));
       CloudRouter.overlayPage = pageUrl;
       CloudRouter.overlayUpdater(pageUrl, routeParam);
       return;
@@ -150,8 +152,12 @@ export class CloudRouter {
 
   /** 绕过拦截直接离开，供拦截方在用户确认放弃后调用 */
   static popForced(): void {
-    if (CloudRouter.overlayPage.length > CloudThemeToken.zero) {
-      CloudRouter.clearOverlay();
+    if (CloudRouter.overlayStack.length > CloudThemeToken.zero) {
+      CloudRouter.overlayStack.pop();
+      const previous = CloudRouter.overlayStack[CloudRouter.overlayStack.length - 1];
+      CloudRouter.overlayPage = previous?.pageUrl ?? '';
+      CloudRouter.overlayUpdater?.(
+        CloudRouter.overlayPage, previous?.param ?? new EmptyRouteParam());
       return;
     }
     CloudRouter.pathStack?.pop();
@@ -228,9 +234,11 @@ export class CloudRouter {
   }
 
   private static clearOverlay(): void {
-    if (CloudRouter.overlayPage.length <= CloudThemeToken.zero) {
+    if (CloudRouter.overlayStack.length <= CloudThemeToken.zero &&
+      CloudRouter.overlayPage.length <= CloudThemeToken.zero) {
       return;
     }
+    CloudRouter.overlayStack = [];
     CloudRouter.overlayPage = '';
     CloudRouter.overlayUpdater?.('', new EmptyRouteParam());
   }
@@ -274,4 +282,14 @@ export class CloudRouter {
 }
 
 class EmptyRouteParam {
+}
+
+class OverlayRoute {
+  pageUrl: string
+  param: Object
+
+  constructor(pageUrl: string, param: Object) {
+    this.pageUrl = pageUrl
+    this.param = param
+  }
 }

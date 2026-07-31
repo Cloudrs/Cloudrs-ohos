@@ -1697,29 +1697,6 @@ export struct TabMine {
     return `登录凭证有效至 ${DateFormatUtil.format(expires, 'yyyy/MM/dd')}`
   }
 
-  private refreshCurrentAvatarCache(): void {
-    const dbUserInfo = this.getCurrentDbUserInfo()
-    if (!dbUserInfo) {
-      showToast('未找到当前账号')
-      return
-    }
-    AvatarUtil.refreshDbUserAvatar(dbUserInfo)
-      .then((pixMap?: PixelMap) => {
-        if (pixMap) {
-          this.userAvatar = pixMap
-          this.userAvatarCacheUri = AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
-          this.saveMineCache()
-          showToast('头像缓存已刷新')
-        } else {
-          showToast('头像刷新失败')
-        }
-      })
-      .catch((err: Error) => {
-        AppLogger.error(TAG, `refresh avatar cache failed: ${err.message}`)
-        showToast('头像刷新失败')
-      })
-  }
-
   private getSystemAuthDescription(): string {
     if (this.systemAuthBusy) {
       return '正在等待系统认证'

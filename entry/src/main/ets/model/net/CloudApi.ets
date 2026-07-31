@@ -300,7 +300,7 @@ export class CloudApi {
     // Preview fetch not supported via native layer
   }
 
-  static getUserAvatar(_userId: string, _callback?: HttpCallback<ArrayBuffer>): void {
+  static getUserAvatar(_userId: string, _callback?: HttpCallback<Uint8Array>): void {
     nativeGetUserAvatar(_userId, _callback);
   }
 

@@ -11,6 +11,8 @@ export struct AccountAvatar {
   @Prop avatar: string = ''
   @Prop cookie: string = ''
   @Prop refreshToken: string = ''
+  /** 传进来才认得出这是不是当前账号——当前账号的头像走 native，能自愈过期 token */
+  @Prop username: string = ''
   @Prop avatarSize: number = CloudThemeToken.iconBoxSm
   @Prop radius: number = CloudThemeToken.controlRadiusRoundLg
   @State pixelMap?: PixelMap = undefined
@@ -41,7 +43,8 @@ export struct AccountAvatar {
       userId: this.userId,
       avatar: this.avatar,
       cookie: this.cookie,
-      refreshToken: this.refreshToken
+      refreshToken: this.refreshToken,
+      username: this.username
     }
     const memoryAvatar = AvatarUtil.getMemoryCachedAvatar(source)
     if (memoryAvatar) {

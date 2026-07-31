@@ -5,6 +5,8 @@ import fs from '@ohos.file.fs';
 import Constant from '../model/Constant';
 import { DbUserInfo } from '../model/net/ApiTypes';
 import AppLogger from './AppLogger';
+import { ActiveAccount } from './ActiveAccount';
+import { nativeGetUserAvatar } from './CloudreveNative';
 
 const TAG: string = 'AvatarUtil'
 const AVATAR_TRACE_ENABLED: boolean = false
@@ -21,6 +23,8 @@ export interface AvatarSource {
   avatar: string
   cookie: string
   refreshToken?: string
+  /** 判断是否当前账号用；native 只持有当前会话，别的账号仍走本地凭据自己发请求 */
+  username?: string
 }
 
 type HeaderMap = Record<string, string>
@@ -48,7 +52,8 @@ export class AvatarUtil {
       userId: user.userinfo.id,
       avatar: user.userinfo.avatar,
       cookie: user.cookie,
-      refreshToken: user.refresh_token
+      refreshToken: user.refresh_token,
+      username: user.username
     }, forceRefresh)
   }
 
@@ -58,7 +63,8 @@ export class AvatarUtil {
       userId: user.userinfo.id,
       avatar: user.userinfo.avatar,
       cookie: user.cookie,
-      refreshToken: user.refresh_token
+      refreshToken: user.refresh_token,
+      username: user.username
     })
   }
 
@@ -168,8 +174,50 @@ export class AvatarUtil {
     }
   }
 
+  /**
+   * 当前账号的头像走 native：native 客户端自己维护 token，过期会刷新重试，
+   * 而这里手里的 cookie 来自 DB / AppStorage，只在登录和恢复会话时更新，会越用越旧。
+   * 切换账号面板里的其他账号 native 拿不到（它只持有当前会话），继续走下面的老路径。
+   */
+  private static isActiveAccount(source: AvatarSource): boolean {
+    const username = AvatarUtil.normalizeText(source.username ?? '')
+    if (username.length === 0) {
+      return false
+    }
+    const current = ActiveAccount.current()
+    return current.length > 0 && ActiveAccount.scopeOf(username, source.baseUrl) === current
+  }
+
+  private static requestAvatarViaNative(userId: string): Promise<ArrayBuffer> {
+    return new Promise<ArrayBuffer>((resolve: (data: ArrayBuffer) => void,
+      reject: (reason: Error) => void) => {
+      nativeGetUserAvatar(userId, {
+        // native 给的是 Uint8Array，下游解码要的是 ArrayBuffer
+        onSuccess: (data: Uint8Array) => resolve(data.buffer as ArrayBuffer),
+        onFailure: (msg: string) => reject(new Error(msg))
+      })
+    })
+  }
+
   private static async loadAvatarFromNetwork(source: AvatarSource, cacheKey: string): Promise<PixelMap | undefined> {
     const trace = AvatarUtil.traceStart(`loadAvatarFromNetwork key=${cacheKey}`)
+    if (AvatarUtil.isActiveAccount(source)) {
+      try {
+        const data = await AvatarUtil.requestAvatarViaNative(source.userId)
+        if (AvatarUtil.isImageData(data)) {
+          const pixelMap = await AvatarUtil.cacheFetchResult(source, cacheKey, {
+            pixelMap: await AvatarUtil.createPixelMap(data),
+            data
+          })
+          AvatarUtil.traceEnd(trace, 'native')
+          return pixelMap
+        }
+        AppLogger.warn(TAG, 'native avatar response is not image data, falling back')
+      } catch (err) {
+        AppLogger.warn(TAG, `native avatar failed, falling back: ${(err as Error)?.message ?? err}`)
+      }
+    }
+
     const directUrl = AvatarUtil.resolveAvatarUrl(source, source.avatar)
     if (directUrl.length > 0) {
       try {

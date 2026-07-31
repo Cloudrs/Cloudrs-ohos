@@ -106,6 +106,7 @@ export struct UserSwitchSheet {
         avatar: user.userinfo.avatar,
         cookie: user.cookie,
         refreshToken: user.refresh_token,
+        username: user.username,
         avatarSize: CloudThemeToken.iconBoxXl,
         radius: CloudThemeToken.controlRadiusRoundXl
       })

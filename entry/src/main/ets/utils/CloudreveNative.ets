@@ -82,7 +82,7 @@ export function nativeGetUserSetting<T>(callback?: HttpCallback<T>): void {
   wrapJson(getUserSetting(), callback);
 }
 
-export function nativeGetUserAvatar(userId: string, callback?: HttpCallback<ArrayBuffer>): void {
+export function nativeGetUserAvatar(userId: string, callback?: HttpCallback<Uint8Array>): void {
   wrap(getUserAvatar(userId), callback);
 }
 

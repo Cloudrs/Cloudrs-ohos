@@ -26,4 +26,6 @@
 # Claude Code 项目说明,本地保留不入库
 /CLAUDE.md
 /.claude/
+# ZCode 计划/缓存,本地保留不入库
+/.zcode/
 **/.DS_Store

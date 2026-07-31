@@ -1,9 +1,14 @@
 # Cloudrs
 
+[English](README.en.md) | 简体中文
+
+[![Version](https://img.shields.io/github/v/tag/Cloudrs/Cloudrs-ohos?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/Cloudrs/Cloudrs-ohos/tags)
+[![License](https://img.shields.io/github/license/Cloudrs/Cloudrs-ohos?label=%E5%8D%8F%E8%AE%AE)](LICENSE)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-6.1.0(23)-1F6FEB)](https://www.harmonyos.com/)
+
 Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **HarmonyOS Next 原生客户端**，使用 ArkTS 编写界面，底层网络层由 Rust 实现，同时支持 Cloudreve V3 / V4 服务端 API。
 
 - **Bundle**: `com.dreamflytech.cloudrs`
-- **当前版本**: 1.0.1
 - **目标 SDK**: HarmonyOS 6.1.0(23)
 
 ## 功能特性
@@ -59,6 +64,16 @@ Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **H
 2. **构建**：在 DevEco Studio 中打开项目，通过 *Build > Build Hap(s)/APP(s)* 构建（项目未包含 `hvigorw` 命令行包装器，使用 IDE 自带的 hvigor 集成即可）。项目无第三方 ohpm 依赖。单 `entry` 模块面向手机/平板/2in1；2in1 上桌面入口 `EntryAbility` 作为跳板以状态栏模式拉起 `MainAbility`。
 
 3. **（可选）重新编译 Rust native 层**：`entry/libs/` 中已包含预编译的 `.so`，日常开发无需 Rust 环境。如需修改 native 代码，进入 `cloudreve-api-native/` 执行 `build-ohos.ps1`（依赖本地的 `cloudreve-api` crate）。
+
+## 开源协议
+
+本项目基于 [**GPL-3.0**](LICENSE) 协议开源，Copyright © 2026 Dreamfly Tech and Cloudrs contributors。
+
+- 本仓库（Cloudrs 客户端）与子模块 [`cloudreve-api-native`](cloudreve-api-native/) 均采用 GPL-3.0。
+- Cloudrs 客户端是独立作品，仅通过 HTTP API 对接 Cloudreve 服务端，与 [Cloudreve 服务端](https://github.com/cloudreve/Cloudreve)（同为 GPL-3.0）相互独立。
+- 所使用的第三方组件（CodeMirror、napi-rs、reqwest、tokio 等）均为 MIT / Apache-2.0 协议，详见 [第三方组件声明](THIRD_PARTY_NOTICES.md)。
+
+任何二次分发或网络服务化均需遵守 GPL-3.0 条款，包括开源全部代码。
 
 ## 相关文档
 

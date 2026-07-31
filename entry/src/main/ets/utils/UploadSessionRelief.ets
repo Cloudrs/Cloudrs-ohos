@@ -1,4 +1,5 @@
 import { CloudApi } from '../model/net/CloudApi';
+import { FileModelState } from '../model/FileModel';
 import PhotoBackupSessionStore, { PhotoBackupSessionData } from '../model/PhotoBackupSessionStore';
 import TransferDatabase, { UploadRecord } from '../model/TransferDatabase';
 import PhotoBackupUploader from './PhotoBackupUploader';
@@ -35,6 +36,18 @@ function normalize(path: string): string {
   return value;
 }
 
+/**
+ * 只有还没走完的上传才可能真的占着服务端会话。
+ * 传输列表里 COMPLETED / FAILED 的记录不会被删（要留给用户看历史，见 UploadManager
+ * 上传成功只改 state 不删行），sessionId 也原样留着——不排掉的话，凡是从本机传过的文件
+ * 一旦删除失败，都会被报成「文件被上传占用」，而真实原因可能是登录态失效之类的其它错误。
+ */
+function isActiveUploadState(state: FileModelState): boolean {
+  return state === FileModelState.INITIALIZED || state === FileModelState.WAITING ||
+    state === FileModelState.RUNNING || state === FileModelState.RETRYING ||
+    state === FileModelState.PAUSED;
+}
+
 function matches(remotePath: string, fileSet: Set<string>, dirPrefixes: string[]): boolean {
   const target = normalize(remotePath);
   if (fileSet.has(target)) {
@@ -63,7 +76,8 @@ class UploadSessionReliefImpl {
       .filter((data: PhotoBackupSessionData) => matches(data.remotePath, fileSet, dirPrefixes));
     const fileUploadRecords = TransferDatabase.listUploads()
       .filter((record: UploadRecord) =>
-        record.sessionId.length > 0 && matches(record.remotePath, fileSet, dirPrefixes));
+        record.sessionId.length > 0 && isActiveUploadState(record.state) &&
+          matches(record.remotePath, fileSet, dirPrefixes));
 
     return {
       photoBackupSessions,

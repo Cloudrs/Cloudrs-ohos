@@ -4,7 +4,9 @@ import {
   getUserStorage, getUserSetting,
   getUserAvatar,
   getDirectory, getObjectDetail,
-  deleteObjects, moveObjects, copyObjects,
+  deleteObjects, deleteObjectLockAware, unlockFiles,
+  getFileMetadata, searchFiles,
+  moveObjects, copyObjects,
   renameObject, newDirectory, newFile,
   getDownloadUri, getUploadUri, deleteUploadSession,
   uploadLocalFile, uploadLocalFileChunk, uploadLocalFileChunkWithProgress,
@@ -97,6 +99,28 @@ export function nativeDeleteObjects(items: string[], dirs: string[], callback?: 
   deleteObjects(items, dirs)
     .then(() => callback?.onSuccess(null))
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+/**
+ * 锁感知删除（仅 V4）。返回服务端原始 {code,msg,data} 的 JSON 字符串——
+ * 40073 时 data 里是锁冲突列表，普通的 deleteObjects 拿不到这份数据。
+ */
+export function nativeDeleteObjectLockAware(path: string): Promise<string> {
+  return deleteObjectLockAware(path);
+}
+
+export function nativeUnlockFiles(tokens: string[]): Promise<void> {
+  return unlockFiles(tokens);
+}
+
+/** 单文件 metadata 点查，返回 metadata 对象的 JSON（没有则为 "{}"）。 */
+export function nativeGetFileMetadata(path: string): Promise<string> {
+  return getFileMetadata(path);
+}
+
+/** 服务端搜索，返回 ObjectInfo[] 的 JSON 数组。 */
+export function nativeSearchFiles(keyword: string, path: string): Promise<string> {
+  return searchFiles(keyword, path);
 }
 
 export function nativeMoveObjects(items: string[], dirs: string[], srcDir: string, dst: string, callback?: HttpCallback<null>): void {

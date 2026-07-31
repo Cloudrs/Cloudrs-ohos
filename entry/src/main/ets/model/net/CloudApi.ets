@@ -4,7 +4,9 @@ import {
   nativeGetUserStorage, nativeGetUserSetting,
   nativeGetUserAvatar,
   nativeGetDirectory, nativeGetObjectDetail,
-  nativeDeleteObjects, nativeMoveObjects, nativeCopyObjects,
+  nativeDeleteObjects, nativeDeleteObjectLockAware, nativeUnlockFiles,
+  nativeGetFileMetadata, nativeSearchFiles,
+  nativeMoveObjects, nativeCopyObjects,
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
   nativeGetDownloadUri, nativeGetUploadUri, nativeDeleteUploadSession,
   nativeUploadLocalFile, nativeUploadLocalFileChunk,
@@ -28,37 +30,11 @@ import {
 import { ObjectSrc, ObjectCopy, ObjectMove, ObjectUpload } from './ObjectParam';
 import Constant from '../Constant';
 import AppLogger from '../../utils/AppLogger';
-import { http } from '@kit.NetworkKit';
 
 const CLOUD_API_TAG: string = 'CloudApi';
-const SERVER_SEARCH_PAGE_SIZE: number = 2000;
 
 // 单文件补 metadata 的数量上限，防止异常目录里大量空文件把请求打爆
 const METADATA_PROBE_LIMIT: number = 20;
-const SERVER_SEARCH_MAX_PAGES: number = 100;
-
-interface V4SearchFile {
-  id: string;
-  name: string;
-  path: string;
-  type: number;
-  size: number;
-  created_at: string;
-  updated_at: string;
-  metadata?: Record<string, string>;
-  capability?: string;
-}
-
-interface V4SearchPagination {
-  page?: number;
-  page_size?: number;
-  next_page_token?: string;
-}
-
-interface V4SearchData {
-  files: V4SearchFile[];
-  pagination?: V4SearchPagination;
-}
 
 export interface FileLockApplication {
   type?: string;
@@ -82,17 +58,7 @@ export interface LockAwareDeleteCallback {
   onFailure: (msg: string, conflicts: FileLockConflict[]) => void;
 }
 
-interface V4DeleteFileRequest {
-  uris: string[];
-}
-
-interface V4UnlockFileRequest {
-  tokens: string[];
-}
-
 export class CloudApi {
-  private static v4RefreshPromise?: Promise<string>;
-
   private static withApiLogging<T>(name: string, callback?: HttpCallback<T>): HttpCallback<T> | undefined {
     if (!callback) {
       return callback;
@@ -257,20 +223,18 @@ export class CloudApi {
     if (targets.length === 0) {
       return 0;
     }
-    const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? '';
     const probes = targets.slice(0, METADATA_PROBE_LIMIT);
     let uploadingCount = 0;
     for (const item of probes) {
       try {
         const separator = dirPath.endsWith('/') ? '' : '/';
-        const uri = CloudApi.buildV4MyUri(`${dirPath}${separator}${item.name}`);
-        const url = `${CloudApi.getApiBaseUrl()}/api/v4/file/info?uri=${encodeURIComponent(uri)}`;
-        const response = await CloudApi.requestV4JsonWithRefresh<V4SearchFile>(url, cookie);
-        if (response.code !== 0 || !response.data || !response.data.metadata) {
+        const metadata =
+          JSON.parse(await nativeGetFileMetadata(`${dirPath}${separator}${item.name}`)) as Record<string, string>;
+        if (Object.keys(metadata).length === 0) {
           continue;
         }
-        item.metadata = response.data.metadata;
-        if (response.data.metadata['sys:upload_session_id'] !== undefined) {
+        item.metadata = metadata;
+        if (metadata['sys:upload_session_id'] !== undefined) {
           uploadingCount++;
         }
       } catch (err) {
@@ -316,175 +280,16 @@ export class CloudApi {
     return data;
   }
 
+  /** 服务端搜索。V3 / V4 的差异与翻页都在 native 里处理，这里只管解析结果。 */
   static searchFiles(keyword: string, path: string = '/', callback?: HttpCallback<ObjectInfo[]>): void {
     callback?.onStart?.();
-    CloudApi.requestServerSearch(keyword, path)
-      .then((objects: ObjectInfo[]) => callback?.onSuccess(objects))
+    nativeSearchFiles(keyword, path)
+      .then((json: string) => callback?.onSuccess(JSON.parse(json) as ObjectInfo[]))
       .catch((err: Error) => {
         const message = err.message ?? String(err);
         AppLogger.warn(CLOUD_API_TAG, `searchFiles failed: ${message}`);
         callback?.onFailure(message);
       });
-  }
-
-  private static async requestServerSearch(keyword: string, path: string): Promise<ObjectInfo[]> {
-    const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? '';
-    if (cookie.startsWith(Constant.CLOUD_V4_COOKIE_PREFIX)) {
-      return CloudApi.requestV4Search(keyword, path, cookie);
-    }
-    return CloudApi.requestV3Search(keyword, path, cookie);
-  }
-
-  private static async requestV3Search(keyword: string, path: string, cookie: string): Promise<ObjectInfo[]> {
-    const queryPath = path.length > 0 ? path : '/';
-    const url = `${CloudApi.getApiBaseUrl()}/api/v3/file/search/keywords/${encodeURIComponent(keyword)}` +
-      `?path=${encodeURIComponent(queryPath)}`;
-    const response = await CloudApi.requestJson<BaseResponse<DirectoryInfo>>(url, {
-      'Cookie': cookie.startsWith(Constant.CLOUD_V3_COOKIE_PREFIX) ?
-        cookie : `${Constant.CLOUD_V3_COOKIE_PREFIX}${cookie}`
-    });
-    if (response.code !== 0 || !response.data) {
-      throw new Error(response.msg || `V3 search failed (${response.code})`);
-    }
-    return response.data.objects ?? [];
-  }
-
-  private static async requestV4Search(keyword: string, path: string, cookie: string): Promise<ObjectInfo[]> {
-    const fileUri = CloudApi.buildV4SearchUri(path, keyword);
-    const objectsById: Map<string, ObjectInfo> = new Map<string, ObjectInfo>();
-    let page = 0;
-    let nextPageToken = '';
-
-    while (page < SERVER_SEARCH_MAX_PAGES) {
-      let url = `${CloudApi.getApiBaseUrl()}/api/v4/file?uri=${encodeURIComponent(fileUri)}` +
-        `&page=${page}&page_size=${SERVER_SEARCH_PAGE_SIZE}`;
-      if (nextPageToken.length > 0) {
-        url += `&next_page_token=${encodeURIComponent(nextPageToken)}`;
-      }
-      const response = await CloudApi.requestV4JsonWithRefresh<V4SearchData>(url, cookie);
-      if (response.code !== 0 || !response.data) {
-        throw new Error(response.msg || `V4 search failed (${response.code})`);
-      }
-
-      const files = response.data.files ?? [];
-      const previousSize = objectsById.size;
-      files.forEach((item: V4SearchFile) => {
-        objectsById.set(item.id, CloudApi.mapV4SearchFile(item));
-      });
-      if (files.length < SERVER_SEARCH_PAGE_SIZE || objectsById.size === previousSize) {
-        break;
-      }
-
-      nextPageToken = response.data.pagination?.next_page_token ?? '';
-      page += 1;
-    }
-    return Array.from(objectsById.values());
-  }
-
-  private static async requestJson<T>(url: string, headers: Record<string, string>): Promise<T> {
-    const request = http.createHttp();
-    try {
-      const response = await request.request(url, {
-        method: http.RequestMethod.GET,
-        header: headers,
-        expectDataType: http.HttpDataType.STRING
-      });
-      if (response.responseCode !== Constant.HTTP_STATUS_OK) {
-        throw new Error(`HTTP ${response.responseCode}`);
-      }
-      return JSON.parse(response.result as string) as T;
-    } catch (err) {
-      const message = (err as Error)?.message ?? String(err);
-      throw new Error(message);
-    } finally {
-      request.destroy();
-    }
-  }
-
-  private static getApiBaseUrl(): string {
-    const baseUrl = CloudApi.getBaseURL();
-    return baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
-  }
-
-  private static buildV4SearchUri(path: string, keyword: string): string {
-    const normalizedPath = path.length === 0 || path === '/' ? '' :
-      path.split('/').filter((segment: string) => segment.length > 0)
-        .map((segment: string) => encodeURIComponent(segment)).join('/');
-    return `cloudreve://my/${normalizedPath}?name=${encodeURIComponent(keyword)}&case_folding=true`;
-  }
-
-  private static mapV4SearchFile(item: V4SearchFile): ObjectInfo {
-    return {
-      id: item.id,
-      name: item.name,
-      path: CloudApi.getV4ParentPath(item.path),
-      thumb: item.metadata?.['thumb:disabled'] === undefined && item.type === 0,
-      size: item.size ?? 0,
-      type: item.type === 1 ? Constant.OBJECT_DIR_TYPE : Constant.OBJECT_FILE_TYPE,
-      date: item.updated_at ?? item.created_at ?? '',
-      create_date: item.created_at ?? '',
-      source_enabled: true,
-      metadata: item.metadata
-    };
-  }
-
-  private static async requestV4JsonWithRefresh<T>(url: string,
-    cookie: string): Promise<BaseResponse<T>> {
-    let token = cookie.substring(Constant.CLOUD_V4_COOKIE_PREFIX.length);
-    let response = await CloudApi.requestJson<BaseResponse<T>>(url, {
-      'Authorization': `Bearer ${token}`
-    });
-    if (response.code !== 401) {
-      return response;
-    }
-    AppLogger.info(CLOUD_API_TAG, 'V4 access token expired, refreshing before retry');
-    token = await CloudApi.refreshV4AccessToken();
-    response = await CloudApi.requestJson<BaseResponse<T>>(url, {
-      'Authorization': `Bearer ${token}`
-    });
-    return response;
-  }
-
-  private static refreshV4AccessToken(): Promise<string> {
-    if (CloudApi.v4RefreshPromise) {
-      return CloudApi.v4RefreshPromise;
-    }
-    const refreshToken = AppStorage.get<string>(Constant.CLOUD_REFRESH_TOKEN) ?? '';
-    if (refreshToken.length === 0) {
-      return Promise.reject(new Error('V4 refresh token is missing'));
-    }
-    CloudApi.v4RefreshPromise = new Promise<string>((resolve: (token: string) => void,
-      reject: (reason: Error) => void) => {
-      nativeLoginWithRefreshToken(CloudApi.getBaseURL(), refreshToken, {
-        onSuccess: (result: string[]) => {
-          CloudApi.storeLoginResult(result);
-          const token = result[Constant.LOGIN_RESULT_TOKEN_INDEX] ?? '';
-          if (token.length > 0) {
-            resolve(token);
-          } else {
-            reject(new Error('V4 access token refresh returned an empty token'));
-          }
-        },
-        onFailure: (msg: string) => reject(new Error(msg))
-      });
-    }).finally(() => {
-      CloudApi.v4RefreshPromise = undefined;
-    });
-    return CloudApi.v4RefreshPromise;
-  }
-
-  private static getV4ParentPath(uri: string): string {
-    const schemeIndex = uri.indexOf('://');
-    const pathStart = schemeIndex >= 0 ? uri.indexOf('/', schemeIndex + 3) : -1;
-    const encodedPath = pathStart >= 0 ? uri.substring(pathStart) : uri;
-    let decodedPath = encodedPath;
-    try {
-      decodedPath = decodeURIComponent(encodedPath);
-    } catch (_) {
-      decodedPath = encodedPath;
-    }
-    const lastSlash = decodedPath.lastIndexOf('/');
-    return lastSlash <= 0 ? '/' : decodedPath.substring(0, lastSlash);
   }
 
   static getThumb(id: string, callback?: HttpCallback<string>): void {
@@ -535,12 +340,9 @@ export class CloudApi {
       return;
     }
     callback.onStart?.();
-    const requestBody: V4DeleteFileRequest = {
-      uris: [CloudApi.buildV4MyUri(remotePath)]
-    };
-    AppLogger.info(CLOUD_API_TAG, `lock-aware delete uri=${requestBody.uris[0]}`);
-    CloudApi.requestV4FileMutation<FileLockConflict[]>('/api/v4/file',
-      JSON.stringify(requestBody), cookie).then((response: BaseResponse<FileLockConflict[]>) => {
+    AppLogger.info(CLOUD_API_TAG, `lock-aware delete path=${remotePath}`);
+    nativeDeleteObjectLockAware(remotePath).then((json: string) => {
+      const response = JSON.parse(json) as BaseResponse<FileLockConflict[]>;
       AppLogger.info(CLOUD_API_TAG, `lock-aware delete response code=${response.code}, ` +
         `conflicts=${Array.isArray(response.data) ? response.data.length : 0}`);
       if (response.code === 0) {
@@ -562,60 +364,12 @@ export class CloudApi {
       return;
     }
     callback.onStart?.();
-    const requestBody: V4UnlockFileRequest = { tokens: tokens };
-    CloudApi.requestV4FileMutation<string>('/api/v4/file/lock', JSON.stringify(requestBody), cookie)
-      .then((response: BaseResponse<string>) => {
-        AppLogger.info(CLOUD_API_TAG, `force unlock response code=${response.code}, tokens=${tokens.length}`);
-        if (response.code === 0) {
-          callback.onSuccess(null);
-        } else {
-          callback.onFailure(`${response.code}: ${response.msg}`);
-        }
+    nativeUnlockFiles(tokens)
+      .then(() => {
+        AppLogger.info(CLOUD_API_TAG, `force unlock ok, tokens=${tokens.length}`);
+        callback.onSuccess(null);
       })
       .catch((err: Error) => callback.onFailure(err.message ?? String(err)));
-  }
-
-  private static buildV4MyUri(remotePath: string): string {
-    const encodedPath = remotePath.split('/')
-      .filter((segment: string) => segment.length > 0)
-      .map((segment: string) => encodeURIComponent(segment))
-      .join('/');
-    return encodedPath.length > 0 ? `cloudreve://my/${encodedPath}` : 'cloudreve://my';
-  }
-
-  private static async requestV4FileMutation<T>(path: string, body: string,
-    cookie: string): Promise<BaseResponse<T>> {
-    let token = cookie.substring(Constant.CLOUD_V4_COOKIE_PREFIX.length);
-    let response = await CloudApi.performV4FileMutation<T>(path, body, token);
-    if (response.code !== 401) {
-      return response;
-    }
-    AppLogger.info(CLOUD_API_TAG, `V4 mutation token expired path=${path}, refreshing before retry`);
-    token = await CloudApi.refreshV4AccessToken();
-    response = await CloudApi.performV4FileMutation<T>(path, body, token);
-    return response;
-  }
-
-  private static async performV4FileMutation<T>(path: string, body: string,
-    token: string): Promise<BaseResponse<T>> {
-    const request = http.createHttp();
-    try {
-      const response = await request.request(`${CloudApi.getApiBaseUrl()}${path}`, {
-        method: http.RequestMethod.DELETE,
-        header: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        extraData: body,
-        expectDataType: http.HttpDataType.STRING
-      });
-      if (response.responseCode !== Constant.HTTP_STATUS_OK) {
-        throw new Error(`HTTP ${response.responseCode}`);
-      }
-      return JSON.parse(response.result as string) as BaseResponse<T>;
-    } finally {
-      request.destroy();
-    }
   }
 
   static copyObjects(copy: ObjectCopy, callback?: HttpCallback<null>): void {

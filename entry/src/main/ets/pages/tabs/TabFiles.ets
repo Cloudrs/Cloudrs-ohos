@@ -63,6 +63,16 @@ const FILE_THUMB_QUEUE_DELAY_MS: number = 500
 const FILE_THUMB_QUEUE_MAX: number = 64
 const FILE_SHARE_REFRESH_DELAY_MS: number = 650
 const FILE_BATCH_MAX_CONCURRENT: number = 4
+/**
+ * 批量操作面板延迟这么久才出现。删 2-3 个文件通常 200ms 就跑完了，比半模态自身的
+ * 开合动画还短，立刻开又立刻关看起来就是闪一下；这段时间内做完的批次干脆不弹面板，
+ * 结果由各调用方本来就有的 toast 交代。
+ * 判据是耗时而不是数量——网络差时删 2 个文件也可能要十几秒，那时候面板照常出现，
+ * 用户仍有进度和取消入口。
+ */
+const BATCH_SHEET_SHOW_DELAY_MS: number = 400
+/** 面板一旦露面就至少驻留这么久，避免刚展开就被收起 */
+const BATCH_SHEET_MIN_VISIBLE_MS: number = 500
 
 // Lifecycle phase of a bindSheet, driven by its
 // onWillAppear/onAppear/onWillDisappear/onDisappear callbacks.
@@ -294,6 +304,10 @@ export struct TabFiles {
   private batchOperationSheetCtrl: SheetPhaseController = new SheetPhaseController()
   private activeBatchOperationControl: BatchOperationControl | null = null
   private batchOperationElapsedTimer: number = -1
+  /** 延迟弹面板的定时器；批次在延迟内结束就直接取消，面板不会出现 */
+  private batchOperationShowTimer: number = -1
+  /** 面板真正请求展开的时刻，用于兑现最短驻留 */
+  private batchOperationShownAt: number = 0
   @State fileConflictVisible: boolean = false
   @State fileConflictName: string = ''
   private fileConflictPolicy: FileConflictPolicy = FileConflictPolicy.ASK
@@ -1486,11 +1500,25 @@ export struct TabFiles {
     this.batchOperationElapsedSeconds = 0
     this.activeBatchOperationControl = control
     this.batchOperationRunning = true
-    this.batchOperationSheetCtrl.requestOpen(
-      () => this.batchOperationVisible,
-      (value: boolean) => {
-        this.batchOperationVisible = value
-      })
+    this.batchOperationShownAt = 0
+    if (this.batchOperationShowTimer >= 0) {
+      clearTimeout(this.batchOperationShowTimer)
+    }
+    // 跑得够快的批次不弹面板，见 BATCH_SHEET_SHOW_DELAY_MS
+    this.batchOperationShowTimer = setTimeout(() => {
+      this.batchOperationShowTimer = -1
+      // 已取消、或期间弹出了同名冲突确认（那层结束后会自己重新打开），这里都不插手
+      if (!this.batchOperationRunning || this.activeBatchOperationControl !== control ||
+        control.canceled || this.activeFileConflict) {
+        return
+      }
+      this.batchOperationShownAt = Date.now()
+      this.batchOperationSheetCtrl.requestOpen(
+        () => this.batchOperationVisible,
+        (value: boolean) => {
+          this.batchOperationVisible = value
+        })
+    }, BATCH_SHEET_SHOW_DELAY_MS)
     if (this.batchOperationElapsedTimer >= 0) {
       clearInterval(this.batchOperationElapsedTimer)
     }
@@ -1510,10 +1538,37 @@ export struct TabFiles {
       clearInterval(this.batchOperationElapsedTimer)
       this.batchOperationElapsedTimer = -1
     }
-    this.batchOperationVisible = false
+    // 面板还没到点出现：取消这次显示，用户只会看到结果 toast
+    if (this.batchOperationShowTimer >= 0) {
+      clearTimeout(this.batchOperationShowTimer)
+      this.batchOperationShowTimer = -1
+    }
     this.batchOperationPaused = false
     control.resumeWaiters.forEach((resume: () => void) => resume())
     control.resumeWaiters = []
+    this.hideBatchOperationSheet()
+  }
+
+  /**
+   * 收起面板，但兑现最短驻留。
+   * 延时期间若又开了新批次（比如解除占用后重试删除），交给新批次自己管，这里不再插手。
+   */
+  private hideBatchOperationSheet(): void {
+    const shownAt = this.batchOperationShownAt
+    this.batchOperationShownAt = 0
+    if (!this.batchOperationVisible) {
+      return
+    }
+    const remain = shownAt > 0 ? BATCH_SHEET_MIN_VISIBLE_MS - (Date.now() - shownAt) : 0
+    if (remain <= 0) {
+      this.batchOperationVisible = false
+      return
+    }
+    setTimeout(() => {
+      if (!this.batchOperationRunning) {
+        this.batchOperationVisible = false
+      }
+    }, remain)
   }
 
   private toggleBatchOperationPause(): void {
@@ -1834,6 +1889,8 @@ export struct TabFiles {
     this.showNextFileConflict()
     if (!this.activeFileConflict && this.fileConflictQueue.length === 0 && this.batchOperationRunning &&
       !this.batchOperationCancelRequested) {
+      // 冲突确认结束后重新露面，最短驻留重新计时
+      this.batchOperationShownAt = Date.now()
       this.batchOperationSheetCtrl.requestOpen(
         () => this.batchOperationVisible,
         (value: boolean) => {

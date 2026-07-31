@@ -3,7 +3,7 @@
 [English](README.en.md) | 简体中文
 
 [![Version](https://img.shields.io/github/v/tag/Cloudrs/Cloudrs-ohos?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/Cloudrs/Cloudrs-ohos/tags)
-[![License](https://img.shields.io/github/license/Cloudrs/Cloudrs-ohos?label=%E5%8D%8F%E8%AE%AE)](LICENSE)
+[![License](https://img.shields.io/badge/%E5%8D%8F%E8%AE%AE-GPL--3.0-blue)](LICENSE)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-6.1.0(23)-1F6FEB)](https://www.harmonyos.com/)
 
 Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **HarmonyOS Next 原生客户端**，使用 ArkTS 编写界面，底层网络层由 Rust 实现，同时支持 Cloudreve V3 / V4 服务端 API。

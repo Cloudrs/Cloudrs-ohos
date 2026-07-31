@@ -3,7 +3,7 @@
 English | [简体中文](README.md)
 
 [![Version](https://img.shields.io/github/v/tag/Cloudrs/Cloudrs-ohos?label=version&sort=semver)](https://github.com/Cloudrs/Cloudrs-ohos/tags)
-[![License](https://img.shields.io/github/license/Cloudrs/Cloudrs-ohos)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-6.1.0(23)-1F6FEB)](https://www.harmonyos.com/)
 
 Cloudrs is a **native HarmonyOS Next client** for [Cloudreve](https://github.com/cloudreve/Cloudreve) cloud storage. The UI is written in ArkTS, the networking layer is implemented in Rust, and both Cloudreve V3 / V4 server APIs are supported.

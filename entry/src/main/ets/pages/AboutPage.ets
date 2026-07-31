@@ -1,12 +1,18 @@
+import { common } from "@kit.AbilityKit";
+import { BusinessError } from "@kit.BasicServicesKit";
 import { CommonTitle } from "../components/CommonTitle";
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudApi } from "../model/net/CloudApi";
 import AppLogger from "../utils/AppLogger";
+import { showToast } from "../utils/ToastUtil";
 import { VERSION_CODE } from 'BuildProfile';
 
 const EMAIL: string = 'wangxian@dreamflytech.com'
 const ABOUT_TAG: string = 'AboutPage'
+/** 开源仓库镜像。gitea 是自建私有源，不对外公开，这里只放 GitHub / Gitee 两个公开镜像 */
+const GITHUB_URL: string = 'https://github.com/Cloudrs/Cloudrs-ohos'
+const GITEE_URL: string = 'https://gitee.com/larriti/cloudrs-ohos'
 
 @Component
 export struct AboutPage {
@@ -116,6 +122,8 @@ export struct AboutPage {
       .justifyContent(FlexAlign.SpaceBetween)
       Divider().strokeWidth(CloudThemeToken.lineWidth).color(CloudThemeToken.line)
       this.commonInfo($r('app.string.about_email'), EMAIL)
+      Divider().strokeWidth(CloudThemeToken.lineWidth).color(CloudThemeToken.line)
+      this.sourceInfo()
     }
     .width('100%')
     .padding({ left: CloudThemeToken.aboutInfoHorizontalPadding, right: CloudThemeToken.aboutInfoHorizontalPadding })
@@ -123,6 +131,59 @@ export struct AboutPage {
     .backgroundColor(CloudThemeToken.surface)
     .borderRadius(CloudThemeToken.cardRadius)
     .justifyContent(FlexAlign.Center)
+  }
+
+  /** 开源地址一行放两个镜像，点哪个就用系统浏览器开哪个 */
+  @Builder sourceInfo() {
+    Row () {
+      Text($r('app.string.about_source'))
+        .fontSize(CloudThemeToken.aboutInfoTitleSize)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
+      Row({ space: CloudThemeToken.aboutSourceLinkGap }) {
+        this.sourceLink('GitHub', GITHUB_URL)
+        this.sourceLink('Gitee', GITEE_URL)
+      }
+    }
+    .height(CloudThemeToken.aboutInfoRowHeight)
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.SpaceBetween)
+  }
+
+  @Builder sourceLink(label: string, url: string) {
+    Text(label)
+      .fontSize(CloudThemeToken.aboutInfoTextSize)
+      .fontColor(CloudThemeToken.primary)
+      .height(CloudThemeToken.aboutSourceLinkHeight)
+      .padding({
+        left: CloudThemeToken.aboutSourceLinkPadding,
+        right: CloudThemeToken.aboutSourceLinkPadding
+      })
+      .borderRadius(CloudThemeToken.aboutSourceLinkRadius)
+      .backgroundColor(CloudThemeToken.primarySoft)
+      .textAlign(TextAlign.Center)
+      .hoverEffect(HoverEffect.Highlight)
+      .accessibilityText(`打开 ${label} 仓库`)
+      .onClick(() => this.openExternalUrl(url))
+  }
+
+  private openExternalUrl(url: string): void {
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      showToast('无法打开链接')
+      return
+    }
+
+    const context = hostContext as common.UIAbilityContext
+    context.startAbility({
+      action: 'ohos.want.action.viewData',
+      uri: url,
+      entities: ['entity.system.browsable']
+    }).catch((err: BusinessError) => {
+      AppLogger.error(ABOUT_TAG, `open external url failed: ${err.code}, ${err.message}`)
+      showToast('无法打开浏览器')
+    })
   }
 
   @Builder commonInfo(title: ResourceStr, info: ResourceStr) {

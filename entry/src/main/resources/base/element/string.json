@@ -361,6 +361,10 @@
       "value": "API 版本"
     },
     {
+      "name": "about_source",
+      "value": "开源地址"
+    },
+    {
       "name": "auto_sync",
       "value": "开启相册同步"
     },

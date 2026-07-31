@@ -306,6 +306,10 @@ export class CloudThemeToken {
   static readonly aboutInfoTitleSize: number = 16
   static readonly aboutInfoTextSize: number = 14
   static readonly aboutInfoRowHeight: number = 50
+  static readonly aboutSourceLinkGap: number = 8
+  static readonly aboutSourceLinkHeight: number = 28
+  static readonly aboutSourceLinkPadding: number = 12
+  static readonly aboutSourceLinkRadius: number = 14
   static readonly aboutIcpHeight: number = 12
   static readonly filesHeaderGap: number = 10
   static readonly filesHeaderPadding: number = 10

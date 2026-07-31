@@ -5,8 +5,17 @@
 [![Version](https://img.shields.io/github/v/tag/Cloudrs/Cloudrs-ohos?label=%E7%89%88%E6%9C%AC&sort=semver)](https://github.com/Cloudrs/Cloudrs-ohos/tags)
 [![License](https://img.shields.io/badge/%E5%8D%8F%E8%AE%AE-GPL--3.0-blue)](LICENSE)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-6.1.0(23)-1F6FEB)](https://www.harmonyos.com/)
+[![AppGallery](https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-%E5%8D%8E%E4%B8%BA%E5%BA%94%E7%94%A8%E5%B8%82%E5%9C%BA-red)](https://appgallery.huawei.com/app/detail?id=com.dreamflytech.cloudrs&channelId=SHARE&source=appshare)
+
+> 中文 | [English](README.en.md)
 
 Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **HarmonyOS Next 原生客户端**，使用 ArkTS 编写界面，底层网络层由 Rust 实现，同时支持 Cloudreve V3 / V4 服务端 API。
+
+## 💾 下载
+
+[**华为应用市场 (AppGallery)**](https://appgallery.huawei.com/app/detail?id=com.dreamflytech.cloudrs&channelId=SHARE&source=appshare) — 推荐普通用户下载安装，开箱即用。
+
+如果你是开发者，或想体验最新功能，可参照下方 [构建](#构建) 章节自行编译。
 
 - **Bundle**: `com.dreamflytech.cloudrs`
 - **目标 SDK**: HarmonyOS 6.1.0(23)
@@ -79,6 +88,16 @@ Cloudrs 是 [Cloudreve](https://github.com/cloudreve/Cloudreve) 云存储的 **H
 
 - [隐私政策](docs/privacy.md)
 - [第三方组件声明](THIRD_PARTY_NOTICES.md)
+
+## ☕ 请作者喝杯咖啡
+
+Cloudrs 是一个用爱发电的开源项目，所有开发和维护都在业余时间完成。如果它为你带来了便利，欢迎请作者喝杯咖啡 ☕ ——你的支持是这个项目持续更新的动力。
+
+| 微信 | 支付宝 |
+|:---:|:---:|
+| <img src="docs/images/donate-wechat.png" width="220" alt="微信赞赏码" /> | <img src="docs/images/donate-alipay.jpg" width="220" alt="支付宝收款码" /> |
+
+> 任意金额都是鼓励，感谢每一份支持 ❤️
 
 ## 致谢
 

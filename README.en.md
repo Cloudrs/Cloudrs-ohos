@@ -5,8 +5,17 @@ English | [简体中文](README.md)
 [![Version](https://img.shields.io/github/v/tag/Cloudrs/Cloudrs-ohos?label=version&sort=semver)](https://github.com/Cloudrs/Cloudrs-ohos/tags)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-6.1.0(23)-1F6FEB)](https://www.harmonyos.com/)
+[![AppGallery](https://img.shields.io/badge/download-AppGallery-red)](https://appgallery.huawei.com/app/detail?id=com.dreamflytech.cloudrs&channelId=SHARE&source=appshare)
+
+> English | [中文](README.md)
 
 Cloudrs is a **native HarmonyOS Next client** for [Cloudreve](https://github.com/cloudreve/Cloudreve) cloud storage. The UI is written in ArkTS, the networking layer is implemented in Rust, and both Cloudreve V3 / V4 server APIs are supported.
+
+## 💾 Download
+
+[**Huawei AppGallery**](https://appgallery.huawei.com/app/detail?id=com.dreamflytech.cloudrs&channelId=SHARE&source=appshare) — recommended for end users, install and go.
+
+If you're a developer or want the latest features, see [Build](#build) below to compile from source.
 
 - **Bundle**: `com.dreamflytech.cloudrs`
 - **Target SDK**: HarmonyOS 6.1.0(23)
@@ -79,6 +88,16 @@ Any redistribution or network-serving of this work must comply with the GPL-3.0 
 
 - [Privacy Policy](docs/privacy.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
+
+## ☕ Sponsor
+
+Cloudrs is a free, open-source project built and maintained in spare time. If it makes your life easier, consider buying the author a coffee ☕ — your support keeps the project going.
+
+| WeChat | Alipay |
+|:---:|:---:|
+| <img src="docs/images/donate-wechat.png" width="220" alt="WeChat" /> | <img src="docs/images/donate-alipay.jpg" width="220" alt="Alipay" /> |
+
+> Any amount is appreciated — thank you for your support ❤️
 
 ## Acknowledgements
 

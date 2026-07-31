@@ -27,7 +27,9 @@ class UserPreferences {
       perf.putSync(key, value)
       // 刷入磁盘
       perf.flush()
-      console.debug('UserPrivData', `保存首选项${name}.${key} : ${value} 成功`)
+      // 只打 key：曾经把 ${value} 拼进模板，模板字面量在调用前就求值，
+      // MB 级的 value 每次落盘都要在 UI 线程上再拼一份大字符串，白白喂 GC。
+      console.debug('UserPrivData', `保存首选项${name}.${key} 成功`)
     } catch (e) {
       AppLogger.error('UserPrivData', `保存首选项${name}.${key} 失败, 错误: ${(e as Error)?.message ?? e}`)
     }
@@ -61,7 +63,7 @@ class UserPreferences {
       let perf = this.perfMap.get(name)!
       // 读取数据
       let value = perf.getSync(key, defValue)
-      console.debug('UserPrivData', `获取首选项${name}.${key} : ${value} 成功`)
+      console.debug('UserPrivData', `获取首选项${name}.${key} 成功`)
       return value
     } catch (e) {
       AppLogger.error('UserPrivData', `获取首选项${name}.${key} 失败, 错误: ${(e as Error)?.message ?? e}`)

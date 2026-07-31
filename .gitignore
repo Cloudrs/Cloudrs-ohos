@@ -6,6 +6,8 @@
 /.idea
 **/build
 /.hvigor
+# hvigor 也会在源码子目录下生成缓存目录(如 entry/src/main/ets/.hvigor)
+**/.hvigor
 .cxx
 /.clangd
 /.clang-format

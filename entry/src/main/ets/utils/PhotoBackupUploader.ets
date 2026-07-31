@@ -227,15 +227,26 @@ class PhotoBackupUploaderImpl {
           callbacks.onProgress(current);
         }
       };
+      // 两条分支都是 native 侧从文件流式读取上传。此前 chunkSize > 0 时走的
+      // uploadLocalFileChunk 会把整个分片读进内存（上游还会再 to_vec 一份），
+      // Cloudreve 默认 25MB 分片 × 5 并发就是上百 MB 的瞬时占用。
       const uploaded = useRemoteNode
         ? await CloudApi.uploadLocalFileChunkToUrlWithProgress(
           cachePath, uploadUrls[Constant.FIRST_ARRAY_INDEX], session.credential,
           index, chunkOffset, length, progressCallback)
-        : session.chunkSize <= 0
-          ? await CloudApi.uploadLocalFileChunkWithProgress(
-            cachePath, session.sessionId, index, chunkOffset, length, progressCallback)
-          : await CloudApi.uploadLocalFileChunk(cachePath, session.sessionId, index, chunkOffset, length);
-      offset += uploaded > 0 ? uploaded : length;
+        : await CloudApi.uploadLocalFileChunkWithProgress(
+          cachePath, session.sessionId, index, chunkOffset, length, progressCallback);
+      // 必须严格校验实际上传字节数，不能"没传够就当传满了"。
+      // 原先是 offset += uploaded > 0 ? uploaded : length —— 本地文件比 session 登记的
+      // total 短时（媒体库 size 过时，见 backupItem 里的真实大小回填），native 读到文件尾
+      // 会返回 0，这里却按 length 把 offset 直接推到 total，循环正常结束、上报 COMPLETED；
+      // 而服务端收到的字节数不足声明值，会把文件一直挂在"上传中"、大小 0B，
+      // 预览是黑屏。宁可这张明确失败让用户看见，也不要静默产出空文件。
+      if (uploaded < length) {
+        throw new Error(`分片 ${index} 只上传了 ${uploaded} / ${length} 字节` +
+          `（本地文件比登记的 ${total} 字节短），已中止以免在云端留下空文件`);
+      }
+      offset += uploaded;
       index++;
       if (callbacks?.onProgress) {
         callbacks.onProgress(Math.min(offset, total));

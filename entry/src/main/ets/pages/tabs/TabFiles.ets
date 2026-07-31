@@ -167,11 +167,24 @@ class SheetPhaseController {
 }
 
 PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
-PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_NAME)
+// 默认按修改时间倒序（最新的在最前）。SORT_BY_TIME 的 reverse=true 才是倒序，见 sortObjects。
+PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_TIME)
 PersistentStorage.persistProp(Constant.CURRENT_SORT_TYPE_RESERVE, new Map<SortType, boolean>([
   [SortType.SORT_BY_NAME, false], [SortType.SORT_BY_TYPE, false],
-  [SortType.SORT_BY_TIME, false], [SortType.SORT_BY_SIZE, false],
+  [SortType.SORT_BY_TIME, true], [SortType.SORT_BY_SIZE, false],
 ]))
+
+// persistProp 只在"该键尚未持久化"时才写入默认值，所以老用户仍停留在旧的按名称升序。
+// 这里做一次性迁移把他们也带到新默认；标记落盘后不再重复，用户之后自己改的排序照常保留。
+PersistentStorage.persistProp(Constant.SORT_DEFAULT_TIME_DESC_APPLIED, false)
+if (!AppStorage.get<boolean>(Constant.SORT_DEFAULT_TIME_DESC_APPLIED)) {
+  AppStorage.setOrCreate(Constant.CURRENT_SORT_TYPE, SortType.SORT_BY_TIME)
+  const migratedReverse = new Map<SortType, boolean>(
+    AppStorage.get<Map<SortType, boolean>>(Constant.CURRENT_SORT_TYPE_RESERVE) ?? new Map<SortType, boolean>())
+  migratedReverse.set(SortType.SORT_BY_TIME, true)
+  AppStorage.setOrCreate(Constant.CURRENT_SORT_TYPE_RESERVE, migratedReverse)
+  AppStorage.setOrCreate(Constant.SORT_DEFAULT_TIME_DESC_APPLIED, true)
+}
 
 enum FilePageState {
   IDLE = 'idle',
@@ -2447,7 +2460,9 @@ export struct TabFiles {
 
       Column() {
         Column() {
-          this.fileMoreCommonItem($r('app.string.more_multi_select'), $r('app.media.ic_selected'), false, () => {
+          // 用 checklist 图标而不是 ic_selected：后者是行尾表示"当前选中"的对勾，
+          // 同一个菜单里拿它当"多选"入口，会被读成"多选这项已被选中"
+          this.fileMoreCommonItem($r('app.string.more_multi_select'), $r('app.media.ic_multi_select'), false, () => {
             this.closeFileMoreMenu()
             this.onMoreClick(MoreMenuType.MULTI_SELECT)
           })

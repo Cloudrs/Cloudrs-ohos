@@ -12,7 +12,7 @@ import {
   PhotoBackupState,
   PhotoBackupStatus
 } from '../../model/PhotoBackupModel';
-import { CloudApi } from '../../model/net/CloudApi';
+import { CloudApi, FileLockConflict } from '../../model/net/CloudApi';
 import UserPreferences from '../../model/UserPreferences';
 import AppLogger from '../../utils/AppLogger';
 import { showToast } from '../../utils/ToastUtil';
@@ -29,6 +29,7 @@ import { GallerySegment, PhotoGroup, groupByDate, groupByAlbum } from '../../mod
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_REVISION_KEY } from '../../model/PhotoBackupSettingsStore';
 import PhotoBackupUploader, { PhotoBackupUploadResult } from '../../utils/PhotoBackupUploader';
 import PhotoBackupSessionStore from '../../model/PhotoBackupSessionStore';
+import PhotoBackupRecordStore from '../../utils/PhotoBackupRecordStore';
 import PhotoBackupBackgroundTask, {
   PhotoBackupBackgroundInterruptReason
 } from '../../utils/PhotoBackupBackgroundTask';
@@ -64,7 +65,13 @@ const AUTO_BACKUP_DEBOUNCE_MS: number = 1500;
 const REMOTE_RECONCILE_MIN_INTERVAL_MS: number = 2 * 60 * 1000;
 // 对账保险丝：一轮 gone 超过这个数且过半标记图都 missing 时怀疑列表异常，跳过撤销。
 const RECONCILE_SUSPICIOUS_GONE_COUNT: number = 20;
+
+// 孤儿空壳至少要有这么老才允许删，避免误删其它设备/其它端正在上传中的占位文件
+const ORPHAN_EMPTY_MIN_AGE_MS: number = 30 * 60 * 1000;
 const BACKUP_GRID_REFRESH_MS: number = 1500;
+
+// 备份进行中，照片清单 / 已备份标记的全量落盘间隔上限。
+const BACKUP_SAVE_INTERVAL_MS: number = 5000;
 const GRID_SCROLL_QUIET_MS: number = 400;
 // 云端缩略图 LIFO 限流队列：最新出现的（≈当前屏幕）优先加载，超出上限丢最旧，
 // 被丢项重新上屏时会经 onRequestThumb/onDataGet 再次入队；本地缩略图走媒体库，不限流。
@@ -153,6 +160,14 @@ export struct TabPictures {
   // 启动延后加载是否已完成。未完成前 applyPendingRemoteRemovals 不消费待移除名单，
   // 避免 onActiveStateChanged 抢在 photos 加载前清空名单、丢失标记撤销。
   private photosLoaded: boolean = false;
+  private doneIdsLoaded: boolean = false;
+  // 增量落盘的脏记录追踪。dirtyPhotos 存对象引用而非 id，省掉每次落盘 O(N) 建索引；
+  // 集合被整体替换时会连同 photoSetChanged 一起清空，不会留下悬空引用。
+  private dirtyPhotos: Set<PhotoBackupItem> = new Set<PhotoBackupItem>();
+  private photoSetChanged: boolean = false;
+  private pendingDoneAdds: Set<string> = new Set<string>();
+  private pendingDoneRemoves: Set<string> = new Set<string>();
+  private doneIdsRewrite: boolean = false;
   private lastRemotePath: string = '';
   private lastRemoteReconcileAt: number = 0;
   @State drawerOpen: boolean = false;
@@ -167,6 +182,11 @@ export struct TabPictures {
     this.bindPreviewDataSources();
     this.loadSettings();
     this.lastRemotePath = this.normalizeRemotePath(this.getSettingsRemotePath());
+    // 照片清单/已备份标记不再走 Preferences，必须在第一次读之前初始化（内含一次性迁移）
+    const context = this.getAbilityContext();
+    if (context) {
+      PhotoBackupRecordStore.init(context);
+    }
     this.loadDoneIds();
     this.scheduleActiveAutoScan();
     this.syncMediaChangeRegistration();
@@ -175,6 +195,15 @@ export struct TabPictures {
     // 相册非默认 Tab，启动时不可见；setTimeout(0) 在用户手动点击切页前即完成加载，无感知。
     this.deferredLoadTimer = setTimeout(() => {
       this.deferredLoadTimer = -1;
+      // init 是幂等的；aboutToAppear 时拿不到 context 的话这里再试一次，
+      // 否则 readItems 会返回空清单，把几千条已备份记录当成没备份过。
+      const deferredContext = this.getAbilityContext();
+      if (deferredContext) {
+        PhotoBackupRecordStore.init(deferredContext);
+      }
+      if (!this.doneIdsLoaded) {
+        this.loadDoneIds();
+      }
       this.loadPhotoRecords();
       this.applyPendingRemoteRemovals();
       this.rebuildGroups();
@@ -241,6 +270,8 @@ export struct TabPictures {
     this.stopCompletedPreviewFlush();
     this.flushDoneIdsSave();
     this.flushPhotoRecordsSave();
+    // 上面两步只是把内容交给 RecordStore（异步写），页面马上就没了，这里同步落盘兜底
+    PhotoBackupRecordStore.flushSync();
     // 页面销毁时优雅暂停：uploader 在 chunk 边界写 offset/chunkIndex 到 sessionStore，
     // 保 session 不删。下次进来 startBackup 会从 offset 续传，避免重传浪费流量。
     if (this.backupState === PhotoBackupState.BACKING_UP) {
@@ -323,24 +354,44 @@ export struct TabPictures {
     CloudApi.getFilesInfo(this.normalizeRemotePath(this.getSettingsRemotePath()), {
       onSuccess: (data: DirectoryInfo) => {
         const remoteNames = new Set<string>();
+        // 名字在、但内容是空的（0B 未完成上传占位）：等同于没备份成功。
+        // 这类文件网页端显示"上传中"、预览黑屏，而本地却记着 COMPLETED，
+        // 不单独识别的话永远不会重传。
+        const emptyNames = new Set<string>();
+        const emptyObjects: ObjectInfo[] = [];
         (data.objects ?? []).forEach((object: ObjectInfo) => {
           remoteNames.add(object.name);
+          // 只看文件。目录的 size 恒为 0，漏掉这个判断会把备份目录下的子文件夹
+          // 当成空壳，轻则误撤标记重传，重则被 purgeOrphanEmptyObjects 直接删掉。
+          if (object.size <= 0 && object.type !== Constant.OBJECT_DIR_TYPE) {
+            emptyNames.add(object.name);
+            emptyObjects.push(object);
+          }
         });
         const gone = markedNames.filter((name: string) => !remoteNames.has(name));
+        const empty = markedNames.filter((name: string) => emptyNames.has(name));
         // 保险丝：列表非空但过半标记图都"不见了"（且规模不小），更可能是服务端目录列表
         // 返回了 stale/partial 数据（实测：删目录后路径缓存不同步，list 长时间报 Path not exist
         // 或缺一大截），此时批量撤标记会造成大面积重传。宁可这轮不对账，也不误伤。
         // 目录被真的清空（remoteNames 为空）不拦——那是用户明确的删除意图。
         // 即便误放过 stale 数据导致重传，create session 撞"对象已存在"也会按已备份处理，能自愈。
         const halfMarked = Math.floor(markedNames.length / 2);
-        if (remoteNames.size > 0 && gone.length > RECONCILE_SUSPICIOUS_GONE_COUNT && gone.length > halfMarked) {
+        const suspicious = remoteNames.size > 0 && gone.length > RECONCILE_SUSPICIOUS_GONE_COUNT
+          && gone.length > halfMarked;
+        if (suspicious) {
           AppLogger.warn(TAG, `[reconcile] suspicious listing: ${gone.length}/${markedNames.length} missing but dir has ${remoteNames.size} entries, skip dropping`);
-          return;
         }
-        if (gone.length > 0) {
-          AppLogger.info(TAG, `[reconcile] ${gone.length}/${markedNames.length} marked photos missing remotely, dropping marks`);
-          this.dropBackupMarksByNames(new Set<string>(gone));
+        // 空占位不受上面那道保险丝限制：它是"列表里确实有这条、且明确是空的"，
+        // 不可能是 stale/partial 列表造成的假象，撤标记重传是唯一正确处理。
+        const drop = new Set<string>(empty);
+        if (!suspicious) {
+          gone.forEach((name: string) => drop.add(name));
         }
+        if (drop.size > 0) {
+          AppLogger.info(TAG, `[reconcile] dropping ${drop.size} marks (missing=${suspicious ? 0 : gone.length}, empty=${empty.length}) of ${markedNames.length}`);
+          this.dropBackupMarksByNames(drop);
+        }
+        this.purgeOrphanEmptyObjects(emptyObjects, new Set<string>(markedNames));
       },
       onFailure: (msg: string) => {
         if (this.isNotFoundError(msg)) {
@@ -350,6 +401,73 @@ export struct TabPictures {
         } else {
           AppLogger.info(TAG, `[reconcile] skipped: ${msg}`);
         }
+      }
+    });
+  }
+
+  /**
+   * 清掉备份目录里的「孤儿空壳」：0 字节、且没有任何本地记录把它当作备份目标。
+   *
+   * 来历：上传中途失败会在服务端留下 0B 占位；这张图之后往往以 "X (1).jpg" 传成功，
+   * 本地记录的 remoteName 就指向了 (1)，原名那个空壳再没有任何记录引用它。
+   * 对账是按「标记名」查的，扫不到它，于是它既不会被重传也不会被清理，永久堆在目录里
+   * （网页端显示"上传中"、预览黑屏）。这类文件内容为空，删除不会丢任何数据。
+   *
+   * 时间保护：只删创建时间超过 ORPHAN_EMPTY_MIN_AGE_MS 的，避免误删其它设备正在上传的占位。
+   */
+  private purgeOrphanEmptyObjects(emptyObjects: ObjectInfo[], markedNames: Set<string>): void {
+    if (emptyObjects.length === 0) {
+      return;
+    }
+    const now = new Date().getTime();
+    const orphans = emptyObjects.filter((object: ObjectInfo) => {
+      if (markedNames.has(object.name) || object.id.length === 0) {
+        return false;
+      }
+      const createdAt = Date.parse(object.create_date.length > 0 ? object.create_date : object.date);
+      return !Number.isNaN(createdAt) && now - createdAt >= ORPHAN_EMPTY_MIN_AGE_MS;
+    });
+    if (orphans.length === 0) {
+      return;
+    }
+    AppLogger.info(TAG, `[reconcile] purging ${orphans.length} orphan empty placeholders`);
+    orphans.forEach((object: ObjectInfo) => {
+      this.purgeOneEmptyObject(object);
+    });
+  }
+
+  /**
+   * 删一个空壳。未完成的上传会话会给文件上锁，普通删除会被服务端以 40073 Lock conflict 拒回，
+   * 此时用响应里带回的 lock token 强制解锁再删一次——和网页端"强制删除"是同一套接口。
+   *
+   * 走 token 而不是 deleteUploadSession，是为了不依赖 sys:upload_session_id：
+   * 那个字段要靠翻页拉全目录 metadata 才拿得到，几千张的备份目录翻一次要好几秒，
+   * 为了几个空壳让每次刷新相册都付这个代价不值得。文件大小本来就在列表里，够用了。
+   */
+  private purgeOneEmptyObject(object: ObjectInfo): void {
+    const remotePath = this.getRemoteFilePathByName(object.name);
+    CloudApi.deleteObjectLockAware(object.id, false, remotePath, {
+      onSuccess: () => AppLogger.info(TAG, `[reconcile] purged empty placeholder ${object.name}`),
+      onFailure: (msg: string, conflicts: FileLockConflict[]) => {
+        const tokens = conflicts
+          .map((conflict: FileLockConflict) => conflict.token ?? '')
+          .filter((token: string) => token.length > 0);
+        if (tokens.length === 0) {
+          AppLogger.warn(TAG, `[reconcile] purge ${object.name} failed: ${msg}`);
+          return;
+        }
+        CloudApi.unlockFiles(tokens, {
+          onSuccess: () => {
+            CloudApi.deleteObjectLockAware(object.id, false, remotePath, {
+              onSuccess: () =>
+                AppLogger.info(TAG, `[reconcile] purged locked placeholder ${object.name}`),
+              onFailure: (retryMsg: string) =>
+                AppLogger.warn(TAG, `[reconcile] purge ${object.name} after unlock failed: ${retryMsg}`)
+            });
+          },
+          onFailure: (unlockMsg: string) =>
+            AppLogger.warn(TAG, `[reconcile] unlock ${object.name} failed: ${unlockMsg}`)
+        });
       }
     });
   }
@@ -380,10 +498,15 @@ export struct TabPictures {
     // 重建分组刷新网格（行 key 含 status，COMPLETED→WAITING 让 key 变化、强制重建对应行刷新角标）。
     // 触发自动补传后，补传完成会再走 markBackupItemDone → rebuildGroups 把角标刷回“已备份”。
     this.photos = next;
+    this.markPhotoSetChanged();
     this.saveDoneIds();
     this.refreshPhotoStats();
     this.rebuildGroups();
     this.savePhotoRecords();
+    // 撤了标记就得真的把补传接上，否则这些图会一直停在"待备份"，
+    // 干等下一次扫描/网络事件才动。maybeAutoBackup 自带
+    // [自动备份开关 / 网络 / 已在备份中] 守卫，这里不会叠轮。
+    this.scheduleAutoBackup();
   }
 
   // 兜底：点开已备份的图时异步点查云端单文件是否还在；确认“不存在”才撤销标记。
@@ -461,13 +584,17 @@ export struct TabPictures {
   }
 
   loadDoneIds(): void {
-    let json = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_DONE_IDS, '[]') as string;
-    try {
-      this.doneIds = new Set<string>(JSON.parse(json ?? '[]') as string[]);
-    } catch (err) {
-      AppLogger.error(TAG, `load done ids failed: ${(err as Error)?.message ?? err}`);
-      this.doneIds = new Set<string>();
+    // store 没就绪时读到的是空集合；如果就这么当成"一张都没备份过"往下走，
+    // refreshDoneStatus 会把几千张已备份的图重置成待备份，随后又被持久化。
+    // 标记未加载，等 deferred 里 store 就绪后重来一次。
+    this.doneIdsLoaded = PhotoBackupRecordStore.isReady();
+    if (!this.doneIdsLoaded) {
+      AppLogger.warn(TAG, 'skip loading done ids: record store not ready yet');
+      return;
     }
+    this.doneIds = new Set<string>(PhotoBackupRecordStore.readDoneIds());
+    this.pendingDoneAdds.clear();
+    this.pendingDoneRemoves.clear();
     this.invalidateLegacyDoneIdPool();
     this.refreshPhotoStats();
   }
@@ -479,12 +606,59 @@ export struct TabPictures {
     }
   }
 
+  /** 记一个"已备份"标记的增删，落盘时只写这条增量。 */
+  addDoneId(key: string): void {
+    if (this.doneIds.has(key)) {
+      return;
+    }
+    this.doneIds.add(key);
+    this.pendingDoneRemoves.delete(key);
+    this.pendingDoneAdds.add(key);
+  }
+
+  removeDoneId(key: string): void {
+    if (!this.doneIds.delete(key)) {
+      return;
+    }
+    this.pendingDoneAdds.delete(key);
+    this.pendingDoneRemoves.add(key);
+  }
+
+  /** 集合被整体重建（迁移/重扫）时用，强制下次全量重写。 */
+  private markDoneIdsRewrite(): void {
+    this.doneIdsRewrite = true;
+    this.pendingDoneAdds.clear();
+    this.pendingDoneRemoves.clear();
+  }
+
   persistDoneIds(): void {
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_DONE_IDS,
-      JSON.stringify(Array.from(this.doneIds)));
+    if (this.doneIdsRewrite || PhotoBackupRecordStore.needsDoneIdsCompaction()) {
+      PhotoBackupRecordStore.writeDoneIdsSnapshot(Array.from(this.doneIds));
+      this.doneIdsRewrite = false;
+      this.pendingDoneAdds.clear();
+      this.pendingDoneRemoves.clear();
+      return;
+    }
+    if (this.pendingDoneAdds.size === 0 && this.pendingDoneRemoves.size === 0) {
+      return;
+    }
+    PhotoBackupRecordStore.appendDoneIds(
+      Array.from(this.pendingDoneAdds), Array.from(this.pendingDoneRemoves));
+    this.pendingDoneAdds.clear();
+    this.pendingDoneRemoves.clear();
   }
 
   scheduleDoneIdsSave(): void {
+    // 备份中改成"已排期就不重排"，理由同 schedulePhotoRecordsSave
+    if (this.isBackupRunning()) {
+      if (this.doneIdsSaveTimer < CloudThemeToken.zero) {
+        this.doneIdsSaveTimer = setTimeout(() => {
+          this.doneIdsSaveTimer = -1;
+          this.persistDoneIds();
+        }, BACKUP_SAVE_INTERVAL_MS);
+      }
+      return;
+    }
     if (this.doneIdsSaveTimer >= CloudThemeToken.zero) {
       clearTimeout(this.doneIdsSaveTimer);
     }
@@ -503,10 +677,15 @@ export struct TabPictures {
   }
 
   loadPhotoRecords(): void {
-    let json = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_ITEMS, '[]') as string;
+    if (!PhotoBackupRecordStore.isReady()) {
+      // 同 loadDoneIds：读不到就别把 photos 清空，保持未加载状态，等下次进页面重试
+      AppLogger.error(TAG, 'skip loading photo records: record store not ready');
+      return;
+    }
     try {
-      let data = JSON.parse(json ?? '[]') as PhotoBackupItemData[];
+      let data = PhotoBackupRecordStore.readItems();
       this.photos = data.map((item: PhotoBackupItemData) => PhotoBackupItem.fromData(item));
+      this.markPhotoSetChanged();
       // Migrate older records whose modifiedAt was stored in seconds (showed as 1970).
       let migrated = false;
       let recoveredUploading = 0;
@@ -545,23 +724,70 @@ export struct TabPictures {
     } catch (err) {
       AppLogger.error(TAG, `load photo records failed: ${(err as Error)?.message ?? err}`);
       this.photos = [];
+      this.markPhotoSetChanged();
       this.refreshPhotoStats();
     }
     this.photosLoaded = true;
   }
 
   savePhotoRecords(): void {
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_ITEMS,
-      JSON.stringify(this.getPhotos().map((item: PhotoBackupItem) => item.toData())));
+    this.persistPhotoRecords();
     this.refreshPhotoStats();
   }
 
+  /** 某条记录的字段变了，落盘时只写这一条。 */
+  markPhotoDirty(item: PhotoBackupItem): void {
+    this.dirtyPhotos.add(item);
+  }
+
+  /** 照片集合整体变了（扫描/合并/删除），下次落盘必须重写快照。 */
+  markPhotoSetChanged(): void {
+    this.photoSetChanged = true;
+    this.dirtyPhotos.clear();
+  }
+
+  /**
+   * 全量重写 vs 增量追加。
+   *
+   * 1~2 万张时一次全量就是 5~10MB 的 stringify 加同等规模的临时对象，全落在 UI 线程和
+   * ArkTS GC 上。备份中每轮真正变化的只有几条记录，所以默认只追加这几条；
+   * 只有集合本身变了、或 journal 攒得够长该压缩了，才重写整份快照。
+   */
   persistPhotoRecords(): void {
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_ITEMS,
-      JSON.stringify(this.getPhotos().map((item: PhotoBackupItem) => item.toData())));
+    // 脏记录占比过高时（refreshDoneStatus 这类全表操作会把每条都标脏）追加反而更贵，
+    // 直接重写快照。这条兜底也让以后新增的批量改动路径不必逐个记得标记集合变更。
+    // 要求 size > 0：否则"零脏记录 + 空列表"会走进全量分支，把还没加载出来的
+    // 记录用一份空快照覆盖掉。
+    const bulkChange = this.dirtyPhotos.size > 0 && this.dirtyPhotos.size * 2 >= this.getPhotos().length;
+    if (this.photoSetChanged || bulkChange || PhotoBackupRecordStore.needsItemsCompaction()) {
+      PhotoBackupRecordStore.writeItemsSnapshot(
+        this.getPhotos().map((item: PhotoBackupItem) => item.toData()));
+      this.photoSetChanged = false;
+      this.dirtyPhotos.clear();
+      return;
+    }
+    if (this.dirtyPhotos.size === 0) {
+      return;
+    }
+    const changed: PhotoBackupItemData[] = [];
+    this.dirtyPhotos.forEach((item: PhotoBackupItem) => changed.push(item.toData()));
+    this.dirtyPhotos.clear();
+    PhotoBackupRecordStore.appendItems(changed);
   }
 
   schedulePhotoRecordsSave(): void {
+    // 备份中改成"已排期就不重排"：最多 BACKUP_SAVE_INTERVAL_MS 落一次盘，
+    // 且不会被连续完成事件饿死。收尾有 runBackup 的 flushPhotoRecordsSave，
+    // 页面销毁有 aboutToDisappear，崩溃场景则由 PhotoBackupSessionStore + 重扫兜底。
+    if (this.isBackupRunning()) {
+      if (this.photoRecordsSaveTimer < CloudThemeToken.zero) {
+        this.photoRecordsSaveTimer = setTimeout(() => {
+          this.photoRecordsSaveTimer = -1;
+          this.persistPhotoRecords();
+        }, BACKUP_SAVE_INTERVAL_MS);
+      }
+      return;
+    }
     if (this.photoRecordsSaveTimer >= CloudThemeToken.zero) {
       clearTimeout(this.photoRecordsSaveTimer);
     }
@@ -871,6 +1097,7 @@ export struct TabPictures {
       this.getPhotoAssetDimension(asset, photoAccessHelper.PhotoKeys.HEIGHT),
       '', this.getPhotoAssetTakenAt(asset));
     this.updatePhotoItemFromResolved(item, resolved);
+    this.markPhotoDirty(item);
   }
 
   private getPhotoAssetSize(asset: photoAccessHelper.PhotoAsset): number {
@@ -1153,6 +1380,7 @@ export struct TabPictures {
   }
 
   setPhotoStatus(item: PhotoBackupItem, status: PhotoBackupStatus, progress: number, error: string = ''): void {
+    this.markPhotoDirty(item);
     this.runInUiScope(() => {
       const previousStatus = item.status;
       item.status = status;
@@ -1165,6 +1393,7 @@ export struct TabPictures {
   }
 
   updatePhotoProgress(item: PhotoBackupItem, progress: number): void {
+    this.markPhotoDirty(item);
     this.runInUiScope(() => {
       item.progress = progress;
     });
@@ -1388,6 +1617,7 @@ export struct TabPictures {
       }
     });
     this.photos = next;
+    this.markPhotoSetChanged();
     this.refreshPhotoStats();
     this.rebuildGroups();
     this.savePhotoRecords();
@@ -1477,6 +1707,10 @@ export struct TabPictures {
       }
       const remotePhotoMap = forceFull ? await this.loadRemotePhotoMap() : undefined;
       this.photos = this.mergePhotoList(nextPhotos, !forceFull, remotePhotoMap);
+      this.markPhotoSetChanged();
+      if (forceFull) {
+        this.pruneStaleDoneIds();
+      }
       if (albumNameByUri.size > 0) {
         this.applyAlbumNames(albumNameByUri);
       }
@@ -1611,6 +1845,7 @@ export struct TabPictures {
       const name = map.get(item.uri);
       if (name && name.length > 0 && item.albumName !== name) {
         item.albumName = name;
+        this.markPhotoDirty(item);
         changed = true;
       }
     });
@@ -1837,7 +2072,7 @@ export struct TabPictures {
       target.status = PhotoBackupStatus.COMPLETED;
       target.progress = CloudThemeToken.percentageFull;
       target.error = '';
-      this.doneIds.add(this.getDoneKey(target));
+      this.addDoneId(this.getDoneKey(target));
     } else {
       target.status = previousStatus;
       target.progress = previousProgress;
@@ -1845,6 +2080,14 @@ export struct TabPictures {
     }
     if (oldId !== target.id) {
       this.photoAssetCache.delete(oldId);
+      // id 由 uri_size_modifiedAt 拼成，媒体库元数据一漂移 id 就变。上面按新 id 记了
+      // done key，旧 key 必须同步删掉，否则每漂移一次就永久残留一条：doneIds 只增不减，
+      // 而 completedPhotoCount 取 max(实际完成数, doneIds 数)，界面上的"已备份"就会
+      // 越报越多（实测本机残留 402 条，显示 5279 张、实际只有 4877 张）。
+      const nextDoneKey = this.getDoneKey(target);
+      if (oldDoneKey !== nextDoneKey) {
+        this.removeDoneId(oldDoneKey);
+      }
       this.scheduleDoneIdsSave();
       this.schedulePhotoRecordsSave();
     }
@@ -1859,6 +2102,7 @@ export struct TabPictures {
   }
 
   applyDoneStatus(item: PhotoBackupItem, resetNotDone: boolean): void {
+    this.markPhotoDirty(item);
     if (this.isPhotoDone(item)) {
       item.status = PhotoBackupStatus.COMPLETED;
       item.progress = CloudThemeToken.percentageFull;
@@ -1875,10 +2119,10 @@ export struct TabPictures {
   // 撤销某张图的"已备份"标记：清当前路径 done-key 与历史遗留 id（远端那份被删时调用）。
   // legacy id 仅默认路径才有意义；非默认路径跳过全量扫描，避免每次 O(doneIds) 开销。
   clearDoneMark(item: PhotoBackupItem): void {
-    this.doneIds.delete(this.getDoneKey(item));
+    this.removeDoneId(this.getDoneKey(item));
     if (this.isDefaultBackupPath()) {
       this.getLegacyDoneIds(item).forEach((id: string) => {
-        this.doneIds.delete(id);
+        this.removeDoneId(id);
       });
       this.invalidateLegacyDoneIdPool();
     }
@@ -1935,16 +2179,54 @@ export struct TabPictures {
       if (legacyIds.length === 0) {
         return;
       }
-      this.doneIds.add(scopedKey);
+      this.addDoneId(scopedKey);
       legacyIds.forEach((id: string) => {
-        this.doneIds.delete(id);
+        this.removeDoneId(id);
       });
       changed = true;
     });
     if (changed) {
       this.invalidateLegacyDoneIdPool();
+      this.markDoneIdsRewrite();
       this.saveDoneIds();
     }
+  }
+
+  /**
+   * 清掉 doneIds 里已经没有对应照片记录的当前路径 key。
+   *
+   * 这些是历史残留：照片 id 由 uri_size_modifiedAt 拼成，媒体库元数据一漂移 id 就变，
+   * 早期版本换 id 时只加新 key、不删旧 key（见 updatePhotoItemFromResolved），
+   * 于是 doneIds 只增不减。completedPhotoCount 取 max(实际完成数, doneIds 数)，
+   * 界面上的"已备份"就被撑大了（本机残留 402 条，显示 5279 张、实际 4877 张）。
+   *
+   * 只在全量扫描后调用：此时 photos 才是权威的完整集合，增量扫描的结果不能用来判定"不存在"。
+   * 另外只动当前备份路径前缀的 key，其它路径的历史标记留着，切回去时仍然有效。
+   */
+  private pruneStaleDoneIds(): void {
+    const photos = this.getPhotos();
+    if (!this.photosLoaded || photos.length === 0) {
+      return;
+    }
+    const liveIds = new Set<string>();
+    photos.forEach((item: PhotoBackupItem) => liveIds.add(item.id));
+    const prefix = `${this.normalizeRemotePath(this.getSettingsRemotePath())}|`;
+    const stale: string[] = [];
+    this.doneIds.forEach((key: string) => {
+      if (!key.startsWith(prefix)) {
+        return;
+      }
+      if (!liveIds.has(key.substring(prefix.length))) {
+        stale.push(key);
+      }
+    });
+    if (stale.length === 0) {
+      return;
+    }
+    stale.forEach((key: string) => this.removeDoneId(key));
+    this.invalidateLegacyDoneIdPool();
+    this.scheduleDoneIdsSave();
+    AppLogger.info(TAG, `pruned ${stale.length} stale done ids, remaining=${this.doneIds.size}`);
   }
 
   getCurrentPathDoneCount(): number {
@@ -2377,12 +2659,37 @@ export struct TabPictures {
       let target = this.resolveRemoteBackupTarget(item);
       if (target.alreadyBackedUp) {
         this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
-        this.doneIds.add(this.getDoneKey(item));
+        this.addDoneId(this.getDoneKey(item));
         this.scheduleDoneIdsSave();
         this.schedulePhotoRecordsSave();
         return true;
       }
       localPath = await this.copyPhotoToCache(item);
+      // 以缓存副本的真实字节数为准。item.size 来自扫描时的媒体库元数据，刚拍的照片
+      // 常常在入库后还会被相机后处理（HDR/水印）改写，扫到的 size 可能已经过时。
+      // 分片上传按这个 size 声明 Content-Length，但实际读的是这份副本：对不上时
+      // 服务端收不满声明的长度，会以 "error sending request" 这种传输层错误失败，
+      // 且每次重试都一样——因为元数据一直是旧的。
+      const copiedSize = FileSystemUtil.getFileSize(localPath);
+      if (copiedSize > 0 && copiedSize !== item.size) {
+        AppLogger.warn(TAG, `photo size drifted: ${item.name} scanned=${item.size} actual=${copiedSize}`);
+        item.size = copiedSize;
+        this.markPhotoDirty(item);
+        // 上面那次 resolveRemoteBackupTarget 是按漂移的 size 判的，而
+        // isSameRemotePhoto 正是靠比大小认"云端这份是不是同一张"：大小对不上就当成
+        // 不同的图，改名传成 "X (1).jpg"，同一张照片在云端存两份（本机已积累 5 份）。
+        // 拿到真实大小后必须重判一次。
+        this.releaseReservedRemoteName(target.fileName);
+        target = this.resolveRemoteBackupTarget(item);
+        if (target.alreadyBackedUp) {
+          AppLogger.info(TAG, `remote already has ${item.name} after size correction, skip upload`);
+          this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
+          this.addDoneId(this.getDoneKey(item));
+          this.scheduleDoneIdsSave();
+          this.schedulePhotoRecordsSave();
+          return true;
+        }
+      }
       this.updatePhotoProgress(item, CloudThemeToken.photoBackupCopyProgress);
       let result = PhotoBackupUploadResult.EXISTS;
       let renameAttempts = 0;
@@ -2406,7 +2713,7 @@ export struct TabPictures {
       }
       this.setPhotoStatus(item, PhotoBackupStatus.COMPLETED, CloudThemeToken.percentageFull);
       this.markRemotePhotoKnown(item, target.fileName);
-      this.doneIds.add(this.getDoneKey(item));
+      this.addDoneId(this.getDoneKey(item));
       this.scheduleDoneIdsSave();
       this.schedulePhotoRecordsSave();
       return true;
@@ -2456,7 +2763,6 @@ export struct TabPictures {
     // 把原图修改时间作为 LastModified 透传给 Cloudreve，让云端入库时间对齐原图而不是上传时刻
     const lastModifiedMs = item.takenAt > 0 ? item.takenAt : item.modifiedAt;
     const startProgress = CloudThemeToken.photoBackupUploadStartProgress;
-    const uploadRange = CloudThemeToken.percentageFull - startProgress;
     const fileName = this.sanitizeFileName(remoteFileName);
     return PhotoBackupUploader.uploadOne(
       item.id,
@@ -2470,12 +2776,12 @@ export struct TabPictures {
           this.updatePhotoProgress(item, startProgress);
           PhotoBackupBackgroundTask.notifyTransferProgress();
         },
-        onProgress: (uploadedBytes: number) => {
+        // 只做长时任务通知的保活判断（一次取时间 + 两次比较）。
+        // 这里曾经按分片进度写 item.progress，但 progress 没有任何 UI 绑定
+        // （抽屉显示的是 backupQueueText，进度条用的是 completedPhotoCount），
+        // 等于每 chunk 回调都白跑一次 runScopedTask + @Trace 通知，纯粹占用 UI 线程。
+        onProgress: () => {
           PhotoBackupBackgroundTask.notifyTransferProgress();
-          if (item.size > 0) {
-            const percent = startProgress + Math.floor(uploadedBytes / item.size * uploadRange);
-            this.updatePhotoProgress(item, Math.min(percent, CloudThemeToken.percentageFull));
-          }
         },
         isPauseRequested: (): boolean => this.isBackupPauseRequested(),
         isCancelRequested: (): boolean => this.shouldCancelBackup
@@ -2510,6 +2816,7 @@ export struct TabPictures {
       const fileName = this.getFileNameFromRemotePath(storedSession.remotePath);
       if (fileName.length > 0) {
         item.remoteName = fileName;
+        this.markPhotoDirty(item);
         AppLogger.info(TAG, `prefer resumable backup session ${storedSession.sessionId} for ${fileName}`);
         return { fileName: fileName, alreadyBackedUp: false };
       }
@@ -2519,6 +2826,7 @@ export struct TabPictures {
     if (existing && existing.id.length > 0 && this.isSameRemotePhoto(existing, item)) {
       item.remoteName = originalName;
       item.remoteFileId = existing.id;
+      this.markPhotoDirty(item);
       return { fileName: originalName, alreadyBackedUp: true };
     }
     let candidate = originalName;
@@ -2535,8 +2843,46 @@ export struct TabPictures {
       }
     }
     item.remoteName = candidate;
+    this.markPhotoDirty(item);
     this.reserveRemotePhotoName(candidate, item);
     return { fileName: candidate, alreadyBackedUp: false };
+  }
+
+  /**
+   * 从候选文件名里挑出「空占位」：大小为 0 的条目。
+   *
+   * 分两种：带 sys:upload_session_id 的是会话仍在的未完成上传（网页端显示"上传中"）；
+   * 不带的是会话已被服务端回收、只剩一个 0B 空壳（预览黑屏）。两种都得清掉，
+   * 只认前者的话，后者会一直占着原文件名，逼着补传往 (1)(2) 上叠，垃圾越积越多。
+   */
+  private pickStalePlaceholder(names: string[]): ObjectInfo | undefined {
+    for (const name of names) {
+      if (name.length === 0) {
+        continue;
+      }
+      const remote = this.remotePhotoCache?.get(name);
+      // 同样要排除目录：目录 size 恒为 0，不能当成待清理的空占位
+      if (remote && remote.size <= 0 && remote.type !== Constant.OBJECT_DIR_TYPE) {
+        return remote;
+      }
+    }
+    return undefined;
+  }
+
+  /** 删掉一个 0B 空壳文件（没有 upload session 可删时走这条），成功与否都不阻塞备份。 */
+  private deleteEmptyRemoteObject(remote: ObjectInfo): Promise<void> {
+    return new Promise<void>((resolve: () => void) => {
+      CloudApi.deleteObject(remote.id, false, {
+        onSuccess: () => {
+          AppLogger.info(TAG, `deleted empty remote placeholder ${remote.name}`);
+          resolve();
+        },
+        onFailure: (msg: string) => {
+          AppLogger.warn(TAG, `delete empty placeholder ${remote.name} failed: ${msg}`);
+          resolve();
+        }
+      });
+    });
   }
 
   private async cleanupStaleUntrackedUpload(item: PhotoBackupItem): Promise<void> {
@@ -2545,26 +2891,37 @@ export struct TabPictures {
     }
     const originalName = this.sanitizeFileName(item.name.length > 0 ? item.name : 'photo.jpg');
     const remoteName = item.remoteName.length > 0 ? item.remoteName : originalName;
-    const remote = this.remotePhotoCache?.get(remoteName) ?? this.remotePhotoCache?.get(originalName);
-    const sessionId = remote?.metadata?.['sys:upload_session_id'] ?? '';
-    if (!remote || remote.size > 0 || sessionId.length === 0) {
+    // 两个候选名都要查，而且要挑出「空占位」的那个。
+    // 原先是 cache.get(remoteName) ?? cache.get(originalName)：一旦这张图历史上被改名成
+    // "X (1).jpg" 并传成功，remoteName 命中的就是那个正常文件，函数直接 return，
+    // 于是占着 "X.jpg" 的 0B 占位再没人清理——下次备份又只能继续往 (2)(3) 上叠。
+    const remote = this.pickStalePlaceholder([remoteName, originalName]);
+    if (!remote) {
       return;
     }
+    const sessionId = remote.metadata?.['sys:upload_session_id'] ?? '';
     const createdAt = Date.parse(remote.create_date.length > 0 ? remote.create_date : remote.date);
     const staleAgeMs = 5 * 60 * 1000;
     if (Number.isNaN(createdAt) || new Date().getTime() - createdAt < staleAgeMs) {
       throw new Error('检测到其他上传会话仍在进行，请稍后重试');
     }
-    const remotePath = this.getRemoteFilePathByName(remote.name);
-    await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
-      CloudApi.deleteUploadSession(remotePath, sessionId, {
-        onSuccess: () => resolve(),
-        onFailure: (msg: string) => reject(new Error(`清理中断的上传会话失败：${msg}`))
+    if (sessionId.length > 0) {
+      // 会话还在：删会话，服务端会连带清掉占位文件
+      const remotePath = this.getRemoteFilePathByName(remote.name);
+      await new Promise<void>((resolve: () => void, reject: (error: Error) => void) => {
+        CloudApi.deleteUploadSession(remotePath, sessionId, {
+          onSuccess: () => resolve(),
+          onFailure: (msg: string) => reject(new Error(`清理中断的上传会话失败：${msg}`))
+        });
       });
-    });
+      AppLogger.info(TAG, `cleaned stale untracked upload session ${sessionId} for ${remote.name}`);
+    } else {
+      // 会话已被服务端回收，只剩 0B 空壳：直接删文件。内容为空，删除不会丢数据。
+      await this.deleteEmptyRemoteObject(remote);
+    }
     this.remotePhotoCache?.delete(remote.name);
     item.remoteName = originalName;
-    AppLogger.info(TAG, `cleaned stale untracked upload session ${sessionId} for ${remote.name}`);
+    this.markPhotoDirty(item);
   }
 
   private isSessionInCurrentBackupPath(remotePath: string): boolean {
@@ -2589,6 +2946,18 @@ export struct TabPictures {
         CloudThemeToken.photoBackupDateMatchToleranceMs;
   }
 
+  /**
+   * 撤掉 reserveRemotePhotoName 塞进缓存的占位（id 为空的才是我们自己占的假条目，
+   * 真实云端文件不能删）。用于按错误大小算出候选名之后需要重新判定的场景，
+   * 否则这个脏占位会把后续同名照片挤到更大的 (n) 序号上。
+   */
+  private releaseReservedRemoteName(name: string): void {
+    const existing = this.remotePhotoCache?.get(name);
+    if (existing && existing.id.length === 0) {
+      this.remotePhotoCache?.delete(name);
+    }
+  }
+
   private reserveRemotePhotoName(name: string, item: PhotoBackupItem): void {
     this.remotePhotoCache?.set(name, {
       id: '',
@@ -2606,6 +2975,7 @@ export struct TabPictures {
 
   private markRemotePhotoKnown(item: PhotoBackupItem, name: string): void {
     item.remoteName = name;
+    this.markPhotoDirty(item);
     this.reserveRemotePhotoName(name, item);
     const known = this.remotePhotoCache?.get(name);
     if (known) {

@@ -32,6 +32,9 @@ import { http } from '@kit.NetworkKit';
 
 const CLOUD_API_TAG: string = 'CloudApi';
 const SERVER_SEARCH_PAGE_SIZE: number = 2000;
+
+// 单文件补 metadata 的数量上限，防止异常目录里大量空文件把请求打爆
+const METADATA_PROBE_LIMIT: number = 20;
 const SERVER_SEARCH_MAX_PAGES: number = 100;
 
 interface V4SearchFile {
@@ -221,10 +224,15 @@ export class CloudApi {
   }
 
   static getFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {
+    const startedAt = new Date().getTime();
     nativeGetDirectory(path, {
       onStart: callback?.onStart,
       onSuccess: (data: DirectoryInfo) => {
+        const listedAt = new Date().getTime();
         CloudApi.enrichV4DirectoryMetadata(path, data).then((enriched: DirectoryInfo) => {
+          const doneAt = new Date().getTime();
+          AppLogger.info(CLOUD_API_TAG, `[timing] getFilesInfo(${path}) objects=${(enriched.objects ?? []).length} ` +
+            `list=${listedAt - startedAt}ms metadata=${doneAt - listedAt}ms`);
           callback?.onSuccess(enriched);
         });
       },
@@ -235,38 +243,70 @@ export class CloudApi {
     });
   }
 
+  /**
+   * 对少量文件逐个查 metadata（走 /file/info 单文件接口）。
+   *
+   * 用途：目录列表补 metadata 只拉第一页（page_size=2000），几千个文件的目录里
+   * 排在后面的拿不到 metadata，"上传中"角标就丢了。但真正需要这个字段的只有
+   * 0 字节的上传占位，一个目录通常也就零星几个，逐个点查远比翻完整个目录便宜
+   * （翻页是串行的，几千张的备份目录一次要好几秒，每次刷新都付这个代价不值得）。
+   *
+   * 数量上兜一道 METADATA_PROBE_LIMIT，避免异常目录里几百个空文件把请求打爆。
+   */
+  private static async fillMetadataOneByOne(dirPath: string, targets: ObjectInfo[]): Promise<number> {
+    if (targets.length === 0) {
+      return 0;
+    }
+    const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? '';
+    const probes = targets.slice(0, METADATA_PROBE_LIMIT);
+    let uploadingCount = 0;
+    for (const item of probes) {
+      try {
+        const separator = dirPath.endsWith('/') ? '' : '/';
+        const uri = CloudApi.buildV4MyUri(`${dirPath}${separator}${item.name}`);
+        const url = `${CloudApi.getApiBaseUrl()}/api/v4/file/info?uri=${encodeURIComponent(uri)}`;
+        const response = await CloudApi.requestV4JsonWithRefresh<V4SearchFile>(url, cookie);
+        if (response.code !== 0 || !response.data || !response.data.metadata) {
+          continue;
+        }
+        item.metadata = response.data.metadata;
+        if (response.data.metadata['sys:upload_session_id'] !== undefined) {
+          uploadingCount++;
+        }
+      } catch (err) {
+        AppLogger.warn(CLOUD_API_TAG, `probe metadata failed name=${item.name}: ${(err as Error)?.message ?? err}`);
+      }
+    }
+    if (targets.length > probes.length) {
+      AppLogger.info(CLOUD_API_TAG, `metadata probe capped at ${METADATA_PROBE_LIMIT}, skipped ${targets.length - probes.length}`);
+    }
+    return uploadingCount;
+  }
+
+  /**
+   * 给目录列表补 metadata，目前只用于显示"上传中"角标。
+   *
+   * 关键前提：只有未完成上传的占位文件才带 sys:upload_session_id，而这种文件必然是 0 字节。
+   * 所以完全不需要为整个目录拉 metadata——先按列表里现成的 size 筛出候选（通常一个都没有），
+   * 只对这几个点查即可。
+   *
+   * 之前的做法是无条件拉一次 /api/v4/file?page=0&page_size=2000：4882 个文件的目录实测
+   * 要 344ms，而且是阻塞列表显示的，即便目录里一个空文件都没有也照付不误。
+   */
   private static async enrichV4DirectoryMetadata(path: string, data: DirectoryInfo): Promise<DirectoryInfo> {
     const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? '';
     if (!cookie.startsWith(Constant.CLOUD_V4_COOKIE_PREFIX) || (data.objects ?? []).length === 0) {
       return data;
     }
+    // 必须排除目录：文件夹的 size 本来就是 0，不加这个判断的话每进一个目录
+    // 都会为它的每个子文件夹白发一次点查（实测 7 个子目录 = 291ms）。
+    const empties = (data.objects ?? []).filter((item: ObjectInfo) =>
+      item.size <= 0 && item.type !== Constant.OBJECT_DIR_TYPE);
+    if (empties.length === 0) {
+      return data;
+    }
     try {
-      const uri = CloudApi.buildV4MyUri(path);
-      const url = `${CloudApi.getApiBaseUrl()}/api/v4/file?uri=${encodeURIComponent(uri)}` +
-        `&page=0&page_size=${SERVER_SEARCH_PAGE_SIZE}`;
-      const response = await CloudApi.requestV4JsonWithRefresh<V4SearchData>(url, cookie);
-      if (response.code !== 0 || !response.data) {
-        AppLogger.warn(CLOUD_API_TAG, `V4 metadata list failed path=${path}, code=${response.code}, msg=${response.msg}`);
-        return data;
-      }
-      const metadataById = new Map<string, Record<string, string>>();
-      const metadataByName = new Map<string, Record<string, string>>();
-      (response.data.files ?? []).forEach((file: V4SearchFile) => {
-        if (file.metadata) {
-          metadataById.set(file.id, file.metadata);
-          metadataByName.set(file.name, file.metadata);
-        }
-      });
-      let uploadingCount = 0;
-      (data.objects ?? []).forEach((item: ObjectInfo) => {
-        const metadata = metadataById.get(item.id) ?? metadataByName.get(item.name);
-        if (metadata) {
-          item.metadata = metadata;
-          if (metadata['sys:upload_session_id'] !== undefined) {
-            uploadingCount++;
-          }
-        }
-      });
+      const uploadingCount = await CloudApi.fillMetadataOneByOne(path, empties);
       if (uploadingCount > 0) {
         AppLogger.info(CLOUD_API_TAG, `V4 metadata enriched path=${path}, uploading=${uploadingCount}`);
       }

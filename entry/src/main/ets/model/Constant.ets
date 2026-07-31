@@ -197,6 +197,9 @@ class Constant {
 
   CURRENT_SORT_TYPE_RESERVE = 'sortTypeReverse'
 
+  /** 默认排序改为"时间倒序"的一次性迁移标记；已存在说明迁移过，不再覆盖用户后来的选择 */
+  SORT_DEFAULT_TIME_DESC_APPLIED = 'sortDefaultTimeDescApplied'
+
   CURRENT_SHOW_TYPE = 'showType'
 
   PHOTO_BACKUP_SETTINGS = 'photoBackupSettings'

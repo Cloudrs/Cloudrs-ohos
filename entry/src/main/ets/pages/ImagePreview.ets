@@ -16,6 +16,7 @@ import AppLogger from "../utils/AppLogger";
 import UserPreferences from "../model/UserPreferences";
 import { CommonUtil } from "../utils/CommonUtil";
 import { ZoomableImage } from "../components/ZoomableImage";
+import LazyDataSource from "../utils/LazyDataSource";
 
 const TAG: string = 'ImagePreview'
 
@@ -28,6 +29,11 @@ export struct ImagePreviewPage {
   @State isLoading: boolean = true;
   @State currentIndex: number = 0
   @State previewFiles: PreviewFile[] = []
+  /**
+   * Swiper 的数据源。用 LazyForEach 而不是 ForEach：后者会把整个相册的页面一次性
+   * 建完，几千张图时首帧要等好几秒才画得出来，点击看上去毫无反应。
+   */
+  private previewSource: LazyDataSource<PreviewFile> = new LazyDataSource<PreviewFile>()
   @State previewRevision: number = 0
   @State loadingIds: string[] = []
   @State failedIds: string[] = []
@@ -128,6 +134,7 @@ export struct ImagePreviewPage {
     AppLogger.info(TAG, `open image preview, gallery=${this.fileParam?.previewFiles?.length ?? 1}`)
     this.previewFiles = this.fileParam?.previewFiles?.length ? this.fileParam.previewFiles :
       [new PreviewFile(this.fileParam?.fileName ?? '', this.fileParam?.fileId ?? '', this.fileParam?.fileExtension ?? '')]
+    this.previewSource.replaceAll(this.previewFiles)
     this.currentIndex = this.normalizeIndex(this.fileParam?.currentIndex ?? 0)
     this.imageDraggable = UserPreferences.getSync(
       Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, false) as boolean
@@ -194,13 +201,15 @@ export struct ImagePreviewPage {
     HdsNavigation() {
       Stack() {
         Swiper(this.swiperController) {
-          ForEach(this.previewFiles, (item: PreviewFile, index: number) => {
+          LazyForEach(this.previewSource, (item: PreviewFile, index: number) => {
             this.previewItem(item, index)
           }, (item: PreviewFile, index: number) => item.fileId + index)
         }
         .index(this.currentIndex)
         .loop(false)
         .indicator(false)
+        // 前后各留一页，和 prefetchAround 的预取范围对齐
+        .cachedCount(1)
         .disableSwipe(this.zoomDisableSwipe)
         .onChange((index: number) => {
           this.currentIndex = this.normalizeIndex(index)

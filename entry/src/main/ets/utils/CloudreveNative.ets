@@ -5,6 +5,7 @@ import {
   getUserAvatar,
   getDirectory, getObjectDetail,
   deleteObjects, deleteObjectLockAware, unlockFiles,
+  deleteObjectsBatch, transferObjectsBatch,
   getFileMetadata, searchFiles,
   moveObjects, copyObjects,
   renameObject, newDirectory, newFile,
@@ -107,6 +108,17 @@ export function nativeDeleteObjects(items: string[], dirs: string[], callback?: 
  */
 export function nativeDeleteObjectLockAware(path: string): Promise<string> {
   return deleteObjectLockAware(path);
+}
+
+/** 一次删除整批，返回 BatchOutcome 的 JSON。 */
+export function nativeDeleteObjectsBatch(items: string[], dirs: string[]): Promise<string> {
+  return deleteObjectsBatch(items, dirs);
+}
+
+/** 一次移动或复制整批，返回 BatchOutcome 的 JSON。 */
+export function nativeTransferObjectsBatch(items: string[], dirs: string[],
+  srcDir: string, dst: string, copy: boolean): Promise<string> {
+  return transferObjectsBatch(items, dirs, srcDir, dst, copy);
 }
 
 export function nativeUnlockFiles(tokens: string[]): Promise<void> {

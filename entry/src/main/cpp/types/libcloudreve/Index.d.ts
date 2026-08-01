@@ -13,6 +13,10 @@ export const getObjectDetail: (id: string, isFolder: boolean) => Promise<string>
 export const deleteObjects: (items: string[], dirs: string[]) => Promise<void>;
 export const deleteObjectLockAware: (path: string) => Promise<string>;
 export const unlockFiles: (tokens: string[]) => Promise<void>;
+/** 一次删除整批，返回 BatchOutcome 的 JSON；未出现在 failed 里的即为成功 */
+export const deleteObjectsBatch: (items: string[], dirs: string[]) => Promise<string>;
+/** 一次移动（copy=false）或复制（copy=true）整批，返回结构同 deleteObjectsBatch */
+export const transferObjectsBatch: (items: string[], dirs: string[], srcDir: string, dst: string, copy: boolean) => Promise<string>;
 export const getFileMetadata: (path: string) => Promise<string>;
 export const searchFiles: (keyword: string, path: string) => Promise<string>;
 export const moveObjects: (items: string[], dirs: string[], srcDir: string, dst: string) => Promise<void>;

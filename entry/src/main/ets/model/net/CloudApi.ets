@@ -5,6 +5,7 @@ import {
   nativeGetUserAvatar,
   nativeGetDirectory, nativeGetObjectDetail,
   nativeDeleteObjects, nativeDeleteObjectLockAware, nativeUnlockFiles,
+  nativeDeleteObjectsBatch, nativeTransferObjectsBatch,
   nativeGetFileMetadata, nativeSearchFiles,
   nativeMoveObjects, nativeCopyObjects,
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
@@ -56,6 +57,24 @@ export interface LockAwareDeleteCallback {
   onStart?: () => void;
   onSuccess: () => void;
   onFailure: (msg: string, conflicts: FileLockConflict[]) => void;
+}
+
+/** 批量操作里单个失败项。path 是提交时用的那个标识（V4 为完整路径，V3 为 id）。 */
+export interface BatchFailure {
+  path: string;
+  code: number;
+  message: string;
+  /** 40073 锁冲突时服务端给的解锁 token */
+  tokens: string[];
+}
+
+/**
+ * 一次批量请求的结果。没出现在 failed 里的提交项即为成功——服务端只点名
+ * 失败的，成功集合由调用方按「提交的减去 failed」自行还原。
+ */
+export interface BatchOutcome {
+  succeeded: number;
+  failed: BatchFailure[];
 }
 
 export class CloudApi {
@@ -355,6 +374,44 @@ export class CloudApi {
       AppLogger.warn(CLOUD_API_TAG, `lock-aware delete request failed: ${err.message ?? String(err)}`);
       callback.onFailure(err.message ?? String(err), []);
     });
+  }
+
+  /**
+   * 一次删除整批。服务端的删除接口本就吃 uri 数组，一个请求就能处理一整块，
+   * 逐项失败（含锁冲突的 token）由 native 拆开后放进 failed。
+   */
+  static deleteObjectsBatch(src: ObjectSrc, callback: HttpCallback<BatchOutcome>): void {
+    callback.onStart?.();
+    const items = src.items ?? [];
+    const dirs = src.dirs ?? [];
+    AppLogger.info(CLOUD_API_TAG, `batch delete, items=${items.length}, dirs=${dirs.length}`);
+    nativeDeleteObjectsBatch(items, dirs)
+      .then((json: string) => {
+        const outcome = JSON.parse(json) as BatchOutcome;
+        AppLogger.info(CLOUD_API_TAG,
+          `batch delete done, succeeded=${outcome.succeeded}, failed=${outcome.failed?.length ?? 0}`);
+        callback.onSuccess(outcome);
+      })
+      .catch((err: Error) => callback.onFailure(err.message ?? String(err)));
+  }
+
+  /** 一次移动或复制整批，结果结构同 deleteObjectsBatch。 */
+  static transferObjectsBatch(src: ObjectSrc, srcDir: string, dst: string, isCopy: boolean,
+    callback: HttpCallback<BatchOutcome>): void {
+    callback.onStart?.();
+    const items = src.items ?? [];
+    const dirs = src.dirs ?? [];
+    AppLogger.info(CLOUD_API_TAG,
+      `batch ${isCopy ? 'copy' : 'move'}, items=${items.length}, dirs=${dirs.length}, dst=${dst}`);
+    nativeTransferObjectsBatch(items, dirs, srcDir, dst, isCopy)
+      .then((json: string) => {
+        const outcome = JSON.parse(json) as BatchOutcome;
+        AppLogger.info(CLOUD_API_TAG,
+          `batch ${isCopy ? 'copy' : 'move'} done, succeeded=${outcome.succeeded}, ` +
+          `failed=${outcome.failed?.length ?? 0}`);
+        callback.onSuccess(outcome);
+      })
+      .catch((err: Error) => callback.onFailure(err.message ?? String(err)));
   }
 
   static unlockFiles(tokens: string[], callback: HttpCallback<null>): void {

@@ -312,7 +312,7 @@ export struct TabFiles {
   private shareSheetCtrl: SheetPhaseController = new SheetPhaseController()
   private transportSheetCtrl: SheetPhaseController = new SheetPhaseController()
   private pathSelectSheetCtrl: SheetPhaseController = new SheetPhaseController()
-  @State detailData: DetailData = new DetailData('Unknown', false, new ObjectDetail())
+  @State detailData: DetailData = new DetailData('Unknown', false, '/', new ObjectDetail())
   // 详情面板当前展示的对象,供碰一碰分享取当前文件;仅在面板注册监听期间被读取
   private detailKnockObject: ObjectInfo | null = null
   private currentPath: string = '/'
@@ -3668,7 +3668,12 @@ export struct TabFiles {
   }
 
   @Builder detailSheet() {
-    DetailSheet({detailData: this.detailData})
+    DetailSheet({
+      detailData: this.detailData,
+      onNavigate: (path: string) => {
+        this.navigateFromDetail(path)
+      }
+    })
   }
 
   @Builder sheetCloseButton(onClose: () => void) {
@@ -4212,10 +4217,25 @@ export struct TabFiles {
       lower.includes('404') || lower.includes('不存在') || lower.includes('找不到')
   }
 
+  /**
+   * 从详情里点「所在目录」跳过去。
+   *
+   * 详情可能是从搜索结果打开的，那时搜索页作为浮层盖在文件页之上——不先退出它，
+   * 目录切过去了也看不见。
+   */
+  private navigateFromDetail(path: string): void {
+    this.showObjectDetail = false
+    if (CloudRouter.currentOverlay() === Constant.FILE_SEARCH_PAGE) {
+      CloudRouter.pop()
+    }
+    this.getFileList(true, path)
+  }
+
   itemDetail(item: ObjectInfo) {
     CloudApi.getObjectDetail(item.id, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
-        this.detailData = new DetailData(item.name, item.type == Constant.OBJECT_DIR_TYPE, data)
+        this.detailData = new DetailData(item.name, item.type == Constant.OBJECT_DIR_TYPE,
+          item.path.length > 0 ? item.path : '/', data)
         this.detailKnockObject = item
         this.detailSheetCtrl.requestOpen(() => this.showObjectDetail, (value: boolean) => {
           this.showObjectDetail = value

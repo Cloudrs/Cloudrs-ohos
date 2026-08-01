@@ -8,6 +8,8 @@ import { DateFormatUtil } from "../utils/DateFormatUtil"
 export struct DetailSheet {
   @Prop detailData: DetailData
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  /** 点「所在目录」跳过去。搜索结果跨目录，这是从结果回到上下文的入口 */
+  onNavigate?: (path: string) => void
 
   private getTypeText(): ResourceStr {
     return this.detailData.isDir ? $r('app.string.detail_dir_name') : $r('app.string.detail_filename')
@@ -88,7 +90,13 @@ export struct DetailSheet {
     Column({ space: CloudThemeToken.zero }) {
       this.commonRow(this.getTypeText(), this.detailData.name)
       this.commonDivider()
-      this.commonRow($r('app.string.detail_size'), CommonUtil.formatBytes(this.detailData.detailInfo.size))
+      this.pathRow()
+
+      if (this.detailData.isDir) {
+        // 文件夹的摘要区只写「文件夹」，大小在这儿才看得到；文件的大小摘要区已有，不再重复
+        this.commonDivider()
+        this.commonRow($r('app.string.detail_size'), CommonUtil.formatBytes(this.detailData.detailInfo.size))
+      }
       this.commonDivider()
       this.commonRow($r('app.string.detail_policy'), this.getPolicyText())
 
@@ -111,6 +119,29 @@ export struct DetailSheet {
     })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder pathRow() {
+    Row({ space: CloudThemeToken.detailSheetRowGap }) {
+      Text('所在目录')
+        .fontColor(CloudThemeToken.textSecondary)
+        .fontSize(CloudThemeToken.textSizeBody)
+        .maxLines(1)
+      Text(this.detailData.parentPath)
+        .fontColor(CloudThemeToken.primary)
+        .fontSize(CloudThemeToken.textSizeBody)
+        .wordBreak(WordBreak.BREAK_ALL)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.MARQUEE })
+        .textAlign(TextAlign.End)
+        .layoutWeight(1)
+    }
+    .height(CloudThemeToken.detailSheetRowHeight)
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.SpaceBetween)
+    .onClick(() => {
+      this.onNavigate?.(this.detailData.parentPath)
+    })
   }
 
   @Builder commonRow(title: ResourceStr, value: ResourceStr) {

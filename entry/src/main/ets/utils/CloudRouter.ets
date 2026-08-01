@@ -142,6 +142,11 @@ export class CloudRouter {
     return UserSwitchResult.Ok;
   }
 
+  /** 当前盖在页面之上的浮层页；没有则为空串 */
+  static currentOverlay(): string {
+    return CloudRouter.overlayPage;
+  }
+
   static pop(): void {
     // 有未保存内容的页面在这里拦一道，覆盖返回键、返回手势和页内返回按钮三条路径
     if (CloudRouter.exitGuard?.()) {

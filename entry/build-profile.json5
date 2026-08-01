@@ -5,6 +5,12 @@
       "debugSymbol": {
         "strip": false
       }
+    },
+    "arkOptions": {
+      // 占位值。真实哈希由根 hvigorfile.ts 在构建时写入，拿不到 git 信息时保持 unknown
+      "buildProfileFields": {
+        "GIT_COMMIT": "unknown"
+      }
     }
   },
   "buildOptionSet": [

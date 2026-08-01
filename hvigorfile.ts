@@ -1,7 +1,8 @@
-import { appTasks, OhosAppContext, OhosPluginId, AppJson } from '@ohos/hvigor-ohos-plugin';
+import { appTasks, OhosAppContext, OhosHapContext, OhosPluginId, AppJson } from '@ohos/hvigor-ohos-plugin';
 import { hvigor } from '@ohos/hvigor';
 import * as fs from 'fs';
 import * as path from 'path';
+import { execSync } from 'child_process';
 
 /**
  * 仅 release 构建时自动生成 versionCode,格式为 YYMMdd + index。
@@ -21,6 +22,50 @@ import * as path from 'path';
  *      index 建议保持 1~3 位。
  */
 const VERSION_INDEX = 1;
+
+/**
+ * 把构建时的 git 短哈希注入 BuildProfile.GIT_COMMIT，关于页点一下版本号就能看到。
+ *
+ * 用途是拿到一个上架的包能回溯它从哪个 commit 构建。工作区有未提交改动时追加
+ * -dirty：带这个后缀的包说明发的不是一个干净的 commit，正是最该警惕的情况。
+ *
+ * 不落任何文件到仓库，所以没有 git 噪音。取不到 git 信息（比如从压缩包解出来构建）
+ * 就保持 build-profile.json5 里的 unknown，不让构建失败。
+ */
+function resolveGitCommit(projectPath: string): string | undefined {
+  const run = (cmd: string): string =>
+    execSync(cmd, { cwd: projectPath, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  try {
+    const hash = run('git rev-parse --short HEAD');
+    if (!hash) {
+      return undefined;
+    }
+    const dirty = run('git status --porcelain').length > 0;
+    return dirty ? `${hash}-dirty` : hash;
+  } catch (e) {
+    console.warn(`[gitCommit] skipped: ${String(e)}`);
+    return undefined;
+  }
+}
+
+hvigor.nodesEvaluated(() => {
+  const entryNode = hvigor.getNodeByName('entry');
+  if (entryNode) {
+    const hapContext = entryNode.getContext(OhosPluginId.OHOS_HAP_PLUGIN) as OhosHapContext;
+    const commit = resolveGitCommit(hvigor.getRootNode().getNodePath());
+    if (hapContext && commit) {
+      const profile = hapContext.getBuildProfileOpt();
+      profile['buildOption'] = profile['buildOption'] ?? {};
+      profile['buildOption']['arkOptions'] = profile['buildOption']['arkOptions'] ?? {};
+      profile['buildOption']['arkOptions']['buildProfileFields'] = {
+        ...profile['buildOption']['arkOptions']['buildProfileFields'],
+        GIT_COMMIT: commit
+      };
+      hapContext.setBuildProfileOpt(profile);
+      console.log(`[gitCommit] ${commit}`);
+    }
+  }
+});
 
 hvigor.nodesEvaluated(() => {
   const appContext = hvigor.getRootNode().getContext(OhosPluginId.OHOS_APP_PLUGIN) as OhosAppContext;

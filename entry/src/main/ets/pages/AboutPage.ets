@@ -6,7 +6,7 @@ import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudApi } from "../model/net/CloudApi";
 import AppLogger from "../utils/AppLogger";
 import { showToast } from "../utils/ToastUtil";
-import { VERSION_CODE } from 'BuildProfile';
+import { GIT_COMMIT, VERSION_CODE } from 'BuildProfile';
 
 const EMAIL: string = 'wangxian@dreamflytech.com'
 const ABOUT_TAG: string = 'AboutPage'
@@ -20,6 +20,8 @@ export struct AboutPage {
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @StorageProp(Constant.CLOUD_COOKIE) cloudCookie: string = '';
   @State cloudApiVersion: string = ''
+  /** 版本号那一行是否正显示构建来源，点一下切换 */
+  @State showGitCommit: boolean = false
   embedded: boolean = false
 
   aboutToAppear(): void {
@@ -105,7 +107,7 @@ export struct AboutPage {
 
   @Builder aboutInfo() {
     Column() {
-      this.commonInfo($r('app.string.version'), `${this.appVersion}(${VERSION_CODE})`)
+      this.versionInfo()
       Divider().strokeWidth(CloudThemeToken.lineWidth).color(CloudThemeToken.line)
       Row () {
         Text($r('app.string.about_api_version'))
@@ -183,6 +185,29 @@ export struct AboutPage {
     }).catch((err: BusinessError) => {
       AppLogger.error(ABOUT_TAG, `open external url failed: ${err.code}, ${err.message}`)
       showToast('无法打开浏览器')
+    })
+  }
+
+  /**
+   * 版本行。点一下把版本号换成构建它的 git 短哈希，再点一下换回来。
+   * 拿到一个上架的包时，靠它回溯是从哪个 commit 构建的。
+   */
+  @Builder versionInfo() {
+    Row() {
+      Text($r('app.string.version'))
+        .fontSize(CloudThemeToken.aboutInfoTitleSize)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(CloudThemeToken.textPrimary)
+      Text(this.showGitCommit ? GIT_COMMIT : `${this.appVersion}(${VERSION_CODE})`)
+        .fontSize(CloudThemeToken.aboutInfoTextSize)
+        .fontColor(CloudThemeToken.textSecondary)
+    }
+    .height(CloudThemeToken.aboutInfoRowHeight)
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.SpaceBetween)
+    .onClick(() => {
+      this.showGitCommit = !this.showGitCommit
     })
   }
 

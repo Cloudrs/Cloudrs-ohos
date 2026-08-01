@@ -353,6 +353,14 @@ export struct TabFiles {
   @State fileConflictApplyAll: boolean = false
   /** promptAction 返回的弹窗句柄，-1 表示当前没有打开 */
   private fileConflictDialogId: number = -1
+  // ---- 占用提示弹窗 ----
+  @State occupiedFailedCount: number = 0
+  @State occupiedLockCount: number = 0
+  @State occupiedLocalCount: number = 0
+  @State occupiedServerCount: number = 0
+  /** 有值表示这批占用可以解除，点确认后执行它；无值则只能告知 */
+  private occupiedRelieve?: () => void
+  private occupiedDialogId: number = -1
   private fileConflictPolicy: FileConflictPolicy = FileConflictPolicy.ASK
   private fileConflictQueue: FileConflictRequest[] = []
   private activeFileConflict: FileConflictRequest | null = null
@@ -4085,36 +4093,62 @@ export struct TabFiles {
     const lockTokens = Array.from(tokenSet)
     if (summary.count === 0 && lockTokens.length === 0 && serverSessions.length === 0) {
       if (hasServerLockConflict) {
-        showCloudConfirmDialog(this.getUIContext(), {
-          title: $r('app.string.upload_occupied_title'),
-          message: '服务器确认文件正被上传、备份或在线编辑任务占用，但当前账号没有可解除的锁。' +
-            '请先结束占用任务，或在创建该任务的设备上取消后重试。',
-          confirmText: '知道了',
-          onConfirm: () => {}
-        })
+        this.occupiedFailedCount = failedItems.length
+        this.occupiedLockCount = 0
+        this.occupiedLocalCount = 0
+        this.occupiedServerCount = 0
+        this.occupiedRelieve = undefined
+        this.openOccupiedDialog()
       }
       return
     }
-    const details: string[] = []
-    if (lockTokens.length > 0) {
-      details.push(`${lockTokens.length} 个云端文件锁`)
+    this.occupiedFailedCount = failedItems.length
+    this.occupiedLockCount = lockTokens.length
+    this.occupiedLocalCount = summary.count
+    this.occupiedServerCount = serverSessions.length
+    this.occupiedRelieve = () => {
+      this.relieveLocksAndRetry(summary, filePaths, dirPaths, lockTokens, serverSessions,
+        () => this.deleteSelectedObjectsWithResults(failedItems, successCount))
     }
-    if (summary.count > 0) {
-      details.push(`${summary.count} 个本机未完成上传会话`)
+    this.openOccupiedDialog()
+  }
+
+  /**
+   * 占用提示走系统模态，和同名冲突那层同一套承载方式。
+   *
+   * 分两种形态：能解除的给「解除并重试」，不能解除的只告知——后者是锁不属于当前
+   * 账号，客户端做什么都没用，只能让用户去发起任务的设备上处理。
+   */
+  private openOccupiedDialog(): void {
+    if (this.occupiedDialogId >= 0) {
+      return
     }
-    if (serverSessions.length > 0) {
-      details.push(`${serverSessions.length} 个服务器上传会话`)
-    }
-    showCloudConfirmDialog(this.getUIContext(), {
-      title: $r('app.string.upload_occupied_title'),
-      message: `删除失败的 ${failedItems.length} 项中检测到${details.join('和')}。` +
-        '解除占用会终止对应的上传、备份或在线编辑任务，是否解除后重试删除？',
-      confirmText: $r('app.string.upload_occupied_relieve'),
-      onConfirm: () => {
-        this.relieveLocksAndRetry(summary, filePaths, dirPaths, lockTokens, serverSessions,
-          () => this.deleteSelectedObjectsWithResults(failedItems, successCount))
-      }
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: () => {
+        this.occupiedDialog()
+      },
+      alignment: DialogAlignment.Center,
+      autoCancel: false,
+      maskColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: Color.Transparent,
+      cornerRadius: CloudThemeToken.controlRadiusXl,
+      width: this.fileConflictDialogWidth()
     })
+      .then((dialogId: number) => {
+        this.occupiedDialogId = dialogId
+      })
+      .catch((err: Error) => {
+        AppLogger.error(TAG, `open occupied dialog failed: ${err.message ?? String(err)}`)
+      })
+  }
+
+  private closeOccupiedDialog(): void {
+    const dialogId = this.occupiedDialogId
+    if (dialogId < 0) {
+      return
+    }
+    this.occupiedDialogId = -1
+    this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
   }
 
   private async relieveLocksAndRetry(summary: UploadSessionSummary, filePaths: string[],
@@ -5248,6 +5282,152 @@ export struct TabFiles {
     return parts.join(' · ')
   }
 
+  @Builder occupiedDialog() {
+    Column({ space: CloudThemeToken.spacingPanel }) {
+      Text(this.occupiedRelieve
+        ? `${this.occupiedFailedCount} 项因被占用未能删除`
+        : `${this.occupiedFailedCount} 项被其他设备占用`)
+        .width('100%')
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .textAlign(TextAlign.Center)
+
+      Text(this.occupiedRelieve
+        ? '检测到以下占用：'
+        : '这些文件正被上传、备份或在线编辑任务使用，当前账号无法解除。')
+        .width('100%')
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.textSecondary)
+        .textAlign(TextAlign.Center)
+
+      Column() {
+        if (this.occupiedRelieve) {
+          if (this.occupiedLockCount > 0) {
+            this.occupiedRow($r('sys.symbol.lock'), '云端文件锁', '其他设备或在线编辑持有',
+              this.occupiedLockCount)
+          }
+          if (this.occupiedLocalCount > 0) {
+            this.occupiedRow($r('sys.symbol.arrow_up_circle'), '本机未完成上传',
+              '这台设备上没传完的任务', this.occupiedLocalCount)
+          }
+          if (this.occupiedServerCount > 0) {
+            this.occupiedRow($r('sys.symbol.icloud'), '服务器上传会话', '云端残留的未完成上传',
+              this.occupiedServerCount)
+          }
+        } else {
+          this.occupiedHint('在发起任务的设备上取消它')
+          this.occupiedHint('或等任务结束后重试删除')
+        }
+      }
+      .width('100%')
+      .borderRadius(CloudThemeToken.controlRadiusMd)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+      .clip(true)
+
+      if (this.occupiedRelieve) {
+        Text('解除会终止这些上传、备份或在线编辑任务，已传输的部分不保留。')
+          .width('100%')
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+          .textAlign(TextAlign.Center)
+      }
+
+      Row({ space: CloudThemeToken.spacingCard }) {
+        if (this.occupiedRelieve) {
+          Button('取消')
+            .layoutWeight(1)
+            .height(CloudThemeToken.rowHeightXl)
+            .fontSize(CloudThemeToken.textSizeBody)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+            .backgroundColor(CloudThemeToken.surfaceSubtle)
+            .onClick(() => this.closeOccupiedDialog())
+          Button('解除并重试')
+            .layoutWeight(1)
+            .height(CloudThemeToken.rowHeightXl)
+            .fontSize(CloudThemeToken.textSizeBody)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.onPrimary)
+            .backgroundColor(CloudThemeToken.danger)
+            .onClick(() => {
+              const relieve = this.occupiedRelieve
+              this.occupiedRelieve = undefined
+              this.closeOccupiedDialog()
+              relieve?.()
+            })
+        } else {
+          Button('知道了')
+            .layoutWeight(1)
+            .height(CloudThemeToken.rowHeightXl)
+            .fontSize(CloudThemeToken.textSizeBody)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.primary)
+            .backgroundColor(CloudThemeToken.primarySoft)
+            .onClick(() => this.closeOccupiedDialog())
+        }
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(CloudThemeToken.spacingSheetHorizontal)
+    .borderRadius(CloudThemeToken.controlRadiusXl)
+    .backgroundColor(CloudThemeToken.surface)
+  }
+
+  @Builder occupiedRow(icon: Resource, label: string, hint: string, count: number) {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      SymbolGlyph(icon)
+        .fontSize(CloudThemeToken.textSizeTitle)
+        .fontColor([CloudThemeToken.primary])
+      Column({ space: CloudThemeToken.spacingTiny }) {
+        Text(label)
+          .width('100%')
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(CloudThemeToken.textPrimary)
+        Text(hint)
+          .width('100%')
+          .fontSize(CloudThemeToken.textSizeMicro)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      Text(`${count}`)
+        .fontSize(CloudThemeToken.textSizeBodyPlus)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+    }
+    .width('100%')
+    .padding({
+      left: CloudThemeToken.spacingSection,
+      right: CloudThemeToken.spacingSection,
+      top: CloudThemeToken.spacingCard,
+      bottom: CloudThemeToken.spacingCard
+    })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /** 无法解除时列出的出路，是并列的两个办法而不是先后步骤 */
+  @Builder occupiedHint(text: string) {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      SymbolGlyph($r('sys.symbol.circle_fill'))
+        .fontSize(CloudThemeToken.textSizeSmall)
+        .fontColor([CloudThemeToken.textSecondary])
+      Text(text)
+        .layoutWeight(1)
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.textPrimary)
+    }
+    .width('100%')
+    .padding({
+      left: CloudThemeToken.spacingSection,
+      right: CloudThemeToken.spacingSection,
+      top: CloudThemeToken.spacingCard,
+      bottom: CloudThemeToken.spacingCard
+    })
+    .alignItems(VerticalAlign.Center)
+  }
+
   @Builder fileConflictDialog() {
     Column({ space: CloudThemeToken.spacingPanel }) {
       Text('目标位置已有同名文件')
@@ -5255,7 +5435,7 @@ export struct TabFiles {
         .fontSize(CloudThemeToken.textSizeLarge)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
-        .textAlign(TextAlign.Start)
+        .textAlign(TextAlign.Center)
 
       // 文件本身是主角：判断要不要覆盖，靠的正是名字、大小和去向
       Row({ space: CloudThemeToken.spacingCard }) {
@@ -5338,7 +5518,7 @@ export struct TabFiles {
         .width('100%')
         .fontSize(CloudThemeToken.textSizeSmall)
         .fontColor(CloudThemeToken.textSecondary)
-        .textAlign(TextAlign.Start)
+        .textAlign(TextAlign.Center)
     }
     .width('100%')
     .padding(CloudThemeToken.spacingSheetHorizontal)

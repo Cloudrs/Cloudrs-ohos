@@ -72,8 +72,17 @@ export struct ObjectItem {
     return CommonUtil.getFileType(name) === FileType.VIDEO
   }
 
+  /**
+   * 未完成的上传占位必然是 0 字节的文件。
+   *
+   * 光看 sys:upload_session_id 在不在是不够的：分片上传完成后服务端不一定清掉
+   * 这个字段，大文件会一直带着它。目录列表那边只给 0 字节文件补 metadata，所以
+   * 一直没露馅；搜索结果的 metadata 是服务端全量给的，就把误判暴露出来了。
+   */
   isUploading(item: ObjectInfo): boolean {
-    return item.metadata?.['sys:upload_session_id'] !== undefined
+    return item.size <= 0 &&
+      item.type !== Constant.OBJECT_DIR_TYPE &&
+      item.metadata?.['sys:upload_session_id'] !== undefined
   }
 
   getItemIcon(name: string, isDir: boolean) {

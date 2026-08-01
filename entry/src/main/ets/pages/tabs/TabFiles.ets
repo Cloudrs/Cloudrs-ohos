@@ -4,7 +4,7 @@ import {
 import Constant from "../../model/Constant";
 import TransferDatabase from "../../model/TransferDatabase";
 import LazyDataSource from "../../utils/LazyDataSource";
-import { CloudApi, FileLockConflict } from "../../model/net/CloudApi";
+import { BatchFailure, BatchOutcome, CloudApi, FileLockConflict } from "../../model/net/CloudApi";
 import { showApiFailureToast, showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { ApiErrorUtil, NETWORK_ERROR_MESSAGE } from "../../utils/ApiErrorUtil";
 import { ObjectItem } from "../../components/ObjectItem";
@@ -64,6 +64,15 @@ const FILE_THUMB_QUEUE_MAX: number = 64
 const FILE_SHARE_REFRESH_DELAY_MS: number = 650
 const FILE_BATCH_MAX_CONCURRENT: number = 4
 /**
+ * 每个请求塞多少个对象。服务端的删除/移动/复制接口本来就吃 uri 数组，一次
+ * 请求处理一整块，4000 个文件的请求数从 4000 降到 80。
+ * 不取更大是因为块越大三件事越难受：进度条在一块跑完前不动、取消时已发出的
+ * 那批停不下来、单个请求在服务端的事务也越长。50 是这几者之间的折中。
+ */
+const FILE_BATCH_CHUNK_SIZE: number = 50
+/** 冲突确认框在宽屏上的宽度上限，避免在平板上拉成一条 */
+const CONFLICT_DIALOG_MAX_WIDTH: number = 420
+/**
  * 批量操作面板延迟这么久才出现。删 2-3 个文件通常 200ms 就跑完了，比半模态自身的
  * 开合动画还短，立刻开又立刻关看起来就是闪一下；这段时间内做完的批次干脆不弹面板，
  * 结果由各调用方本来就有的 toast 交代。
@@ -115,6 +124,10 @@ enum FileConflictDecision {
 
 interface FileConflictRequest {
   name: string
+  size: number
+  isDir: boolean
+  /** 目标目录，确认框里要让用户看清是往哪儿放 */
+  destination: string
   resolve: (decision: FileConflictDecision) => void
 }
 
@@ -133,6 +146,8 @@ interface ServerUploadSession {
 class SheetPhaseController {
   private phase: SheetPhase = SheetPhase.CLOSED
   private reopenPending: boolean = false
+  /** 排队中的"稍后打开"，requestClose 要能把它撤销 */
+  private pendingOpenTimer: number = -1
 
   requestOpen(getFlag: () => boolean, setFlag: (value: boolean) => void): void {
     if (getFlag() && (this.phase === SheetPhase.OPEN || this.phase === SheetPhase.OPENING)) {
@@ -143,7 +158,11 @@ class SheetPhaseController {
       this.reopenPending = false
       if (getFlag()) {
         setFlag(false)
-        setTimeout(() => setFlag(true), 50)
+        this.clearPendingOpen()
+        this.pendingOpenTimer = setTimeout(() => {
+          this.pendingOpenTimer = -1
+          setFlag(true)
+        }, 50)
       } else {
         setFlag(true)
       }
@@ -151,6 +170,26 @@ class SheetPhaseController {
     }
     this.reopenPending = true
     setFlag(false)
+  }
+
+  /**
+   * 收起面板，并撤销一切待打开的意图。
+   *
+   * 直接把绑定量设 false 是不够的：requestOpen 可能已经排了个 50ms 后打开的
+   * 定时器，或标了 reopenPending，它们会在之后把面板重新拉起来——盖住此刻真正
+   * 要给用户看的那一层。想让路就得连意图一起撤掉。
+   */
+  requestClose(setFlag: (value: boolean) => void): void {
+    this.clearPendingOpen()
+    this.reopenPending = false
+    setFlag(false)
+  }
+
+  private clearPendingOpen(): void {
+    if (this.pendingOpenTimer >= 0) {
+      clearTimeout(this.pendingOpenTimer)
+      this.pendingOpenTimer = -1
+    }
   }
 
   onWillAppear(): void {
@@ -283,6 +322,8 @@ export struct TabFiles {
   private objectsInfo: DirFileInfo = new DirFileInfo();
   @State isGridPadding: boolean = false;
   @State showPathSelect: boolean = false
+  /** 已选好但还没开工的移动/复制目标，等路径选择半模态消失后再启动 */
+  private pendingCopyMoveDst: string = ''
   private objectSelect: ObjectSelect = new ObjectSelect()
 
   @State downloadingCount: number = 0;
@@ -308,8 +349,10 @@ export struct TabFiles {
   private batchOperationShowTimer: number = -1
   /** 面板真正请求展开的时刻，用于兑现最短驻留 */
   private batchOperationShownAt: number = 0
-  @State fileConflictVisible: boolean = false
-  @State fileConflictName: string = ''
+  /** 冲突确认框内的"其余同名项目都这样处理" */
+  @State fileConflictApplyAll: boolean = false
+  /** promptAction 返回的弹窗句柄，-1 表示当前没有打开 */
+  private fileConflictDialogId: number = -1
   private fileConflictPolicy: FileConflictPolicy = FileConflictPolicy.ASK
   private fileConflictQueue: FileConflictRequest[] = []
   private activeFileConflict: FileConflictRequest | null = null
@@ -1556,17 +1599,22 @@ export struct TabFiles {
   private hideBatchOperationSheet(): void {
     const shownAt = this.batchOperationShownAt
     this.batchOperationShownAt = 0
+    const setVisible: (value: boolean) => void = (value: boolean) => {
+      this.batchOperationVisible = value
+    }
     if (!this.batchOperationVisible) {
+      // 面板还没露面也要收：延迟显示的那一枪可能已经上膛了
+      this.batchOperationSheetCtrl.requestClose(setVisible)
       return
     }
     const remain = shownAt > 0 ? BATCH_SHEET_MIN_VISIBLE_MS - (Date.now() - shownAt) : 0
     if (remain <= 0) {
-      this.batchOperationVisible = false
+      this.batchOperationSheetCtrl.requestClose(setVisible)
       return
     }
     setTimeout(() => {
       if (!this.batchOperationRunning) {
-        this.batchOperationVisible = false
+        this.batchOperationSheetCtrl.requestClose(setVisible)
       }
     }, remain)
   }
@@ -1599,7 +1647,10 @@ export struct TabFiles {
     waiters.forEach((resume: () => void) => resume())
     this.cancelPendingFileConflicts()
     // 停止派发后立即退出半模态；少量已发请求在后台收尾，完成后统一刷新页面和统计结果。
-    this.batchOperationVisible = false
+    // 走 requestClose 才能连带撤销待打开的意图，否则面板会自己弹回来。
+    this.batchOperationSheetCtrl.requestClose((value: boolean) => {
+      this.batchOperationVisible = value
+    })
   }
 
   private cancelPendingFileConflicts(): void {
@@ -1607,8 +1658,8 @@ export struct TabFiles {
     const queued = this.fileConflictQueue
     this.activeFileConflict = null
     this.fileConflictQueue = []
-    this.fileConflictVisible = false
-    this.fileConflictName = ''
+    this.fileConflictApplyAll = false
+    this.closeFileConflictDialog()
     active?.resolve(FileConflictDecision.SKIP)
     queued.forEach((request: FileConflictRequest) => request.resolve(FileConflictDecision.SKIP))
   }
@@ -1622,49 +1673,260 @@ export struct TabFiles {
     })
   }
 
-  private async runBatchItems(items: ObjectInfo[], title: string,
-    operation: (item: ObjectInfo) => Promise<BatchItemResult>,
+  /**
+   * 分块跑批量操作：每块一个请求，块之间并发。
+   *
+   * 与 runBatchItems 的区别只在派发粒度——进度、暂停、取消的语义保持一致，
+   * 只是取消的最小单位变成一块（已经发出去的那批仍会在服务端跑完）。
+   */
+  private async runBatchChunks(items: ObjectInfo[], title: string,
+    chunkOperation: (chunk: ObjectInfo[]) => Promise<BatchItemResult[]>,
     previousSuccessCount: number = 0): Promise<BatchExecutionResult> {
+    // 同一个对象决不能落进两个块：并发的两个请求会同时去删它，服务端给先到的
+    // 那个加锁，后到的就撞上 40073 报"被占用"——占用者其实是我们自己。
+    // 目录列表分页本来就可能在页边界重复吐同一条（native 的搜索也做了同样的去重）。
+    const unique = new Map<string, ObjectInfo>()
+    items.forEach((item: ObjectInfo) => {
+      if (!unique.has(item.id)) {
+        unique.set(item.id, item)
+      }
+    })
+    const deduped: ObjectInfo[] = Array.from(unique.values())
+    if (deduped.length !== items.length) {
+      AppLogger.info(TAG, `batch dedup: ${items.length} -> ${deduped.length}`)
+    }
+    items = deduped
+
     const control = this.beginBatchOperation(title, previousSuccessCount + items.length, previousSuccessCount)
+    const chunks: ObjectInfo[][] = []
+    for (let index = 0; index < items.length; index += FILE_BATCH_CHUNK_SIZE) {
+      chunks.push(items.slice(index, index + FILE_BATCH_CHUNK_SIZE))
+    }
     const results: BatchItemResult[] = []
-    let nextIndex = 0
+    let nextChunk = 0
     const runWorker = async (): Promise<void> => {
-      while (nextIndex < items.length) {
+      while (nextChunk < chunks.length) {
         await this.waitForBatchOperationResume(control)
         if (control.canceled) {
           break
         }
-        const index = nextIndex
-        nextIndex++
-        this.batchOperationInFlight++
-        let result: BatchItemResult
+        const chunk = chunks[nextChunk]
+        nextChunk++
+        this.batchOperationInFlight += chunk.length
+        let chunkResults: BatchItemResult[]
         try {
-          result = await operation(items[index])
+          chunkResults = await chunkOperation(chunk)
         } catch (err) {
           const message = (err as Error)?.message ?? String(err)
-          AppLogger.error(TAG, `batch item threw id=${items[index].id}, msg=${message}`)
-          result = { item: items[index], success: false, skipped: false, message: message }
+          AppLogger.error(TAG, `batch chunk threw, size=${chunk.length}, msg=${message}`)
+          chunkResults = chunk.map((item: ObjectInfo) =>
+            ({ item: item, success: false, skipped: false, message: message } as BatchItemResult))
         }
-        this.batchOperationInFlight = Math.max(0, this.batchOperationInFlight - 1)
-        results.push(result)
-        this.batchOperationProcessed++
-        if (result.skipped) {
-          this.batchOperationSkipped++
-        } else if (result.success) {
-          this.batchOperationSucceeded++
-        } else {
-          this.batchOperationFailed++
-        }
+        this.batchOperationInFlight = Math.max(0, this.batchOperationInFlight - chunk.length)
+        chunkResults.forEach((result: BatchItemResult) => {
+          results.push(result)
+          this.batchOperationProcessed++
+          if (result.skipped) {
+            this.batchOperationSkipped++
+          } else if (result.success) {
+            this.batchOperationSucceeded++
+          } else {
+            this.batchOperationFailed++
+          }
+        })
       }
     }
     const workers: Promise<void>[] = []
-    const workerCount = Math.min(FILE_BATCH_MAX_CONCURRENT, items.length)
+    const workerCount = Math.min(FILE_BATCH_MAX_CONCURRENT, chunks.length)
     for (let index = 0; index < workerCount; index++) {
       workers.push(runWorker())
     }
     await Promise.all(workers)
     this.finishBatchOperation(control)
     return { results: results, canceled: control.canceled }
+  }
+
+  /**
+   * 把一次批量请求的结果摊回逐项。服务端只点名失败的，所以块内其余项即成功。
+   * 匹配用 id：V4 下它就是完整路径，V3 下是对象 id，与提交时用的标识一致。
+   */
+  private mapBatchOutcome(chunk: ObjectInfo[], outcome: BatchOutcome,
+    treatMissingAsSuccess: boolean): BatchItemResult[] {
+    const failures = new Map<string, BatchFailure>()
+    const failed = outcome.failed ?? []
+    failed.forEach((failure: BatchFailure) => failures.set(failure.path, failure))
+    return chunk.map((item: ObjectInfo) => {
+      const failure = failures.get(item.id)
+      if (!failure) {
+        return { item: item, success: true, skipped: false, message: '' } as BatchItemResult
+      }
+      const conflicts: FileLockConflict[] = (failure.tokens ?? []).map((token: string) =>
+        ({ path: failure.path, token: token, type: 0 } as FileLockConflict))
+      // 删除时"对象不存在"就是想要的结果，按幂等成功处理；移动/复制则不然，
+      // 源没了是真失败。
+      const missing = treatMissingAsSuccess && this.isObjectMissingMessage(failure.message)
+      return {
+        item: item,
+        success: missing,
+        skipped: false,
+        message: failure.message,
+        lockConflicts: conflicts
+      } as BatchItemResult
+    })
+  }
+
+  /** 整块请求本身就失败了（网络等），块内每项记同一个原因。 */
+  private allChunkFailed(chunk: ObjectInfo[], message: string): BatchItemResult[] {
+    return chunk.map((item: ObjectInfo) =>
+      ({ item: item, success: false, skipped: false, message: message } as BatchItemResult))
+  }
+
+  private deleteChunk(chunk: ObjectInfo[]): Promise<BatchItemResult[]> {
+    return new Promise<BatchItemResult[]>((resolve: (value: BatchItemResult[]) => void) => {
+      const src = new ObjectSrc()
+      chunk.forEach((item: ObjectInfo) => {
+        if (item.type === Constant.OBJECT_DIR_TYPE) {
+          src.dirs.push(item.id)
+        } else {
+          src.items.push(item.id)
+        }
+      })
+      CloudApi.deleteObjectsBatch(src, {
+        onSuccess: (outcome: BatchOutcome) => resolve(this.mapBatchOutcome(chunk, outcome, true)),
+        onFailure: (msg: string) => {
+          AppLogger.error(TAG, `batch delete chunk failed, size=${chunk.length}, msg=${msg}`)
+          resolve(this.allChunkFailed(chunk, msg))
+        }
+      })
+    })
+  }
+
+  private transferBatch(items: ObjectInfo[], type: FileMenuType,
+    sourcePath: string, dst: string): Promise<BatchItemResult[]> {
+    return new Promise<BatchItemResult[]>((resolve: (value: BatchItemResult[]) => void) => {
+      const src = new ObjectSrc()
+      items.forEach((item: ObjectInfo) => {
+        if (item.type === Constant.OBJECT_DIR_TYPE) {
+          src.dirs.push(item.id)
+        } else {
+          src.items.push(item.id)
+        }
+      })
+      const isCopy = type === FileMenuType.COPY
+      CloudApi.transferObjectsBatch(src, sourcePath, dst, isCopy, {
+        onSuccess: (outcome: BatchOutcome) => resolve(this.mapBatchOutcome(items, outcome, false)),
+        onFailure: (msg: string) => {
+          AppLogger.error(TAG, `batch ${isCopy ? 'copy' : 'move'} failed, size=${items.length}, msg=${msg}`)
+          resolve(this.allChunkFailed(items, msg))
+        }
+      })
+    })
+  }
+
+  /**
+   * 一块移动/复制。
+   *
+   * 同名冲突要一个个问用户，但"问"和"做"必须分开：先把整块的决策收齐，再把决定
+   * 覆盖的那些整批删掉目标、整批复制过去。若边问边做，选了"全部覆盖"就会退化成
+   * 每个文件一删一复制两次请求，几千个文件下来近万次，批量的意义全没了。
+   */
+  private async transferChunk(chunk: ObjectInfo[], type: FileMenuType, sourcePath: string,
+    dst: string, destinationObjects: Map<string, ObjectInfo>): Promise<BatchItemResult[]> {
+    const conflicting: ObjectInfo[] = []
+    const pending: ObjectInfo[] = []
+    chunk.forEach((item: ObjectInfo) => {
+      if (destinationObjects.has(item.name)) {
+        conflicting.push(item)
+      } else {
+        pending.push(item)
+      }
+    })
+
+    const results: BatchItemResult[] = []
+    // 覆盖前要清掉的目标同名项，以及它们各自属于哪个源项——删失败时好归因
+    const staleTargets: ObjectInfo[] = []
+    const targetOwner = new Map<string, ObjectInfo>()
+
+    if (conflicting.length > 0) {
+      const decisions: FileConflictDecision[] = await Promise.all(
+        conflicting.map((item: ObjectInfo) => this.requestFileConflictDecision(item, dst)))
+      conflicting.forEach((item: ObjectInfo, index: number) => {
+        if (decisions[index] === FileConflictDecision.SKIP) {
+          results.push({ item: item, success: false, skipped: true, message: '已跳过同名项目' })
+          return
+        }
+        const existing = destinationObjects.get(item.name)
+        if (existing) {
+          staleTargets.push(existing)
+          targetOwner.set(existing.id, item)
+          destinationObjects.delete(item.name)
+        }
+        pending.push(item)
+      })
+    }
+
+    if (staleTargets.length > 0) {
+      const removed = await this.deleteChunk(staleTargets)
+      const blocked = new Set<string>()
+      removed.forEach((result: BatchItemResult) => {
+        if (result.success) {
+          return
+        }
+        const owner = targetOwner.get(result.item.id)
+        if (!owner) {
+          return
+        }
+        blocked.add(owner.id)
+        results.push({
+          item: owner,
+          success: false,
+          skipped: false,
+          message: `覆盖前删除目标同名项目失败：${result.message}`
+        })
+      })
+      // 目标没清掉就别复制了，否则服务端还是会以重名顶回来
+      for (let index = pending.length - 1; index >= 0; index--) {
+        if (blocked.has(pending[index].id)) {
+          pending.splice(index, 1)
+        }
+      }
+    }
+
+    if (pending.length > 0) {
+      const mapped = await this.transferBatch(pending, type, sourcePath, dst)
+      for (let index = 0; index < mapped.length; index++) {
+        const result = mapped[index]
+        if (!result.success && ApiErrorUtil.isObjectExisted(result.message)) {
+          results.push(await this.resolveLateConflict(result.item, type, sourcePath, dst))
+        } else {
+          results.push(result)
+        }
+      }
+    }
+    return results
+  }
+
+  /**
+   * 预检没看见、被服务端以"已存在"顶回来的重名。
+   *
+   * 目标目录列表可能被分页截断，所以这条兜底路径仍然需要——但它是少数派，
+   * 逐项处理不影响整体。
+   */
+  private async resolveLateConflict(item: ObjectInfo, type: FileMenuType,
+    sourcePath: string, dst: string): Promise<BatchItemResult> {
+    const existing = await this.findDestinationObject(item.name, dst)
+    if (!existing) {
+      return { item: item, success: false, skipped: false, message: '目标位置已存在同名项目' }
+    }
+    const decision = await this.requestFileConflictDecision(item, dst)
+    if (decision === FileConflictDecision.SKIP) {
+      return { item: item, success: false, skipped: true, message: '已跳过同名项目' }
+    }
+    const deleteMessage = await this.deleteDestinationObject(existing)
+    if (deleteMessage.length > 0) {
+      return { item: item, success: false, skipped: false, message: deleteMessage }
+    }
+    return this.executeCopyMoveItem(item, type, sourcePath, dst)
   }
 
   copyMoveObjects(dst: string) {
@@ -1690,9 +1952,12 @@ export struct TabFiles {
       return
     }
     this.resetFileConflictState()
+    const probeStart = Date.now()
     const destinationObjects = await this.loadDestinationObjects(dst)
-    const execution = await this.runBatchItems(items, title, (item: ObjectInfo) =>
-      this.copyMoveOneItem(item, type, sourcePath, dst, destinationObjects))
+    AppLogger.info(TAG, `[timing] destination probe took ${Date.now() - probeStart}ms, ` +
+      `entries=${destinationObjects.size}, items=${items.length}`)
+    const execution = await this.runBatchChunks(items, title, (chunk: ObjectInfo[]) =>
+      this.transferChunk(chunk, type, sourcePath, dst, destinationObjects))
     const results = execution.results
     const succeeded = results.filter((result: BatchItemResult) => result.success)
       .map((result: BatchItemResult) => result.item)
@@ -1719,46 +1984,12 @@ export struct TabFiles {
       this.exitMultiSelectMode()
     }
     const action = isCopy ? '复制' : '移动'
+    // 只报成功数。没成的那些仍然留在选中态里，用户在列表上看得见，
+    // 不必再用一串数字复述一遍。
     showToast(execution.canceled
-      ? `已取消${action}：成功 ${succeeded.length} 项，跳过 ${skipped.length} 项，` +
-        `失败 ${failed.length} 项，未处理 ${unprocessed.length} 项`
-      : `${action}成功 ${succeeded.length} 项，跳过 ${skipped.length} 项，失败 ${failed.length} 项`)
+      ? `已取消${action}：成功 ${succeeded.length} 项`
+      : `${action}成功 ${succeeded.length} 项`)
     this.resetFileConflictState()
-  }
-
-  private async copyMoveOneItem(item: ObjectInfo, type: FileMenuType,
-    sourcePath: string, dst: string, destinationObjects: Map<string, ObjectInfo>): Promise<BatchItemResult> {
-    const existing = destinationObjects.get(item.name)
-    if (existing) {
-      const decision = await this.requestFileConflictDecision(item.name)
-      if (decision === FileConflictDecision.SKIP) {
-        return { item: item, success: false, skipped: true, message: '已跳过同名项目' }
-      }
-      const deleteMessage = await this.deleteDestinationObject(existing)
-      if (deleteMessage.length > 0) {
-        return { item: item, success: false, skipped: false, message: deleteMessage }
-      }
-      destinationObjects.delete(item.name)
-    }
-    const firstResult = await this.executeCopyMoveItem(item, type, sourcePath, dst)
-    if (firstResult.success || !ApiErrorUtil.isObjectExisted(firstResult.message)) {
-      return firstResult
-    }
-    // 目标目录列表可能被服务端分页截断；以实际复制/移动返回的重名错误兜底，
-    // 再用服务器搜索定位目标对象，确保大目录中的冲突也能进入相同确认流程。
-    const searchedExisting = await this.findDestinationObject(item.name, dst)
-    if (!searchedExisting) {
-      return firstResult
-    }
-    const decision = await this.requestFileConflictDecision(item.name)
-    if (decision === FileConflictDecision.SKIP) {
-      return { item: item, success: false, skipped: true, message: '已跳过同名项目' }
-    }
-    const deleteMessage = await this.deleteDestinationObject(searchedExisting)
-    if (deleteMessage.length > 0) {
-      return { item: item, success: false, skipped: false, message: deleteMessage }
-    }
-    return this.executeCopyMoveItem(item, type, sourcePath, dst)
   }
 
   private executeCopyMoveItem(item: ObjectInfo, type: FileMenuType,
@@ -1838,11 +2069,11 @@ export struct TabFiles {
     this.fileConflictPolicy = FileConflictPolicy.ASK
     this.fileConflictQueue = []
     this.activeFileConflict = null
-    this.fileConflictVisible = false
-    this.fileConflictName = ''
+    this.fileConflictApplyAll = false
+    this.closeFileConflictDialog()
   }
 
-  private requestFileConflictDecision(name: string): Promise<FileConflictDecision> {
+  private requestFileConflictDecision(item: ObjectInfo, dst: string): Promise<FileConflictDecision> {
     if (this.fileConflictPolicy === FileConflictPolicy.SKIP_ALL) {
       return Promise.resolve(FileConflictDecision.SKIP)
     }
@@ -1850,7 +2081,13 @@ export struct TabFiles {
       return Promise.resolve(FileConflictDecision.OVERWRITE)
     }
     return new Promise<FileConflictDecision>((resolve: (decision: FileConflictDecision) => void) => {
-      this.fileConflictQueue.push({ name: name, resolve: resolve })
+      this.fileConflictQueue.push({
+        name: item.name,
+        size: item.size ?? 0,
+        isDir: item.type === Constant.OBJECT_DIR_TYPE,
+        destination: dst,
+        resolve: resolve
+      })
       this.showNextFileConflict()
     })
   }
@@ -1869,11 +2106,54 @@ export struct TabFiles {
     }
     this.activeFileConflict = this.fileConflictQueue.shift() ?? null
     if (this.activeFileConflict) {
-      this.fileConflictName = this.activeFileConflict.name
-      // 系统进度半模态位于页面内容之上；冲突确认期间先收起，避免挡住确认层。
-      this.batchOperationVisible = false
-      this.fileConflictVisible = true
+      this.fileConflictApplyAll = false
+      this.openFileConflictDialog()
     }
+  }
+
+  /**
+   * 冲突确认走系统模态。
+   *
+   * 早先这里是页面内自绘的一层 Stack 子节点，看得见却点不动：它和同组件里的多个
+   * bindSheet 抢同一件事，而两者根本不在一套事件体系里。交给 promptAction 之后，
+   * 层级排序由系统负责，也不必再写"冲突时先收起进度面板"这类互斥编排。
+   */
+  private openFileConflictDialog(): void {
+    if (this.fileConflictDialogId >= 0) {
+      return
+    }
+    this.getUIContext().getPromptAction().openCustomDialog({
+      builder: () => {
+        this.fileConflictDialog()
+      },
+      alignment: DialogAlignment.Center,
+      // 只能通过按钮决策：点蒙层或返回键溜走会让等待中的 Promise 永远挂起
+      autoCancel: false,
+      maskColor: 'rgba(0, 0, 0, 0.55)',
+      backgroundColor: Color.Transparent,
+      cornerRadius: CloudThemeToken.controlRadiusXl,
+      width: this.fileConflictDialogWidth()
+    })
+      .then((dialogId: number) => {
+        this.fileConflictDialogId = dialogId
+      })
+      .catch((err: Error) => {
+        AppLogger.error(TAG, `open conflict dialog failed: ${err.message ?? String(err)}`)
+      })
+  }
+
+  private closeFileConflictDialog(): void {
+    const dialogId = this.fileConflictDialogId
+    if (dialogId < 0) {
+      return
+    }
+    this.fileConflictDialogId = -1
+    this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
+  }
+
+  /** 窄屏留边，宽屏封顶，避免平板上拉成一条 */
+  private fileConflictDialogWidth(): number {
+    return Math.min(this.sheetLayoutWidth * 0.86, CONFLICT_DIALOG_MAX_WIDTH)
   }
 
   private resolveFileConflict(decision: FileConflictDecision, applyAll: boolean): void {
@@ -1883,8 +2163,8 @@ export struct TabFiles {
     }
     const active = this.activeFileConflict
     this.activeFileConflict = null
-    this.fileConflictVisible = false
-    this.fileConflictName = ''
+    this.fileConflictApplyAll = false
+    this.closeFileConflictDialog()
     active?.resolve(decision)
     this.showNextFileConflict()
     if (!this.activeFileConflict && this.fileConflictQueue.length === 0 && this.batchOperationRunning &&
@@ -1967,10 +2247,6 @@ export struct TabFiles {
 
         if (this.albumSaving) {
           this.albumSavingOverlay()
-        }
-
-        if (this.fileConflictVisible) {
-          this.fileConflictOverlay()
         }
 
         Column()
@@ -2141,7 +2417,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             title: {
               title: this.batchOperationTitle,
-              subtitle: this.batchOperationPaused ? '任务已暂停' : '正在后台处理，请稍候'
+              // 暂停状态由按钮自己说清楚（它会变成"继续"），不必再复述一遍
+              subtitle: this.batchOperationPaused ? '已暂停' : undefined
             },
             showClose: false,
             enableOutsideInteractive: false,
@@ -3346,8 +3623,25 @@ export struct TabFiles {
         }, () => {
           this.showPathSelect = false
         })
+        this.startPendingCopyMove()
       }
     })
+  }
+
+  /**
+   * 路径选好之后，等这层半模态真正消失了才开工。
+   *
+   * 移动/复制中途会弹同名冲突确认层，而那层是页面内的 Stack 子节点。若它在半模态
+   * 还盖着页面时被插进去，画面上看得见，却进不了手势响应树——点不动，也就永远关不掉。
+   * 所以这里等 onDisappear，确保它是在一个干净的页面上创建的。
+   */
+  private startPendingCopyMove(): void {
+    const dst = this.pendingCopyMoveDst
+    if (dst.length === 0) {
+      return
+    }
+    this.pendingCopyMoveDst = ''
+    this.copyMoveObjects(dst)
   }
 
   @Builder selectPathSheet() {
@@ -3358,7 +3652,8 @@ export struct TabFiles {
         this.closePathSelectSheet()
         if (isFinished && path && path != '') {
           console.debug(TAG, 'select path: ' + path)
-          this.copyMoveObjects(path)
+          // 只记下目标，等这层半模态真的消失了再开工——见 pendingCopyMoveDst
+          this.pendingCopyMoveDst = path
         }
     }
     })
@@ -3472,7 +3767,10 @@ export struct TabFiles {
       let fileType = CommonUtil.getFileType(item.name)
       let fileExtension = CommonUtil.getFileExtention(item.name)
       if (fileType == FileType.IMAGE) {
-        CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, this.buildImagePreviewParam(item, fileExtension))
+        const param = this.buildImagePreviewParam(item, fileExtension)
+        const pushStarted = Date.now()
+        CloudRouter.push(Constant.IAMGE_PREVIEW_PAGE, param)
+        AppLogger.info(TAG, `[timing] preview push returned in ${Date.now() - pushStarted}ms`)
       } else if (fileType == FileType.VIDEO) {
         CloudRouter.push(Constant.VIDEO_PREVIEW_PAGE,
           new VideoPreview(item.name, item.id, fileExtension, this.getObjectSharePath(item)))
@@ -3489,10 +3787,13 @@ export struct TabFiles {
   }
 
   private buildImagePreviewParam(item: ObjectInfo, fileExtension: string): ImagePreview {
+    const started = Date.now()
     const images = this.fileDataSource.dataArray
       .filter((file: ObjectInfo) => CommonUtil.getFileType(file.name) === FileType.IMAGE)
       .map((file: ObjectInfo) => new PreviewFile(file.name, file.id, CommonUtil.getFileExtention(file.name)))
     const currentIndex = images.findIndex((file: PreviewFile) => file.fileId === item.id)
+    AppLogger.info(TAG, `[timing] preview param built in ${Date.now() - started}ms, ` +
+      `scanned=${this.fileDataSource.dataArray.length}, images=${images.length}`)
     return new ImagePreview(item.name, item.id, fileExtension, images, currentIndex >= 0 ? currentIndex : 0)
   }
 
@@ -3699,12 +4000,22 @@ export struct TabFiles {
   private async deleteSelectedObjectsWithResults(items: ObjectInfo[],
     previousSuccessCount: number = 0): Promise<void> {
     AppLogger.info(TAG, `counted batch delete start, count=${items.length}`)
-    const execution = await this.runBatchItems(items, '正在删除',
-      (item: ObjectInfo) => this.deleteObjectForCountedBatch(item), previousSuccessCount)
+    const execution = await this.runBatchChunks(items, '正在删除',
+      (chunk: ObjectInfo[]) => this.deleteChunk(chunk), previousSuccessCount)
     const results = execution.results
     const deleted = results.filter((result: BatchItemResult) => result.success)
       .map((result: BatchItemResult) => result.item)
     const failed = results.filter((result: BatchItemResult) => !result.success)
+    if (failed.length > 0) {
+      const reasons = new Map<string, number>()
+      failed.forEach((result: BatchItemResult) => {
+        const key = result.message.length > 0 ? result.message : '(empty)'
+        reasons.set(key, (reasons.get(key) ?? 0) + 1)
+      })
+      reasons.forEach((count: number, reason: string) => {
+        AppLogger.warn(TAG, `delete failure x${count}: ${reason}`)
+      })
+    }
     const successCount = previousSuccessCount + deleted.length
     if (deleted.length > 0) {
       this.removeDeletedObjectsFromPage(deleted)
@@ -3728,31 +4039,6 @@ export struct TabFiles {
     }
     showToast(`删除成功 ${successCount} 项，失败 ${failed.length} 项`)
     this.offerRelieveFailedDeleteSessions(failed, successCount)
-  }
-
-  private deleteObjectForCountedBatch(item: ObjectInfo): Promise<BatchItemResult> {
-    return new Promise<BatchItemResult>((resolve: (result: BatchItemResult) => void) => {
-      const remotePath = this.joinRemotePath(this.currentPath, item.name)
-      CloudApi.deleteObjectLockAware(item.id, item.type === Constant.OBJECT_DIR_TYPE, remotePath, {
-        onSuccess: () => {
-          resolve({ item: item, success: true, skipped: false, message: '' })
-        },
-        onFailure: (msg: string, conflicts: FileLockConflict[]) => {
-          // 批量接口可能已完成部分删除后才报错；逐项重试遇到“不存在”应按幂等成功处理。
-          const missing = this.isObjectMissingMessage(msg)
-          if (!missing) {
-            AppLogger.error(TAG, `counted delete failed id=${item.id}, msg=${msg}`)
-          }
-          resolve({
-            item: item,
-            success: missing,
-            skipped: false,
-            message: msg,
-            lockConflicts: conflicts
-          })
-        }
-      })
-    })
   }
 
   private offerRelieveFailedDeleteSessions(failed: BatchItemResult[], successCount: number): void {
@@ -4877,75 +5163,58 @@ export struct TabFiles {
   }
 
   @Builder batchOperationSheet() {
-    Column({ space: CloudThemeToken.spacingSection }) {
-      Row() {
-        Text('处理进度')
-          .fontSize(CloudThemeToken.textSizeBody)
-          .fontColor(CloudThemeToken.textSecondary)
-        Blank()
-        Text(`${this.batchOperationProcessed} / ${this.batchOperationTotal}`)
-          .fontSize(CloudThemeToken.textSizeBodyPlus)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.primary)
-          .padding({
-            left: CloudThemeToken.spacingSm,
-            right: CloudThemeToken.spacingSm,
-            top: CloudThemeToken.spacingXs,
-            bottom: CloudThemeToken.spacingXs
-          })
-          .borderRadius(CloudThemeToken.controlRadiusRoundLg)
-          .backgroundColor(CloudThemeToken.primarySoft)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Progress({
-        value: this.batchOperationProcessed,
-        total: Math.max(this.batchOperationTotal, 1),
-        type: ProgressType.Capsule
-      })
+    Column({ space: CloudThemeToken.spacingPage }) {
+      Column({ space: CloudThemeToken.spacingCard }) {
+        // 进度是这里唯一真正被关心的信息，交给数字本身去承担
+        Row({ space: CloudThemeToken.spacingMd }) {
+          Text(`${this.batchOperationProcessed}`)
+            .fontSize(CloudThemeToken.textSizeMetric)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text(`/ ${this.batchOperationTotal}`)
+            .fontSize(CloudThemeToken.textSizeLargePlus)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
         .width('100%')
-        .height(CloudThemeToken.spacingSm)
-        .color(CloudThemeToken.primary)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .alignItems(VerticalAlign.Bottom)
 
-      Row({ space: CloudThemeToken.spacingSm }) {
-        this.batchOperationStat('成功', this.batchOperationSucceeded, CloudThemeToken.primary)
-        this.batchOperationStat('跳过', this.batchOperationSkipped, CloudThemeToken.textSecondary)
-        this.batchOperationStat('失败', this.batchOperationFailed,
-          this.batchOperationFailed > 0 ? CloudThemeToken.danger : CloudThemeToken.textSecondary)
-      }
-      .width('100%')
-
-      Row({ space: CloudThemeToken.spacingSm }) {
-        LoadingProgress()
-          .width(CloudThemeToken.spacingSection)
-          .height(CloudThemeToken.spacingSection)
+        Progress({
+          value: this.batchOperationProcessed,
+          total: Math.max(this.batchOperationTotal, 1),
+          type: ProgressType.Capsule
+        })
+          .width('100%')
+          .height(CloudThemeToken.spacingSm)
           .color(this.batchOperationPaused ? CloudThemeToken.textSecondary : CloudThemeToken.primary)
-          .enableLoading(!this.batchOperationPaused)
-        Text(this.batchOperationPaused
-          ? (this.batchOperationInFlight > 0
-            ? `等待 ${this.batchOperationInFlight} 个已发请求完成后暂停`
-            : '已暂停，点击继续处理剩余项目')
-          : (this.batchOperationInFlight > 0
-            ? `${this.batchOperationInFlight} 个请求正在处理中`
-            : '正在准备下一批项目'))
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-          .layoutWeight(1)
-          .maxLines(2)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
+
+        // 跳过和失败通常都是 0，没内容时整行不占位
+        if (this.batchOperationSkipped > 0 || this.batchOperationFailed > 0) {
+          Text(this.batchOperationOutcomeText())
+            .width('100%')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(this.batchOperationFailed > 0
+              ? CloudThemeToken.danger : CloudThemeToken.textSecondary)
+            .textAlign(TextAlign.Start)
+        }
       }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+      .width('100%')
 
       Row({ space: CloudThemeToken.spacingCard }) {
-        Text(`已运行 ${this.batchOperationElapsedSeconds} 秒`)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
+        Button(this.batchOperationPaused ? '继续' : '暂停')
           .layoutWeight(1)
-        Button('取消任务')
-          .height(CloudThemeToken.rowHeightLg)
-          .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+          .height(CloudThemeToken.rowHeightXl)
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.batchOperationPaused ? CloudThemeToken.onPrimary : CloudThemeToken.primary)
+          .backgroundColor(this.batchOperationPaused
+            ? CloudThemeToken.primary : CloudThemeToken.primarySoft)
+          .onClick(() => {
+            this.toggleBatchOperationPause()
+          })
+        Button('取消')
+          .layoutWeight(1)
+          .height(CloudThemeToken.rowHeightXl)
           .fontSize(CloudThemeToken.textSizeBody)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.danger)
@@ -4953,124 +5222,153 @@ export struct TabFiles {
           .onClick(() => {
             this.cancelBatchOperation()
           })
-        Button(this.batchOperationPaused ? '继续任务' : '暂停任务')
-          .height(CloudThemeToken.rowHeightLg)
-          .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-          .fontSize(CloudThemeToken.textSizeBody)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.batchOperationPaused ? CloudThemeToken.onPrimary : CloudThemeToken.primary)
-          .backgroundColor(this.batchOperationPaused ? CloudThemeToken.primary : CloudThemeToken.primarySoft)
-          .onClick(() => {
-            this.toggleBatchOperationPause()
-          })
       }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+      .width('100%')
     }
     .width('100%')
     .padding({
       left: CloudThemeToken.spacingPage,
       right: CloudThemeToken.spacingPage,
-      top: CloudThemeToken.spacingSm,
+      top: CloudThemeToken.spacingCard,
       // bindSheet 覆盖应用底栏，但操作按钮仍需避开系统手势条/三键导航区。
       // 与详情、分享、路径选择等系统半模态保持同一套底部安全间距。
       bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
     })
   }
 
-  @Builder batchOperationStat(label: string, value: number, color: ResourceColor) {
-    Column({ space: CloudThemeToken.spacingXs }) {
-      Text(`${value}`)
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(color)
-      Text(label)
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
+  /** 只讲非零的那部分——全部成功时这行根本不出现 */
+  private batchOperationOutcomeText(): string {
+    const parts: string[] = []
+    if (this.batchOperationSkipped > 0) {
+      parts.push(`已跳过 ${this.batchOperationSkipped}`)
     }
-    .layoutWeight(1)
-    .padding({
-      top: CloudThemeToken.spacingSm,
-      bottom: CloudThemeToken.spacingSm
-    })
-    .borderRadius(CloudThemeToken.controlRadius)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
+    if (this.batchOperationFailed > 0) {
+      parts.push(`失败 ${this.batchOperationFailed}`)
+    }
+    return parts.join(' · ')
   }
 
-  @Builder fileConflictOverlay() {
-    Column() {
-      Column({ space: CloudThemeToken.spacingMd }) {
-        Text('发现同名项目')
-          .width('100%')
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-          .textAlign(TextAlign.Start)
+  @Builder fileConflictDialog() {
+    Column({ space: CloudThemeToken.spacingPanel }) {
+      Text('目标位置已有同名文件')
+        .width('100%')
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .textAlign(TextAlign.Start)
 
-        Text(this.fileConflictName)
-          .width('100%')
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .fontSize(CloudThemeToken.textSizeBody)
-          .fontColor(CloudThemeToken.textPrimary)
-          .textAlign(TextAlign.Start)
-
-        Text('覆盖会先删除目标位置的同名文件或文件夹，再执行本次操作。')
-          .width('100%')
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.danger)
-          .textAlign(TextAlign.Start)
-
-        Row({ space: CloudThemeToken.spacingSm }) {
-          Button('跳过')
-            .layoutWeight(1)
-            .height(CloudThemeToken.rowHeightLg)
+      // 文件本身是主角：判断要不要覆盖，靠的正是名字、大小和去向
+      Row({ space: CloudThemeToken.spacingCard }) {
+        Text(this.fileConflictTypeLabel())
+          .width(CloudThemeToken.rowHeightMd)
+          .height(CloudThemeToken.rowHeightMd)
+          .borderRadius(CloudThemeToken.controlRadiusSm)
+          .backgroundColor(CloudThemeToken.primarySoft)
+          .fontSize(CloudThemeToken.textSizeMicro)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.primary)
+          .textAlign(TextAlign.Center)
+        Column({ space: CloudThemeToken.spacingTiny }) {
+          Text(this.activeFileConflict?.name ?? '')
+            .width('100%')
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .fontSize(CloudThemeToken.textSizeLargePlus)
+            .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
-            .backgroundColor(CloudThemeToken.surfaceSubtle)
-            .onClick(() => this.resolveFileConflict(FileConflictDecision.SKIP, false))
-          Button('全部跳过')
-            .layoutWeight(1)
-            .height(CloudThemeToken.rowHeightLg)
-            .fontColor(CloudThemeToken.primary)
-            .backgroundColor(CloudThemeToken.primarySoft)
-            .onClick(() => this.resolveFileConflict(FileConflictDecision.SKIP, true))
+          Text(this.fileConflictMeta())
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
         }
-        .width('100%')
-
-        Row({ space: CloudThemeToken.spacingSm }) {
-          Button('覆盖')
-            .layoutWeight(1)
-            .height(CloudThemeToken.rowHeightLg)
-            .fontColor(CloudThemeToken.danger)
-            .backgroundColor(CloudThemeToken.surfaceSubtle)
-            .onClick(() => this.resolveFileConflict(FileConflictDecision.OVERWRITE, false))
-          Button('全部覆盖')
-            .layoutWeight(1)
-            .height(CloudThemeToken.rowHeightLg)
-            .fontColor(CloudThemeToken.onPrimary)
-            .backgroundColor(CloudThemeToken.danger)
-            .onClick(() => this.resolveFileConflict(FileConflictDecision.OVERWRITE, true))
-        }
-        .width('100%')
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
       }
-      .width('86%')
-      .constraintSize({ maxWidth: 440 })
+      .width('100%')
       .padding(CloudThemeToken.spacingCard)
-      .borderRadius(CloudThemeToken.controlRadiusLg)
-      .backgroundColor(CloudThemeToken.surface)
-      .shadow({
-        radius: CloudThemeToken.spacingMd,
-        color: 'rgba(0,0,0,0.18)',
-        offsetX: 0,
-        offsetY: CloudThemeToken.spacingXs
+      .borderRadius(CloudThemeToken.controlRadiusMd)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+      .alignItems(VerticalAlign.Center)
+
+      // "全部"是这个决策的作用范围，不是另外两个选项
+      Row({ space: CloudThemeToken.spacingXl }) {
+        Checkbox()
+          .select(this.fileConflictApplyAll)
+          .selectedColor(CloudThemeToken.primary)
+          .width(CloudThemeToken.spacingSheetHorizontal)
+          .height(CloudThemeToken.spacingSheetHorizontal)
+          .onChange((value: boolean) => {
+            this.fileConflictApplyAll = value
+          })
+        Text('其余同名项目都这样处理')
+          .layoutWeight(1)
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(CloudThemeToken.textPrimary)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.fileConflictApplyAll = !this.fileConflictApplyAll
       })
+
+      Row({ space: CloudThemeToken.spacingCard }) {
+        Button(this.fileConflictApplyAll ? '全部覆盖' : '覆盖')
+          .layoutWeight(1)
+          .height(CloudThemeToken.rowHeightXl)
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.fileConflictApplyAll ? CloudThemeToken.onPrimary : CloudThemeToken.danger)
+          .backgroundColor(this.fileConflictApplyAll ? CloudThemeToken.danger : CloudThemeToken.dangerSoft)
+          .onClick(() => this.resolveFileConflict(FileConflictDecision.OVERWRITE, this.fileConflictApplyAll))
+        // 跳过占主位：它是这里的高频选择，也是安全的那个
+        Button(this.fileConflictApplyAll ? '全部跳过' : '跳过')
+          .layoutWeight(1)
+          .height(CloudThemeToken.rowHeightXl)
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.primary)
+          .backgroundColor(CloudThemeToken.primarySoft)
+          .onClick(() => this.resolveFileConflict(FileConflictDecision.SKIP, this.fileConflictApplyAll))
+      }
+      .width('100%')
+
+      Text('覆盖会先删除目标位置的同名项目。')
+        .width('100%')
+        .fontSize(CloudThemeToken.textSizeSmall)
+        .fontColor(CloudThemeToken.textSecondary)
+        .textAlign(TextAlign.Start)
     }
     .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor('rgba(0,0,0,0.55)')
-    .hitTestBehavior(HitTestMode.Block)
+    .padding(CloudThemeToken.spacingSheetHorizontal)
+    .borderRadius(CloudThemeToken.controlRadiusXl)
+    .backgroundColor(CloudThemeToken.surface)
+  }
+
+  /** 图标位上的类型角标：文件夹给"目录"，文件给扩展名 */
+  private fileConflictTypeLabel(): string {
+    const request = this.activeFileConflict
+    if (!request) {
+      return ''
+    }
+    if (request.isDir) {
+      return '目录'
+    }
+    const ext = CommonUtil.getFileExtention(request.name).toUpperCase()
+    return ext.length > 0 && ext.length <= 4 ? ext : '文件'
+  }
+
+  private fileConflictMeta(): string {
+    const request = this.activeFileConflict
+    if (!request) {
+      return ''
+    }
+    const action = this.objectSelect.type === FileMenuType.COPY ? '复制到' : '移动到'
+    if (request.isDir) {
+      return `${action} ${request.destination}`
+    }
+    return `${CommonUtil.formatBytes(request.size)} · ${action} ${request.destination}`
   }
 
   private async saveImagesFlow(context: common.UIAbilityContext, images: ObjectInfo[]): Promise<void> {

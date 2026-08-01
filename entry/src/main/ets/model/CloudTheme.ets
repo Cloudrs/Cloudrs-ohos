@@ -21,6 +21,8 @@ export class CloudThemeToken {
   static readonly textSizeHeadline: number = 20
   static readonly textSizeHero: number = 22
   static readonly textSizeDisplay: number = 24
+  /** 让读数本身成为主角的字号，用于进度这类"只此一个数字"的场合 */
+  static readonly textSizeMetric: number = 34
   static readonly spacingTiny: number = 3
   static readonly spacingXs: number = 4
   static readonly spacingSm: number = 5

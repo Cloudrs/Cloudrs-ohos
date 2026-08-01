@@ -23,6 +23,9 @@ import { execSync } from 'child_process';
  */
 const VERSION_INDEX = 1;
 
+/** 唯一由构建脚本写回的文件，判定 dirty 时要排除它 */
+const VERSION_CODE_FILE = 'AppScope/app.json5';
+
 /**
  * 把构建时的 git 短哈希注入 BuildProfile.GIT_COMMIT，关于页点一下版本号就能看到。
  *
@@ -40,7 +43,15 @@ function resolveGitCommit(projectPath: string): string | undefined {
     if (!hash) {
       return undefined;
     }
-    const dirty = run('git status --porcelain').length > 0;
+    // app.json5 的 versionCode 是本文件在 release 构建时写进去的，属于构建产物而非
+    // 代码改动。不排掉的话，发版时构建第二次就会把自己写的东西认成 dirty。
+    // 在 JS 里过滤而不用 git 的 pathspec exclude 语法：后者在 Windows 的 cmd 下
+    // 要处理引号和括号转义，容易出岔子。
+    const dirty = run('git status --porcelain')
+      .split('\n')
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0)
+      .some((line: string) => !line.endsWith(VERSION_CODE_FILE));
     return dirty ? `${hash}-dirty` : hash;
   } catch (e) {
     console.warn(`[gitCommit] skipped: ${String(e)}`);

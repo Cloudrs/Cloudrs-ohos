@@ -21,19 +21,41 @@ import {
 } from 'libcloudreve.so';
 import { HttpCallback } from '../model/net/ApiTypes';
 import { ApiErrorUtil } from './ApiErrorUtil';
+import { SessionSync } from './SessionSync';
+
+/**
+ * 静默续期只可能发生在 API 调用中间，所以每次调用落地后都回收一次；
+ * 绝大多数时候只是一次空取。失败路径也要收：续期成功但重试仍失败时，
+ * 新 token 同样已经生成，丢了下次还得重续一遍。
+ */
+function syncSession(): void {
+  SessionSync.pull();
+}
 
 function wrap<T>(promise: Promise<T>, callback?: HttpCallback<T>): void {
   if (callback?.onStart) { callback.onStart(); }
   promise
-    .then((data: T) => callback?.onSuccess(data))
-    .catch((err: Error) => callback?.onFailure(ApiErrorUtil.translate(err.message ?? String(err))));
+    .then((data: T) => {
+      syncSession();
+      callback?.onSuccess(data);
+    })
+    .catch((err: Error) => {
+      syncSession();
+      callback?.onFailure(ApiErrorUtil.translate(err.message ?? String(err)));
+    });
 }
 
 function wrapJson<T>(promise: Promise<string>, callback?: HttpCallback<T>): void {
   if (callback?.onStart) { callback.onStart(); }
   promise
-    .then((json: string) => callback?.onSuccess(JSON.parse(json) as T))
-    .catch((err: Error) => callback?.onFailure(ApiErrorUtil.translate(err.message ?? String(err))));
+    .then((json: string) => {
+      syncSession();
+      callback?.onSuccess(JSON.parse(json) as T);
+    })
+    .catch((err: Error) => {
+      syncSession();
+      callback?.onFailure(ApiErrorUtil.translate(err.message ?? String(err)));
+    });
 }
 
 export function nativeInit(url: string, callback?: HttpCallback<string>): void {

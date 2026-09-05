@@ -1,6 +1,7 @@
 export const init: (baseUrl: string) => Promise<string>;
 export const getApiVersionInfo: () => Promise<string[]>;
 export const restoreSession: (baseUrl: string, accessToken: string, refreshToken: string, isV3: boolean) => void;
+export const takeRefreshedSession: () => string[];
 export const getSiteConfig: () => Promise<string>;
 export const login: (username: string, password: string) => Promise<string[]>;
 export const login2fa: (code: string) => Promise<string[]>;

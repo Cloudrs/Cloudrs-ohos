@@ -99,7 +99,12 @@ class Constant {
 
   CLOUD_V4_COOKIE_PREFIX: string = 'v4:'
 
-  CLOUD_COOKIE_EXPIRE_DAYS: number = 30
+  /**
+   * 凭证有效期的兜底值，只在拿不到服务端真值时用。
+   * v4 登录会返回 refresh token 的真实到期时间，走不到这里；
+   * v3 只有 session，Cloudreve 默认就是 7 天，估得比实际长会让过期凭证看起来还能用。
+   */
+  CLOUD_COOKIE_EXPIRE_DAYS: number = 7
 
   PROTOCOL_HTTPS_INDEX: number = 0
 

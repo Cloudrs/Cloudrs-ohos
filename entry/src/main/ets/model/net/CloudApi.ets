@@ -31,6 +31,7 @@ import {
 import { ObjectSrc, ObjectCopy, ObjectMove, ObjectUpload } from './ObjectParam';
 import Constant from '../Constant';
 import AppLogger from '../../utils/AppLogger';
+import { SessionSync } from '../../utils/SessionSync';
 
 const CLOUD_API_TAG: string = 'CloudApi';
 
@@ -190,13 +191,8 @@ export class CloudApi {
     const refreshExpires: string = result[Constant.LOGIN_RESULT_REFRESH_EXPIRES_INDEX] ?? '';
     const cookieToStore = version === Constant.CLOUD_VERSION_V3 ?
       `${Constant.CLOUD_V3_COOKIE_PREFIX}${token}` : `${Constant.CLOUD_V4_COOKIE_PREFIX}${token}`;
-    let expiresDate = refreshExpires.length > 0 ? new Date(refreshExpires) : new Date();
-    if (refreshExpires.length === 0 || Number.isNaN(expiresDate.getTime())) {
-      expiresDate = new Date();
-      expiresDate.setDate(expiresDate.getDate() + Constant.CLOUD_COOKIE_EXPIRE_DAYS);
-    }
     AppStorage.setOrCreate(Constant.CLOUD_COOKIE, cookieToStore);
-    AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, expiresDate.toUTCString());
+    AppStorage.setOrCreate(Constant.CLOUD_COOKIE_EXPIRES, SessionSync.resolveExpires(refreshExpires));
     AppStorage.setOrCreate(Constant.CLOUD_REFRESH_TOKEN, refreshToken);
   }
 

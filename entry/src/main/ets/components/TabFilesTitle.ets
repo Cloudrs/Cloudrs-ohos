@@ -225,7 +225,8 @@ export struct TabFilesTitle {
     .width(CloudThemeToken.menuWidth)
     .padding(CloudThemeToken.zero)
     .margin(CloudThemeToken.zero)
-    .backgroundColor(CloudThemeToken.surface)
+    // API 26 沉浸光感：应用级开启后菜单默认使用系统厚材质，
+    // 不透明背景色会盖住材质层，故不再设置 backgroundColor
     .menuItemDivider({
       color: CloudThemeToken.line,
       strokeWidth: { value: CloudThemeToken.strongLineWidth, unit: LengthUnit.PX }

@@ -259,6 +259,11 @@ export struct LoginPage {
       this.username = param.username
     }
     this.password = ''
+    // 站点与用户名都已知（凭证过期重登 / 接续拉起）：自动跑完网址校验这一步，
+    // 直接停到密码输入，别让用户对着填好的网址再点一次“继续”
+    if (!param.isAdd && this.address.length > 0 && this.username.length > 0) {
+      this.websiteTest(false, true)
+    }
   }
 
   private prefillActiveUserForRelogin(): void {
@@ -1231,7 +1236,8 @@ export struct LoginPage {
   }
 
   private switchToSelectedUser(user: DbUserInfo): void {
-    if (CloudRouter.switchToUser(user.username, user.url, true)) {
+    // 过期账号会重新渲染登录页并预填，先关 sheet 避免它盖在上面
+    if (CloudRouter.switchToUser(user.username, user.url, () => { this.showUserSwitchSheet = false })) {
       this.showUserSwitchSheet = false
       CloudRouter.goAfterLogin(this.nextPage ?? Constant.HOME_PAGE)
     }

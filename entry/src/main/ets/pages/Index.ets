@@ -294,6 +294,12 @@ struct Index {
       return false;
     }
     if (this.rootPage === Constant.LOGIN_PAGE) {
+      // 切到过期账号会把用户送到登录页，但原来那个有效账号并没被动；
+      // 此时返回键应该退回首页，而不是直接退出应用。
+      if (CloudRouter.hasActiveSession()) {
+        CloudRouter.replaceRoot(Constant.HOME_PAGE);
+        return true;
+      }
       return CloudRouter.handleExitBack(this.getUIContext());
     }
     return CloudRouter.handleHomeBack(this.getUIContext());

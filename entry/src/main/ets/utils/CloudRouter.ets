@@ -104,7 +104,12 @@ export class CloudRouter {
     CloudRouter.replaceRoot(Constant.LOGIN_PAGE, new LoginParam(false, nextPage));
   }
 
-  static switchToUser(username: string, url?: string, showExpiredTip: boolean = true): boolean {
+  /**
+   * 切账号。凭证过期时不再只弹提示（用户除了删账号重填网址无路可走），
+   * 而是带着站点 + 用户名跳登录页，只补一次密码即可。
+   * onBeforeRelogin 给调用方在跳转前收尾（如关掉 bindSheet）。
+   */
+  static switchToUser(username: string, url?: string, onBeforeRelogin?: () => void): boolean {
     const result = CloudRouter.switchToUserSilently(username, url);
     if (result === UserSwitchResult.NotFound) {
       AppLogger.warn(TAG, `switch user not found: ${username}`);
@@ -113,15 +118,27 @@ export class CloudRouter {
     }
     if (result === UserSwitchResult.Expired) {
       AppLogger.warn(TAG, `switch user session expired: ${username}`);
-      if (showExpiredTip) {
-        showToastTips('登录信息过期，重新登录!', ToastType.Warn);
-      }
+      onBeforeRelogin?.();
+      CloudRouter.startRelogin(username, url);
       return false;
     }
     AppLogger.info(TAG, `switch user ok: ${username}`);
     // 手动切账号也可能正好切到接续来源账号，顺势完成挂起的续播
     ContinuationCenter.notifyRestore();
     return true;
+  }
+
+  /**
+   * 去登录页重新认证指定账号：预填站点与用户名，登录页会直接停在密码输入。
+   * 故意不动 ActiveAccount：用户中途放弃时，原来那个有效账号还在，返回键可以回首页。
+   */
+  static startRelogin(username: string, url?: string, nextPage: string = Constant.HOME_PAGE): void {
+    const dbUserInfo: DbUserInfo | null = UserDatabase.getUserInfo(username, url);
+    const siteUrl = dbUserInfo?.url ?? url ?? '';
+    const account = dbUserInfo?.username ?? username;
+    AppLogger.info(TAG, `start relogin: ${account}`);
+    showToastTips('该账号登录已过期，请重新输入密码', ToastType.Warn);
+    CloudRouter.replaceRoot(Constant.LOGIN_PAGE, new LoginParam(false, nextPage, siteUrl, account));
   }
 
   /** 本机当前是否有可用登录态（顺带恢复该会话） */

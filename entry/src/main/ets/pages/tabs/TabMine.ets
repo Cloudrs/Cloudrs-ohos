@@ -1237,7 +1237,8 @@ export struct TabMine {
       currentUser: this.currentUser,
       currentUrl: this.currentUrl,
       onSelect: (user: DbUserInfo) => {
-        if (CloudRouter.switchToUser(user.username, user.url, true)) {
+        // 过期账号会跳登录页，得先把 sheet 关掉再跳
+        if (CloudRouter.switchToUser(user.username, user.url, () => { this.closeSettingsSheet() })) {
           this.closeSettingsSheet()
           this.loadMineData()
         }

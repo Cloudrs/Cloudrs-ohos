@@ -22,6 +22,12 @@ export struct UserSwitchSheet {
     this.users = UserDatabase.listUserInfo()
   }
 
+  /** 凭证已过期：点它不会直接切过去，而是去登录页补密码，提前标出来免得意外 */
+  private isExpired(user: DbUserInfo): boolean {
+    const expires = new Date(user.expires).getTime()
+    return Number.isNaN(expires) || expires <= Date.now()
+  }
+
   private isCurrentUser(user: DbUserInfo): boolean {
     if (this.currentUrl.length > 0) {
       return user.username === this.currentUser && user.url === this.currentUrl
@@ -112,12 +118,31 @@ export struct UserSwitchSheet {
       })
 
       Column({ space: CloudThemeToken.spacingTiny }) {
-        Text(user.userinfo.nickname.length > 0 ? user.userinfo.nickname : user.username)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Row({ space: CloudThemeToken.spacingXs }) {
+          Text(user.userinfo.nickname.length > 0 ? user.userinfo.nickname : user.username)
+            .fontSize(CloudThemeToken.textSizeLarge)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+
+          if (this.isExpired(user)) {
+            Text('已过期')
+              .fontSize(CloudThemeToken.textSizeTiny)
+              .fontColor(CloudThemeToken.danger)
+              .backgroundColor(CloudThemeToken.dangerSoft)
+              .borderRadius(CloudThemeToken.controlRadiusSm)
+              .padding({
+                left: CloudThemeToken.spacingXs + CloudThemeToken.spacingTiny,
+                right: CloudThemeToken.spacingXs + CloudThemeToken.spacingTiny,
+                top: CloudThemeToken.spacingTiny,
+                bottom: CloudThemeToken.spacingTiny
+              })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
 
         Text(user.username)
           .fontSize(CloudThemeToken.textSizeSmall)

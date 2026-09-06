@@ -647,7 +647,7 @@ export struct TextPreviewPage {
     const cachePath = `${context.cacheDir}/text_save_${new Date().getTime()}_${CommonUtil.getFileName(param.filePath)}`
     await FileSystemUtil.writeArrayBuffer(cachePath, buffer)
     try {
-      await this.uploadCacheFile(cachePath, param.filePath)
+      await this.uploadCacheFile(cachePath, param.fileId, param.filePath)
     } finally {
       FileSystemUtil.unlinkIfExists(cachePath)
     }
@@ -666,9 +666,9 @@ export struct TextPreviewPage {
     AppLogger.info(TAG, `saved ${param.filePath}, ${buffer.byteLength} bytes`)
   }
 
-  private uploadCacheFile(cachePath: string, remotePath: string): Promise<void> {
+  private uploadCacheFile(cachePath: string, fileId: string, remotePath: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      CloudApi.uploadLocalFile(cachePath, remotePath, true, new Date().getTime(), {
+      CloudApi.updateFileContent(fileId, remotePath, cachePath, new Date().getTime(), {
         onSuccess: () => resolve(),
         onFailure: (msg: string) => reject(new Error(msg))
       })

@@ -5,6 +5,7 @@ import { ObjectUpload } from '../model/net/ObjectParam';
 import PhotoBackupSessionStore, { PhotoBackupSessionData } from '../model/PhotoBackupSessionStore';
 import { FileSystemUtil } from './FileSystemUtil';
 import { ApiErrorUtil } from './ApiErrorUtil';
+import UploadConflictResolver from './UploadConflictResolver';
 import AppLogger from './AppLogger';
 
 const TAG: string = 'PhotoBackupUploader';
@@ -62,8 +63,7 @@ class PhotoBackupUploaderImpl {
   ): Promise<PhotoBackupUploadResult> {
     let session: PhotoBackupSessionData;
     try {
-      this.throwIfInterrupted(callbacks);
-      session = await this.resolveSession(itemId, cachePath, remotePath, fileName, total, lastModifiedMs, callbacks);
+      session = await this.openSession(itemId, cachePath, remotePath, fileName, total, lastModifiedMs, callbacks);
     } catch (err) {
       if (err instanceof PhotoBackupUploadInterrupted) {
         return err.reason;
@@ -114,6 +114,49 @@ class PhotoBackupUploaderImpl {
       }
     }
     PhotoBackupSessionStore.clear();
+  }
+
+  /**
+   * 建会话（或续用本地存档的会话）；撞上 40054「上传会话已存在」时先清掉服务端
+   * 残留的占位再试一次。
+   *
+   * 这条自愈路径是必需的：备份失败时 uploader 会删服务端会话再抹掉本地存档，
+   * 而删除在 V3 上一直是空操作（native 侧误以为 V3 没有删除接口），于是每失败
+   * 一次就在服务端留一个永久占位，本地却连 sessionId 都没了。之后这张照片每次
+   * 备份都撞同一个 40054，要等服务端 GC（upload_session_timeout 默认 24h）。
+   * 反馈里"47 张照片反复无法上传"就是这么来的。
+   */
+  private async openSession(
+    itemId: string,
+    cachePath: string,
+    remotePath: string,
+    fileName: string,
+    total: number,
+    lastModifiedMs: number,
+    callbacks?: PhotoBackupUploadCallbacks
+  ): Promise<PhotoBackupSessionData> {
+    this.throwIfInterrupted(callbacks);
+    try {
+      return await this.resolveSession(itemId, cachePath, remotePath, fileName, total, lastModifiedMs, callbacks);
+    } catch (err) {
+      if (err instanceof PhotoBackupUploadInterrupted) {
+        throw err;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      if (!ApiErrorUtil.isUploadSessionExisted(message)) {
+        throw err instanceof Error ? err : new Error(message);
+      }
+      const knownSessionId = PhotoBackupSessionStore.get(itemId)?.sessionId ?? '';
+      AppLogger.warn(TAG, `create session hit 40054 for ${fileName}, clearing stale placeholder`);
+      const cleared = await UploadConflictResolver.clear(remotePath, knownSessionId, true);
+      if (!cleared) {
+        // 没清掉任何东西就重试只会再撞一次同样的错，直接把原错误抛出去
+        throw err instanceof Error ? err : new Error(message);
+      }
+      PhotoBackupSessionStore.remove(itemId);
+      this.throwIfInterrupted(callbacks);
+      return await this.resolveSession(itemId, cachePath, remotePath, fileName, total, lastModifiedMs, callbacks);
+    }
   }
 
   private async resolveSession(

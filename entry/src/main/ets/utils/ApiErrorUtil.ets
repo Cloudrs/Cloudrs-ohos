@@ -18,6 +18,21 @@ export class ApiErrorUtil {
     return lower.includes('40004') || lower.includes('object existed') || lower.includes('对象已存在');
   }
 
+  /**
+   * Cloudreve「上传会话已存在」（40054）。
+   *
+   * 建会话时服务端会插一条占位文件记录占住文件名，上传没走完就中断的话占位会留下，
+   * 之后同名文件每次建会话都撞这个码，要等服务端 GC（V3 的 upload_session_timeout
+   * 默认 24h）才自己好。和 40004 的区别很关键：40004 是撞上一个真实文件，
+   * 40054 意味着同名的那个对象一定是占位——所以清掉它是安全的。
+   */
+  static isUploadSessionExisted(msg: string): boolean {
+    const lower = (msg ?? '').toLowerCase();
+    return lower.includes('40054') ||
+      lower.includes('upload session existed') ||
+      lower.includes('上传会话已存在');
+  }
+
   /** Cloudreve V4 文件锁冲突（40073），常见于未结束的上传/备份会话。 */
   static isLockConflict(msg: string): boolean {
     const lower = (msg ?? '').toLowerCase();

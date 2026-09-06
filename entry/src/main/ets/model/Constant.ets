@@ -40,6 +40,14 @@ class Constant {
 
   TRANSFER_PERSIST_INTERVAL_MS: number = 2000
 
+  /**
+   * 传输进度刷新到 UI 的最小间隔。
+   * 上传的进度回调来自 native，是按字节步长（每 4MB）触发的，网速快时一秒能来十几次，
+   * 百分比和字节数会跳得很碎。下载那边由 request.agent 按时间节奏回调，大约一秒一次，
+   * 这里对齐它，让两个列表的观感一致；顺带让速度值变成稳定的一秒均值。
+   */
+  TRANSFER_PROGRESS_UI_INTERVAL_MS: number = 1000
+
   BACKGROUND_TASK_COMPLETE_PERCENT: number = 100
 
   BACKGROUND_TASK_EMPTY_SIZE: number = 0

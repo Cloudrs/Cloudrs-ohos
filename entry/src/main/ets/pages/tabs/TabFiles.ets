@@ -4636,20 +4636,44 @@ export struct TabFiles {
 
   /**
    * 新建文本文件后直接打开编辑器。
-   * 服务端刚建好的文件还没回到列表里，这里用已知的路径和文件名自己拼一个
-   * ObjectInfo；大小为 0，编辑器按空文件加载。
+   *
+   * 必须先拿到服务端给的真实对象 id。V3 的 /file/download/:id 要的是 hashid，
+   * 把全路径塞进去连路由都匹配不上，服务端回一段纯文本 404，客户端按 JSON 解就
+   * 成了「加载失败 · error decoding response body」。V4 的 id 恰好就是全路径，
+   * 所以这个坑一直只在 V3 上暴露。
+   *
+   * 建文件的接口只回 {code:0} 不带 id，只能自己反查一次目录。不能指望
+   * confirmNewObject 里那次刷新——getFileList 虽然声明成 async，内部却是回调式的，
+   * 请求一发出就返回，await 它等不到数据落地。
    */
   private openNewTextFile(dirPath: string, fileName: string): void {
     const sep = dirPath.endsWith('/') ? '' : '/'
     const fullPath = `${dirPath}${sep}${fileName}`
-    const created: ObjectInfo = {
+    // 反查不到时退回自拼的这个：V4 上它是合法 id，等于保持原有行为
+    const fallback: ObjectInfo = {
       id: fullPath, name: fileName, path: dirPath,
       thumb: false, size: 0, type: Constant.OBJECT_FILE_TYPE,
       date: '', create_date: '', source_enabled: false
     }
     const refreshPath = this.currentPath
-    TextPreviewEntry.open(created, () => {
-      this.getFileList(true, refreshPath)
+    const openEditor = (item: ObjectInfo): void => {
+      TextPreviewEntry.open(item, () => {
+        this.getFileList(true, refreshPath)
+      })
+    }
+    CloudApi.getFilesInfo(dirPath, {
+      onSuccess: (data: DirectoryInfo) => {
+        const listed = (data.objects ?? []).find((object: ObjectInfo) =>
+          object.name === fileName && object.type !== Constant.OBJECT_DIR_TYPE)
+        if (!listed) {
+          AppLogger.warn(TAG, `new text file ${fileName} not found under ${dirPath}, falling back to path id`)
+        }
+        openEditor(listed ?? fallback)
+      },
+      onFailure: (msg: string) => {
+        AppLogger.warn(TAG, `resolve id for new text file ${fileName} failed: ${msg}`)
+        openEditor(fallback)
+      }
     })
   }
 

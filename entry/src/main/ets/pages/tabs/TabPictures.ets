@@ -517,8 +517,18 @@ export struct TabPictures {
       return;
     }
     const name = this.getRemoteName(item);
-    const remotePath = item.remoteFileId.length > 0 ? item.remoteFileId : this.getRemoteFilePath(item);
-    CloudApi.getObjectDetail(remotePath, false, {
+    // getObjectDetail 收的是不透明的对象 id。V4 上 id 就是全路径，所以没记到
+    // remoteFileId 时拼一个路径出来还能查；V3 上 id 是 hashid，把路径塞进
+    // /object/property/{id} 连路由都匹配不上，服务端回纯文本 404 ——
+    // 而 isNotFoundError 认得 "404"，于是这里会把一张好端端的图判成"云端已删"，
+    // 撤掉已备份标记再重传一遍。查不了就别查，正合本方法"宁可不动"的初衷。
+    const objectId = item.remoteFileId.length > 0
+      ? item.remoteFileId
+      : (CloudApi.isV4() ? this.getRemoteFilePath(item) : '');
+    if (objectId.length === 0) {
+      return;
+    }
+    CloudApi.getObjectDetail(objectId, false, {
       onSuccess: () => {},
       onFailure: (msg: string) => {
         AppLogger.info(TAG, `[verify] cloud check failed for ${name}: ${msg}`);

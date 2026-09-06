@@ -9,8 +9,8 @@ import {
   nativeGetFileMetadata, nativeSearchFiles,
   nativeMoveObjects, nativeCopyObjects,
   nativeRenameObject, nativeNewDirectory, nativeNewFile,
-  nativeGetDownloadUri, nativeGetUploadUri, nativeDeleteUploadSession,
-  nativeUploadLocalFile, nativeUploadLocalFileChunk,
+  nativeGetDownloadUri, nativeGetUploadUri, nativeDeleteUploadSession, nativeDeleteAllUploadSessions,
+  nativeUploadLocalFile, nativeUpdateFileContent, nativeUploadLocalFileChunk,
   nativeUploadLocalFileChunkWithProgress, nativeUploadLocalFileChunkToUrl,
   nativeUploadLocalFileChunkToUrlWithProgress,
   nativeAria2Downloading, nativeAria2Finished,
@@ -340,6 +340,18 @@ export class CloudApi {
   }
 
   /**
+   * 当前站点是不是 V4。
+   *
+   * 值得关心的差别之一：ObjectInfo.id 是不透明的——V4 上它就是文件全路径
+   * （native 列目录时直接填 unix path），V3 上是服务端的 hashid。所以"用路径
+   * 拼一个 id 出来"这种写法在 V4 上能用、在 V3 上会打到不存在的路由上。
+   */
+  static isV4(): boolean {
+    const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? '';
+    return cookie.startsWith(Constant.CLOUD_V4_COOKIE_PREFIX);
+  }
+
+  /**
    * V4 删除必须保留 40073 响应里的锁 token，网页端正是用这些 token 调 /file/lock 强制解锁。
    * native deleteObjects 只上抛错误字符串，会丢失 data；V3 没有该锁接口，继续走 native 兼容路径。
    */
@@ -465,6 +477,15 @@ export class CloudApi {
     nativeDeleteUploadSession(remotePath, sessionId, CloudApi.withApiLogging(`deleteUploadSession(${remotePath})`, callback));
   }
 
+  /**
+   * 删掉当前账号名下全部上传占位（V3 专属）。
+   * 只在 sessionId 丢失、按 id 清不掉残留时使用，且必须确认此刻没有其它上传在跑——
+   * 它会把进行中上传的占位也一并删掉。V4 没有对应接口，onSuccess(false)。
+   */
+  static deleteAllUploadSessions(callback?: HttpCallback<boolean>): void {
+    nativeDeleteAllUploadSessions(CloudApi.withApiLogging('deleteAllUploadSessions', callback));
+  }
+
   static getUploadUri(object: ObjectUpload, callback?: HttpCallback<UploadRequestResponse>, overwrite: boolean = false): void {
     nativeGetUploadUri(
       object.path, object.size, object.name,
@@ -472,6 +493,17 @@ export class CloudApi {
       overwrite ? 1 : 0,
       CloudApi.withApiLogging(`getUploadUri(${object.name})`, callback)
     );
+  }
+
+  /**
+   * 覆盖保存一个已存在文件的内容（文本编辑器保存）。
+   * 不能用 uploadLocalFile(overwrite=true) 代替：那个 overwrite 在 V3 上不起作用，
+   * V3 的上传会话撞同名文件只会回 40004 Object existed。
+   */
+  static updateFileContent(fileId: string, remotePath: string, localPath: string,
+    lastModifiedMs: number = 0, callback?: HttpCallback<null>): void {
+    nativeUpdateFileContent(fileId, remotePath, localPath, lastModifiedMs,
+      CloudApi.withApiLogging(`updateFileContent(${remotePath})`, callback));
   }
 
   static uploadLocalFile(localPath: string, remotePath: string, overwrite: boolean = false,

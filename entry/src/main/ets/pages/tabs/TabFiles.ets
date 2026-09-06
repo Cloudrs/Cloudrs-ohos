@@ -42,7 +42,7 @@ import { CloudIconButton } from "../../components/CloudIconButton";
 import {
   DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
 } from "@kit.UIDesignKit";
-import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
 import { Downloads, TransferAction } from "../../components/Downloads";
 import { Uploads } from "../../components/Uploads";
 import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
@@ -375,7 +375,6 @@ export struct TabFiles {
   @State inputPlaceholder: string|Resource = ''
   @State inputValue: string = ''
   @State gridWidth: number = 0
-  @State isHeaderGlassActive: boolean = false
   @State headerCollapseProgress: number = 0
   @State refreshPullOffset: number = 0
   @State currentUser: string = ''
@@ -399,7 +398,6 @@ export struct TabFiles {
     backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
   })
   @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex]
-  private lastHeaderScrollOffset: number = 0
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
   private inputTextController: TextInputController = new TextInputController()
@@ -779,25 +777,19 @@ export struct TabFiles {
     return items
   }
 
-  updateHeaderGlassState(): void {
+  /** 标题栏的毛玻璃现在由 HdsNavigation 的 systemMaterialEffect 负责，这里只算折叠进度。 */
+  updateHeaderCollapseProgress(): void {
     const scrollOffset = Math.max(CloudThemeToken.zero, this.scrollerForList.currentOffset().yOffset)
     const collapseDistance = this.getHeaderCollapseDistance()
     const nextProgress = Math.min(CloudThemeToken.fullOpacity, Math.max(CloudThemeToken.zero,
       scrollOffset / collapseDistance))
-    this.lastHeaderScrollOffset = scrollOffset
     if (Math.abs(this.headerCollapseProgress - nextProgress) >= CloudThemeToken.scrollProgressUpdateThreshold) {
       this.headerCollapseProgress = nextProgress
-    }
-    const active = nextProgress > CloudThemeToken.zero
-    if (this.isHeaderGlassActive !== active) {
-      this.isHeaderGlassActive = active
     }
   }
 
   resetHeaderScrollState(): void {
-    this.isHeaderGlassActive = false
     this.headerCollapseProgress = 0
-    this.lastHeaderScrollOffset = 0
   }
 
   getTopInset(): number {
@@ -817,13 +809,6 @@ export struct TabFiles {
       return CloudThemeToken.zero
     }
     return this.getSearchHeaderVisibleProgress()
-  }
-
-  getTitleBarMaterialOpacity(): number {
-    if (this.isMultiSelectMode) {
-      return CloudThemeToken.fullOpacity
-    }
-    return this.headerCollapseProgress * CloudThemeToken.filesHeaderGlassMaxOpacity
   }
 
   getHeaderCollapsedOffset(): number {
@@ -2866,7 +2851,10 @@ export struct TabFiles {
         offsetY: CloudThemeToken.refreshShadowOffsetY
       })
       .margin({
-        top: this.getHdsTitleBarBaseHeight() - CloudThemeToken.spacingSm,
+        // 必须落在标题栏下沿之外。HdsNavigation 的毛玻璃画在内容区之上，而这个菜单
+        // 是内容区里的浮层，zIndex 只在内容区内部排序，管不到标题栏那一层。原先往上
+        // 顶了 spacingSm，第一项「多选」的上半截就被糊掉了。
+        top: this.getHdsTitleBarBaseHeight() + CloudThemeToken.spacingCard,
         right: CloudThemeToken.filesHeaderPadding
       })
     }
@@ -3596,11 +3584,19 @@ export struct TabFiles {
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: CloudThemeToken.defaultAnimationDuration})
     .scrollBarWidth(CloudThemeToken.strongLineWidth)
+    // 列表整个铺满标题栏底下（沉浸式：内容从底下滚过去，让位靠的是滚动内容里的
+    // 占位项而不是组件 padding），滚动条默认按组件全高绘制，滑块滚到接近顶部时
+    // 就会伸进标题栏那条毛玻璃带里。把轨道两端让开标题栏和悬浮 tab bar。
+    .scrollBarMargin({
+      start: LengthMetrics.vp(this.getHdsTitleBarBaseHeight()),
+      end: LengthMetrics.vp((this.isMultiSelectMode ? this.multiSelectBarHeight : this.tabBarHeight) +
+        CloudThemeToken.tabContentBottomGap)
+    })
     .onDidScroll((_scrollOffset: number, scrollState: ScrollState) => {
       if (scrollState !== ScrollState.Idle) {
         this.prioritizeNewestThumbRequests = true
       }
-      this.updateHeaderGlassState()
+      this.updateHeaderCollapseProgress()
     })
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const width = Number(newValue.width)

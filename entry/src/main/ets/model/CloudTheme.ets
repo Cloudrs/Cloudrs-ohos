@@ -319,9 +319,6 @@ export class CloudThemeToken {
   static readonly filesHeaderIconPadding: number = 10
   static readonly filesHeaderBackIconPadding: number = 5
   static readonly filesHeaderBadgeSize: number = 12
-  static readonly filesHeaderGlassThreshold: number = 8
-  static readonly filesHeaderGlassBlurStyle: BlurStyle = BlurStyle.BACKGROUND_THIN
-  static readonly filesHeaderGlassMaxOpacity: number = 0.28
   static readonly filesHeaderCollapsedContentLift: number = 10
   static readonly filesHeaderZIndex: number = 5
   static readonly filesHeaderTransitionDuration: number = 200

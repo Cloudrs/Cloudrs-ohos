@@ -1460,7 +1460,12 @@ export struct TabFiles {
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : CommonUtil.getLastDirectoryName(path)
     // 请求发出后可能被账号切换打断，回来的是上一账号的目录，不能再往界面上写
     const requestScope = this.loadedAccountScope
-    CloudApi.getFilesInfo(path, {
+    // 包成 Promise，让 await 真的等到数据落地。此前这个方法虽然声明成 async，
+    // 内部却是纯回调，请求一发出就 return——调用方 await 它等于没等
+    // （下拉刷新的 await 也一样是空等）。每条退出路径都要 resolve，
+    // 包括账号切换导致丢弃响应的那两处提前 return，否则 Promise 永远悬着。
+    await new Promise<void>((settle: () => void) => {
+      CloudApi.getFilesInfo(path, {
       onStart: () => {
         if (requestScope !== this.loadedAccountScope) {
           return
@@ -1479,6 +1484,7 @@ export struct TabFiles {
       onSuccess: (data: DirectoryInfo) => {
         if (requestScope !== this.loadedAccountScope) {
           AppLogger.info(TAG, 'drop file list response from previous account')
+          settle()
           return
         }
         this.loadingFilePath = ''
@@ -1498,9 +1504,11 @@ export struct TabFiles {
         if (fromPullRefresh) {
           showToast('刷新成功')
         }
+        settle()
       },
       onFailure: (msg) => {
         if (requestScope !== this.loadedAccountScope) {
+          settle()
           return
         }
         this.loadingFilePath = ''
@@ -1513,7 +1521,9 @@ export struct TabFiles {
         this.isRefreshing = false
         this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = shouldKeepContent ? FilePageState.IDLE : FilePageState.FAILED
+        settle()
       }
+      })
     })
   }
 
@@ -4638,9 +4648,10 @@ export struct TabFiles {
    * 成了「加载失败 · error decoding response body」。V4 的 id 恰好就是全路径，
    * 所以这个坑一直只在 V3 上暴露。
    *
-   * 建文件的接口只回 {code:0} 不带 id，只能自己反查一次目录。不能指望
-   * confirmNewObject 里那次刷新——getFileList 虽然声明成 async，内部却是回调式的，
-   * 请求一发出就返回，await 它等不到数据落地。
+   * 建文件的接口只回 {code:0} 不带 id，所以得从目录清单里反查。调用方在开编辑器
+   * 之前已经 await 过一次刷新，优先直接用刷到的那份列表；只有当刷新没覆盖到这个
+   * 目录（比如中途切走了）时才自己补列一次，免得为同一个目录列两遍——大目录上
+   * 一次列表可能就要几十秒。
    */
   private openNewTextFile(dirPath: string, fileName: string): void {
     const sep = dirPath.endsWith('/') ? '' : '/'
@@ -4657,6 +4668,16 @@ export struct TabFiles {
         this.getFileList(true, refreshPath)
       })
     }
+
+    if (dirPath === this.currentPath) {
+      const listed = this.fileDataSource.getDataList().find((object: ObjectInfo) => object.name === fileName)
+      if (listed) {
+        openEditor(listed)
+        return
+      }
+      AppLogger.warn(TAG, `new text file ${fileName} missing from refreshed listing, re-fetching ${dirPath}`)
+    }
+
     CloudApi.getFilesInfo(dirPath, {
       onSuccess: (data: DirectoryInfo) => {
         const listed = (data.objects ?? []).find((object: ObjectInfo) =>
@@ -4680,12 +4701,16 @@ export struct TabFiles {
         const createdPath = this.inputNewPath
         const isDir = this.inputNewIsDir
         this.closeInputSheet()
-        this.getFileList(true, this.currentPath)
         showToast(`新建${content}成功`)
-        // 新建的文本文件直接进编辑器：建完一个空文件却没处填内容，等于没建
-        if (!isDir && CommonUtil.isTextViewable(CommonUtil.getFileType(content))) {
-          this.openNewTextFile(createdPath, content)
-        }
+        // 新建的文本文件直接进编辑器：建完一个空文件却没处填内容，等于没建。
+        // 等这次刷新落地再开——编辑器要的是列表里那条真实 ObjectInfo 的 id，
+        // 复用它就不用为同一个目录再列一次。
+        const shouldOpenEditor = !isDir && CommonUtil.isTextViewable(CommonUtil.getFileType(content))
+        this.getFileList(true, this.currentPath).then(() => {
+          if (shouldOpenEditor) {
+            this.openNewTextFile(createdPath, content)
+          }
+        })
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, '新建文件/文件夹失败 msg: ' + msg)

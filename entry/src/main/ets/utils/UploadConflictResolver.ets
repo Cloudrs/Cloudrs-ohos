@@ -36,6 +36,8 @@ interface DirListingCache {
  */
 class UploadConflictResolverImpl {
   private dirCache: Map<string, DirListingCache> = new Map();
+  /** 同一目录正在飞的那次请求。相册备份是并发的，几张同时撞 40054 会同时来要清单。 */
+  private inFlight: Map<string, Promise<Map<string, string> | undefined>> = new Map();
 
   /**
    * 清掉 remotePath 上的残留上传会话。
@@ -101,36 +103,62 @@ class UploadConflictResolverImpl {
     return deleted;
   }
 
-  /** 取父目录的「文件名 → id」清单，TTL 内复用。目录项不收进来，我们只删文件。 */
+  /**
+   * 取父目录的「文件名 → id」清单，TTL 内复用。目录项不收进来，我们只删文件。
+   *
+   * 两点要紧：
+   * 1. **只缓存成功的清单**。列目录失败时返回空清单，要是把它也缓存下来，接下来
+   *    30 秒里每一次 40054 都会判成"没有占位"直接放弃——一次网络抖动就让整批
+   *    自愈失效，正好毁掉这个方法要救的那个场景。
+   * 2. **同一目录的并发请求要合流**。备份是并发上传的，好几张同时撞 40054 时，
+   *    缓存还没填上，各发各的就会同时打出 N 次列目录。
+   */
   private async listFileIds(parent: string): Promise<Map<string, string>> {
-    const now = new Date().getTime();
     const cached = this.dirCache.get(parent);
-    if (cached && now - cached.at < DIR_CACHE_TTL_MS) {
+    if (cached && new Date().getTime() - cached.at < DIR_CACHE_TTL_MS) {
       return cached.ids;
     }
-    const ids = await this.fetchFileIds(parent);
-    this.dirCache.set(parent, { at: now, ids });
+
+    let request = this.inFlight.get(parent);
+    if (!request) {
+      request = this.fetchFileIds(parent);
+      this.inFlight.set(parent, request);
+    }
+
+    let ids: Map<string, string> | undefined;
+    try {
+      ids = await request;
+    } finally {
+      this.inFlight.delete(parent);
+    }
+
+    if (!ids) {
+      return new Map<string, string>();
+    }
+    this.dirCache.set(parent, { at: new Date().getTime(), ids });
     return ids;
   }
 
-  private fetchFileIds(parent: string): Promise<Map<string, string>> {
-    return new Promise<Map<string, string>>((resolve: (value: Map<string, string>) => void) => {
-      CloudApi.getFilesInfo(parent, {
-        onSuccess: (data: DirectoryInfo) => {
-          const ids = new Map<string, string>();
-          (data.objects ?? []).forEach((object: ObjectInfo) => {
-            if (object.type !== 'dir' && object.id.length > 0) {
-              ids.set(object.name, object.id);
-            }
-          });
-          resolve(ids);
-        },
-        onFailure: (msg: string) => {
-          AppLogger.warn(TAG, `list ${parent} failed while clearing placeholder: ${msg}`);
-          resolve(new Map<string, string>());
-        }
+  /** 列目录失败返回 undefined，好和"目录确实是空的"区分开——后者可以缓存，前者不行。 */
+  private fetchFileIds(parent: string): Promise<Map<string, string> | undefined> {
+    return new Promise<Map<string, string> | undefined>(
+      (resolve: (value: Map<string, string> | undefined) => void) => {
+        CloudApi.getFilesInfo(parent, {
+          onSuccess: (data: DirectoryInfo) => {
+            const ids = new Map<string, string>();
+            (data.objects ?? []).forEach((object: ObjectInfo) => {
+              if (object.type !== 'dir' && object.id.length > 0) {
+                ids.set(object.name, object.id);
+              }
+            });
+            resolve(ids);
+          },
+          onFailure: (msg: string) => {
+            AppLogger.warn(TAG, `list ${parent} failed while clearing placeholder: ${msg}`);
+            resolve(undefined);
+          }
+        });
       });
-    });
   }
 
   private deleteObject(id: string, name: string): Promise<boolean> {

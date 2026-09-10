@@ -233,6 +233,10 @@
       "value": "#E4EAF0"
     },
     {
+      "name": "cloud_scroll_bar",
+      "value": "#C9D1DC"
+    },
+    {
       "name": "cloud_primary",
       "value": "#0A59F7"
     },

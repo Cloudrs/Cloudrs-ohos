@@ -62,30 +62,58 @@ export struct AboutPage {
   }
 
   build() {
+    // 矮屏或大字体下本页装不下（半模态的 MEDIUM 挡位尤其明显），底部会被裁掉。
+    // 只让信息卡与备案号那段滚动：标题栏、logo 与应用名是本页的身份，滚走了就
+    // 不知道自己在看什么。底部安全距挂在最外层，滚动视口本身即止步于导航条之上，
+    // 内容任何时刻都不会经过导航条底下。
     Column({ space: CloudThemeToken.aboutPageGap }) {
       if (!this.embedded) {
         CommonTitle({title: $r('app.string.about')})
       }
 
-      Blank().height(CloudThemeToken.aboutLogoTopGap)
       this.logoTitle()
 
-      this.aboutInfo()
+      Scroll() {
+        Column({ space: CloudThemeToken.aboutPageGap }) {
+          this.aboutInfo()
 
-      Blank().layoutWeight(1)
-      Hyperlink('https://beian.miit.gov.cn', $r('app.string.icp_id'))
-        .height(CloudThemeToken.aboutIcpHeight)
-        .margin({ bottom: CloudThemeToken.pageBottomPadding })
-
-      if (!this.embedded) {
-        Blank().height(this.bottomRectHeight)
+          Blank().layoutWeight(1)
+          Hyperlink('https://beian.miit.gov.cn', $r('app.string.icp_id'))
+            .height(CloudThemeToken.aboutIcpHeight)
+            // 上面的 Blank 只在有余量时才撑得开，滚动态下会塌成 0；
+            // 这条 margin 是备案号不贴住信息卡的保底
+            .margin({ top: CloudThemeToken.aboutIcpTopGap })
+        }
+        .width('100%')
+        // 用 minHeight 而非 height：空间够时照旧撑满，上面那个 layoutWeight 的 Blank
+        // 仍把备案号顶到滚动区底部，观感不变；空间不够时退回自然高度交给 Scroll
+        .constraintSize({ minHeight: '100%' })
+        // 左右内边距下沉到滚动内容上，Scroll 本身通栏：滚动条画在组件右边界，
+        // 留在这条 16vp 的空白槽里，不会压到信息卡上
+        .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })
+        .alignItems(HorizontalAlign.Center)
+        .justifyContent(FlexAlign.SpaceBetween)
       }
+      .width('100%')
+      .layoutWeight(1)
+      // 应用名与信息卡之间的间距（原挂在卡片的 margin 上），移到滚动区外边距：
+      // 视口顶端即卡片顶端，顶上不再留空，滚动条也从卡片顶端起算
+      .margin({ top: CloudThemeToken.aboutInfoTopMargin })
+      .align(Alignment.Top)
+      // 常驻细滚动条：装得下时 ArkUI 自己不画，装不下才出现，正好当"可以滚"的提示。
+      // 只收窄宽度、不改颜色——系统默认色本就是低对比的半透明灰，且跟随深浅色
+      .scrollBar(BarState.On)
+      .scrollBarWidth(CloudThemeToken.strongLineWidth)
+      .scrollBarColor(CloudThemeToken.scrollBar)
+      .edgeEffect(EdgeEffect.Spring)
     }
-    .width('100%').height('100%')
-    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })
-    .backgroundColor(CloudThemeToken.background)
+    .width('100%')
+    .height('100%')
+    // 导航条高度必须原样留出，上面只压一道细缝：本页最后一行是备案号，
+    // 不是可点控件，不需要留出触摸安全距
+    .padding({ bottom: this.bottomRectHeight + CloudThemeToken.spacingSm })
     .alignItems(HorizontalAlign.Center)
-    .justifyContent(FlexAlign.SpaceBetween)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder logoTitle() {
@@ -129,7 +157,9 @@ export struct AboutPage {
     }
     .width('100%')
     .padding({ left: CloudThemeToken.aboutInfoHorizontalPadding, right: CloudThemeToken.aboutInfoHorizontalPadding })
-    .margin({ top: CloudThemeToken.aboutInfoTopMargin })
+    // 与应用名之间的间距不放这里：本卡是滚动区的第一个子节点，放在这儿会变成
+    // 滚动区内部的一段空白，滚动条也跟着从那段空白开始画。间距移到 Scroll 的
+    // 外边距上，卡片才贴着视口顶端
     .backgroundColor(CloudThemeToken.surface)
     .borderRadius(CloudThemeToken.cardRadius)
     .justifyContent(FlexAlign.Center)

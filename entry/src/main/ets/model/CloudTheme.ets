@@ -304,7 +304,8 @@ export class CloudThemeToken {
   static readonly aboutLogoSize: number = 100
   static readonly aboutTitleSize: number = 20
   static readonly aboutInfoHorizontalPadding: number = 10
-  static readonly aboutInfoTopMargin: number = 30
+  // 应用名与信息卡之间的间距。半模态里可视高度紧张，这段纯留白压到 16
+  static readonly aboutInfoTopMargin: number = 16
   static readonly aboutInfoTitleSize: number = 16
   static readonly aboutInfoTextSize: number = 14
   static readonly aboutInfoRowHeight: number = 50
@@ -313,6 +314,9 @@ export class CloudThemeToken {
   static readonly aboutSourceLinkPadding: number = 12
   static readonly aboutSourceLinkRadius: number = 14
   static readonly aboutIcpHeight: number = 12
+  // 备案号与信息卡之间的保底间距：内容超出可滚时撑开的 Blank 会塌成 0，
+  // 只剩 aboutPageGap 会让两者贴在一起
+  static readonly aboutIcpTopGap: number = 12
   static readonly filesHeaderGap: number = 10
   static readonly filesHeaderPadding: number = 10
   static readonly filesHeaderActionWidth: number = 100
@@ -478,6 +482,8 @@ export class CloudThemeToken {
   static readonly previewCloseButtonBackground: ResourceColor = $r('app.color.cloud_preview_close_background')
   static readonly previewCloseIcon: ResourceColor = $r('app.color.cloud_preview_close_icon')
   static readonly line: ResourceColor = $r('app.color.cloud_line')
+  // 滚动条滑块：比分隔线重一档（压在白卡上要看得见），比次要文字轻一档（不抢视线）
+  static readonly scrollBar: ResourceColor = $r('app.color.cloud_scroll_bar')
   static readonly primary: ResourceColor = $r('app.color.cloud_primary')
   static readonly primarySoft: ResourceColor = $r('app.color.cloud_primary_soft')
   static readonly textPrimary: ResourceColor = $r('app.color.cloud_text_primary')

@@ -393,6 +393,9 @@ export class CloudThemeToken {
   // 本地预览返回键与远程预览 HDS titleBar 返回图标(24vp)保持一致
   static readonly photoLocalPreviewBackIconSize: number = 24
   static readonly videoPreviewControlsPanelRadius: number = 20
+  // 续播浮条：胶囊高度即圆角基准，内嵌的"从头播放"按钮再小一号
+  static readonly videoPreviewResumeBannerHeight: number = 40
+  static readonly videoPreviewResumeActionHeight: number = 28
   static readonly videoPreviewTitleShadowRadius: number = 6
   static readonly videoPreviewTitleShadowColor: ResourceColor = 'rgba(0, 0, 0, 0.6)'
   static readonly loginPageGap: number = 10
@@ -504,6 +507,9 @@ export class CloudThemeToken {
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
   static readonly videoPreviewControlBorder: ResourceColor = 'rgba(255, 255, 255, 0.18)'
   static readonly videoPreviewControlsBackground: ResourceColor = 'rgba(0, 0, 0, 0.54)'
+  // 续播浮条的"从头播放"按钮底色。浮条整体只用白与半透明黑，不吃主题色：
+  // cloud_primary 压在深色画面上对比度不足，且视频画面本身与深浅色模式无关
+  static readonly videoPreviewResumeActionBackground: ResourceColor = 'rgba(255, 255, 255, 0.16)'
   static readonly refreshShadow: ResourceColor = 'rgba(24, 36, 56, 0.12)'
   static readonly overlayScrim: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'

@@ -158,6 +158,26 @@ class Constant {
   // Video 挂载后超过该时长仍未 onPrepared 视为失败，不陪系统等 30s 超时
   VIDEO_PREPARE_TIMEOUT_MS: number = 15000
 
+  /** 本地续播记录表，整表一个 JSON 数组存在 USER_PREFERENCES 下 */
+  VIDEO_PROGRESS_KEY: string = 'VideoPlayProgress'
+
+  // 片头片尾各留这么大比例的"不记录区"：开头没看几眼的不记，接近看完的清掉。
+  // 按比例而非绝对秒数，才能同时伺候十几秒的短片和几十分钟的长片
+  VIDEO_PROGRESS_EDGE_RATIO: number = 0.05
+
+  // 不记录区的绝对下限。短片按 5% 算出来只有零点几秒，等于没有门槛；
+  // 同时这条下限天然排除了 10 秒以内的视频——它的可记录区间是空的
+  VIDEO_PROGRESS_EDGE_MIN_SECONDS: number = 5
+
+  // 续播表上限，超出按最后播放时间 LRU 裁剪
+  VIDEO_PROGRESS_MAX_RECORDS: number = 200
+
+  // 播放中定期回写进度的心跳间隔，防进程被系统回收后丢记录
+  VIDEO_PROGRESS_SAVE_INTERVAL_MS: number = 30000
+
+  // 续播浮条自动消失时长
+  VIDEO_RESUME_BANNER_DURATION_MS: number = 4000
+
   FIRST_ARRAY_INDEX: number = 0
 
   SYSTEM_TOP_RECT_HEIGHT: string = 'sysTopRectHeight'

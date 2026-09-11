@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.dreamflytech.cloudrs",
     "vendor": "dreamflytech",
-    "versionCode": 2609101,
-    "versionName": "1.4.3",
+    "versionCode": 2609111,
+    "versionName": "1.4.4",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }

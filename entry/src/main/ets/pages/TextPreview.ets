@@ -435,7 +435,41 @@ export struct TextPreviewPage {
       },
       onFailure: (msg: string) => {
         AppLogger.warn(TAG, `get download uri failed: ${msg}`)
-        this.markFailed('加载失败', msg.length > CloudThemeToken.zero ? msg : '获取文件地址失败，请重试')
+        this.recoverEmptyFile(msg)
+      }
+    })
+  }
+
+  /**
+   * 取不到下载地址时的兜底：确认是个 0 字节文件就按空白打开。
+   *
+   * 空文件在服务端没有可下载的实体，签地址这一步本来就会失败；而空文件恰恰是
+   * 最需要打开的——用户就是要往里写第一行字。
+   * 判空只认服务端详情，不能信路由参数里的 size：那份是列表快照，过期的话
+   * 会把一个有内容的文件当空的打开，用户一保存就把正文清空了。
+   * 详情也拿不到（文件真不存在 / 断网）时照旧报错，不能把真错误吞掉。
+   */
+  private recoverEmptyFile(reason: string): void {
+    const fallback = reason.length > CloudThemeToken.zero ? reason : '获取文件地址失败，请重试'
+    const fileId = this.routeParam?.fileId ?? ''
+    if (fileId.length === CloudThemeToken.zero) {
+      this.markFailed('加载失败', fallback)
+      return
+    }
+    CloudApi.getObjectDetail(fileId, false, {
+      onSuccess: (detail: ObjectDetail) => {
+        if (detail.size !== CloudThemeToken.zero) {
+          this.markFailed('加载失败', fallback)
+          return
+        }
+        AppLogger.info(TAG, 'no download uri for empty file, open as blank')
+        const empty: ArrayBuffer = new ArrayBuffer(CloudThemeToken.zero)
+        this.rawBuffer = empty
+        this.applyDecoded(TextFileCodec.decode(empty))
+      },
+      onFailure: (msg: string) => {
+        AppLogger.warn(TAG, `empty file check failed: ${msg}`)
+        this.markFailed('加载失败', fallback)
       }
     })
   }

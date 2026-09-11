@@ -4610,6 +4610,9 @@ export struct TabFiles {
     AppLogger.info(TAG, `rename ${item.type === Constant.OBJECT_DIR_TYPE ? 'dir' : 'file'}`)
     CloudApi.renameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
+        // id 必须跟着名字一起换：V4 的 id 就是全路径，留着旧 id 的话后面
+        // 预览/下载/详情/删除全打到一个已经不存在的路径上（服务端回 40081）
+        item.id = CloudApi.renamedObjectId(item.id, content)
         item.name = content
         if (item.type == Constant.OBJECT_DIR_TYPE) {
           console.info(TAG, 'index dir ' + index)

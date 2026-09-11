@@ -352,6 +352,26 @@ export class CloudApi {
   }
 
   /**
+   * 改名成功之后，这个对象的新 id。
+   *
+   * V4 的 id 就是全路径，改完名旧路径已经不存在了。列表里只改 name 不换 id 的话，
+   * 之后所有按 id 发的请求（预览取下载地址、详情、删除、移动）都打在旧路径上，
+   * 服务端解析 uri 失败回 40081，表现就是"刚改完名的文件点开必报错"。
+   * V3 的 id 是服务端 hashid，与文件名无关，改名后照旧可用，原样返回。
+   *
+   * 认路径看 id 本身的形状而不是 isV4()：这里要判的就是"这个 id 是不是一条路径"，
+   * 直接看它比拐一道会话状态更靠谱，hashid 也不会长成 / 或 cloudreve:// 开头。
+   */
+  static renamedObjectId(id: string, newName: string): string {
+    const isPath = id.startsWith('/') || id.startsWith('cloudreve://');
+    const cut = id.lastIndexOf('/');
+    if (!isPath || cut < 0) {
+      return id;
+    }
+    return `${id.slice(0, cut + 1)}${newName}`;
+  }
+
+  /**
    * V4 删除必须保留 40073 响应里的锁 token，网页端正是用这些 token 调 /file/lock 强制解锁。
    * native deleteObjects 只上抛错误字符串，会丢失 data；V3 没有该锁接口，继续走 native 兼容路径。
    */

@@ -374,6 +374,10 @@ export interface Aria2Downloading {
   speed: number
   info: Aria2DownloadInfo
   node: string
+  /** v4 的任务 ID（v3 没有这个顶层字段，取 info.gid） */
+  gid?: string
+  /** v4 任务阶段；只有 monitor 阶段服务端才真的会取消（v3 无此字段） */
+  phase?: string
 }
 
 export enum UserTaskType {

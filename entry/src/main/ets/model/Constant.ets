@@ -82,6 +82,12 @@ class Constant {
 
   ARIA2_MIN_UPDATE_INTERVAL_SECONDS: number = 3
 
+  // Cloudreve v4 离线下载任务真正挂在下载器上的阶段，只有这个阶段服务端才接受取消
+  ARIA2_PHASE_MONITOR: string = 'monitor'
+
+  // native 在「服务端说这个任务已经不在跑了」时给错误串打的前缀
+  ARIA2_CANCEL_ERR_NOT_RUNNING: string = 'TASK_NOT_RUNNING'
+
   TOAST_DEFAULT_DURATION_MS: number = 1500
 
   // 含路径等较长内容的提示用 3 秒，给用户留够阅读时间

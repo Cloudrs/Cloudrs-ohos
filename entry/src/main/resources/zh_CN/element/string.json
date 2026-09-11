@@ -477,6 +477,34 @@
       "value": "删除任务失败"
     },
     {
+      "name": "cancel_task_confirm",
+      "value": "确认取消该任务"
+    },
+    {
+      "name": "dialog_cancel_task",
+      "value": "取消任务"
+    },
+    {
+      "name": "cancel_task_success",
+      "value": "已取消任务"
+    },
+    {
+      "name": "cancel_task_failed",
+      "value": "取消任务失败"
+    },
+    {
+      "name": "cancel_task_not_ready",
+      "value": "任务尚未开始下载，暂时无法取消"
+    },
+    {
+      "name": "cancel_task_already_ended",
+      "value": "任务已结束，无需取消"
+    },
+    {
+      "name": "finished_task_admin_only",
+      "value": "已结束的任务记录需管理员清理"
+    },
+    {
       "name": "select_path",
       "value": "路径选择"
     },

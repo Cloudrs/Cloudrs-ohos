@@ -14,7 +14,7 @@ import {
   nativeUploadLocalFileChunkWithProgress, nativeUploadLocalFileChunkToUrl,
   nativeUploadLocalFileChunkToUrlWithProgress,
   nativeAria2Downloading, nativeAria2Finished,
-  nativeAria2CreateTask, nativeAria2DeleteTask,
+  nativeAria2CreateTask, nativeAria2DeleteTask, nativeAria2CancelTask, nativeAria2CanDeleteFinished,
   nativeGetUserTasks,
   nativeGetThumb,
   nativeCreateShareLink, nativeListShareLinks, nativeDeleteShareLink,
@@ -467,6 +467,16 @@ export class CloudApi {
 
   static deleteAria2Task(gid: string, callback?: HttpCallback<null>): void {
     nativeAria2DeleteTask(gid, CloudApi.withApiLogging('deleteAria2Task', callback));
+  }
+
+  /** 取消一个仍在进行中的离线任务；已结束的任务服务端不接受取消，只能删记录 */
+  static cancelAria2Task(gid: string, callback?: HttpCallback<null>): void {
+    nativeAria2CancelTask(gid, CloudApi.withApiLogging('cancelAria2Task', callback));
+  }
+
+  /** 当前账号能否删除已结束的离线任务记录：v3 都能，v4 只有管理员能 */
+  static canDeleteFinishedAria2Task(callback?: HttpCallback<boolean>): void {
+    nativeAria2CanDeleteFinished(CloudApi.withApiLogging('canDeleteFinishedAria2Task', callback));
   }
 
   static getDownloadUri(id: string, callback?: HttpCallback<string>): void {

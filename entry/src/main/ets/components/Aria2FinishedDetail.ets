@@ -8,6 +8,9 @@ import { CloudIconButton } from "./CloudIconButton"
 @Component
 export struct Aria2FinishedDetail {
   @Prop detailData: Aria2Finished
+  // Cloudreve v4 没有面向普通用户的「删除已结束任务记录」接口，只有管理员能删；
+  // 权限不足时藏起按钮，免得点了必然弹「删除失败」。
+  @Prop canDelete: boolean
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State detailGridWidth: number = 0
   onDeleteClick?: () => void
@@ -243,18 +246,27 @@ export struct Aria2FinishedDetail {
 
   @Builder detailTool() {
     Row() {
-      Blank()
-        .layoutWeight(1)
+      if (this.canDelete) {
+        Blank()
+          .layoutWeight(1)
 
-      Image($r('app.media.ic_delete_fill'))
-        .width(CloudThemeToken.aria2DetailToolIconSize)
-        .height(CloudThemeToken.aria2DetailToolIconSize)
-        .fillColor(CloudThemeToken.danger)
-        .onClick(() => {
-          if (this.onDeleteClick) {
-            this.onDeleteClick()
-          }
-        })
+        Image($r('app.media.ic_delete_fill'))
+          .width(CloudThemeToken.aria2DetailToolIconSize)
+          .height(CloudThemeToken.aria2DetailToolIconSize)
+          .fillColor(CloudThemeToken.danger)
+          .onClick(() => {
+            if (this.onDeleteClick) {
+              this.onDeleteClick()
+            }
+          })
+      } else {
+        Text($r('app.string.finished_task_admin_only'))
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
     }
     .width('100%')
     .height(CloudThemeToken.aria2DetailToolHeight)

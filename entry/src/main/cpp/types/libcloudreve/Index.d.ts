@@ -40,7 +40,9 @@ export const uploadLocalFileChunkToUrlWithProgress: (localPath: string, uploadUr
 export const aria2Downloading: () => Promise<string>;
 export const aria2Finished: (page: number) => Promise<string>;
 export const aria2CreateTask: (dst: string, urls: string[]) => Promise<void>;
+export const aria2CancelTask: (gid: string) => Promise<void>;
 export const aria2DeleteTask: (gid: string) => Promise<void>;
+export const aria2CanDeleteFinished: () => Promise<boolean>;
 export const getUserTasks: (page: number) => Promise<string>;
 export const getThumb: (id: string) => Promise<string>;
 export const createShareLink: (path: string, expireDays: number, password: string) => Promise<string>;

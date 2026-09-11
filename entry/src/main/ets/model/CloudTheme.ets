@@ -376,6 +376,9 @@ export class CloudThemeToken {
   static readonly aria2DetailToolHorizontalPadding: number = 10
   static readonly aria2DetailToolBottomPadding: number = 20
   static readonly aria2DetailSheetTopPadding: number = 25
+  static readonly aria2CancelButtonSize: number = 30
+  static readonly aria2CancelButtonRadius: number = 15
+  static readonly aria2CancelIconSize: number = 16
   static readonly imagePreviewErrorImageSize: number = 128
   static readonly imagePreviewSaveTopPadding: number = 10
   static readonly imagePreviewSaveBottomPadding: number = 10

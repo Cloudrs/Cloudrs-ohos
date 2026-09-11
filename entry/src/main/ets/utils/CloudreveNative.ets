@@ -13,7 +13,7 @@ import {
   uploadLocalFile, updateFileContent, uploadLocalFileChunk, uploadLocalFileChunkWithProgress,
   uploadLocalFileChunkToUrl, uploadLocalFileChunkToUrlWithProgress,
   aria2Downloading, aria2Finished,
-  aria2CreateTask, aria2DeleteTask,
+  aria2CreateTask, aria2DeleteTask, aria2CancelTask, aria2CanDeleteFinished,
   getUserTasks,
   getThumb,
   createShareLink, listShareLinks, deleteShareLink,
@@ -318,6 +318,20 @@ export function nativeAria2DeleteTask(gid: string, callback?: HttpCallback<null>
   if (callback?.onStart) { callback.onStart(); }
   aria2DeleteTask(gid)
     .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+export function nativeAria2CancelTask(gid: string, callback?: HttpCallback<null>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  aria2CancelTask(gid)
+    .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+export function nativeAria2CanDeleteFinished(callback?: HttpCallback<boolean>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  aria2CanDeleteFinished()
+    .then((allowed: boolean) => callback?.onSuccess(allowed))
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 

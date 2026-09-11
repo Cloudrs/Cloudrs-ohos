@@ -419,6 +419,9 @@ export struct VideoPreviewPage {
           }
         }
         .width('100%')
+        // 左右内缩放在这一列上：子项写 width('100%') 时 margin 落在宽度之外，
+        // 左对齐会把面板整体推出右边界，内缩必须是 padding
+        .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingPage })
         .alignItems(HorizontalAlign.Start)
         .hitTestBehavior(HitTestMode.Transparent)
       }
@@ -609,7 +612,7 @@ export struct VideoPreviewPage {
     .height(CloudThemeToken.videoPreviewResumeBannerHeight)
     .alignItems(VerticalAlign.Center)
     .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingXl })
-    .margin({ left: CloudThemeToken.spacingPage, bottom: this.resumeBannerBottomMargin() })
+    .margin({ bottom: this.resumeBannerBottomMargin() })
     .borderRadius(CloudThemeToken.videoPreviewResumeBannerHeight / CloudThemeToken.halfDivisor)
     .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
     .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
@@ -668,8 +671,6 @@ export struct VideoPreviewPage {
       bottom: CloudThemeToken.spacingSection
     })
     .margin({
-      left: CloudThemeToken.spacingPage,
-      right: CloudThemeToken.spacingPage,
       // 全屏时导航条已隐藏，控制栏贴近屏幕底部
       bottom: this.isFullscreen ? CloudThemeToken.spacingPage : this.bottomRectHeight + CloudThemeToken.spacingPage
     })

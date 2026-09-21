@@ -40,6 +40,14 @@ class Constant {
 
   TRANSFER_PERSIST_INTERVAL_MS: number = 2000
 
+  /**
+   * 传输进度刷新到 UI 的最小间隔。
+   * 上传的进度回调来自 native，是按字节步长（每 4MB）触发的，网速快时一秒能来十几次，
+   * 百分比和字节数会跳得很碎。下载那边由 request.agent 按时间节奏回调，大约一秒一次，
+   * 这里对齐它，让两个列表的观感一致；顺带让速度值变成稳定的一秒均值。
+   */
+  TRANSFER_PROGRESS_UI_INTERVAL_MS: number = 1000
+
   BACKGROUND_TASK_COMPLETE_PERCENT: number = 100
 
   BACKGROUND_TASK_EMPTY_SIZE: number = 0
@@ -73,6 +81,12 @@ class Constant {
   MILLISECONDS_PER_SECOND: number = 1000
 
   ARIA2_MIN_UPDATE_INTERVAL_SECONDS: number = 3
+
+  // Cloudreve v4 离线下载任务真正挂在下载器上的阶段，只有这个阶段服务端才接受取消
+  ARIA2_PHASE_MONITOR: string = 'monitor'
+
+  // native 在「服务端说这个任务已经不在跑了」时给错误串打的前缀
+  ARIA2_CANCEL_ERR_NOT_RUNNING: string = 'TASK_NOT_RUNNING'
 
   TOAST_DEFAULT_DURATION_MS: number = 1500
 
@@ -149,6 +163,26 @@ class Constant {
 
   // Video 挂载后超过该时长仍未 onPrepared 视为失败，不陪系统等 30s 超时
   VIDEO_PREPARE_TIMEOUT_MS: number = 15000
+
+  /** 本地续播记录表，整表一个 JSON 数组存在 USER_PREFERENCES 下 */
+  VIDEO_PROGRESS_KEY: string = 'VideoPlayProgress'
+
+  // 片头片尾各留这么大比例的"不记录区"：开头没看几眼的不记，接近看完的清掉。
+  // 按比例而非绝对秒数，才能同时伺候十几秒的短片和几十分钟的长片
+  VIDEO_PROGRESS_EDGE_RATIO: number = 0.05
+
+  // 不记录区的绝对下限。短片按 5% 算出来只有零点几秒，等于没有门槛；
+  // 同时这条下限天然排除了 10 秒以内的视频——它的可记录区间是空的
+  VIDEO_PROGRESS_EDGE_MIN_SECONDS: number = 5
+
+  // 续播表上限，超出按最后播放时间 LRU 裁剪
+  VIDEO_PROGRESS_MAX_RECORDS: number = 200
+
+  // 播放中定期回写进度的心跳间隔，防进程被系统回收后丢记录
+  VIDEO_PROGRESS_SAVE_INTERVAL_MS: number = 30000
+
+  // 续播浮条自动消失时长
+  VIDEO_RESUME_BANNER_DURATION_MS: number = 4000
 
   FIRST_ARRAY_INDEX: number = 0
 

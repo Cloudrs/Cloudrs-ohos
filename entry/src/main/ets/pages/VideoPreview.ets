@@ -3,6 +3,7 @@ import { CloudThemeToken } from "../model/CloudTheme";
 import { VideoPreview } from "../model/Params";
 import { CloudApi } from "../model/net/CloudApi";
 import UserPreferences from "../model/UserPreferences";
+import { VideoProgressEntry, VideoProgressStore } from "../model/VideoProgressStore";
 import { CloudRouter } from "../utils/CloudRouter";
 import { ContinuationCenter } from "../utils/ContinuationCenter";
 import { common } from "@kit.AbilityKit";
@@ -71,16 +72,31 @@ export struct VideoPreviewPage {
   private pendingResumeTime: number = 0
   // 接续恢复：源端处于暂停时，起播定位画面后立即暂停
   private pendingPauseAfterStart: boolean = false
+  // 续播浮条：>0 时显示"已从 xx:xx 继续播放"，倒计时结束归零
+  @State resumedFrom: number = 0
+  // 本次起播位置来自本地续播记录（而非接续），prepared 后才弹浮条
+  private resumeFromLocalRecord: boolean = false
+  private resumeBannerTimer: number = -1
+  private progressSaveTimer: number = -1
 
   aboutToAppear(): void {
     if (this.routeParam) {
       this.fileParam = this.routeParam
       this.pendingResumeTime = Math.max(this.routeParam.startTime, CloudThemeToken.zero)
       this.pendingPauseAfterStart = !this.routeParam.autoPlay
+      // 接续带进来的进度优先于本地记录：源端此刻看到哪就从哪接着看
+      if (this.pendingResumeTime <= CloudThemeToken.zero) {
+        const saved: VideoProgressEntry | undefined = VideoProgressStore.load(this.routeParam.fileId)
+        if (saved) {
+          this.pendingResumeTime = saved.t
+          this.resumeFromLocalRecord = true
+        }
+      }
     }
     this.prepareWindow()
     this.loadVideoUrl()
     this.publishContinuationState()
+    this.startProgressHeartbeat()
     harmonyShare.on('knockShare', this.knockShareCallback)
   }
 
@@ -89,6 +105,10 @@ export struct VideoPreviewPage {
     ContinuationCenter.clearVideoState()
     ContinuationCenter.setMissionContinueState(this.abilityContext(), false)
     harmonyShare.off('knockShare', this.knockShareCallback)
+    // 同步落盘：退出页面后进程随时可能被回收，异步 flush 会把这次进度丢掉
+    this.persistProgress(true)
+    this.stopProgressHeartbeat()
+    this.clearResumeBannerTimer()
     this.stopHoldSeek()
     this.cancelPendingMouseSingleClick()
     this.clearPrepareTimeout()
@@ -221,12 +241,18 @@ export struct VideoPreviewPage {
         AppLogger.info(TAG, `prepared in ${new Date().getTime() - this.videoMountAt}ms`)
         this.duration = Math.max(event.duration, CloudThemeToken.zero)
         this.isLoading = false
-        // 接续恢复：先定位再起播，画面直接落在源端的进度上
+        // 接续/续播恢复：先定位再起播，画面直接落在上次的进度上。
+        // 取 min 是因为同 fileId 的文件可能被覆盖上传过，旧进度会超出新时长
         if (this.pendingResumeTime > CloudThemeToken.zero) {
           this.currentTime = Math.min(this.pendingResumeTime, this.getSafeDuration())
           this.pendingResumeTime = 0
           this.commitSeek(this.currentTime)
+          // 只有本地续播才提示，接续是用户自己发起的动作，不用再告知一次
+          if (this.resumeFromLocalRecord) {
+            this.showResumeBanner(this.currentTime)
+          }
         }
+        this.resumeFromLocalRecord = false
         this.isPlaying = true
         this.controller.start()
       })
@@ -248,6 +274,8 @@ export struct VideoPreviewPage {
       .onPause(() => {
         this.isPlaying = false
         this.reportContinuationProgress()
+        // 暂停是"看到这里为止"的强信号，立刻记一次，别等心跳
+        this.persistProgress()
       })
       .onFinish(() => {
         this.isPlaying = false
@@ -379,10 +407,23 @@ export struct VideoPreviewPage {
           this.fullscreenTopBar()
         }
 
-        if (this.videoUrl.length > CloudThemeToken.zero && !this.isFailed &&
-          (!this.isFullscreen || this.controlsVisible)) {
-          this.videoControls()
+        // 浮条与控制面板同处一列：控制面板被收起时浮条自然顶到底部，
+        // 不必把面板高度硬编码成一个随时会过期的常量
+        Column() {
+          if (this.resumedFrom > CloudThemeToken.zero) {
+            this.resumeBanner()
+          }
+
+          if (this.isControlsVisible()) {
+            this.videoControls()
+          }
         }
+        .width('100%')
+        // 左右内缩放在这一列上：子项写 width('100%') 时 margin 落在宽度之外，
+        // 左对齐会把面板整体推出右边界，内缩必须是 padding
+        .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingPage })
+        .alignItems(HorizontalAlign.Start)
+        .hitTestBehavior(HitTestMode.Transparent)
       }
       .width('100%')
       .layoutWeight(1)
@@ -517,6 +558,11 @@ export struct VideoPreviewPage {
     if (this.playRetryCount < Constant.VIDEO_PLAY_MAX_AUTO_RETRY) {
       this.playRetryCount++
       AppLogger.warn(TAG, `video play error after ${elapsed}ms, auto retry ${this.playRetryCount}`)
+      // 换链会重新挂载 Video，新实例默认从片头起播。把当前位置留给它，
+      // 别让中途一次网络抖动把用户扔回开头。
+      // 取 max 是为了兼顾"起播前就失败"：那时 currentTime 还是 0，
+      // 而 pendingResumeTime 里存着尚未兑现的续播/接续目标，不能被 0 覆盖
+      this.pendingResumeTime = Math.max(this.currentTime, this.pendingResumeTime)
       this.videoUrl = ''
       this.loadVideoUrl(true)
     } else {
@@ -537,6 +583,47 @@ export struct VideoPreviewPage {
     return this.playRetryCount > 0
       ? `加载失败，自动重试中 (${this.playRetryCount}/${Constant.VIDEO_PLAY_MAX_AUTO_RETRY})`
       : '正在打开视频'
+  }
+
+  /**
+   * 续播浮条。材质与圆形控制按钮同源（半透明黑底 + 白描边 + 背景模糊），
+   * 通篇只用白与半透明黑，不吃 cloud_primary：那个蓝压在深色画面上对比度不够，
+   * 而视频画面的明暗与系统深浅色模式无关。
+   */
+  @Builder resumeBanner() {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      Text(`已从 ${this.formatTime(this.resumedFrom)} 继续播放`)
+        .fontSize(CloudThemeToken.textSizeBody)
+        .fontColor(CloudThemeToken.onPrimary)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Button('从头播放')
+        .type(ButtonType.Capsule)
+        .height(CloudThemeToken.videoPreviewResumeActionHeight)
+        .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
+        .fontSize(CloudThemeToken.textSizeSmallPlus)
+        .fontColor(CloudThemeToken.onPrimary)
+        .backgroundColor(CloudThemeToken.videoPreviewResumeActionBackground)
+        .onClick(() => {
+          this.restartFromBeginning()
+        })
+    }
+    .height(CloudThemeToken.videoPreviewResumeBannerHeight)
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingXl })
+    .margin({ bottom: this.resumeBannerBottomMargin() })
+    .borderRadius(CloudThemeToken.videoPreviewResumeBannerHeight / CloudThemeToken.halfDivisor)
+    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .border({
+      width: CloudThemeToken.videoPreviewControlBorderWidth,
+      color: CloudThemeToken.videoPreviewControlBorder
+    })
+    .clip(true)
+    .transition(TransitionEffect.OPACITY
+      .combine(TransitionEffect.translate({ y: CloudThemeToken.spacingXl }))
+      .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
   @Builder videoControls() {
@@ -584,8 +671,6 @@ export struct VideoPreviewPage {
       bottom: CloudThemeToken.spacingSection
     })
     .margin({
-      left: CloudThemeToken.spacingPage,
-      right: CloudThemeToken.spacingPage,
       // 全屏时导航条已隐藏，控制栏贴近屏幕底部
       bottom: this.isFullscreen ? CloudThemeToken.spacingPage : this.bottomRectHeight + CloudThemeToken.spacingPage
     })
@@ -957,6 +1042,82 @@ export struct VideoPreviewPage {
       this.isPlaying = true
       this.controller.start()
     }
+  }
+
+  private isControlsVisible(): boolean {
+    return this.videoUrl.length > CloudThemeToken.zero && !this.isFailed &&
+      (!this.isFullscreen || this.controlsVisible)
+  }
+
+  /**
+   * 控制面板在场时浮条只留一个间隙；面板不在场（全屏点击收起、或播放失败）时
+   * 浮条顶到最底，得接管面板原本的底部安全距。
+   */
+  private resumeBannerBottomMargin(): number {
+    if (this.isControlsVisible()) {
+      return CloudThemeToken.spacingXl
+    }
+    return this.isFullscreen
+      ? CloudThemeToken.spacingPage
+      : this.bottomRectHeight + CloudThemeToken.spacingPage
+  }
+
+  private showResumeBanner(time: number): void {
+    this.clearResumeBannerTimer()
+    this.resumedFrom = time
+    this.resumeBannerTimer = setTimeout(() => {
+      this.resumeBannerTimer = -1
+      this.resumedFrom = 0
+    }, Constant.VIDEO_RESUME_BANNER_DURATION_MS)
+  }
+
+  private clearResumeBannerTimer(): void {
+    if (this.resumeBannerTimer >= 0) {
+      clearTimeout(this.resumeBannerTimer)
+      this.resumeBannerTimer = -1
+    }
+  }
+
+  /** 浮条上的"从头播放"：撤销这次续播，并把记录一并清掉 */
+  private restartFromBeginning(): void {
+    this.clearResumeBannerTimer()
+    this.resumedFrom = 0
+    this.currentTime = CloudThemeToken.zero
+    this.commitSeek(CloudThemeToken.zero)
+    VideoProgressStore.remove(this.fileParam?.fileId ?? '')
+  }
+
+  /**
+   * 播放中定期回写，兜住"进程被系统回收，走不到 aboutToDisappear"的情况。
+   * 暂停时不写：onPause 已经记过一次，再写只是把同一个值反复刷进磁盘。
+   */
+  private startProgressHeartbeat(): void {
+    this.stopProgressHeartbeat()
+    this.progressSaveTimer = setInterval(() => {
+      if (this.isPlaying) {
+        this.persistProgress()
+      }
+    }, Constant.VIDEO_PROGRESS_SAVE_INTERVAL_MS)
+  }
+
+  private stopProgressHeartbeat(): void {
+    if (this.progressSaveTimer >= 0) {
+      clearInterval(this.progressSaveTimer)
+      this.progressSaveTimer = -1
+    }
+  }
+
+  /**
+   * 把当前进度交给续播表。"该不该记"由 VideoProgressStore.save 统一裁决，
+   * 这里只挡住时长还没拿到的阶段（prepared 之前 duration 为 0）。
+   */
+  private persistProgress(critical: boolean = false): void {
+    const fileId = this.fileParam?.fileId ?? ''
+    if (fileId.length === 0 || this.duration <= CloudThemeToken.zero) {
+      AppLogger.info(TAG, `persist skipped: fileId=${fileId.length} duration=${this.duration}`)
+      return
+    }
+    VideoProgressStore.save(fileId, this.currentTime, this.duration, critical)
   }
 
   private commitSeek(target: number): void {

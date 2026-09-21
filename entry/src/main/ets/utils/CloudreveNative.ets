@@ -9,11 +9,11 @@ import {
   getFileMetadata, searchFiles,
   moveObjects, copyObjects,
   renameObject, newDirectory, newFile,
-  getDownloadUri, getUploadUri, deleteUploadSession,
-  uploadLocalFile, uploadLocalFileChunk, uploadLocalFileChunkWithProgress,
+  getDownloadUri, getUploadUri, deleteUploadSession, deleteAllUploadSessions,
+  uploadLocalFile, updateFileContent, uploadLocalFileChunk, uploadLocalFileChunkWithProgress,
   uploadLocalFileChunkToUrl, uploadLocalFileChunkToUrlWithProgress,
   aria2Downloading, aria2Finished,
-  aria2CreateTask, aria2DeleteTask,
+  aria2CreateTask, aria2DeleteTask, aria2CancelTask, aria2CanDeleteFinished,
   getUserTasks,
   getThumb,
   createShareLink, listShareLinks, deleteShareLink,
@@ -213,6 +213,35 @@ export function nativeDeleteUploadSession(
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
+/**
+ * 删掉当前账号名下全部上传占位。sessionId 已经丢了、按 id 删不掉时的兜底。
+ * 作用域是整个账号，进行中的上传也会被连带清掉占位，调用方必须确认此刻没有别的上传在跑。
+ * V4 没有对应接口，resolve(false) 表示什么都没做。
+ */
+export function nativeDeleteAllUploadSessions(callback?: HttpCallback<boolean>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  deleteAllUploadSessions()
+    .then((handled: boolean) => callback?.onSuccess(handled))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+/**
+ * 覆盖保存已存在文件的内容。V3 走 PUT /file/update/{id}——它的上传会话没有
+ * overwrite 语义，同名文件建会话会被服务端挡回 40004；V4 仍是覆盖上传。
+ */
+export function nativeUpdateFileContent(
+  id: string,
+  remotePath: string,
+  localPath: string,
+  lastModifiedMs: number,
+  callback?: HttpCallback<null>
+): void {
+  if (callback?.onStart) { callback.onStart(); }
+  updateFileContent(id, remotePath, localPath, lastModifiedMs)
+    .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
 export function nativeUploadLocalFile(
   localPath: string,
   remotePath: string,
@@ -289,6 +318,20 @@ export function nativeAria2DeleteTask(gid: string, callback?: HttpCallback<null>
   if (callback?.onStart) { callback.onStart(); }
   aria2DeleteTask(gid)
     .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+export function nativeAria2CancelTask(gid: string, callback?: HttpCallback<null>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  aria2CancelTask(gid)
+    .then(() => callback?.onSuccess(null))
+    .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
+}
+
+export function nativeAria2CanDeleteFinished(callback?: HttpCallback<boolean>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  aria2CanDeleteFinished()
+    .then((allowed: boolean) => callback?.onSuccess(allowed))
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 

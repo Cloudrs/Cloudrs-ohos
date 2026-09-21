@@ -8,6 +8,8 @@ import AppLogger from '../utils/AppLogger';
 import { showToast } from '../utils/ToastUtil';
 
 const TAG: string = 'LogViewerSheet';
+// Picker 取消：新系统 resolve 空数组，部分版本改为 reject 13900020(Invalid argument)，两条路径都按用户取消静默处理。
+const PICKER_CANCEL_CODE: number = 13900020;
 
 @Component
 export struct LogViewerSheet {
@@ -169,8 +171,8 @@ export struct LogViewerSheet {
       return;
     }
     try {
+      // 不能用 DOWNLOAD 模式：该模式忽略 newFileNames 且返回的是下载目录 URI，拿去 open 会失败。
       const options = new picker.DocumentSaveOptions();
-      options.pickerMode = picker.DocumentPickerMode.DOWNLOAD;
       options.newFileNames = [this.suggestExportName()];
       const documentPicker = new picker.DocumentViewPicker(context);
       documentPicker.save(options).then((result: Array<string>) => {
@@ -179,8 +181,12 @@ export struct LogViewerSheet {
         }
         this.writeLogToUri(result[Constant.FIRST_ARRAY_INDEX]);
       }).catch((err: BusinessError) => {
+        if (err?.code === PICKER_CANCEL_CODE) {
+          AppLogger.info(TAG, 'export cancelled by user');
+          return;
+        }
         AppLogger.error(TAG, `export picker failed: code=${err.code}, msg=${err.message}`);
-        showToast('导出取消或失败');
+        showToast(`导出失败(${err.code})`);
       });
     } catch (err) {
       AppLogger.error(TAG, `export logs threw: ${(err as Error)?.message ?? err}`);
@@ -191,7 +197,7 @@ export struct LogViewerSheet {
   private writeLogToUri(uri: string): void {
     let file: fs.File | undefined = undefined;
     try {
-      file = fs.openSync(uri, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      file = fs.openSync(uri, fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
       fs.writeSync(file.fd, this.logText);
       showToast('日志已导出到所选位置');
     } catch (err) {

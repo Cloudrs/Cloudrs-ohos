@@ -29,6 +29,9 @@ import { PhotoBackupSettingsStore, PHOTO_BACKUP_ENABLED_KEY } from '../../model/
 import { PhotoBackupSettings } from '../../model/PhotoBackupModel';
 
 const TAG:string = 'TabMine'
+// 主题在 AppStorage 里的镜像。@Builder 按值传参不会随 @State 重渲染，
+// 外观行的右侧文案与弹窗里的勾选态都靠子组件绑这个 key 才能即时刷新。
+const APP_THEME_MODE_MIRROR_KEY: string = 'appThemeModeMirror'
 const MINE_SETTINGS_REFRESH_INTERVAL_MS: number = 30000
 const MINE_SETTINGS_REFRESH_DELAY_MS: number = 360
 
@@ -110,7 +113,8 @@ export struct TabMine {
   private settingsPhase: SettingsSheetPhase = SettingsSheetPhase.CLOSED
   private reopenSettingsPending: boolean = false
   @State showMetrics: boolean = false
-  @State themeMode: string = Constant.APP_THEME_LIGHT
+  // 主题只经 APP_THEME_MODE_MIRROR_KEY 驱动 UI，这里仅留一份当前值供落库用
+  private themeMode: string = Constant.APP_THEME_LIGHT
   private scroller: Scroller = new Scroller;
   @State versionInfo: string = ''
   @State uploadMaxConcurrent: number = 3
@@ -150,6 +154,7 @@ export struct TabMine {
       Constant.APP_THEME_MODE,
       Constant.APP_THEME_LIGHT
     ) as string
+    AppStorage.setOrCreate(APP_THEME_MODE_MIRROR_KEY, this.themeMode)
     this.systemAuthEnabled = AppLockUtil.isEnabled()
 
     this.versionInfo = this.appVersion
@@ -1017,6 +1022,45 @@ export struct TabMine {
     })
   }
 
+  // 「外观偏好」行单独实现：右侧文案用响应式子组件 ThemeModeText，
+  // 这样在设置弹窗里切换深浅色后，外面右侧文案能立即同步（rowWithNext 按值传参做不到）。
+  @Builder themeRow() {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      Image($r('app.media.ic_theme_setting'))
+        .width(CloudThemeToken.iconBoxXs)
+        .height(CloudThemeToken.iconBoxXs)
+        .borderRadius(CloudThemeToken.cardRadius)
+        .padding(CloudThemeToken.spacingLg)
+        .fillColor(CloudThemeToken.onPrimary)
+        .backgroundColor(CloudThemeToken.settingIconThemeBackground)
+        .draggable(false)
+
+      Text($r('app.string.user_theme_setting'))
+        .fontSize(CloudThemeToken.textSizeLarge)
+        .fontColor(CloudThemeToken.textPrimary)
+        .layoutWeight(1)
+
+      ThemeModeText()
+
+      Image($r('app.media.ic_chevron_right'))
+        .width(CloudThemeToken.iconXs)
+        .height(CloudThemeToken.iconXs)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
+    }
+    .width('100%')
+    .height(CloudThemeToken.rowHeight4xl)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .clip(true)
+    .backgroundColor(CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.openSettingsSheet(MineSheetType.THEME)
+    })
+  }
+
   // 「相册备份」行单独实现：状态文字用响应式子组件 PhotoBackupStatusText，
   // 这样在设置弹窗里切换开关后，外面右侧文案能立即同步（rowWithNext 按值传参做不到）。
   @Builder photoBackupRow() {
@@ -1129,13 +1173,7 @@ export struct TabMine {
         () => {
           this.openSettingsSheet(MineSheetType.PRIVACY)
         })
-      this.rowWithNext($r('app.media.ic_theme_setting'),
-        CloudThemeToken.settingIconThemeBackground,
-        $r("app.string.user_theme_setting"),
-        this.getThemeModeText(),
-        () => {
-          this.openSettingsSheet(MineSheetType.THEME)
-        })
+      this.themeRow()
       this.photoBackupRow()
       this.rowWithNext($r('app.media.ic_more_setting'),
         CloudThemeToken.settingIconMoreBackground,
@@ -1416,16 +1454,22 @@ export struct TabMine {
 
   @Builder themeSettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
-      this.themeOptionRow(
-        $r('app.string.theme_light_title'),
-        $r('app.string.theme_light_desc'),
-        Constant.APP_THEME_LIGHT
-      )
-      this.themeOptionRow(
-        $r('app.string.theme_dark_title'),
-        $r('app.string.theme_dark_desc'),
-        Constant.APP_THEME_DARK
-      )
+      ThemeOptionRow({
+        title: $r('app.string.theme_light_title'),
+        description: $r('app.string.theme_light_desc'),
+        mode: Constant.APP_THEME_LIGHT,
+        onSelect: (mode: string): void => {
+          this.setThemeMode(mode)
+        }
+      })
+      ThemeOptionRow({
+        title: $r('app.string.theme_dark_title'),
+        description: $r('app.string.theme_dark_desc'),
+        mode: Constant.APP_THEME_DARK,
+        onSelect: (mode: string): void => {
+          this.setThemeMode(mode)
+        }
+      })
     }
     .width('100%')
     .padding({
@@ -1629,48 +1673,10 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
   }
 
-  @Builder themeOptionRow(title: ResourceStr, description: ResourceStr, mode: string) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text(title)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-        Text(description)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      if (this.themeMode === mode) {
-        Image($r('app.media.ic_checkmark_circle'))
-          .width(CloudThemeToken.icon2xl)
-          .height(CloudThemeToken.icon2xl)
-          .fillColor(CloudThemeToken.primary)
-          .draggable(false)
-      }
-    }
-    .width('100%')
-    .height(CloudThemeToken.cardHeightSm)
-    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-    .borderRadius(CloudThemeToken.controlRadiusXl)
-    .backgroundColor(this.themeMode === mode ? CloudThemeToken.primarySoft : CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: this.themeMode === mode ? CloudThemeToken.primary : CloudThemeToken.line })
-    .onClick(() => {
-      this.setThemeMode(mode)
-    })
-  }
-
-  getThemeModeText(): ResourceStr {
-    return this.themeMode === Constant.APP_THEME_DARK
-      ? $r('app.string.theme_dark_title')
-      : $r('app.string.theme_light_title')
-  }
-
   setThemeMode(mode: string): void {
     AppLogger.info(TAG, `theme mode ${mode}`)
     this.themeMode = mode
+    AppStorage.setOrCreate(APP_THEME_MODE_MIRROR_KEY, mode)
     UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.APP_THEME_MODE, mode)
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     try {
@@ -1964,6 +1970,67 @@ export struct TabMine {
       onClose: () => {
         this.closeFeedbackSheet()
       }
+    })
+  }
+}
+
+// 「外观偏好」右侧当前模式文案。同上，绑 AppStorage 镜像才能在弹窗里切换后即时刷新。
+@Component
+struct ThemeModeText {
+  @StorageProp(APP_THEME_MODE_MIRROR_KEY) themeMode: string = Constant.APP_THEME_LIGHT;
+
+  build() {
+    Text(this.themeMode === Constant.APP_THEME_DARK
+      ? $r('app.string.theme_dark_title')
+      : $r('app.string.theme_light_title'))
+      .fontSize(CloudThemeToken.textSizeBody)
+      .fontColor(CloudThemeToken.textSecondary)
+  }
+}
+
+// 外观弹窗里的单个模式选项。勾选态同样绑 AppStorage 镜像，
+// 否则选中项停留在打开弹窗那一刻的取值。
+@Component
+struct ThemeOptionRow {
+  @StorageProp(APP_THEME_MODE_MIRROR_KEY) currentMode: string = Constant.APP_THEME_LIGHT;
+  @Require @Prop title: ResourceStr;
+  @Require @Prop description: ResourceStr;
+  @Require @Prop mode: string;
+  onSelect: (mode: string) => void = (): void => {};
+
+  build() {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Column({ space: CloudThemeToken.spacingXs }) {
+        Text(this.title)
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+        Text(this.description)
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      if (this.currentMode === this.mode) {
+        Image($r('app.media.ic_checkmark_circle'))
+          .width(CloudThemeToken.icon2xl)
+          .height(CloudThemeToken.icon2xl)
+          .fillColor(CloudThemeToken.primary)
+          .draggable(false)
+      }
+    }
+    .width('100%')
+    .height(CloudThemeToken.cardHeightSm)
+    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
+    .borderRadius(CloudThemeToken.controlRadiusXl)
+    .backgroundColor(this.currentMode === this.mode ? CloudThemeToken.primarySoft : CloudThemeToken.surface)
+    .border({
+      width: CloudThemeToken.lineWidth,
+      color: this.currentMode === this.mode ? CloudThemeToken.primary : CloudThemeToken.line
+    })
+    .onClick(() => {
+      this.onSelect(this.mode)
     })
   }
 }

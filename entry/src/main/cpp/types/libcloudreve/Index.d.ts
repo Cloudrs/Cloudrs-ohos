@@ -28,6 +28,10 @@ export const newFile: (path: string) => Promise<void>;
 export const getDownloadUri: (id: string) => Promise<string>;
 export const getUploadUri: (path: string, size: number, name: string, lastModified: number, mimeType: string, chunkSize: number) => Promise<string>;
 export const deleteUploadSession: (path: string, sessionId: string) => Promise<void>;
+/** 删掉当前账号名下全部上传占位（V3 专属兜底，sessionId 丢了时用）。V4 无此接口，返回 false。 */
+export const deleteAllUploadSessions: () => Promise<boolean>;
+/** 覆盖已存在文件的内容：V3 走 PUT /file/update/{id}，V4 走覆盖上传。 */
+export const updateFileContent: (id: string, remotePath: string, localPath: string, lastModifiedMs?: number | null) => Promise<void>;
 export const uploadLocalFile: (localPath: string, remotePath: string, overwrite: boolean, lastModifiedMs?: number | null) => Promise<void>;
 export const uploadLocalFileChunk: (localPath: string, sessionId: string, index: number, offset: number, length: number) => Promise<number>;
 export const uploadLocalFileChunkWithProgress: (localPath: string, sessionId: string, index: number, offset: number, length: number, progress: (uploaded: number) => void) => Promise<number>;
@@ -36,7 +40,9 @@ export const uploadLocalFileChunkToUrlWithProgress: (localPath: string, uploadUr
 export const aria2Downloading: () => Promise<string>;
 export const aria2Finished: (page: number) => Promise<string>;
 export const aria2CreateTask: (dst: string, urls: string[]) => Promise<void>;
+export const aria2CancelTask: (gid: string) => Promise<void>;
 export const aria2DeleteTask: (gid: string) => Promise<void>;
+export const aria2CanDeleteFinished: () => Promise<boolean>;
 export const getUserTasks: (page: number) => Promise<string>;
 export const getThumb: (id: string) => Promise<string>;
 export const createShareLink: (path: string, expireDays: number, password: string) => Promise<string>;

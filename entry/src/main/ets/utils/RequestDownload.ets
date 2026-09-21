@@ -141,13 +141,18 @@ class RequestDownload {
         return;
       }
 
-      let size = progress.sizes[Constant.FIRST_ARRAY_INDEX];
-      if (size <= Constant.BACKGROUND_TASK_EMPTY_SIZE) {
-        return;
-      }
-      let process: number = Math.floor(progress.processed / size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT);
+      // sizes[0] 是系统从 Content-Length 拿到的总长，服务端不给长度时是 -1。
+      // 以前这种情况直接 return，整个下载期间一次进度都不上报，用户盯着的就是
+      // 一个不动的 0%。总长本来就有另一个来源——传输记录里的 item.size，
+      // TransportObject 自己会拿它算百分比，所以这里只要把已传字节数报上去就够了。
+      // 只有能算出百分比且已到 100% 时才跳过，那一帧交给 completed 事件收尾。
+      const size = progress.sizes[Constant.FIRST_ARRAY_INDEX];
+      const knownSize = size > Constant.BACKGROUND_TASK_EMPTY_SIZE;
+      const process: number = knownSize
+        ? Math.floor(progress.processed / size * Constant.BACKGROUND_TASK_COMPLETE_PERCENT)
+        : 0;
 
-      if (process < Constant.BACKGROUND_TASK_COMPLETE_PERCENT) {
+      if (!knownSize || process < Constant.BACKGROUND_TASK_COMPLETE_PERCENT) {
         if (fileModel.callback) {
           fileModel.callback(absoluteTrans, FileModelState.RUNNING);
         }

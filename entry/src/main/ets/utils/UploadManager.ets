@@ -11,6 +11,7 @@ import UserPreferences from '../model/UserPreferences';
 import Constant from '../model/Constant';
 import { FileSystemUtil } from './FileSystemUtil';
 import { ApiErrorUtil } from './ApiErrorUtil';
+import UploadConflictResolver from './UploadConflictResolver';
 import AppLogger from './AppLogger';
 import TransferDatabase, { UploadRecord } from '../model/TransferDatabase';
 
@@ -338,17 +339,27 @@ class UploadManager {
           try {
             session = await this._createUploadSession(task.remotePath, fileName, transportObject.total, task.overwrite)
           } catch (firstErr) {
-            // 40004「对象已存在」且本任务之前建过会话：大概率是上次失败残留的服务端
-            // 占位文件（0KB 脏数据），删掉旧会话后重试一次，让「重试」真正可用
+            // 两种冲突都可能是上一次失败留在服务端的占位，清掉后重试一次，让「重试」真正可用：
+            //   40004 对象已存在——撞上的可能是用户的真实文件，所以只有本任务之前建过
+            //     会话时才敢按那个 sessionId 去清，且不允许按路径删。
+            //   40054 上传会话已存在——服务端只在同名对象带 UploadSessionID 时才回这个码，
+            //     等于已经替我们确认了那是占位，所以哪怕本地 sessionId 已经丢了
+            //     （进程被杀 / 记录被清 / 旧版本 V3 删会话是空操作），也能按路径清掉。
             const firstMsg = (firstErr as Error)?.message ?? String(firstErr)
             const staleRecord = TransferDatabase.listUploads().find(r => r.id === id)
-            if (ApiErrorUtil.isObjectExisted(firstMsg) && staleRecord && staleRecord.sessionId.length > 0) {
-              AppLogger.warn(TAG, `create session hit 40004, delete stale session ${staleRecord.sessionId} and retry`)
-              await this._deleteSessionQuiet(staleRecord.remotePath, staleRecord.sessionId)
-              session = await this._createUploadSession(task.remotePath, fileName, transportObject.total, task.overwrite)
-            } else {
+            const staleSessionId = staleRecord?.sessionId ?? ''
+            const isSessionConflict = ApiErrorUtil.isUploadSessionExisted(firstMsg)
+            const isOwnObjectConflict = ApiErrorUtil.isObjectExisted(firstMsg) && staleSessionId.length > 0
+            if (!isSessionConflict && !isOwnObjectConflict) {
               throw firstErr as Error
             }
+            AppLogger.warn(TAG, `create session conflicted (${firstMsg}), clearing stale upload state`)
+            const cleared = await UploadConflictResolver.clear(task.remotePath, staleSessionId, isSessionConflict)
+            if (!cleared) {
+              // 没清掉任何东西就重试，只会再撞一次同样的错，白白多一轮请求
+              throw firstErr as Error
+            }
+            session = await this._createUploadSession(task.remotePath, fileName, transportObject.total, task.overwrite)
           }
           TransferDatabase.updateUploadSession(
             id,
@@ -449,16 +460,15 @@ class UploadManager {
     }
 
     const chunkSize = session.chunkSize > 0 ? session.chunkSize : transportObject.total
-    if (session.chunkSize <= 0) {
-      transportObject.statusText = '单块上传中'
-    } else {
-      transportObject.statusText = ''
-    }
+    // 不分片时以前挂一句"单块上传中"，是因为那条路径整块传完才回调一次进度，
+    // 显示速度只会是个一直不动的 0B/s。现在它也是流式带进度的，让位给真实速度。
+    transportObject.statusText = ''
     const useRemoteNode = uploadUrls.length === Constant.REMOTE_NODE_UPLOAD_URL_COUNT && !relay &&
       storagePolicyType === Constant.STORAGE_POLICY_REMOTE
     let offset = startOffset
     let index = startIndex
     let lastPersistAt = 0
+    let lastUiUpdateAt = 0
 
     while (offset < transportObject.total) {
       if (transportObject.state === FileModelState.PAUSED ||
@@ -473,6 +483,22 @@ class UploadManager {
 
       const length = Math.min(chunkSize, transportObject.total - offset)
       const chunkOffset = offset
+      // native 的回调是按字节步长来的（每 4MB 一次），网速快时一秒十几次，
+      // 列表里的百分比和字节数会跳得很碎。这里按时间收敛到一秒一次，和下载侧
+      // request.agent 的回调节奏对齐。每块传完后还有一次不受闸门限制的
+      // update(offset)，所以精确的字节数不会被丢掉。
+      const onChunkProgress = (uploadedInChunk: number): void => {
+        const now = new Date().getTime()
+        if (now - lastUiUpdateAt < Constant.TRANSFER_PROGRESS_UI_INTERVAL_MS) {
+          return
+        }
+        lastUiUpdateAt = now
+        const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk))
+        transportObject.update(current, FileModelState.RUNNING)
+      }
+      // 三条分支全部走带进度的接口。此前 chunkSize > 0（多分片）走的是无进度的
+      // uploadLocalFileChunk，进度只在每块传完时跳一次，25MB 分片下用户盯着的
+      // 就是一个长时间不动的百分比；而且它会把整块读进内存再交给 reqwest。
       const uploaded = useRemoteNode
         ? await CloudApi.uploadLocalFileChunkToUrlWithProgress(
           cachePath,
@@ -481,26 +507,28 @@ class UploadManager {
           index,
           chunkOffset,
           length,
-          (uploadedInChunk: number) => {
-            const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk))
-            transportObject.update(current, FileModelState.RUNNING)
-          }
+          onChunkProgress
         )
-        : session.chunkSize <= 0
-          ? await CloudApi.uploadLocalFileChunkWithProgress(
-            cachePath,
-            session.sessionId,
-            index,
-            chunkOffset,
-            length,
-            (uploadedInChunk: number) => {
-              const current = Math.min(transportObject.total, chunkOffset + Math.max(0, uploadedInChunk))
-              transportObject.update(current, FileModelState.RUNNING)
-            }
-          )
-          : await CloudApi.uploadLocalFileChunk(cachePath, session.sessionId, index, chunkOffset, length)
-      offset += uploaded > 0 ? uploaded : length
+        : await CloudApi.uploadLocalFileChunkWithProgress(
+          cachePath,
+          session.sessionId,
+          index,
+          chunkOffset,
+          length,
+          onChunkProgress
+        )
+      // 严格校验实际上传字节数，不能"没传够就当传满了"（相册备份侧同理）。
+      // 本地缓存比会话登记的 total 短时，native 读到文件尾只会返回实际字节数，
+      // 按 length 推 offset 会让循环正常结束、上报 COMPLETED，而服务端收到的
+      // 字节数不足声明值，云端留下一个 0B 挂在"上传中"的空文件。
+      // 宁可这次明确失败让用户看见。
+      if (uploaded < length) {
+        throw new Error(`分片 ${index} 只上传了 ${uploaded} / ${length} 字节` +
+          `（本地文件比登记的 ${transportObject.total} 字节短），已中止以免在云端留下空文件`)
+      }
+      offset += uploaded
       index++
+      lastUiUpdateAt = new Date().getTime()
       transportObject.update(offset, FileModelState.RUNNING)
 
       const now = new Date().getTime()

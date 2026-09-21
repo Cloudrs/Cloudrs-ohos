@@ -42,7 +42,7 @@ import { CloudIconButton } from "../../components/CloudIconButton";
 import {
   DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
 } from "@kit.UIDesignKit";
-import { SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
 import { Downloads, TransferAction } from "../../components/Downloads";
 import { Uploads } from "../../components/Uploads";
 import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
@@ -375,7 +375,6 @@ export struct TabFiles {
   @State inputPlaceholder: string|Resource = ''
   @State inputValue: string = ''
   @State gridWidth: number = 0
-  @State isHeaderGlassActive: boolean = false
   @State headerCollapseProgress: number = 0
   @State refreshPullOffset: number = 0
   @State currentUser: string = ''
@@ -399,7 +398,6 @@ export struct TabFiles {
     backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
   })
   @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex]
-  private lastHeaderScrollOffset: number = 0
   private inputRenameIndex: number = -1
   private inputRenameItem?: ObjectInfo = undefined
   private inputTextController: TextInputController = new TextInputController()
@@ -779,25 +777,19 @@ export struct TabFiles {
     return items
   }
 
-  updateHeaderGlassState(): void {
+  /** 标题栏的毛玻璃现在由 HdsNavigation 的 systemMaterialEffect 负责，这里只算折叠进度。 */
+  updateHeaderCollapseProgress(): void {
     const scrollOffset = Math.max(CloudThemeToken.zero, this.scrollerForList.currentOffset().yOffset)
     const collapseDistance = this.getHeaderCollapseDistance()
     const nextProgress = Math.min(CloudThemeToken.fullOpacity, Math.max(CloudThemeToken.zero,
       scrollOffset / collapseDistance))
-    this.lastHeaderScrollOffset = scrollOffset
     if (Math.abs(this.headerCollapseProgress - nextProgress) >= CloudThemeToken.scrollProgressUpdateThreshold) {
       this.headerCollapseProgress = nextProgress
-    }
-    const active = nextProgress > CloudThemeToken.zero
-    if (this.isHeaderGlassActive !== active) {
-      this.isHeaderGlassActive = active
     }
   }
 
   resetHeaderScrollState(): void {
-    this.isHeaderGlassActive = false
     this.headerCollapseProgress = 0
-    this.lastHeaderScrollOffset = 0
   }
 
   getTopInset(): number {
@@ -817,13 +809,6 @@ export struct TabFiles {
       return CloudThemeToken.zero
     }
     return this.getSearchHeaderVisibleProgress()
-  }
-
-  getTitleBarMaterialOpacity(): number {
-    if (this.isMultiSelectMode) {
-      return CloudThemeToken.fullOpacity
-    }
-    return this.headerCollapseProgress * CloudThemeToken.filesHeaderGlassMaxOpacity
   }
 
   getHeaderCollapsedOffset(): number {
@@ -1475,7 +1460,12 @@ export struct TabFiles {
     this.mainTitle = this.isRoot ? $r('app.string.files_main_title') : CommonUtil.getLastDirectoryName(path)
     // 请求发出后可能被账号切换打断，回来的是上一账号的目录，不能再往界面上写
     const requestScope = this.loadedAccountScope
-    CloudApi.getFilesInfo(path, {
+    // 包成 Promise，让 await 真的等到数据落地。此前这个方法虽然声明成 async，
+    // 内部却是纯回调，请求一发出就 return——调用方 await 它等于没等
+    // （下拉刷新的 await 也一样是空等）。每条退出路径都要 resolve，
+    // 包括账号切换导致丢弃响应的那两处提前 return，否则 Promise 永远悬着。
+    await new Promise<void>((settle: () => void) => {
+      CloudApi.getFilesInfo(path, {
       onStart: () => {
         if (requestScope !== this.loadedAccountScope) {
           return
@@ -1494,6 +1484,7 @@ export struct TabFiles {
       onSuccess: (data: DirectoryInfo) => {
         if (requestScope !== this.loadedAccountScope) {
           AppLogger.info(TAG, 'drop file list response from previous account')
+          settle()
           return
         }
         this.loadingFilePath = ''
@@ -1513,9 +1504,11 @@ export struct TabFiles {
         if (fromPullRefresh) {
           showToast('刷新成功')
         }
+        settle()
       },
       onFailure: (msg) => {
         if (requestScope !== this.loadedAccountScope) {
+          settle()
           return
         }
         this.loadingFilePath = ''
@@ -1528,7 +1521,9 @@ export struct TabFiles {
         this.isRefreshing = false
         this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = shouldKeepContent ? FilePageState.IDLE : FilePageState.FAILED
+        settle()
       }
+      })
     })
   }
 
@@ -2866,7 +2861,10 @@ export struct TabFiles {
         offsetY: CloudThemeToken.refreshShadowOffsetY
       })
       .margin({
-        top: this.getHdsTitleBarBaseHeight() - CloudThemeToken.spacingSm,
+        // 必须落在标题栏下沿之外。HdsNavigation 的毛玻璃画在内容区之上，而这个菜单
+        // 是内容区里的浮层，zIndex 只在内容区内部排序，管不到标题栏那一层。原先往上
+        // 顶了 spacingSm，第一项「多选」的上半截就被糊掉了。
+        top: this.getHdsTitleBarBaseHeight() + CloudThemeToken.spacingCard,
         right: CloudThemeToken.filesHeaderPadding
       })
     }
@@ -3596,11 +3594,19 @@ export struct TabFiles {
     .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
     .animation({duration: CloudThemeToken.defaultAnimationDuration})
     .scrollBarWidth(CloudThemeToken.strongLineWidth)
+    // 列表整个铺满标题栏底下（沉浸式：内容从底下滚过去，让位靠的是滚动内容里的
+    // 占位项而不是组件 padding），滚动条默认按组件全高绘制，滑块滚到接近顶部时
+    // 就会伸进标题栏那条毛玻璃带里。把轨道两端让开标题栏和悬浮 tab bar。
+    .scrollBarMargin({
+      start: LengthMetrics.vp(this.getHdsTitleBarBaseHeight()),
+      end: LengthMetrics.vp((this.isMultiSelectMode ? this.multiSelectBarHeight : this.tabBarHeight) +
+        CloudThemeToken.tabContentBottomGap)
+    })
     .onDidScroll((_scrollOffset: number, scrollState: ScrollState) => {
       if (scrollState !== ScrollState.Idle) {
         this.prioritizeNewestThumbRequests = true
       }
-      this.updateHeaderGlassState()
+      this.updateHeaderCollapseProgress()
     })
     .onAreaChange((oldValue: Area, newValue: Area) => {
       const width = Number(newValue.width)
@@ -4604,6 +4610,9 @@ export struct TabFiles {
     AppLogger.info(TAG, `rename ${item.type === Constant.OBJECT_DIR_TYPE ? 'dir' : 'file'}`)
     CloudApi.renameObject(item.id, content, item.type == Constant.OBJECT_DIR_TYPE, {
       onSuccess: (data) => {
+        // id 必须跟着名字一起换：V4 的 id 就是全路径，留着旧 id 的话后面
+        // 预览/下载/详情/删除全打到一个已经不存在的路径上（服务端回 40081）
+        item.id = CloudApi.renamedObjectId(item.id, content)
         item.name = content
         if (item.type == Constant.OBJECT_DIR_TYPE) {
           console.info(TAG, 'index dir ' + index)
@@ -4636,20 +4645,55 @@ export struct TabFiles {
 
   /**
    * 新建文本文件后直接打开编辑器。
-   * 服务端刚建好的文件还没回到列表里，这里用已知的路径和文件名自己拼一个
-   * ObjectInfo；大小为 0，编辑器按空文件加载。
+   *
+   * 必须先拿到服务端给的真实对象 id。V3 的 /file/download/:id 要的是 hashid，
+   * 把全路径塞进去连路由都匹配不上，服务端回一段纯文本 404，客户端按 JSON 解就
+   * 成了「加载失败 · error decoding response body」。V4 的 id 恰好就是全路径，
+   * 所以这个坑一直只在 V3 上暴露。
+   *
+   * 建文件的接口只回 {code:0} 不带 id，所以得从目录清单里反查。调用方在开编辑器
+   * 之前已经 await 过一次刷新，优先直接用刷到的那份列表；只有当刷新没覆盖到这个
+   * 目录（比如中途切走了）时才自己补列一次，免得为同一个目录列两遍——大目录上
+   * 一次列表可能就要几十秒。
    */
   private openNewTextFile(dirPath: string, fileName: string): void {
     const sep = dirPath.endsWith('/') ? '' : '/'
     const fullPath = `${dirPath}${sep}${fileName}`
-    const created: ObjectInfo = {
+    // 反查不到时退回自拼的这个：V4 上它是合法 id，等于保持原有行为
+    const fallback: ObjectInfo = {
       id: fullPath, name: fileName, path: dirPath,
       thumb: false, size: 0, type: Constant.OBJECT_FILE_TYPE,
       date: '', create_date: '', source_enabled: false
     }
     const refreshPath = this.currentPath
-    TextPreviewEntry.open(created, () => {
-      this.getFileList(true, refreshPath)
+    const openEditor = (item: ObjectInfo): void => {
+      TextPreviewEntry.open(item, () => {
+        this.getFileList(true, refreshPath)
+      })
+    }
+
+    if (dirPath === this.currentPath) {
+      const listed = this.fileDataSource.getDataList().find((object: ObjectInfo) => object.name === fileName)
+      if (listed) {
+        openEditor(listed)
+        return
+      }
+      AppLogger.warn(TAG, `new text file ${fileName} missing from refreshed listing, re-fetching ${dirPath}`)
+    }
+
+    CloudApi.getFilesInfo(dirPath, {
+      onSuccess: (data: DirectoryInfo) => {
+        const listed = (data.objects ?? []).find((object: ObjectInfo) =>
+          object.name === fileName && object.type !== Constant.OBJECT_DIR_TYPE)
+        if (!listed) {
+          AppLogger.warn(TAG, `new text file ${fileName} not found under ${dirPath}, falling back to path id`)
+        }
+        openEditor(listed ?? fallback)
+      },
+      onFailure: (msg: string) => {
+        AppLogger.warn(TAG, `resolve id for new text file ${fileName} failed: ${msg}`)
+        openEditor(fallback)
+      }
     })
   }
 
@@ -4660,12 +4704,16 @@ export struct TabFiles {
         const createdPath = this.inputNewPath
         const isDir = this.inputNewIsDir
         this.closeInputSheet()
-        this.getFileList(true, this.currentPath)
         showToast(`新建${content}成功`)
-        // 新建的文本文件直接进编辑器：建完一个空文件却没处填内容，等于没建
-        if (!isDir && CommonUtil.isTextViewable(CommonUtil.getFileType(content))) {
-          this.openNewTextFile(createdPath, content)
-        }
+        // 新建的文本文件直接进编辑器：建完一个空文件却没处填内容，等于没建。
+        // 等这次刷新落地再开——编辑器要的是列表里那条真实 ObjectInfo 的 id，
+        // 复用它就不用为同一个目录再列一次。
+        const shouldOpenEditor = !isDir && CommonUtil.isTextViewable(CommonUtil.getFileType(content))
+        this.getFileList(true, this.currentPath).then(() => {
+          if (shouldOpenEditor) {
+            this.openNewTextFile(createdPath, content)
+          }
+        })
       },
       onFailure: (msg) => {
         AppLogger.error(TAG, '新建文件/文件夹失败 msg: ' + msg)

@@ -304,7 +304,8 @@ export class CloudThemeToken {
   static readonly aboutLogoSize: number = 100
   static readonly aboutTitleSize: number = 20
   static readonly aboutInfoHorizontalPadding: number = 10
-  static readonly aboutInfoTopMargin: number = 30
+  // 应用名与信息卡之间的间距。半模态里可视高度紧张，这段纯留白压到 16
+  static readonly aboutInfoTopMargin: number = 16
   static readonly aboutInfoTitleSize: number = 16
   static readonly aboutInfoTextSize: number = 14
   static readonly aboutInfoRowHeight: number = 50
@@ -313,15 +314,15 @@ export class CloudThemeToken {
   static readonly aboutSourceLinkPadding: number = 12
   static readonly aboutSourceLinkRadius: number = 14
   static readonly aboutIcpHeight: number = 12
+  // 备案号与信息卡之间的保底间距：内容超出可滚时撑开的 Blank 会塌成 0，
+  // 只剩 aboutPageGap 会让两者贴在一起
+  static readonly aboutIcpTopGap: number = 12
   static readonly filesHeaderGap: number = 10
   static readonly filesHeaderPadding: number = 10
   static readonly filesHeaderActionWidth: number = 100
   static readonly filesHeaderIconPadding: number = 10
   static readonly filesHeaderBackIconPadding: number = 5
   static readonly filesHeaderBadgeSize: number = 12
-  static readonly filesHeaderGlassThreshold: number = 8
-  static readonly filesHeaderGlassBlurStyle: BlurStyle = BlurStyle.BACKGROUND_THIN
-  static readonly filesHeaderGlassMaxOpacity: number = 0.28
   static readonly filesHeaderCollapsedContentLift: number = 10
   static readonly filesHeaderZIndex: number = 5
   static readonly filesHeaderTransitionDuration: number = 200
@@ -375,6 +376,9 @@ export class CloudThemeToken {
   static readonly aria2DetailToolHorizontalPadding: number = 10
   static readonly aria2DetailToolBottomPadding: number = 20
   static readonly aria2DetailSheetTopPadding: number = 25
+  static readonly aria2CancelButtonSize: number = 30
+  static readonly aria2CancelButtonRadius: number = 15
+  static readonly aria2CancelIconSize: number = 16
   static readonly imagePreviewErrorImageSize: number = 128
   static readonly imagePreviewSaveTopPadding: number = 10
   static readonly imagePreviewSaveBottomPadding: number = 10
@@ -396,6 +400,9 @@ export class CloudThemeToken {
   // 本地预览返回键与远程预览 HDS titleBar 返回图标(24vp)保持一致
   static readonly photoLocalPreviewBackIconSize: number = 24
   static readonly videoPreviewControlsPanelRadius: number = 20
+  // 续播浮条：胶囊高度即圆角基准，内嵌的"从头播放"按钮再小一号
+  static readonly videoPreviewResumeBannerHeight: number = 40
+  static readonly videoPreviewResumeActionHeight: number = 28
   static readonly videoPreviewTitleShadowRadius: number = 6
   static readonly videoPreviewTitleShadowColor: ResourceColor = 'rgba(0, 0, 0, 0.6)'
   static readonly loginPageGap: number = 10
@@ -478,6 +485,8 @@ export class CloudThemeToken {
   static readonly previewCloseButtonBackground: ResourceColor = $r('app.color.cloud_preview_close_background')
   static readonly previewCloseIcon: ResourceColor = $r('app.color.cloud_preview_close_icon')
   static readonly line: ResourceColor = $r('app.color.cloud_line')
+  // 滚动条滑块：比分隔线重一档（压在白卡上要看得见），比次要文字轻一档（不抢视线）
+  static readonly scrollBar: ResourceColor = $r('app.color.cloud_scroll_bar')
   static readonly primary: ResourceColor = $r('app.color.cloud_primary')
   static readonly primarySoft: ResourceColor = $r('app.color.cloud_primary_soft')
   static readonly textPrimary: ResourceColor = $r('app.color.cloud_text_primary')
@@ -507,6 +516,9 @@ export class CloudThemeToken {
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
   static readonly videoPreviewControlBorder: ResourceColor = 'rgba(255, 255, 255, 0.18)'
   static readonly videoPreviewControlsBackground: ResourceColor = 'rgba(0, 0, 0, 0.54)'
+  // 续播浮条的"从头播放"按钮底色。浮条整体只用白与半透明黑，不吃主题色：
+  // cloud_primary 压在深色画面上对比度不足，且视频画面本身与深浅色模式无关
+  static readonly videoPreviewResumeActionBackground: ResourceColor = 'rgba(255, 255, 255, 0.16)'
   static readonly refreshShadow: ResourceColor = 'rgba(24, 36, 56, 0.12)'
   static readonly overlayScrim: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'

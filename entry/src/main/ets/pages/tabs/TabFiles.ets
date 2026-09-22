@@ -875,23 +875,38 @@ export struct TabFiles {
 
   // 宽屏侧栏收起时，HomePage 折叠键悬浮在内容最左；给整条标题栏加起始 padding，
   // 把 HDS 返回键整体右推、躲开折叠键（spike）
+  // HDS 返回键的起始 padding：把返回键从内容左缘（展开）或折叠键处（收起）右推，
+  // 留出呼吸边距。仅宽屏 + 非根目录生效
   getFileTitleBarStartPadding(): number {
     const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
-    // 仅宽屏 + 侧栏收起 + 非根目录：把 HDS 返回键右推、躲开 HomePage 悬浮折叠键
-    if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible && !this.isRoot) {
-      return CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    if (!CloudThemeToken.isWideBreakpoint(bp) || this.isRoot) {
+      return 0
     }
-    return 0
+    if (!this.sidebarVisible) {
+      // 收起：让开 HomePage 折叠键（左距 spacingCard + 键宽）再留一段间隙
+      return CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingSection
+    }
+    // 展开：与侧栏分隔线留出呼吸边距，避免返回键贴边
+    return CloudThemeToken.spacingPage
   }
 
+  // stackBuilder 标题的左 padding。stackBuilder 不随 titleBar.padding.start 平移，
+  // 需绝对定位到「折叠键/返回键之后」，与 getFileTitleBarStartPadding 保持一致
   getFileTitleStackLeftPadding(): number {
-    // padding.start 只右推 HDS 原生返回键（躲开 HomePage 折叠键），不影响 stackBuilder；
-    // 所以标题仍要自己让开折叠键 + 返回键两段宽度
-    let pad = CloudThemeToken.filesTitleHorizontalPadding
     const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
-    if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible) {
-      pad += CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    const gap = CloudThemeToken.spacingSection
+    if (CloudThemeToken.isWideBreakpoint(bp)) {
+      if (this.isRoot) {
+        // 无返回键：收起时让开折叠键，展开时基础边距
+        return !this.sidebarVisible ?
+          (CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + gap) :
+          CloudThemeToken.filesTitleHorizontalPadding
+      }
+      // 有返回键：标题接在返回键（起点由 padding.start 决定）之后
+      return this.getFileTitleBarStartPadding() + CloudThemeToken.iconButtonSize + gap
     }
+    // 窄屏：基础边距（非根再让开返回键）
+    let pad = CloudThemeToken.filesTitleHorizontalPadding
     if (!this.isRoot) {
       pad += CloudThemeToken.iconButtonSize + CloudThemeToken.spacingCard
     }

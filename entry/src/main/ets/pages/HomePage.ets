@@ -274,7 +274,8 @@ export struct HomePage {
     .padding(0)
     .margin({
       left: CloudThemeToken.spacingCard,
-      top: this.controlButtonTop()
+      // 上移一点，与 HDS 标题栏返回键垂直居中对齐（两者分属不同布局系统，实测偏低约 3vp）
+      top: this.controlButtonTop() - CloudThemeToken.spacingTiny
     })
     .onClick(() => {
       this.getUIContext().animateTo({

@@ -875,42 +875,37 @@ export struct TabFiles {
 
   // 宽屏侧栏收起时，HomePage 折叠键悬浮在内容最左；给整条标题栏加起始 padding，
   // 把 HDS 返回键整体右推、躲开折叠键（spike）
-  // HDS 返回键的起始 padding：把返回键从内容左缘（展开）或折叠键处（收起）右推，
-  // 留出呼吸边距。仅宽屏 + 非根目录生效
+  // HDS 返回键的起始 padding：把返回键从内容左缘/折叠键处右推、留出呼吸边距。
+  // 根目录无返回键返回 0
   getFileTitleBarStartPadding(): number {
-    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
-    if (!CloudThemeToken.isWideBreakpoint(bp) || this.isRoot) {
+    // 需要起始边距的情形：非根目录（有返回键）或多选态（用 HDS 原生标题「已选 N 项」，
+    // 也从内容左缘起排、会贴边）。根目录的普通态标题走 stackBuilder，另有 padding
+    if (this.isRoot && !this.isMultiSelectMode) {
       return 0
     }
-    if (!this.sidebarVisible) {
-      // 收起：让开 HomePage 折叠键（左距 spacingCard + 键宽）再留一段间隙
+    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+    // 宽屏 + 侧栏收起：让开 HomePage 折叠键（左距 spacingCard + 键宽）再留一段间隙
+    if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible) {
       return CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingSection
     }
-    // 展开：与侧栏分隔线留出呼吸边距，避免返回键贴边
+    // 其余（宽屏展开 / 窄屏）：留出呼吸边距，避免贴屏幕边或侧栏分隔线
     return CloudThemeToken.spacingPage
   }
 
   // stackBuilder 标题的左 padding。stackBuilder 不随 titleBar.padding.start 平移，
   // 需绝对定位到「折叠键/返回键之后」，与 getFileTitleBarStartPadding 保持一致
   getFileTitleStackLeftPadding(): number {
-    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
     const gap = CloudThemeToken.spacingSection
-    if (CloudThemeToken.isWideBreakpoint(bp)) {
-      if (this.isRoot) {
-        // 无返回键：收起时让开折叠键，展开时基础边距
-        return !this.sidebarVisible ?
-          (CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + gap) :
-          CloudThemeToken.filesTitleHorizontalPadding
+    if (this.isRoot) {
+      // 无返回键：宽屏收起时让开折叠键，其余基础边距
+      const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+      if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible) {
+        return CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + gap
       }
-      // 有返回键：标题接在返回键（起点由 padding.start 决定）之后
-      return this.getFileTitleBarStartPadding() + CloudThemeToken.iconButtonSize + gap
+      return CloudThemeToken.filesTitleHorizontalPadding
     }
-    // 窄屏：基础边距（非根再让开返回键）
-    let pad = CloudThemeToken.filesTitleHorizontalPadding
-    if (!this.isRoot) {
-      pad += CloudThemeToken.iconButtonSize + CloudThemeToken.spacingCard
-    }
-    return pad
+    // 有返回键：标题接在返回键（起点由 padding.start 决定）之后
+    return this.getFileTitleBarStartPadding() + CloudThemeToken.iconButtonSize + gap
   }
 
   // FAB 底部 margin：手机端浮在底部 tab bar 之上 + 间距；wide 端无 tab bar，靠 safe area 即可
@@ -2901,9 +2896,9 @@ export struct TabFiles {
       .padding(CloudThemeToken.zero)
       .borderRadius(CloudThemeToken.controlRadiusXl)
       .clip(true)
-      // 自绘菜单不在应用级 ENABLE 的系统组件清单里，材质要手动挂；
-      // 底色让位给材质，26 上透出背后内容，23/24 回落 surface 实色
-      .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
+      // 自绘菜单不在应用级 ENABLE 的系统组件清单里，材质要手动挂；底色分档：
+      // EXQUISITE 高算力档置透明、交给厚材质透出内容；中低算力档/23/24 用实心 surface 保可读
+      .backgroundColor(CloudMaterial.menuBackground())
       .systemMaterial(CloudMaterial.menuMaterial())
       .shadow({
         radius: CloudThemeToken.sheetShadowRadius,

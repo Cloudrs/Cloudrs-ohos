@@ -1,4 +1,5 @@
 import { uiMaterial } from '@kit.ArkUI'
+import { CloudThemeToken } from './CloudTheme'
 import { deviceInfo } from '@kit.BasicServicesKit'
 import AppLogger from '../utils/AppLogger'
 
@@ -47,6 +48,33 @@ export class CloudMaterial {
    */
   static materialSurface(fallback: ResourceColor): ResourceColor {
     return CloudMaterial.supported ? Color.Transparent : fallback
+  }
+
+  private static cachedExquisite: boolean | undefined = undefined
+
+  /**
+   * 当前设备材质档位是否为最高档 EXQUISITE。材质厚度被芯片算力锁死：
+   * 只有 EXQUISITE 档 THICK/ULTRA_THICK 才真的厚实、能当背景用；GENTLE/SMOOTH
+   * 档材质极薄近乎透明，此时若把背景置透明交给材质，文字会被身后内容透穿看不清。
+   */
+  static get isExquisite(): boolean {
+    if (CloudMaterial.cachedExquisite === undefined) {
+      let exquisite: boolean = false
+      // apiAvailable 字面量守卫必须用 if 块，编译器才认得出、消除兼容性告警
+      if (deviceInfo.apiAvailable('26.0.0')) {
+        exquisite = uiMaterial.getGlobalMaterialLevel() === uiMaterial.MaterialLevel.EXQUISITE
+      }
+      CloudMaterial.cachedExquisite = exquisite
+    }
+    return CloudMaterial.cachedExquisite
+  }
+
+  /**
+   * 文字型面板（自绘菜单）的底色：仅 EXQUISITE 档置透明、交给厚材质出通透观感；
+   * 中低算力档与 <26 一律用不透明 surface，保证菜单文字任何背景下都可读。
+   */
+  static menuBackground(): ResourceColor {
+    return CloudMaterial.isExquisite ? Color.Transparent : CloudThemeToken.surface
   }
 
   /** bindSheet 的系统材质。低版本返回 undefined 即系统默认。 */

@@ -873,9 +873,20 @@ export struct TabFiles {
     return $r('app.media.ic_back')
   }
 
+  // 宽屏侧栏收起时，HomePage 折叠键悬浮在内容最左；给整条标题栏加起始 padding，
+  // 把 HDS 返回键整体右推、躲开折叠键（spike）
+  getFileTitleBarStartPadding(): number {
+    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+    // 仅宽屏 + 侧栏收起 + 非根目录：把 HDS 返回键右推、躲开 HomePage 悬浮折叠键
+    if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible && !this.isRoot) {
+      return CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    }
+    return 0
+  }
+
   getFileTitleStackLeftPadding(): number {
-    // 基础边距 + sidebar 折叠时给折叠按钮让位；非根目录再给 HDS 原生返回键让位，
-    // 否则 stackBuilder 里的标题会从最左边缘画上去、盖住返回键
+    // padding.start 只右推 HDS 原生返回键（躲开 HomePage 折叠键），不影响 stackBuilder；
+    // 所以标题仍要自己让开折叠键 + 返回键两段宽度
     let pad = CloudThemeToken.filesTitleHorizontalPadding
     const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
     if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible) {
@@ -2544,6 +2555,9 @@ export struct TabFiles {
           materialType: hdsMaterial.MaterialType.ADAPTIVE,
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
         }
+      },
+      padding: {
+        start: LengthMetrics.vp(this.getFileTitleBarStartPadding())
       },
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false

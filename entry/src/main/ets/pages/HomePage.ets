@@ -9,7 +9,8 @@ import { TabId, TabItem, TabList } from '../model/TabData';
 import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
 import { CloudRouter } from '../utils/CloudRouter';
 import { common } from '@kit.AbilityKit';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { deviceInfo, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { AppLockUtil } from '../utils/AppLockUtil';
 import { showToast } from '../utils/ToastUtil';
 import AppLogger from '../utils/AppLogger';
@@ -254,8 +255,11 @@ export struct HomePage {
     .height('100%')
   }
 
+  // 折叠键与文件页 HDS 返回键并排，观感对齐：容器（非 Button，Button 挂不上材质）
+  // + systemMaterial 光感；底色让位给材质，低版本 ROM 回落 surfaceSubtle 实色
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder sideBarToggleButton() {
-    Button({ type: ButtonType.Normal }) {
+    Stack() {
       SymbolGlyph(this.showSideBar ?
         $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
         .fontSize(CloudThemeToken.sideBarToggleIconSize)
@@ -264,7 +268,8 @@ export struct HomePage {
     }
     .width(CloudThemeToken.sideBarToggleSize)
     .height(CloudThemeToken.sideBarToggleSize)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .borderRadius(CloudThemeToken.actionRadiusForWidth(this.windowWidth, CloudThemeToken.sideBarToggleRadius))
     .padding(0)
     .margin({

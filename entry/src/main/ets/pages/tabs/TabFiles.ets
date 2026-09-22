@@ -2798,6 +2798,8 @@ export struct TabFiles {
     }
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder fileMoreMenuOverlay() {
     Stack({ alignContent: Alignment.TopEnd }) {
       Column()
@@ -2867,7 +2869,10 @@ export struct TabFiles {
       .padding(CloudThemeToken.zero)
       .borderRadius(CloudThemeToken.controlRadiusXl)
       .clip(true)
-      .backgroundColor(CloudThemeToken.surface)
+      // 自绘菜单不在应用级 ENABLE 的系统组件清单里，材质要手动挂；
+      // 底色让位给材质，26 上透出背后内容，23/24 回落 surface 实色
+      .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.menuMaterial())
       .shadow({
         radius: CloudThemeToken.sheetShadowRadius,
         color: CloudThemeToken.sheetShadow,

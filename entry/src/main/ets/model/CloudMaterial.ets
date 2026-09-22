@@ -96,6 +96,24 @@ export class CloudMaterial {
     return undefined
   }
 
+  private static cachedMenu: SystemUiMaterial | undefined = undefined
+
+  /**
+   * 自绘下拉/弹出菜单面板：厚材质，与系统菜单控件（应用级 ENABLE 默认 THICK）
+   * 观感一致。菜单里全是文字，比浮动工具栏更需要模糊背景保证可读。
+   */
+  static menuMaterial(): SystemUiMaterial | undefined {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedMenu === undefined) {
+        CloudMaterial.cachedMenu = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THICK
+        })
+      }
+      return CloudMaterial.cachedMenu
+    }
+    return undefined
+  }
+
 
   /**
    * 材质接管后不再需要手写毛玻璃。只用于 systemMaterial 确实生效的组件

@@ -874,11 +874,15 @@ export struct TabFiles {
   }
 
   getFileTitleStackLeftPadding(): number {
-    // 返回按钮已经内嵌到 Row 里，padding 只管基础边距 + sidebar 折叠时给折叠按钮让位
+    // 基础边距 + sidebar 折叠时给折叠按钮让位；非根目录再给 HDS 原生返回键让位，
+    // 否则 stackBuilder 里的标题会从最左边缘画上去、盖住返回键
     let pad = CloudThemeToken.filesTitleHorizontalPadding
     const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
     if (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible) {
       pad += CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    }
+    if (!this.isRoot) {
+      pad += CloudThemeToken.iconButtonSize + CloudThemeToken.spacingCard
     }
     return pad
   }
@@ -2466,10 +2470,22 @@ export struct TabFiles {
     .mode(NavigationMode.Stack)
     .hideToolBar(true)
     .hideTitleBar(false)
-    .hideBackButton(true)
+    .hideBackButton(this.isRoot)
     .titleMode(HdsNavigationTitleMode.MINI)
     .titleBar({
       content: {
+        // 返回键交给 HDS 原生绘制，与右侧菜单键同吃 systemMaterialEffect 光感，两侧完全一致；
+        // 动作按当前模式分支：多选态退出多选，否则回上级目录
+        backIcon: {
+          icon: this.getTitleBackIcon(),
+          action: () => {
+            if (this.isMultiSelectMode) {
+              this.exitMultiSelectMode()
+            } else {
+              this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+            }
+          }
+        },
         title: {
           mainTitle: this.isMultiSelectMode ? this.getSelectedCountText() : ' ',
           subTitle: this.isMultiSelectMode ? '选择文件后操作' : ' '
@@ -2708,36 +2724,10 @@ export struct TabFiles {
     return danger ? CloudThemeToken.danger : CloudThemeToken.primary
   }
 
-  // 返回键与右侧 HDS 菜单按钮观感对齐：右侧按钮由 HDS 绘制、吃 systemMaterialEffect
-  // 的光感材质，返回键是 stackBuilder 里的自绘元素拿不到那层。用容器（非 Button，
-  // Button 挂不上 systemMaterial）手动挂材质，底色/图标色统一走 getFileTitleAction*，
-  // 让两侧一致；低版本 ROM 回落到 surfaceSubtle 实色。
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder fileTitleBackButton() {
-    Stack() {
-      Image(this.getTitleBackIcon())
-        .width(CloudThemeToken.actionIconSize)
-        .height(CloudThemeToken.actionIconSize)
-        .fillColor(this.getFileTitleActionIconColor())
-        .draggable(false)
-    }
-    .width(CloudThemeToken.iconButtonSize)
-    .height(CloudThemeToken.iconButtonSize)
-    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth, CloudThemeToken.controlRadius))
-    .backgroundColor(CloudMaterial.materialSurface(this.getFileTitleActionBackground()))
-    .systemMaterial(CloudMaterial.titleControlMaterial())
-    .onClick(() => {
-      this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
-    })
-  }
-
   @Builder fileTitleBarStack() {
     if (!this.isMultiSelectMode) {
       Stack() {
         Row({ space: CloudThemeToken.spacingCard }) {
-          if (!this.isRoot) {
-            this.fileTitleBackButton()
-          }
 
           Column({ space: CloudThemeToken.spacingTiny }) {
             Text(this.mainTitle)

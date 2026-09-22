@@ -1,4 +1,5 @@
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { PhotoBackupSettings } from '../model/PhotoBackupModel';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_PATH_KEY } from '../model/PhotoBackupSettingsStore';
 import Constant from '../model/Constant';
@@ -192,6 +193,6 @@ export struct PhotoBackupSettingsSheet {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 }

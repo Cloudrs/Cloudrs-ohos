@@ -8,6 +8,7 @@ import { LoginParam } from '../model/net/LoginParam';
 import { CloudApi } from '../model/net/CloudApi';
 import { image } from '@kit.ImageKit';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { CloudRouter } from '../utils/CloudRouter';
 import { ActiveAccount } from '../utils/ActiveAccount';
 import { AvatarUtil } from '../utils/AvatarUtil';
@@ -385,7 +386,8 @@ export struct LoginPage {
       detents: [SheetSize.FIT_CONTENT],
       title: { title: '选择账号' },
       showClose: true,
-      backgroundColor: CloudThemeToken.background,
+      backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+      systemMaterial: CloudMaterial.sheetMaterial(),
       preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
       width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
       onDisappear: () => {

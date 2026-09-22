@@ -1,5 +1,7 @@
 import Constant from '../model/Constant';
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { PhotoBackupItem, PhotoBackupStatus } from '../model/PhotoBackupModel';
 import { PhotoLocalPreviewParam } from '../model/Params';
 import { CommonUtil } from '../utils/CommonUtil';
@@ -156,6 +158,8 @@ export struct PhotoLocalPreviewPage {
     .height('100%')
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder infoBar(item: PhotoBackupItem) {
     // 文件名已移到顶栏,剩余信息合并为单行,降低底栏高度
     Row() {
@@ -177,10 +181,13 @@ export struct PhotoLocalPreviewPage {
       top: CloudThemeToken.spacingPanel,
       bottom: this.bottomRectHeight + CloudThemeToken.spacingPanel
     })
-    .backgroundColor('rgba(0, 0, 0, 0.32)')
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder topChrome() {
     Row({ space: CloudThemeToken.spacingCard }) {
       this.backButton()
@@ -203,8 +210,9 @@ export struct PhotoLocalPreviewPage {
       left: CloudThemeToken.spacingPage,
       right: CloudThemeToken.spacingPage
     })
-    .backgroundColor('rgba(0, 0, 0, 0.32)')
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .position({ x: 0, y: 0 })
     .opacity(this.chromeVisible ? 1 : 0)
   }

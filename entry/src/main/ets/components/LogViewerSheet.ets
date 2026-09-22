@@ -4,6 +4,7 @@ import { picker } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
 import Constant from '../model/Constant';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudMaterial } from '../model/CloudMaterial';
 import AppLogger from '../utils/AppLogger';
 import { showToast } from '../utils/ToastUtil';
 
@@ -45,7 +46,7 @@ export struct LogViewerSheet {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder actionRow() {

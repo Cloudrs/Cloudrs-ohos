@@ -17,7 +17,7 @@ import { CommonUtil, FileType } from "../../utils/CommonUtil";
 import { PathSelectSheet } from "../../components/PathSelectSheet";
 import { ObjectCopy, ObjectMove, ObjectSrc } from "../../model/net/ObjectParam";
 import { common } from "@kit.AbilityKit";
-import { BusinessError, deviceInfo, pasteboard, request } from "@kit.BasicServicesKit";
+import { BusinessError, SuppressWarnings, SuppressWarningsType, deviceInfo, pasteboard, request } from "@kit.BasicServicesKit";
 import { uniformTypeDescriptor } from "@kit.ArkData";
 import { window } from "@kit.ArkUI";
 import { picker } from '@kit.CoreFileKit';
@@ -27,6 +27,7 @@ import { FileModel, FileModelState } from "../../model/FileModel";
 import { SelectFileSheet } from '../../components/SelectFileSheet';
 import { uploadManager } from '../../utils/UploadManager';
 import { CloudBreakpoint, CloudThemeToken } from "../../model/CloudTheme";
+import { CloudMaterial } from "../../model/CloudMaterial";
 import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import AppLogger from "../../utils/AppLogger";
@@ -2259,7 +2260,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             title: { title: $r('app.string.detail_title') },
             showClose: true,
-            backgroundColor: CloudThemeToken.background,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+            systemMaterial: CloudMaterial.sheetMaterial(),
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onWillAppear: () => {
@@ -2291,7 +2293,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             title: { title: $r('app.string.upload') },
             showClose: true,
-            backgroundColor: CloudThemeToken.background,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+            systemMaterial: CloudMaterial.sheetMaterial(),
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onWillAppear: () => {
@@ -2324,7 +2327,8 @@ export struct TabFiles {
             // 单挡 FIT_CONTENT 下系统避让只保证光标可见，按钮仍被键盘挡住；
             // 改为关闭系统避让，由内容 padding 跟随键盘高度手动避让（见 inputSheetBuilder）
             keyboardAvoidMode: SheetKeyboardAvoidMode.NONE,
-            backgroundColor: CloudThemeToken.background,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+            systemMaterial: CloudMaterial.sheetMaterial(),
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onWillAppear: () => {
@@ -2357,7 +2361,8 @@ export struct TabFiles {
             detents: [SheetSize.FIT_CONTENT],
             title: { title: this.shareLinkText.length > 0 ? '分享链接' : '创建分享' },
             showClose: true,
-            backgroundColor: CloudThemeToken.background,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+            systemMaterial: CloudMaterial.sheetMaterial(),
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             onWillAppear: () => {
@@ -2388,7 +2393,8 @@ export struct TabFiles {
           .width(CloudThemeToken.zero)
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showTransportSheet, this.transportSheetBuilder(), {
-            backgroundColor: CloudThemeToken.surface,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surface),
+            systemMaterial: CloudMaterial.sheetMaterial(),
             title: { title: $r('app.string.transport_title') },
             showClose: true,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
@@ -2425,7 +2431,8 @@ export struct TabFiles {
             },
             showClose: false,
             enableOutsideInteractive: false,
-            backgroundColor: CloudThemeToken.background,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+            systemMaterial: CloudMaterial.sheetMaterial(),
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
             // 批处理只能由任务完成后主动关闭，避免返回、点击蒙层或下拉误关后失去进度入口。
@@ -2573,6 +2580,8 @@ export struct TabFiles {
     .alignItems(VerticalAlign.Center)
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder multiSelectActionBar() {
     Column({ space: CloudThemeToken.spacingCard }) {
       Row() {
@@ -2618,8 +2627,9 @@ export struct TabFiles {
       bottom: CloudThemeToken.zero
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.surfaceGlassStrong)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surfaceGlassStrong))
+    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .shadow({
       radius: CloudThemeToken.sheetShadowRadius,
@@ -2642,6 +2652,8 @@ export struct TabFiles {
     .opacity(1.0)
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder multiActionButton(icon: ResourceStr, title: string, action: () => void, danger: boolean = false) {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -2656,8 +2668,9 @@ export struct TabFiles {
         .height(CloudThemeToken.iconBoxXl)
         .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
           CloudThemeToken.controlRadiusRoundXl))
-        .backgroundColor(this.getMultiActionBackground(danger))
-        .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+        .backgroundColor(CloudMaterial.materialSurface(this.getMultiActionBackground(danger)))
+        .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
+        .systemMaterial(CloudMaterial.floatingControlMaterial())
         .shadow({
           radius: CloudThemeToken.refreshShadowRadius,
           color: danger ? 'rgba(255, 77, 79, 0.10)' : 'rgba(17, 93, 252, 0.10)',
@@ -3054,7 +3067,7 @@ export struct TabFiles {
       .width('100%')
       .margin({ top: CloudThemeToken.filesTransportContentTopMargin })
       .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.background)
+      .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Center)
       .justifyContent(FlexAlign.Center)
@@ -3067,7 +3080,7 @@ export struct TabFiles {
     })
     .height('100%')
     .width('100%')
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder loadingState() {
@@ -3218,7 +3231,7 @@ export struct TabFiles {
         : this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin + CloudThemeToken.spacingSheetBottom
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .zIndex(1)
   }
 
@@ -3283,7 +3296,7 @@ export struct TabFiles {
       bottom: this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin + CloudThemeToken.spacingSheetBottom
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .zIndex(1)
   }
 
@@ -3617,7 +3630,8 @@ export struct TabFiles {
     })
     .bindSheet($$this.showPathSelect, this.selectPathSheet(), {
       showClose: false,
-      backgroundColor: CloudThemeToken.background,
+      backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+      systemMaterial: CloudMaterial.sheetMaterial(),
       preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
       width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
       onWillAppear: () => {
@@ -3703,7 +3717,7 @@ export struct TabFiles {
     }
     .width('100%')
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder selectFileOverlay() {

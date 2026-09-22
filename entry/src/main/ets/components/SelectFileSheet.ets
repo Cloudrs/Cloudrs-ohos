@@ -3,6 +3,7 @@ import { BusinessError } from "@kit.BasicServicesKit"
 import { common } from "@kit.AbilityKit"
 import { picker } from "@kit.CoreFileKit"
 import { CloudThemeToken } from "../model/CloudTheme"
+import { CloudMaterial } from "../model/CloudMaterial"
 import Constant from "../model/Constant"
 import { showToastTips, ToastType } from "../utils/ToastUtil"
 import AppLogger from "../utils/AppLogger"
@@ -56,7 +57,7 @@ export struct SelectFileSheet {
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .zIndex(1)
   }
 

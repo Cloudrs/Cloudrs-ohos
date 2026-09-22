@@ -1,6 +1,7 @@
 import { DbUserInfo } from "../model/net/ApiTypes";
 import UserDatabase from "../model/UserDatabase";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { showCloudConfirmDialog } from "../utils/CloudDialogUtil";
 import { ActiveAccount } from "../utils/ActiveAccount";
 import { AccountAvatar } from "./AccountAvatar";
@@ -101,7 +102,7 @@ export struct UserSwitchSheet {
       bottom: CloudThemeToken.spacingSheetBottom
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder userRow(user: DbUserInfo) {

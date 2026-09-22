@@ -2,6 +2,7 @@ import Constant from '../model/Constant';
 import { LoginParam } from '../model/net/LoginParam';
 import { FileSearchParam, ImagePreview, PhotoLocalPreviewParam, TextPreviewParam, VideoPreview } from '../model/Params';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { CloudRouter, UserSwitchResult } from '../utils/CloudRouter';
 import { AppBoot } from '../utils/AppBoot';
 import { HomePage } from './HomePage';
@@ -39,6 +40,9 @@ struct Index {
   private keyboardHeightListener: ((heightPx: number) => void) | undefined = undefined;
 
   aboutToAppear(): void {
+    // 触一下，把「本机走哪条材质路径」记进启动日志
+    CloudMaterial.supported;
+    CloudMaterial.logDiagnostics();
     initToastUiContext(this.getUIContext());
     this.setupWindowMetrics();
     CloudRouter.init(
@@ -326,6 +330,7 @@ struct Index {
     .width('100%')
     .height('100%')
   }
+
 
   @Builder rootBuilder() {
     if (this.rootPage === Constant.LOGIN_PAGE) {

@@ -1,5 +1,6 @@
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { VideoPreview } from "../model/Params";
 import { CloudApi } from "../model/net/CloudApi";
 import UserPreferences from "../model/UserPreferences";
@@ -11,7 +12,7 @@ import { showApiFailureToast, showToast } from "../utils/ToastUtil";
 import AppLogger from "../utils/AppLogger";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { window } from "@kit.ArkUI";
-import { deviceInfo } from "@kit.BasicServicesKit";
+import { SuppressWarnings, SuppressWarningsType, deviceInfo } from "@kit.BasicServicesKit";
 import { harmonyShare } from "@kit.ShareKit";
 import { KnockShareUtil } from "../utils/KnockShareUtil";
 import { KeyCode } from "@kit.InputKit";
@@ -340,6 +341,24 @@ export struct VideoPreviewPage {
       )
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  @Builder seekHint() {
+    Text(this.seekHintText())
+      .fontSize(CloudThemeToken.textSizeBody)
+      .fontColor(CloudThemeToken.onPrimary)
+      .padding({
+        left: CloudThemeToken.spacingSection,
+        right: CloudThemeToken.spacingSection,
+        top: CloudThemeToken.spacingXs,
+        bottom: CloudThemeToken.spacingXs
+      })
+      .borderRadius(CloudThemeToken.videoPreviewControlsPanelRadius)
+      .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.videoPreviewControlsBackground))
+      .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THIN))
+      .systemMaterial(CloudMaterial.panelMaterial())
+  }
+
   build() {
     HdsNavigation() {
       Stack({ alignContent: Alignment.Bottom }) {
@@ -349,18 +368,7 @@ export struct VideoPreviewPage {
           }
 
           if (this.holdSeekDirection !== 0 || this.isSwipeSeeking) {
-            Text(this.seekHintText())
-              .fontSize(CloudThemeToken.textSizeBody)
-              .fontColor(CloudThemeToken.onPrimary)
-              .padding({
-                left: CloudThemeToken.spacingSection,
-                right: CloudThemeToken.spacingSection,
-                top: CloudThemeToken.spacingXs,
-                bottom: CloudThemeToken.spacingXs
-              })
-              .borderRadius(CloudThemeToken.videoPreviewControlsPanelRadius)
-              .backgroundColor(CloudThemeToken.videoPreviewControlsBackground)
-              .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+            this.seekHint()
           }
 
           if (this.isLoading) {
@@ -590,6 +598,8 @@ export struct VideoPreviewPage {
    * 通篇只用白与半透明黑，不吃 cloud_primary：那个蓝压在深色画面上对比度不够，
    * 而视频画面的明暗与系统深浅色模式无关。
    */
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder resumeBanner() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Text(`已从 ${this.formatTime(this.resumedFrom)} 继续播放`)
@@ -614,8 +624,9 @@ export struct VideoPreviewPage {
     .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingXl })
     .margin({ bottom: this.resumeBannerBottomMargin() })
     .borderRadius(CloudThemeToken.videoPreviewResumeBannerHeight / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.videoPreviewControlBackground))
+    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THIN))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,
       color: CloudThemeToken.videoPreviewControlBorder
@@ -626,6 +637,8 @@ export struct VideoPreviewPage {
       .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder videoControls() {
     Column({ space: CloudThemeToken.spacingXs }) {
       Slider({
@@ -675,8 +688,9 @@ export struct VideoPreviewPage {
       bottom: this.isFullscreen ? CloudThemeToken.spacingPage : this.bottomRectHeight + CloudThemeToken.spacingPage
     })
     .borderRadius(CloudThemeToken.videoPreviewControlsPanelRadius)
-    .backgroundColor(CloudThemeToken.videoPreviewControlsBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.videoPreviewControlsBackground))
+    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THIN))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 

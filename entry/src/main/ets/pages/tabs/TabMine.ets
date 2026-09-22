@@ -6,6 +6,7 @@ import UserPreferences from "../../model/UserPreferences";
 import { CloudApi } from "../../model/net/CloudApi";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { CloudThemeToken } from "../../model/CloudTheme";
+import { CloudMaterial } from "../../model/CloudMaterial";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { FeedbackSheet } from "../../components/FeedbackSheet";
@@ -303,7 +304,8 @@ export struct TabMine {
           detents: [SheetSize.FIT_CONTENT],
           title: { title: '问题反馈', subtitle: '优先邮件反馈，附带日志和诊断信息方便快速定位' },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
         })
@@ -315,7 +317,8 @@ export struct TabMine {
           detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           title: { title: '日志与诊断', subtitle: '已脱敏 · 复制诊断会一并带上日志尾部' },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
         })
@@ -327,7 +330,8 @@ export struct TabMine {
           detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           title: { title: $r('app.string.about') },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onDisappear: () => {
@@ -342,7 +346,8 @@ export struct TabMine {
           detents: [SheetSize.FIT_CONTENT],
           title: { title: this.getSettingsSheetTitle() },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onWillAppear: () => {
@@ -372,7 +377,8 @@ export struct TabMine {
         .height(0)
         .bindSheet($$this.showPhotoBackupPathSheet, this.photoBackupPathSheet(), {
           showClose: false,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onDisappear: () => {
@@ -1287,32 +1293,6 @@ export struct TabMine {
     })
   }
 
-  @Builder userSwitchOverlay() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.overlayScrim)
-        .onClick(() => {
-          this.showUserSwitchSheet = false
-        })
-
-      Column() {
-        this.userSwitchSheet()
-      }
-      .width('100%')
-      .padding({
-        bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-      })
-      .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
-      .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-      .backgroundColor(CloudThemeToken.background)
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
-  }
-
   @Builder settingsSheet() {
     if (this.showUserSwitchSheet) {
       this.userSwitchSheet()
@@ -1378,7 +1358,7 @@ export struct TabMine {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder privacyActionRow(title: string, description: string, danger: boolean, onClick: () => void) {
@@ -1480,7 +1460,7 @@ export struct TabMine {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder settingSwitchRow(title: string, desc: string, value: boolean, onToggle: (v: boolean) => void) {
@@ -1554,7 +1534,7 @@ export struct TabMine {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder knockExpireRow() {

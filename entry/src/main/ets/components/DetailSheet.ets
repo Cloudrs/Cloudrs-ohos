@@ -1,5 +1,6 @@
 import Constant from "../model/Constant"
 import { CloudThemeToken } from "../model/CloudTheme"
+import { CloudMaterial } from "../model/CloudMaterial"
 import { DetailData } from "../model/DetailData"
 import { CommonUtil } from "../utils/CommonUtil"
 import { DateFormatUtil } from "../utils/DateFormatUtil"
@@ -47,7 +48,7 @@ export struct DetailSheet {
     }
     .width('100%')
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
   }

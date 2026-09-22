@@ -1,5 +1,5 @@
 import { abilityAccessCtrl, common, PermissionRequestResult, Permissions } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { connection, http } from '@kit.NetworkKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
@@ -17,6 +17,7 @@ import UserPreferences from '../../model/UserPreferences';
 import AppLogger from '../../utils/AppLogger';
 import { showToast } from '../../utils/ToastUtil';
 import { CloudBreakpoint, CloudThemeToken } from '../../model/CloudTheme';
+import { CloudMaterial } from '../../model/CloudMaterial';
 import { EmptyState } from '../../components/EmptyState';
 import { CloudIconButton } from '../../components/CloudIconButton';
 import { FileSystemUtil } from '../../utils/FileSystemUtil';
@@ -3173,6 +3174,8 @@ export struct TabPictures {
    * Backup-status drawer inlined here (not a child component) so the live counts
    * read directly from @State — child @Prop bindings were not refreshing mid-backup.
    */
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder drawerCard() {
     Column({ space: CloudThemeToken.spacingSection }) {
       if (!this.getSettingsEnabled()) {
@@ -3271,8 +3274,9 @@ export struct TabPictures {
       bottomLeft: CloudThemeToken.surfaceRadius,
       bottomRight: CloudThemeToken.surfaceRadius
     })
-    .backgroundColor(CloudThemeToken.surfaceTranslucent)
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surfaceTranslucent))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
@@ -3313,14 +3317,17 @@ export struct TabPictures {
   }
 
   /** Frosted vertical capsule pinned at the left-center to switch 时间 / 相册. */
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder floatingSwitcher() {
     Column({ space: SWITCHER_GAP }) {
       this.switcherItem('时间', GallerySegment.TIME)
       this.switcherItem('相册', GallerySegment.ALBUM)
     }
     .padding(SWITCHER_PADDING)
-    .backgroundColor('rgba(120, 120, 128, 0.22)')
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface('rgba(120, 120, 128, 0.22)'))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .borderRadius(SWITCHER_ITEM_SIZE / 2 + SWITCHER_PADDING)
     .position({ x: CloudThemeToken.spacingSm, y: '50%' })
     .markAnchor({ x: 0, y: '50%' })

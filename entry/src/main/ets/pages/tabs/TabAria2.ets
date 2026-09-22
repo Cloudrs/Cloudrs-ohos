@@ -13,6 +13,7 @@ import { Aria2Create } from "../../components/Aria2Create";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
+import { CloudMaterial } from "../../model/CloudMaterial";
 import AppLogger from "../../utils/AppLogger";
 import { EmptyState } from "../../components/EmptyState";
 import { CloudActionButton } from "../../components/CloudActionButton";
@@ -454,7 +455,8 @@ export struct TabRemoteDown {
         showClose: true,
         detents: [SheetSize.FIT_CONTENT],
         title: {title: $r('app.string.download_offline')},
-        backgroundColor: CloudThemeToken.background,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
         preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
         width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
         onDisappear: () => {
@@ -771,7 +773,8 @@ export struct TabRemoteDown {
         detents: CloudThemeToken.sheetDetentsForWidth(this.sheetLayoutWidth, SheetSize.FIT_CONTENT),
         title: { title: '下载详情' },
         showClose: true,
-        backgroundColor: CloudThemeToken.background,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
         preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
         width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
         onDisappear: () => {

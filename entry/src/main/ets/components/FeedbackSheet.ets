@@ -1,6 +1,7 @@
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 
+import { CloudMaterial } from "../model/CloudMaterial";
 @Component
 export struct FeedbackSheet {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
@@ -63,7 +64,7 @@ export struct FeedbackSheet {
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .zIndex(1)
   }
 

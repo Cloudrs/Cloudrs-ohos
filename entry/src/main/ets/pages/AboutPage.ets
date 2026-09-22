@@ -3,6 +3,7 @@ import { BusinessError } from "@kit.BasicServicesKit";
 import { CommonTitle } from "../components/CommonTitle";
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from '../model/CloudMaterial';
 import { CloudApi } from "../model/net/CloudApi";
 import AppLogger from "../utils/AppLogger";
 import { showToast } from "../utils/ToastUtil";
@@ -113,7 +114,9 @@ export struct AboutPage {
     // 不是可点控件，不需要留出触摸安全距
     .padding({ bottom: this.bottomRectHeight + CloudThemeToken.spacingSm })
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor(CloudThemeToken.background)
+    // 作为 sheet 内嵌时让位给系统材质；独立成页时仍要实色底
+    .backgroundColor(this.embedded ? CloudMaterial.materialSurface(CloudThemeToken.background) :
+    CloudThemeToken.background)
   }
 
   @Builder logoTitle() {

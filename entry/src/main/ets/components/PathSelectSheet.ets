@@ -1,6 +1,7 @@
 import Constant from "../model/Constant";
 import { EmptyState } from "./EmptyState";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../utils/ToastUtil";
@@ -93,7 +94,7 @@ export struct PathSelectSheet {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .padding({
       top: CloudThemeToken.pathSheetTopPadding,
       bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom

@@ -1,6 +1,7 @@
 import Constant from "../model/Constant"
 import { CloudApi } from "../model/net/CloudApi";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { PathSelectSheet } from "./PathSelectSheet";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
 import AppLogger from "../utils/AppLogger";
@@ -121,10 +122,11 @@ export struct Aria2Create {
     })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .bindSheet($$this.isShowPathSelect, this.selectPathSheet(), {
       showClose: false,
-      backgroundColor: CloudThemeToken.background,
+      backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+      systemMaterial: CloudMaterial.sheetMaterial(),
       preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
       width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
       onDisappear: () => {

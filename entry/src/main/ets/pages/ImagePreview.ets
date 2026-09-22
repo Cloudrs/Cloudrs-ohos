@@ -10,6 +10,7 @@ import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
 import AppLogger from "../utils/AppLogger";

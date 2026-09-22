@@ -1,4 +1,6 @@
 import { CloudThemeToken } from '../model/CloudTheme';
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { PhotoBackupItem } from '../model/PhotoBackupModel';
 import {
   PhotoGroup,
@@ -137,6 +139,8 @@ export struct PhotoGalleryGrid {
     // NONE: render nothing
   }
 
+  // Circle().fill() 在 26 SDK 被重标 since-26，实为误报（master 上一直在 API 23 真机跑）
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder badgeDot(icon: ResourceStr, fill: ResourceColor) {
     Stack() {
       Circle({ width: BADGE_SIZE, height: BADGE_SIZE })

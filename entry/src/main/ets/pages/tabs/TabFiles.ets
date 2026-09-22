@@ -39,7 +39,6 @@ import UserPreferences from "../../model/UserPreferences";
 import { PhotoBackupSettingsStore } from "../../model/PhotoBackupSettingsStore";
 import UploadSessionRelief, { UploadSessionSummary } from "../../utils/UploadSessionRelief";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
-import { CloudIconButton } from "../../components/CloudIconButton";
 import {
   DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
 } from "@kit.UIDesignKit";
@@ -2709,21 +2708,35 @@ export struct TabFiles {
     return danger ? CloudThemeToken.danger : CloudThemeToken.primary
   }
 
+  // 返回键与右侧 HDS 菜单按钮观感对齐：右侧按钮由 HDS 绘制、吃 systemMaterialEffect
+  // 的光感材质，返回键是 stackBuilder 里的自绘元素拿不到那层。用容器（非 Button，
+  // Button 挂不上 systemMaterial）手动挂材质，底色/图标色统一走 getFileTitleAction*，
+  // 让两侧一致；低版本 ROM 回落到 surfaceSubtle 实色。
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  @Builder fileTitleBackButton() {
+    Stack() {
+      Image(this.getTitleBackIcon())
+        .width(CloudThemeToken.actionIconSize)
+        .height(CloudThemeToken.actionIconSize)
+        .fillColor(this.getFileTitleActionIconColor())
+        .draggable(false)
+    }
+    .width(CloudThemeToken.iconButtonSize)
+    .height(CloudThemeToken.iconButtonSize)
+    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth, CloudThemeToken.controlRadius))
+    .backgroundColor(CloudMaterial.materialSurface(this.getFileTitleActionBackground()))
+    .systemMaterial(CloudMaterial.titleControlMaterial())
+    .onClick(() => {
+      this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
+    })
+  }
+
   @Builder fileTitleBarStack() {
     if (!this.isMultiSelectMode) {
       Stack() {
         Row({ space: CloudThemeToken.spacingCard }) {
           if (!this.isRoot) {
-            CloudIconButton({
-              icon: this.getTitleBackIcon(),
-              buttonBackground: CloudThemeToken.surface,
-              iconColor: CloudThemeToken.textPrimary,
-              buttonRadius: CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
-                CloudThemeToken.controlRadius),
-              onAction: () => {
-                this.getFileList(true, CommonUtil.getDirectoryPath(this.currentPath))
-              }
-            })
+            this.fileTitleBackButton()
           }
 
           Column({ space: CloudThemeToken.spacingTiny }) {

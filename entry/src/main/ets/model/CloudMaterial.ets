@@ -96,6 +96,27 @@ export class CloudMaterial {
     return undefined
   }
 
+  private static cachedTitleControl: SystemUiMaterial | undefined = undefined
+
+  /**
+   * 标题栏里自绘的圆角图标控件（如文件页返回键），与右侧 HDS 菜单按钮
+   * （systemMaterialEffect ADAPTIVE）观感对齐：THIN 比浮动控件的 ULTRA_THIN
+   * 厚一档，深色标题栏下磨砂更亮、接近 HDS 按钮。只开交互形变、不开 lightEffect
+   * 流光——HDS 标题按钮是哑光均匀的，流光会显得比旁边更亮更花。
+   */
+  static titleControlMaterial(): SystemUiMaterial | undefined {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedTitleControl === undefined) {
+        CloudMaterial.cachedTitleControl = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          interactive: true
+        })
+      }
+      return CloudMaterial.cachedTitleControl
+    }
+    return undefined
+  }
+
   private static cachedMenu: SystemUiMaterial | undefined = undefined
 
   /**

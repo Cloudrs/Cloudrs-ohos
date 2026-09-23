@@ -395,8 +395,9 @@ export struct HomePage {
     .width('100%')
     .height('100%')
     .clip(true)
-    // 内容区自铺不透明底：窗口/根/侧栏容器都让位透明后，这里必须遮住壁纸
-    .backgroundColor(CloudThemeToken.background)
+    // 内容区自铺不透明底遮住壁纸；「我的」页做全沉浸时让位透明，透出壁纸给其磨砂卡片
+    // （其余 Tab 各自铺不透明底，不受影响）
+    .backgroundColor(this.currentIndex === TabId.MINE ? Color.Transparent : CloudThemeToken.background)
   }
 
   @Builder appLockOverlay() {

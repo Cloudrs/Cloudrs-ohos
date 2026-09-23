@@ -18,6 +18,9 @@
     "requestPermissions": [{
       "name": "ohos.permission.INTERNET",
     }, {
+      // 2in1 上把窗口背景/容器置透明，让侧栏沉浸光感透出桌面壁纸（normal 级，system_grant 自动授予）
+      "name": "ohos.permission.SET_WINDOW_TRANSPARENT",
+    }, {
       "name": "ohos.permission.KEEP_BACKGROUND_RUNNING",
     }, {
       "name": "ohos.permission.GET_NETWORK_INFO",

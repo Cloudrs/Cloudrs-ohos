@@ -1,6 +1,6 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { deviceInfo, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
 import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
@@ -102,6 +102,9 @@ export default class MainAbility extends UIAbility {
         return;
       }
       hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
+      // 窗口透明必须在 loadContent 生效之后才能调用（否则抛 "window state abnormal"）。
+      // 仅 2in1：让侧栏沉浸光感透出桌面壁纸；内容区各页面自铺不透明底遮住。
+      this.applyWindowTransparency()
     });
     perfMark('loadContent dispatched')
 
@@ -241,6 +244,31 @@ export default class MainAbility extends UIAbility {
     } catch (err) {
       hilog.warn(0x0000, 'testTag', 'Prepare active avatar cache failed. Cause: %{public}s',
         (err as Error)?.message ?? '');
+    }
+  }
+
+  /**
+   * 2in1 上把窗口背景与容器置透明，让侧栏沉浸光感透出桌面壁纸。
+   * 必须在 loadContent 生效后调用（早于此会抛 "window state abnormal"）。
+   * 需权限 ohos.permission.SET_WINDOW_TRANSPARENT（normal/system_grant，装机自动授予）。
+   * 背景色 + 容器色两者都要置透明，PC 窗口才真正透明（见官方 FAQ「如何设置PC窗口透明」）。
+   */
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  private applyWindowTransparency(): void {
+    if (deviceInfo.deviceType !== '2in1') {
+      return
+    }
+    try {
+      const win = this.windowStage?.getMainWindowSync()
+      if (!win) {
+        return
+      }
+      win.setWindowBackgroundColor('#00000000')
+      win.setWindowContainerColor('#00000000', '#00000000')
+      hilog.info(0x0000, 'testTag', 'window transparency applied')
+    } catch (err) {
+      hilog.warn(0x0000, 'testTag', 'setWindowTransparent failed. Cause: %{public}s',
+        (err as Error)?.message ?? '')
     }
   }
 

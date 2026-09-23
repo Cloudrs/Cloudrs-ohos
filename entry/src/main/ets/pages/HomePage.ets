@@ -141,7 +141,8 @@ export struct HomePage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(CloudThemeToken.background)
+    // 根不铺底：手机布局与宽屏内容区各自铺不透明底，宽屏侧栏区留透明给沉浸光感透出壁纸（2in1）
+    .backgroundColor(Color.Transparent)
   }
 
   @Builder phoneLayout() {
@@ -242,7 +243,8 @@ export struct HomePage {
       })
       .width('100%')
       .height('100%')
-      .backgroundColor(CloudThemeToken.background)
+      // 侧栏区不铺底，交给 sideBarContent 的材质透出壁纸；内容区由 mainTabsContent 自铺不透明底
+      .backgroundColor(Color.Transparent)
       .foregroundBlurStyle(this.appLocked ? BlurStyle.Thin : BlurStyle.NONE, {
         colorMode: ThemeColorMode.SYSTEM,
         adaptiveColor: AdaptiveColor.DEFAULT
@@ -288,6 +290,9 @@ export struct HomePage {
     })
   }
 
+  // 侧栏接沉浸光感：2in1 上底色让位、挂 panelMaterial 透出桌面壁纸；
+  // 非 2in1 / 低版本回落原 surface 实色（materialSurface/panelMaterial 内部按版本分档）
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder sideBarContent() {
     Column({ space: CloudThemeToken.sideNavGap }) {
       ForEach(TabList, (tab: TabItem) => {
@@ -304,7 +309,9 @@ export struct HomePage {
     })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
+    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.panelMaterial())
   }
 
   @Builder sideNavItem(tab: TabItem) {
@@ -388,6 +395,8 @@ export struct HomePage {
     .width('100%')
     .height('100%')
     .clip(true)
+    // 内容区自铺不透明底：窗口/根/侧栏容器都让位透明后，这里必须遮住壁纸
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder appLockOverlay() {

@@ -514,6 +514,8 @@ export class CloudThemeToken {
   static readonly selectedHighlight: ResourceColor = '#66FFFFFF'
   static readonly imagePreviewCounterBackground: ResourceColor = 'rgba(255, 255, 255, 0.14)'
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
+  // 高算力档材质接管后的薄染：白图标压在亮画面上仍需一点深底保对比
+  static readonly videoPreviewControlMaterialTint: ResourceColor = 'rgba(18, 22, 30, 0.3)'
   static readonly videoPreviewControlBorder: ResourceColor = 'rgba(255, 255, 255, 0.18)'
   static readonly videoPreviewControlsBackground: ResourceColor = 'rgba(0, 0, 0, 0.54)'
   // 续播浮条的"从头播放"按钮底色。浮条整体只用白与半透明黑，不吃主题色：

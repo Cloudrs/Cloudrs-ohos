@@ -2146,6 +2146,7 @@ export struct TabFiles {
    * bindSheet 抢同一件事，而两者根本不在一套事件体系里。交给 promptAction 之后，
    * 层级排序由系统负责，也不必再写"冲突时先收起进度面板"这类互斥编排。
    */
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   private openFileConflictDialog(): void {
     if (this.fileConflictDialogId >= 0) {
       return
@@ -2159,6 +2160,8 @@ export struct TabFiles {
       autoCancel: false,
       maskColor: 'rgba(0, 0, 0, 0.55)',
       backgroundColor: Color.Transparent,
+      // 26+ 由系统弹窗材质托底，内容根容器按档位让位
+      systemMaterial: CloudMaterial.dialogMaterial(),
       cornerRadius: CloudThemeToken.controlRadiusXl,
       width: this.fileConflictDialogWidth()
     })
@@ -3153,6 +3156,7 @@ export struct TabFiles {
     .hitTestBehavior(HitTestMode.None)
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder refreshingHint() {
     Row({ space: CloudThemeToken.spacingXl }) {
       LoadingProgress()
@@ -3166,7 +3170,8 @@ export struct TabFiles {
     .height(CloudThemeToken.iconBoxSm)
     .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
     .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .shadow({
       radius: CloudThemeToken.refreshShadowRadius,
       color: CloudThemeToken.refreshShadow,
@@ -4188,6 +4193,7 @@ export struct TabFiles {
    * 分两种形态：能解除的给「解除并重试」，不能解除的只告知——后者是锁不属于当前
    * 账号，客户端做什么都没用，只能让用户去发起任务的设备上处理。
    */
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   private openOccupiedDialog(): void {
     if (this.occupiedDialogId >= 0) {
       return
@@ -4200,6 +4206,8 @@ export struct TabFiles {
       autoCancel: false,
       maskColor: 'rgba(0, 0, 0, 0.55)',
       backgroundColor: Color.Transparent,
+      // 26+ 由系统弹窗材质托底，内容根容器按档位让位
+      systemMaterial: CloudMaterial.dialogMaterial(),
       cornerRadius: CloudThemeToken.controlRadiusXl,
       width: this.fileConflictDialogWidth()
     })
@@ -5266,6 +5274,7 @@ export struct TabFiles {
     requestDownload.downloadFileBackground(fileModel, context, begins)
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder albumSavingOverlay() {
     Column() {
       Blank()
@@ -5307,7 +5316,9 @@ export struct TabFiles {
         topLeft: CloudThemeToken.controlRadiusXl,
         topRight: CloudThemeToken.controlRadiusXl
       })
-      .backgroundColor(CloudThemeToken.surface)
+      // 自绘底部面板，与真 bindSheet 同档 THICK 材质，观感一致
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.sheetMaterial())
       .shadow({
         radius: CloudThemeToken.spacingSection,
         color: 'rgba(0,0,0,0.22)',
@@ -5408,6 +5419,7 @@ export struct TabFiles {
     return parts.join(' · ')
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder occupiedDialog() {
     Column({ space: CloudThemeToken.spacingPanel }) {
       Text(this.occupiedRelieve
@@ -5448,7 +5460,8 @@ export struct TabFiles {
       }
       .width('100%')
       .borderRadius(CloudThemeToken.controlRadiusMd)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surfaceSubtle))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .clip(true)
 
       if (this.occupiedRelieve) {
@@ -5498,7 +5511,7 @@ export struct TabFiles {
     .width('100%')
     .padding(CloudThemeToken.spacingSheetHorizontal)
     .borderRadius(CloudThemeToken.controlRadiusXl)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
   }
 
   @Builder occupiedRow(icon: Resource, label: string, hint: string, count: number) {
@@ -5554,6 +5567,7 @@ export struct TabFiles {
     .alignItems(VerticalAlign.Center)
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder fileConflictDialog() {
     Column({ space: CloudThemeToken.spacingPanel }) {
       Text('目标位置已有同名文件')
@@ -5595,7 +5609,8 @@ export struct TabFiles {
       .width('100%')
       .padding(CloudThemeToken.spacingCard)
       .borderRadius(CloudThemeToken.controlRadiusMd)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surfaceSubtle))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .alignItems(VerticalAlign.Center)
 
       // "全部"是这个决策的作用范围，不是另外两个选项
@@ -5649,7 +5664,7 @@ export struct TabFiles {
     .width('100%')
     .padding(CloudThemeToken.spacingSheetHorizontal)
     .borderRadius(CloudThemeToken.controlRadiusXl)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
   }
 
   /** 图标位上的类型角标：文件夹给"目录"，文件给扩展名 */

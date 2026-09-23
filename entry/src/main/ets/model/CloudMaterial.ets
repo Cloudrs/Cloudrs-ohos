@@ -93,13 +93,17 @@ export class CloudMaterial {
 
   /** sheet 内层卡片材质：仅 EXQUISITE 高算力档挂 THIN 磨砂，其余档由 cardBackground 兜色。 */
   static cardMaterial(): SystemUiMaterial | undefined {
-    if (CloudMaterial.isExquisite && deviceInfo.apiAvailable('26.0.0')) {
-      if (CloudMaterial.cachedCard === undefined) {
-        CloudMaterial.cachedCard = new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN
-        })
+    // apiAvailable 字面量守卫必须单独用 if 块直接包住 uiMaterial 使用点，编译器才认得出并消除
+    // 兼容性告警；与 isExquisite 写成 `&&` 会让识别失效（实测会报 since 26 告警）
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.isExquisite) {
+        if (CloudMaterial.cachedCard === undefined) {
+          CloudMaterial.cachedCard = new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THIN
+          })
+        }
+        return CloudMaterial.cachedCard
       }
-      return CloudMaterial.cachedCard
     }
     return undefined
   }
@@ -147,6 +151,64 @@ export class CloudMaterial {
         })
       }
       return CloudMaterial.cachedPanel
+    }
+    return undefined
+  }
+
+  private static cachedSheetControl: SystemUiMaterial | undefined = undefined
+
+  /**
+   * sheet 内的圆形按钮：比浮在画面上的控件厚一档（THIN），
+   * 否则压在 sheet 材质上几乎看不出按钮轮廓；同样开形变与光感。
+   */
+  static sheetControlMaterial(): SystemUiMaterial | undefined {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedSheetControl === undefined) {
+        CloudMaterial.cachedSheetControl = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          interactive: true,
+          lightEffect: { color: undefined }
+        })
+      }
+      return CloudMaterial.cachedSheetControl
+    }
+    return undefined
+  }
+
+  /**
+   * 材质按钮（Button 已换成容器）的底色。材质在低档设备上几乎透明，
+   * 手机上常见的这类按钮不能像 PC 侧栏折叠键那样一律置透明：
+   * EXQUISITE 档用 exquisiteTint（默认全透明；白图标压在亮画面上的传深色薄染保对比），
+   * GENTLE/SMOOTH 档与 <26 沿用原底色，材质只贡献按压形变。
+   */
+  static controlSurface(fallback: ResourceColor, exquisiteTint: ResourceColor = Color.Transparent): ResourceColor {
+    return CloudMaterial.isExquisite ? exquisiteTint : fallback
+  }
+
+  /** 同 controlSurface：只有 EXQUISITE 档撤掉手写模糊，其余档保留原毛玻璃。 */
+  static controlBlurStyle(fallback: BlurStyle): BlurStyle {
+    return CloudMaterial.isExquisite ? BlurStyle.NONE : fallback
+  }
+
+  /** 同 controlBlurStyle，用于 backdropBlur 形式的手写模糊。 */
+  static controlBackdropBlur(fallback: number): number {
+    return CloudMaterial.isExquisite ? 0 : fallback
+  }
+
+  private static cachedDialog: SystemUiMaterial | undefined = undefined
+
+  /**
+   * 自绘内容的系统模态弹窗（openCustomDialog 的 systemMaterial 选项）：
+   * 与系统弹窗同档 ULTRA_THICK。弹窗根容器底色走 cardBackground 分档让位。
+   */
+  static dialogMaterial(): SystemUiMaterial | undefined {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedDialog === undefined) {
+        CloudMaterial.cachedDialog = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THICK
+        })
+      }
+      return CloudMaterial.cachedDialog
     }
     return undefined
   }

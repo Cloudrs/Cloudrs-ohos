@@ -729,8 +729,11 @@ export struct VideoPreviewPage {
     .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
+  // 压在视频画面上的圆控件：容器（非 Button，Button 挂不上材质）+ floatingControlMaterial
+  // 超薄光感与按压形变；EXQUISITE 档留一层薄染保白图标对比，其余档/低版本回落原深色毛玻璃。
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder playbackButton() {
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Stack() {
       if (this.isPlaying) {
         Image($r('app.media.ic_pause_fill'))
           .width(CloudThemeToken.videoPreviewControlIconSize)
@@ -748,8 +751,10 @@ export struct VideoPreviewPage {
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
     .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THIN))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,
       color: CloudThemeToken.videoPreviewControlBorder
@@ -760,8 +765,9 @@ export struct VideoPreviewPage {
     })
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder videoControlButton(icon: ResourceStr, iconSize: number, onAction: () => void) {
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Stack() {
       Image(icon)
         .width(iconSize)
         .height(iconSize)
@@ -771,8 +777,10 @@ export struct VideoPreviewPage {
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
     .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THIN))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,
       color: CloudThemeToken.videoPreviewControlBorder
@@ -783,8 +791,9 @@ export struct VideoPreviewPage {
     })
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder fullscreenButton() {
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Stack() {
       SymbolGlyph(this.isFullscreen
         ? $r('sys.symbol.arrow_down_right_and_arrow_up_left')
         : $r('sys.symbol.arrow_up_left_and_arrow_down_right'))
@@ -796,8 +805,10 @@ export struct VideoPreviewPage {
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
     .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THIN))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,
       color: CloudThemeToken.videoPreviewControlBorder

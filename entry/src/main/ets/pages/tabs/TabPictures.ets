@@ -3357,6 +3357,7 @@ export struct TabPictures {
       .opacity(CloudThemeToken.zero)
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder refreshingHintOverlay() {
     Column() {
       Row({ space: CloudThemeToken.spacingXl }) {
@@ -3371,7 +3372,8 @@ export struct TabPictures {
       .height(CloudThemeToken.iconBoxSm)
       .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
       .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.panelMaterial())
       .justifyContent(FlexAlign.Center)
     }
     .width('100%')

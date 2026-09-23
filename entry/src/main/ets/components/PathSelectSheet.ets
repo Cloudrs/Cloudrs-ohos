@@ -284,7 +284,9 @@ export struct PathSelectSheet {
       .clip(true)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Center)
-      .backgroundColor(this.currentPath === CloudApi.getTotalPath(item) ? CloudThemeToken.primarySoft : CloudThemeToken.background)
+      // 未选中行让位给 sheet 材质（多行不逐行挂材质，避免材质叠材质发浑）；选中行保留高亮
+      .backgroundColor(this.currentPath === CloudApi.getTotalPath(item)
+        ? CloudThemeToken.primarySoft : CloudMaterial.materialSurface(CloudThemeToken.background))
       .onClick(() => {
         this.currentPath = CloudApi.getTotalPath(item)
         let isShow = this.getPathShow(item)

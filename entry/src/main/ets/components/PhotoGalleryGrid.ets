@@ -193,8 +193,11 @@ export struct PhotoGalleryGrid {
     .onClick(() => { this.toggleCollapse(row.title); })
   }
 
+  // 回顶键：容器（非 Button，Button 挂不上材质）+ floatingControlMaterial 光感与按压形变，
+  // 与 PC 侧栏折叠键同一套；底色让位给材质，低算力档/低版本回落原灰色手写毛玻璃。
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder backTopFab() {
-    Button({ type: ButtonType.Circle }) {
+    Stack() {
       Image($r('app.media.ic_chevron_down'))
         .width(FAB_ICON_SIZE)
         .height(FAB_ICON_SIZE)
@@ -204,11 +207,15 @@ export struct PhotoGalleryGrid {
     }
     .width(FAB_SIZE)
     .height(FAB_SIZE)
-    .backgroundColor('rgba(150, 150, 150, 0.25)')
-    .backdropBlur(18)
+    .borderRadius(FAB_SIZE / 2)
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface('rgba(150, 150, 150, 0.25)'))
+    .backdropBlur(CloudMaterial.controlBackdropBlur(18))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .margin({ right: CloudThemeToken.spacingPage, bottom: this.bottomInset + CloudThemeToken.spacingPage })
     .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
+    .accessibilityText('回到顶部')
     .onClick(() => { this.scroller.scrollToIndex(0, true); })
   }
 

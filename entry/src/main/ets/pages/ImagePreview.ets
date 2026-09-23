@@ -11,6 +11,7 @@ import { common } from "@kit.AbilityKit";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
+import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
 import AppLogger from "../utils/AppLogger";
@@ -346,8 +347,11 @@ export struct ImagePreviewPage {
     }
   }
 
+  // 压在图片上的翻页圆钮：容器 + floatingControlMaterial（Button 挂不上材质）；
+  // EXQUISITE 档留薄染保白箭头对比，其余档/低版本回落原深色毛玻璃。
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder navArrowButton(isNext: boolean) {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
+    Stack() {
       SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
         .fontColor([CloudThemeToken.onPrimary])
@@ -355,8 +359,12 @@ export struct ImagePreviewPage {
     }
     .width(CloudThemeToken.imagePreviewArrowButtonSize)
     .height(CloudThemeToken.imagePreviewArrowButtonSize)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .borderRadius(CloudThemeToken.imagePreviewArrowButtonSize / CloudThemeToken.halfDivisor)
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .enabled(this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {

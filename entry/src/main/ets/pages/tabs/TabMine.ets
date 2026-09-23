@@ -1106,6 +1106,8 @@ export struct TabMine {
     })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder rowWithSelect(title: ResourceStr) {
     Row({ space: CloudThemeToken.spacingCard }) {
       Column({ space: CloudThemeToken.spacingSm }) {
@@ -1148,21 +1150,32 @@ export struct TabMine {
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .alignItems(VerticalAlign.Center)
   }
 
   @Builder concurrentStepButton(text: string, disabled: boolean, onClick: () => void) {
+    // 点击热区放大到 48×48（填满步进器行高），字形不变、四周留白变大，手机上不易点空；
+    // 按下给一层 primarySoft 底反馈，明确「点到了」
     Text(text)
-      .width(CloudThemeToken.rowHeightSm)
-      .height(CloudThemeToken.rowHeightSm)
+      .width(CloudThemeToken.rowHeight2xl)
+      .height(CloudThemeToken.rowHeight2xl)
       .fontSize(CloudThemeToken.textSizeLarge)
       .fontWeight(FontWeight.Bold)
       .fontColor(disabled ? CloudThemeToken.textSecondary : CloudThemeToken.textPrimary)
       .textAlign(TextAlign.Center)
       .borderRadius(CloudThemeToken.controlRadiusRoundMd)
       .opacity(disabled ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
+      .stateStyles({
+        pressed: {
+          .backgroundColor(disabled ? CloudThemeToken.transparent : CloudThemeToken.primarySoft)
+        },
+        normal: {
+          .backgroundColor(CloudThemeToken.transparent)
+        }
+      })
       .onClick(() => {
         if (!disabled) {
           onClick()

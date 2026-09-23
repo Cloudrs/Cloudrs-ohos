@@ -1,5 +1,7 @@
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
+import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 import { ObjectItem } from "../components/ObjectItem";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import { DirectoryInfo, ObjectInfo } from "../model/net/ApiTypes";
@@ -732,15 +734,13 @@ export struct FileSearchPage {
     HdsNavigation() {
       Column() {
         Stack({ alignContent: Alignment.Bottom }) {
+          // 底部留白改由列表内部承担（见 resultList 的 Grid/List padding.bottom），
+          // 让滚动内容能从磨砂多选栏后透出；此处不再整体上抬留出实心空隙
           Column() {
             this.resultList()
           }
           .width('100%')
           .height('100%')
-          .padding({
-            bottom: this.isMultiSelectMode ? CloudThemeToken.rowHeight5xl + CloudThemeToken.spacingPage :
-            CloudThemeToken.zero
-          })
 
           if (this.isMultiSelectMode) {
             this.multiSelectActionBar()
@@ -974,7 +974,10 @@ export struct FileSearchPage {
         .rowsGap(CloudThemeToken.gridGap)
         .padding({
           left: CloudThemeToken.spacingCard,
-          right: CloudThemeToken.spacingCard
+          right: CloudThemeToken.spacingCard,
+          // 末行能滚出磨砂多选栏，中间内容从栏后透出
+          bottom: this.isMultiSelectMode ? CloudThemeToken.rowHeight5xl + CloudThemeToken.spacingPage :
+          CloudThemeToken.zero
         })
         .onAreaChange((_oldArea: Area, newArea: Area) => {
           const width = Number(newArea.width)
@@ -999,6 +1002,11 @@ export struct FileSearchPage {
         }
         .width('100%')
         .height('100%')
+        .padding({
+          // 末行能滚出磨砂多选栏，中间内容从栏后透出
+          bottom: this.isMultiSelectMode ? CloudThemeToken.rowHeight5xl + CloudThemeToken.spacingPage :
+          CloudThemeToken.zero
+        })
         .cachedCount(CloudThemeToken.compactListCachedCount)
         .divider({
           strokeWidth: CloudThemeToken.lineWidth,
@@ -1170,6 +1178,8 @@ export struct FileSearchPage {
     })
   }
 
+  // 磨砂多选栏，与文件页多选栏同款；底色让位给材质，低算力档/低版本回落实色 surface
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder multiSelectActionBar() {
     Row() {
       Button(this.areAllResultsSelected() ? '取消全选' : '全选')
@@ -1206,7 +1216,9 @@ export struct FileSearchPage {
       left: CloudThemeToken.spacingPage,
       right: CloudThemeToken.spacingPage
     })
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
+    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .border({
       width: { top: CloudThemeToken.lineWidth },
       color: CloudThemeToken.line

@@ -217,8 +217,11 @@ export struct PhotoLocalPreviewPage {
     .opacity(this.chromeVisible ? 1 : 0)
   }
 
+  // 压在照片上的圆控件：容器 + floatingControlMaterial（Button 挂不上材质）；
+  // EXQUISITE 档留薄染保白图标对比，其余档/低版本回落原深色毛玻璃。
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder backButton() {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
+    Stack() {
       SymbolGlyph($r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.photoLocalPreviewBackIconSize)
         .fontColor([Color.White])
@@ -226,9 +229,14 @@ export struct PhotoLocalPreviewPage {
     }
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .enabled(this.chromeVisible)
+    .accessibilityText('返回')
     .onClick(() => {
       CloudRouter.pop()
     })
@@ -249,8 +257,9 @@ export struct PhotoLocalPreviewPage {
     }
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder navArrowButton(isNext: boolean) {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
+    Stack() {
       SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
         .fontColor([Color.White])
@@ -258,8 +267,12 @@ export struct PhotoLocalPreviewPage {
     }
     .width(CloudThemeToken.imagePreviewArrowButtonSize)
     .height(CloudThemeToken.imagePreviewArrowButtonSize)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .borderRadius(CloudThemeToken.imagePreviewArrowButtonSize / CloudThemeToken.halfDivisor)
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .enabled(this.chromeVisible && this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {

@@ -52,6 +52,7 @@ export struct UserSwitchSheet {
     })
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   build() {
     Column({ space: CloudThemeToken.spacingPage }) {
       if (this.currentUrl.length > 0) {
@@ -70,7 +71,8 @@ export struct UserSwitchSheet {
         .height(CloudThemeToken.rowHeightSm)
         .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
         .borderRadius(CloudThemeToken.cardRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surfaceSubtle))
+        .systemMaterial(CloudMaterial.cardMaterial())
         .alignItems(VerticalAlign.Center)
       }
 

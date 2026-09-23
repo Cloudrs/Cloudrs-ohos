@@ -1,4 +1,5 @@
 import Constant from "../model/Constant"
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { CloudApi } from "../model/net/CloudApi";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
@@ -42,6 +43,8 @@ export struct Aria2Create {
     })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   build() {
     Column({ space: CloudThemeToken.aria2CreateGap }){
       TextArea({placeholder: $r('app.string.aria2_url_input_placeholder'), text: $$this.inputUrls})
@@ -82,7 +85,8 @@ export struct Aria2Create {
       .borderRadius(CloudThemeToken.cardRadius)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .onClick(() => {
         this.isShowPathSelect = true
       })

@@ -3332,6 +3332,8 @@ export struct TabFiles {
     .zIndex(1)
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareTargetSummary() {
     Row({ space: CloudThemeToken.detailSheetSummaryGap }) {
       Stack() {
@@ -3368,9 +3370,12 @@ export struct TabFiles {
     .width('100%')
     .padding(CloudThemeToken.detailSheetSummaryPadding)
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareLinkCard() {
     Column({ space: CloudThemeToken.spacingXl }) {
       Text('当前分享链接')
@@ -3392,9 +3397,12 @@ export struct TabFiles {
     .width('100%')
     .padding(CloudThemeToken.spacingSection)
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareDetailCard() {
     Column({ space: CloudThemeToken.spacingXl }) {
       Text('分享详情')
@@ -3410,7 +3418,8 @@ export struct TabFiles {
     .width('100%')
     .padding(CloudThemeToken.spacingSection)
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
   @Builder shareDetailRow(label: string, value: string) {
@@ -3432,6 +3441,8 @@ export struct TabFiles {
     .alignItems(VerticalAlign.Center)
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareCreateOptions() {
     Column({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -3454,7 +3465,8 @@ export struct TabFiles {
         .fontSize(CloudThemeToken.textSizeLarge)
         .fontColor(CloudThemeToken.textPrimary)
         .placeholderColor(CloudThemeToken.textSecondary)
-        .backgroundColor(CloudThemeToken.surface)
+        .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+        .systemMaterial(CloudMaterial.cardMaterial())
         .borderRadius(CloudThemeToken.controlRadius)
         .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
         .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })

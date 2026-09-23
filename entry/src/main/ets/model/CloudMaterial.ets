@@ -1,6 +1,6 @@
 import { uiMaterial } from '@kit.ArkUI'
 import { CloudThemeToken } from './CloudTheme'
-import { deviceInfo } from '@kit.BasicServicesKit'
+import { SuppressWarnings, SuppressWarningsType, deviceInfo } from '@kit.BasicServicesKit';
 import AppLogger from '../utils/AppLogger'
 
 const TAG = 'CloudMaterial'
@@ -75,6 +75,33 @@ export class CloudMaterial {
    */
   static menuBackground(): ResourceColor {
     return CloudMaterial.isExquisite ? Color.Transparent : CloudThemeToken.surface
+  }
+
+  private static cachedCard: SystemUiMaterial | undefined = undefined
+
+  /**
+   * sheet 内层卡片底色（磨砂卡片方案）：
+   * EXQUISITE 高算力档置透明、交给 THIN 材质出通透磨砂；GENTLE/SMOOTH 档材质太薄，
+   * 退回半透明色 surfaceTranslucent 保可读；<26 用调用点原本的实色。
+   */
+  static cardBackground(fallback: ResourceColor): ResourceColor {
+    if (!CloudMaterial.supported) {
+      return fallback
+    }
+    return CloudMaterial.isExquisite ? Color.Transparent : CloudThemeToken.surfaceTranslucent
+  }
+
+  /** sheet 内层卡片材质：仅 EXQUISITE 高算力档挂 THIN 磨砂，其余档由 cardBackground 兜色。 */
+  static cardMaterial(): SystemUiMaterial | undefined {
+    if (CloudMaterial.isExquisite && deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedCard === undefined) {
+        CloudMaterial.cachedCard = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN
+        })
+      }
+      return CloudMaterial.cachedCard
+    }
+    return undefined
   }
 
   /** bindSheet 的系统材质。低版本返回 undefined 即系统默认。 */

@@ -23,7 +23,7 @@ import AppLogger from "../../utils/AppLogger";
 import { showToast } from "../../utils/ToastUtil";
 import { AppLockUtil } from "../../utils/AppLockUtil";
 import { SystemAuthResult } from "../../utils/SystemAuthUtil";
-import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
+import { BusinessError, SuppressWarnings, SuppressWarningsType, pasteboard } from "@kit.BasicServicesKit";
 import { PhotoBackupSettingsSheet } from '../../components/PhotoBackupSettingsSheet';
 import { PathSelectSheet } from '../../components/PathSelectSheet';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_ENABLED_KEY } from '../../model/PhotoBackupSettingsStore';
@@ -1314,6 +1314,8 @@ export struct TabMine {
     })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder privacySettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1336,7 +1338,8 @@ export struct TabMine {
       .padding(CloudThemeToken.spacingPanel)
       .alignItems(HorizontalAlign.Start)
       .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
 
       this.systemAuthActionRow()
@@ -1361,6 +1364,8 @@ export struct TabMine {
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder privacyActionRow(title: string, description: string, danger: boolean, onClick: () => void) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1387,11 +1392,14 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(danger ? CloudThemeToken.dangerSoft : CloudThemeToken.surface)
+    .backgroundColor(danger ? CloudThemeToken.dangerSoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: danger ? CloudThemeToken.danger : CloudThemeToken.line })
     .onClick(onClick)
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder systemAuthActionRow() {
     Row({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1421,7 +1429,8 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(this.systemAuthEnabled ? CloudThemeToken.successSoft : CloudThemeToken.surface)
+    .backgroundColor(this.systemAuthEnabled ? CloudThemeToken.successSoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({
       width: CloudThemeToken.lineWidth,
       color: this.systemAuthEnabled ? CloudThemeToken.success : CloudThemeToken.line
@@ -1463,6 +1472,8 @@ export struct TabMine {
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder settingSwitchRow(title: string, desc: string, value: boolean, onToggle: (v: boolean) => void) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1495,7 +1506,8 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
@@ -1537,6 +1549,8 @@ export struct TabMine {
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder knockExpireRow() {
     Column({ space: CloudThemeToken.spacingMd }) {
       Text('分享链接有效期')
@@ -1555,7 +1569,8 @@ export struct TabMine {
     .alignItems(HorizontalAlign.Start)
     .padding(CloudThemeToken.spacingPanel)
     .borderRadius(CloudThemeToken.controlRadiusLg)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 

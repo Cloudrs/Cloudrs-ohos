@@ -120,13 +120,15 @@ export struct UserSwitchSheet {
 
       Column({ space: CloudThemeToken.spacingTiny }) {
         Row({ space: CloudThemeToken.spacingXs }) {
+          // 名字可收缩、超长省略；「已过期」紧跟其后（flexShrink(0) 不被挤压），
+          // 不再用 layoutWeight 把徽标顶到右缘——那样各行徽标 x 会因是否有勾选而参差
           Text(user.userinfo.nickname.length > 0 ? user.userinfo.nickname : user.username)
             .fontSize(CloudThemeToken.textSizeLarge)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
+            .flexShrink(1)
 
           if (this.isExpired(user)) {
             Text('已过期')
@@ -134,6 +136,7 @@ export struct UserSwitchSheet {
               .fontColor(CloudThemeToken.danger)
               .backgroundColor(CloudThemeToken.dangerSoft)
               .borderRadius(CloudThemeToken.controlRadiusSm)
+              .flexShrink(0)
               .padding({
                 left: CloudThemeToken.spacingXs + CloudThemeToken.spacingTiny,
                 right: CloudThemeToken.spacingXs + CloudThemeToken.spacingTiny,
@@ -143,6 +146,7 @@ export struct UserSwitchSheet {
           }
         }
         .width('100%')
+        .justifyContent(FlexAlign.Start)
         .alignItems(VerticalAlign.Center)
 
         Text(user.username)

@@ -3369,7 +3369,8 @@ export struct TabPictures {
     })
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surfaceTranslucent))
     .backdropBlur(CloudMaterial.backdropBlurFallback(18))
-    .systemMaterial(CloudMaterial.panelMaterial())
+    // 文字密集的浮层：用 sheet 同款 THICK 材质，THIN 会透出下方日期与照片干扰阅读
+    .systemMaterial(CloudMaterial.sheetMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 

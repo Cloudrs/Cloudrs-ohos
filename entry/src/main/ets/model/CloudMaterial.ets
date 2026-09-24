@@ -41,13 +41,15 @@ export class CloudMaterial {
   }
 
   /**
-   * 交给系统材质渲染的表面底色：26+ 置透明让材质透出，低版本沿用原色。
-   * 用于 sheet 自身、sheet 内容区顶层容器、以及菜单这类系统接管背景的组件；
+   * 交给系统材质渲染的表面底色：仅 EXQUISITE 档置透明让材质透出，其余情况沿用原色。
+   * 用于 sheet 自身、sheet 内容区顶层容器、菜单与浮层面板这类由材质接管背景的组件；
    * 内层卡片（surface / surfaceSubtle）不该用它，那些要保持不透明才有层次。
-   * @param fallback 低版本 ROM 上使用的底色
+   * 按档位而非版本判断：GENTLE/SMOOTH 档（如 Mate 60 Pro）26+ 也支持材质但薄到近乎透明，
+   * 置透明会让浮层（相册下拉卡片、时间/相册胶囊、照片预览顶栏等）透出底下内容、文字叠字。
+   * @param fallback 非 EXQUISITE 档与低版本 ROM 上使用的底色
    */
   static materialSurface(fallback: ResourceColor): ResourceColor {
-    return CloudMaterial.supported ? Color.Transparent : fallback
+    return CloudMaterial.isExquisite ? Color.Transparent : fallback
   }
 
   private static cachedExquisite: boolean | undefined = undefined
@@ -284,14 +286,15 @@ export class CloudMaterial {
   /**
    * 材质接管后不再需要手写毛玻璃。只用于 systemMaterial 确实生效的组件
    * （Column / Row / Stack / Text —— Button 不支持材质，那些站点保留原模糊）。
+   * 同 materialSurface 按档位判断：只有 EXQUISITE 档材质够厚能替代手写模糊，其余档保留原模糊。
    */
   static blurFallback(fallback: BlurStyle): BlurStyle {
-    return CloudMaterial.supported ? BlurStyle.NONE : fallback
+    return CloudMaterial.isExquisite ? BlurStyle.NONE : fallback
   }
 
   /** 同 blurFallback，用于 backdropBlur 形式的手写模糊。 */
   static backdropBlurFallback(fallback: number): number {
-    return CloudMaterial.supported ? 0 : fallback
+    return CloudMaterial.isExquisite ? 0 : fallback
   }
 
   /**

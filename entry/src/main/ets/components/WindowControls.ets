@@ -45,7 +45,7 @@ export struct WindowControls {
           WindowMover.close(this.getUIContext().getHostContext() as common.UIAbilityContext)
         } })
       }
-      .height(CloudThemeToken.rowHeight5xl)
+      .height(CloudThemeToken.titleRowHeight)
       .padding({ right: CloudThemeToken.windowControlEndMargin })
       .alignItems(VerticalAlign.Center)
     }

@@ -286,9 +286,9 @@ export struct TabRemoteDown {
     CloudScaffold({
       scrollable: false,
       avoidTabBar: false,
-      // 2in1 隐藏系统标题栏后，标题行与窗口三键区（rowHeight5xl 高）垂直居中对齐
+      // 2in1 隐藏系统标题栏后，标题行与窗口三键区（titleRowHeight 高）垂直居中对齐
       topPadding: this.titleButtonInsetEnd > 0 ?
-        (CloudThemeToken.rowHeight5xl - CloudThemeToken.iconBoxLg) / CloudThemeToken.halfDivisor :
+        (CloudThemeToken.titleRowHeight - CloudThemeToken.iconBoxLg) / CloudThemeToken.halfDivisor :
         CloudThemeToken.pageTopPadding,
       bottomPadding: CloudThemeToken.zero,
       horizontalPadding: CloudThemeToken.pagePadding

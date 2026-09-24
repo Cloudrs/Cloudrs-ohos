@@ -16,6 +16,7 @@ import { UserSwitchSheet } from '../components/UserSwitchSheet';
 import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { CloudIconButton } from '../components/CloudIconButton';
+import { TitleControlButton } from '../components/TitleControlButton';
 import AppLogger from '../utils/AppLogger';
 import { WindowMover } from '../utils/WindowMover';
 import { common } from '@kit.AbilityKit';
@@ -308,12 +309,9 @@ export struct LoginPage {
         Column({ space: CloudThemeToken.loginPageGap }) {
         Column() {
           Row() {
-            CloudIconButton({
+            TitleControlButton({
               icon: $r('app.media.ic_back'),
-              buttonSize: CloudThemeToken.iconButtonSize,
-              iconSize: CloudThemeToken.actionIconSize,
-              buttonBackground: CloudThemeToken.surfaceSubtle,
-              iconColor: CloudThemeToken.textPrimary,
+              label: '返回',
               onAction: () => {
                 if (this.needs2FA) {
                   this.needs2FA = false

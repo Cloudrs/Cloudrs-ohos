@@ -292,12 +292,13 @@ export struct ImagePreviewPage {
             titleStyle: {
               mainTitleColor: CloudThemeToken.onPrimary
             },
+            // 高算力档置透明露出 HDS 材质的通透玻璃，与 TitleControlButton 一致；其余档实色
             backIconStyle: {
-              backgroundColor: CloudThemeToken.videoPreviewControlBackground,
+              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground),
               iconColor: CloudThemeToken.onPrimary
             },
             menuStyle: {
-              backgroundColor: CloudThemeToken.videoPreviewControlBackground,
+              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground),
               iconColor: CloudThemeToken.onPrimary
             }
           }

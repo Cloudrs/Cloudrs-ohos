@@ -178,18 +178,26 @@ export class CloudMaterial {
   private static cachedTitleControl: SystemUiMaterial | undefined = undefined
 
   /**
-   * 标题栏上的自绘方块键（侧栏折叠键、2in1 窗口三键）：与 HDS 标题栏菜单键并排，
-   * 材质染 surfaceSubtle 取得同样的蓝灰底，否则 ULTRA_THIN 透出背景成中性灰；开形变与光感。
+   * 标题栏上的自绘方块键（TitleControlButton：折叠键、2in1 窗口三键、相册下拉等），开形变与光感。
+   * EXQUISITE 档：THIN 不染色，与相册页左侧时间/相册胶囊（panelMaterial）同款通透玻璃观感，
+   * 底色须配合 controlSurface 置透明；
+   * GENTLE/SMOOTH 档材质太薄、不染色会近乎隐形，改染 surfaceSubtle 保住按钮轮廓（与 HDS 菜单键同色）。
    */
   static titleControlMaterial(): SystemUiMaterial | undefined {
     if (deviceInfo.apiAvailable('26.0.0')) {
       if (CloudMaterial.cachedTitleControl === undefined) {
-        CloudMaterial.cachedTitleControl = new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-          materialColor: $r('app.color.cloud_surface_subtle'),
-          interactive: true,
-          lightEffect: { color: undefined }
-        })
+        CloudMaterial.cachedTitleControl = CloudMaterial.isExquisite ?
+          new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.THIN,
+            interactive: true,
+            lightEffect: { color: undefined }
+          }) :
+          new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+            materialColor: $r('app.color.cloud_surface_subtle'),
+            interactive: true,
+            lightEffect: { color: undefined }
+          })
       }
       return CloudMaterial.cachedTitleControl
     }

@@ -59,6 +59,9 @@ export class CloudThemeToken {
   static readonly rowHeight3xl: number = 50
   static readonly rowHeight4xl: number = 52
   static readonly rowHeight5xl: number = 58
+  // HDS MINI 标题栏按钮的居中基准行高（实测其返回/菜单键中心距窗口顶 28vp）；
+  // 2in1 自绘的顶行（窗口三键、侧栏品牌行/折叠键、我的/下载页标题行）按它居中，才能与 HDS 按钮齐平
+  static readonly titleRowHeight: number = 56
   static readonly cardHeightSm: number = 64
   static readonly cardHeightMd: number = 70
   static readonly cardHeightLg: number = 76

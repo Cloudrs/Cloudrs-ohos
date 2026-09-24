@@ -531,8 +531,10 @@ export struct TabFiles {
     this.visibleSheetCount = Math.max(0, this.visibleSheetCount - 1)
   }
 
+  // HDS 返回键与菜单键底色：高算力档置透明，露出 HDS 自带材质的通透玻璃观感，
+  // 与自绘 TitleControlButton（折叠键、窗口三键）一致；其余档与低版本保留 surfaceSubtle 实色
   private getFileTitleActionBackground(): ResourceColor {
-    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudThemeToken.surfaceSubtle
+    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle)
   }
 
   private getFileTitleActionIconColor(): ResourceColor {

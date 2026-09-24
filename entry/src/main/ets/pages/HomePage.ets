@@ -317,11 +317,11 @@ export struct HomePage {
   }
 
   // 折叠键与文件页 HDS 返回键并排：同用 TitleControlButton，底色、光感与菜单键一致。
-  // 展开/收起同一个侧栏面板图标，靠按钮位置区分
+  // 图标表达当前状态：展开为通长分隔线的侧栏面板，收起时分隔线缩成框内短竖条
   @Builder sideBarToggleButton() {
     Column() {
       TitleControlButton({
-        icon: $r('app.media.ic_sidebar_panel'),
+        icon: this.showSideBar ? $r('app.media.ic_sidebar_panel') : $r('app.media.ic_sidebar_panel_collapsed'),
         label: this.showSideBar ? '收起侧栏' : '展开侧栏',
         onAction: () => {
           this.getUIContext().animateTo({

@@ -69,6 +69,10 @@
       "value": "#1B2D4D"
     },
     {
+      "name": "cloud_nav_highlight_glass",
+      "value": "#382E6BFF"
+    },
+    {
       "name": "cloud_text_primary",
       "value": "#F3F7FB"
     },

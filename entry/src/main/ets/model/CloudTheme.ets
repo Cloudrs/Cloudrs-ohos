@@ -489,6 +489,8 @@ export class CloudThemeToken {
   static readonly scrollBar: ResourceColor = $r('app.color.cloud_scroll_bar')
   static readonly primary: ResourceColor = $r('app.color.cloud_primary')
   static readonly primarySoft: ResourceColor = $r('app.color.cloud_primary_soft')
+  // 半透明主色：沉浸档侧栏选中框用，让磨砂透出带蓝调（activity/vibrancy 选中）
+  static readonly navHighlightGlass: ResourceColor = $r('app.color.cloud_nav_highlight_glass')
   static readonly textPrimary: ResourceColor = $r('app.color.cloud_text_primary')
   static readonly textSecondary: ResourceColor = $r('app.color.cloud_text_secondary')
   static readonly onPrimary: Color = Color.White

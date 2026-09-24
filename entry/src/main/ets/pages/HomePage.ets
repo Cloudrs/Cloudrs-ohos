@@ -338,7 +338,7 @@ export struct HomePage {
       })
       .borderRadius(CloudThemeToken.sideNavItemRadius)
       .backgroundColor(this.currentIndex === tab.tabId ?
-        CloudThemeToken.primarySoft : CloudThemeToken.transparent)
+        CloudMaterial.navHighlightSurface() : CloudThemeToken.transparent)
       .alignItems(VerticalAlign.Center)
       .onClick(() => {
         this.switchTab(tab.tabId)
@@ -362,7 +362,7 @@ export struct HomePage {
       .height(CloudThemeToken.sideNavItemHeight)
       .borderRadius(CloudThemeToken.sideNavItemRadius)
       .backgroundColor(this.currentIndex === tab.tabId ?
-        CloudThemeToken.primarySoft : CloudThemeToken.transparent)
+        CloudMaterial.navHighlightSurface() : CloudThemeToken.transparent)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
       .onClick(() => {

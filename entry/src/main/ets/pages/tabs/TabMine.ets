@@ -6,6 +6,7 @@ import UserPreferences from "../../model/UserPreferences";
 import { CloudApi } from "../../model/net/CloudApi";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { CloudThemeToken } from "../../model/CloudTheme";
+import { WindowMover } from "../../utils/WindowMover";
 import { CloudMaterial } from "../../model/CloudMaterial";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
@@ -89,8 +90,11 @@ export struct TabMine {
   @StorageProp(Constant.WINDOW_WIDTH_VP) @Watch('onLayoutMetricChanged') sheetLayoutWidth: number = 0
   // 宽屏侧栏收起时，HomePage 的悬浮折叠键会压在页面左上角，用来给内容让位避免和头像重叠
   @StorageProp(Constant.SIDEBAR_VISIBLE) @Watch('onLayoutMetricChanged') sidebarVisible: boolean = true
+  // 2in1 隐藏系统标题栏后窗口三键区宽度（其它设备为 0）；>0 时顶部加一行固定标题，卡片从其下开始
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) @Watch('onLayoutMetricChanged') titleButtonInsetEnd: number = 0
   // 我的页顶部让位（避开折叠键）；@StorageProp 只在方法里读不会被 build 追踪，故用 @Watch 驱动 @State
   @State mineTopPadding: number = 0
+  @State mineTitleLeftPadding: number = CloudThemeToken.pagePadding
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
@@ -287,28 +291,64 @@ export struct TabMine {
   // 宽屏且侧栏收起时，给内容顶部让出 HomePage 悬浮折叠键的高度，避免头像被压住
   private onLayoutMetricChanged(): void {
     const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
-    this.mineTopPadding = (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible)
-      ? CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
-      : CloudThemeToken.zero
+    const toggleFloating = CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible
+    const toggleSpace = CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    // 有标题行时折叠键落在标题行里，由标题行左内边距让位；否则整页下移让开折叠键
+    this.mineTopPadding = (toggleFloating && this.titleButtonInsetEnd <= 0) ? toggleSpace : CloudThemeToken.zero
+    this.mineTitleLeftPadding = toggleFloating ? toggleSpace : CloudThemeToken.pagePadding
+  }
+
+  // 2in1：与文件页「存储」、相册页「相册」同一行位置的固定标题，兼作窗口拖动区（行内无按钮）
+  @Builder mineTitleRow() {
+    Row() {
+      Text('我的')
+        .fontSize(CloudThemeToken.textSizeHeadline)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .maxLines(1)
+    }
+    .width('100%')
+    .height(CloudThemeToken.rowHeight5xl)
+    .padding({
+      left: this.mineTitleLeftPadding,
+      right: CloudThemeToken.pagePadding + this.titleButtonInsetEnd
+    })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(CloudThemeToken.background)
+    .onTouch((event: TouchEvent) => {
+      WindowMover.onTouch(event)
+    })
   }
 
   build() {
     Stack() {
-      CloudScaffold({
-        scroller: this.scroller,
-        topPadding: this.mineTopPadding,
-        bottomPadding: CloudThemeToken.pageBottomPadding
-      }) {
-        Column({ space: CloudThemeToken.sectionGap }) {
-          this.userInfo()
-          this.storageInfo()
-          SectionHeader({ title: $r('app.string.more_setting') })
-          this.settingButton()
-          this.webButton()
-          this.logoutButton()
+      Column() {
+        if (this.titleButtonInsetEnd > 0) {
+          this.mineTitleRow()
+        }
+        // 自定义组件尾随闭包后不能再链属性，故外包一层承接 layoutWeight
+        Column() {
+          CloudScaffold({
+            scroller: this.scroller,
+            topPadding: this.mineTopPadding,
+            bottomPadding: CloudThemeToken.pageBottomPadding
+          }) {
+            Column({ space: CloudThemeToken.sectionGap }) {
+              this.userInfo()
+              this.storageInfo()
+              SectionHeader({ title: $r('app.string.more_setting') })
+              this.settingButton()
+              this.webButton()
+              this.logoutButton()
+            }
+            .width('100%')
+          }
         }
         .width('100%')
+        .layoutWeight(1)
       }
+      .width('100%')
+      .height('100%')
 
       Column()
         .width(0)

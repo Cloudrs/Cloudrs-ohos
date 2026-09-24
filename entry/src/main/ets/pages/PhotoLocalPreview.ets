@@ -25,6 +25,8 @@ export struct PhotoLocalPreviewPage {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
+  // 2in1 隐藏系统标题栏后窗口三键浮在右上角，顶栏右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @State items: PhotoBackupItem[] = []
   @State index: number = 0
   @State backupEnabled: boolean = false
@@ -208,7 +210,7 @@ export struct PhotoLocalPreviewPage {
       top: this.sysTopRectHeight + CloudThemeToken.spacingPanel,
       bottom: CloudThemeToken.spacingPanel,
       left: CloudThemeToken.spacingPage,
-      right: CloudThemeToken.spacingPage
+      right: CloudThemeToken.spacingPage + this.titleButtonInsetEnd
     })
     .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
     .backdropBlur(CloudMaterial.backdropBlurFallback(18))

@@ -1,3 +1,4 @@
+import { LengthMetrics } from '@kit.ArkUI';
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
@@ -29,6 +30,8 @@ export struct VideoPreviewPage {
   routeParam?: VideoPreview
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @State videoUrl: string = ''
   @State isLoading: boolean = true
   @State isFailed: boolean = false
@@ -496,6 +499,10 @@ export struct VideoPreviewPage {
           materialType: hdsMaterial.MaterialType.IMMERSIVE,
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
         }
+      },
+      padding: {
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
       },
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false

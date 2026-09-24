@@ -155,6 +155,27 @@ export class CloudMaterial {
     return undefined
   }
 
+  private static cachedTitleControl: SystemUiMaterial | undefined = undefined
+
+  /**
+   * 标题栏上的自绘方块键（侧栏折叠键、2in1 窗口三键）：与 HDS 标题栏菜单键并排，
+   * 材质染 surfaceSubtle 取得同样的蓝灰底，否则 ULTRA_THIN 透出背景成中性灰；开形变与光感。
+   */
+  static titleControlMaterial(): SystemUiMaterial | undefined {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedTitleControl === undefined) {
+        CloudMaterial.cachedTitleControl = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
+          materialColor: $r('app.color.cloud_surface_subtle'),
+          interactive: true,
+          lightEffect: { color: undefined }
+        })
+      }
+      return CloudMaterial.cachedTitleControl
+    }
+    return undefined
+  }
+
   private static cachedSheetControl: SystemUiMaterial | undefined = undefined
 
   /**

@@ -31,6 +31,7 @@ import { CloudMaterial } from "../../model/CloudMaterial";
 import { EmptyState } from "../../components/EmptyState";
 import { FileSystemUtil } from "../../utils/FileSystemUtil";
 import AppLogger from "../../utils/AppLogger";
+import { WindowMover } from "../../utils/WindowMover";
 import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
 import { TextPreviewEntry } from "../../utils/TextPreviewEntry";
@@ -294,6 +295,8 @@ export struct TabFiles {
   @StorageProp(Constant.KEYBOARD_HEIGHT_VP) keyboardHeightVp: number = 0;
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true;
+  // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧菜单要给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0;
   @StorageLink(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageLink(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
   @StorageLink(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
@@ -919,7 +922,9 @@ export struct TabFiles {
   }
 
   getFileTitleStackRightPadding(): number {
-    return CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.rowHeight5xl * this.getFileTitleMenu().length
+    // 菜单按钮已因 2in1 窗口三键左移 titleButtonInsetEnd，标题区（兼拖动区）同步让开，免得盖住菜单按钮抢点击
+    return CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.rowHeight5xl * this.getFileTitleMenu().length +
+      this.titleButtonInsetEnd
   }
 
   getStorageHeaderTranslateY(): number {
@@ -2570,7 +2575,9 @@ export struct TabFiles {
         }
       },
       padding: {
-        start: LengthMetrics.vp(this.getFileTitleBarStartPadding())
+        start: LengthMetrics.vp(this.getFileTitleBarStartPadding()),
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
       },
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false
@@ -2771,9 +2778,13 @@ export struct TabFiles {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           .layoutWeight(1)
+          .height('100%')
           .alignItems(HorizontalAlign.Start)
           .justifyContent(FlexAlign.Center)
-          .hitTestBehavior(HitTestMode.None)
+          // 标题本身无点击行为；2in1 隐藏系统标题栏后作为窗口拖动区（左右内边距已让开返回键与菜单）
+          .onTouch((event: TouchEvent) => {
+            WindowMover.onTouch(event)
+          })
         }
         .layoutWeight(1)
         .width('100%')

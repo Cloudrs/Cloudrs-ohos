@@ -1,3 +1,4 @@
+import { LengthMetrics } from '@kit.ArkUI';
 import Constant from "../model/Constant";
 import { image } from "@kit.ImageKit";
 import { CloudApi } from "../model/net/CloudApi";
@@ -27,6 +28,8 @@ export struct ImagePreviewPage {
   routeParam?: ImagePreview
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0;
   @State isLoading: boolean = true;
   @State currentIndex: number = 0
@@ -303,6 +306,10 @@ export struct ImagePreviewPage {
           materialType: hdsMaterial.MaterialType.IMMERSIVE,
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
         }
+      },
+      padding: {
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
       },
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false

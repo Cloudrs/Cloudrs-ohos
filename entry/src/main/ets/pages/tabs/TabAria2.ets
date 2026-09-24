@@ -15,8 +15,9 @@ import { CloudScaffold } from "../../components/CloudScaffold";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { CloudMaterial } from "../../model/CloudMaterial";
 import AppLogger from "../../utils/AppLogger";
+import { WindowMover } from "../../utils/WindowMover";
 import { EmptyState } from "../../components/EmptyState";
-import { CloudActionButton } from "../../components/CloudActionButton";
+import { TitleControlButton } from "../../components/TitleControlButton";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { ActiveAccount } from "../../utils/ActiveAccount";
@@ -33,6 +34,8 @@ export struct TabRemoteDown {
   @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
+  // 2in1 窗口三键区宽度；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0;
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.download_offline') }, { text: $r('app.string.task_queue') }] as SegmentButtonItemTuple,
     multiply: false,
@@ -283,7 +286,10 @@ export struct TabRemoteDown {
     CloudScaffold({
       scrollable: false,
       avoidTabBar: false,
-      topPadding: CloudThemeToken.pageTopPadding,
+      // 2in1 隐藏系统标题栏后，标题行与窗口三键区（rowHeight5xl 高）垂直居中对齐
+      topPadding: this.titleButtonInsetEnd > 0 ?
+        (CloudThemeToken.rowHeight5xl - CloudThemeToken.iconBoxLg) / CloudThemeToken.halfDivisor :
+        CloudThemeToken.pageTopPadding,
       bottomPadding: CloudThemeToken.zero,
       horizontalPadding: CloudThemeToken.pagePadding
     }) {
@@ -439,18 +445,32 @@ export struct TabRemoteDown {
   @Builder title() {
     Stack({alignContent: Alignment.End}) {
       Row() {
+        // 分段按钮两侧空白作为 2in1 窗口拖动区（不挂整行，免得点分段按钮也拖窗口）
+        Blank().layoutWeight(1).height('100%')
+          .onTouch((event: TouchEvent) => {
+            WindowMover.onTouch(event)
+          })
         SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
           .width(CloudThemeToken.filesSegmentWidth)
+        Blank().layoutWeight(1).height('100%')
+          .onTouch((event: TouchEvent) => {
+            WindowMover.onTouch(event)
+          })
       }
       .width('100%')
+      .height('100%')
       .justifyContent(FlexAlign.Center)
 
-      CloudActionButton({
-        icon: $r('app.media.ic_plus'),
-        onAction: () => {
-          this.openCreateSheet()
-        }
-      })
+      // 与 HDS 标题栏菜单键同款（TitleControlButton），和其它页标题栏按钮观感一致
+      Column() {
+        TitleControlButton({
+          icon: $r('app.media.ic_title_plus'),
+          label: '新建离线下载',
+          onAction: () => {
+            this.openCreateSheet()
+          }
+        })
+      }
       .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
         showClose: true,
         detents: [SheetSize.FIT_CONTENT],
@@ -463,6 +483,8 @@ export struct TabRemoteDown {
           this.showCreateSheet = false
         }
       })
+      // 2in1 窗口三键浮在右上角，新建按钮左移让位；分段按钮仍在页面居中
+      .margin({ right: this.titleButtonInsetEnd })
     }
     .width('100%')
     .height(CloudThemeToken.iconBoxLg)

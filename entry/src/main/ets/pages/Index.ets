@@ -13,6 +13,7 @@ import { TextPreviewPage } from './TextPreview';
 import { AboutPage } from './AboutPage';
 import { FileSearchPage } from './FileSearchPage';
 import { PhotoLocalPreviewPage } from './PhotoLocalPreview';
+import { WindowControls } from '../components/WindowControls';
 import { window } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
@@ -28,6 +29,7 @@ struct Index {
   @State rootPage: string = '';
   @State rootLoginParam: LoginParam = new LoginParam(false, Constant.HOME_PAGE);
   @State overlayPage: string = '';
+  @StorageProp(Constant.WINDOW_CONTROLS_CUSTOM) windowControlsCustom: boolean = false;
   @State fileSearchVisible: boolean = false;
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
@@ -326,6 +328,13 @@ struct Index {
       })
 
       this.overlayBuilder()
+
+      // 2in1 自绘窗口三键：叠在所有页面与覆盖层之上，各页标题栏右侧已按 TITLE_BUTTON_INSET_END 让位
+      if (this.windowControlsCustom) {
+        WindowControls({ hideInFullScreen: this.overlayPage === Constant.VIDEO_PREVIEW_PAGE })
+          .position({ top: 0, right: 0 })
+          .zIndex(CloudThemeToken.overlayZIndex + 1)
+      }
     }
     .width('100%')
     .height('100%')

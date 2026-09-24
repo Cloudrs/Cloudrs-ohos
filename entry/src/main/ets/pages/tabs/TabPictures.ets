@@ -15,11 +15,12 @@ import {
 import { CloudApi, FileLockConflict } from '../../model/net/CloudApi';
 import UserPreferences from '../../model/UserPreferences';
 import AppLogger from '../../utils/AppLogger';
+import { WindowMover } from '../../utils/WindowMover';
 import { showToast } from '../../utils/ToastUtil';
 import { CloudBreakpoint, CloudThemeToken } from '../../model/CloudTheme';
 import { CloudMaterial } from '../../model/CloudMaterial';
 import { EmptyState } from '../../components/EmptyState';
-import { CloudIconButton } from '../../components/CloudIconButton';
+import { TitleControlButton } from '../../components/TitleControlButton';
 import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
 import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
@@ -93,6 +94,8 @@ export struct TabPictures {
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true
+  // 2in1 窗口三键浮在右上角，标题行右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @Watch('onForegroundTickChanged')
   @StorageProp(Constant.APP_FOREGROUND_TICK) foregroundTick: number = 0;
   @State settingsEnabled: boolean = false;
@@ -3125,19 +3128,30 @@ export struct TabPictures {
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
         .maxLines(1)
+        .onTouch((event: TouchEvent) => {
+          WindowMover.onTouch(event)
+        })
+      // 标题与按钮之间的空白作为 2in1 窗口拖动区（不挂整行，免得按按钮也拖窗口）
       Blank().layoutWeight(1)
-      CloudIconButton({
-        icon: $r('app.media.ic_chevron_down'),
-        iconColor: CloudThemeToken.textPrimary,
-        onAction: () => { this.toggleDrawer(); }
-      })
-        .rotate({ angle: this.drawerOpen ? 180 : 0 })
+        .height('100%')
+        .onTouch((event: TouchEvent) => {
+          WindowMover.onTouch(event)
+        })
+      // 与 HDS 标题栏菜单键同款（TitleControlButton），和其它页标题栏按钮观感一致
+      Column() {
+        TitleControlButton({
+          icon: $r('app.media.ic_title_chevron_down'),
+          label: this.drawerOpen ? '收起相册列表' : '展开相册列表',
+          onAction: () => { this.toggleDrawer(); }
+        })
+      }
+      .rotate({ angle: this.drawerOpen ? 180 : 0 })
     }
     .width('100%')
     .height('100%')
     .padding({
       left: this.getPicturesTitleLeftPadding(),
-      right: CloudThemeToken.filesTitleHorizontalPadding
+      right: CloudThemeToken.filesTitleHorizontalPadding + this.titleButtonInsetEnd
     })
     .alignItems(VerticalAlign.Center)
   }

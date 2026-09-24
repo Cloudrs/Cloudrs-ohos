@@ -563,7 +563,12 @@ export class CloudThemeToken {
 
   // sm/md 不需要（手机端用底部浮动 tab），lg/xl 是侧边栏宽度
   static readonly sideNavWidthLg: number = 96
-  static readonly sideNavWidthXl: number = 240
+  static readonly sideNavWidthXl: number = 208
+  // XL 原生风侧栏：紧凑导航行、品牌顶行、底部账号卡片（参照系统「文件管理」）
+  static readonly sideNavRowHeight: number = 40
+  static readonly sideNavRowRadius: number = 10
+  static readonly sideNavRowGap: number = 2
+  static readonly sideNavLogoSize: number = 24
   static readonly sideNavItemHeight: number = 56
   static readonly sideNavItemRadius: number = 14
   static readonly sideNavVerticalPadding: number = 24
@@ -571,8 +576,16 @@ export class CloudThemeToken {
   static readonly sideNavGap: number = 6
   // 与标题栏图标按钮（iconButtonSize 40 / actionIconSize 22 级别）保持一致
   static readonly sideBarToggleSize: number = 40
-  static readonly sideBarToggleIconSize: number = 28
-  static readonly sideBarToggleRadius: number = 16
+  // 2in1 自绘窗口三键：与标题栏 HDS 按钮同尺寸（40vp 方块、圆角 actionSquircleRadius），
+  // 左侧一条短竖线与页面按钮分组；inset 为整组占用宽度，各页标题栏右侧按它让位
+  static readonly windowControlSize: number = 40
+  static readonly windowControlIconSize: number = 24
+  static readonly windowControlGap: number = 8
+  static readonly windowControlEndMargin: number = 12
+  static readonly windowControlDividerHeight: number = 20
+  static readonly windowControlDividerWidth: number = 1
+  static readonly windowControlsInset: number = CloudThemeToken.windowControlDividerWidth +
+    CloudThemeToken.windowControlGap * 3 + CloudThemeToken.windowControlSize * 3 + CloudThemeToken.windowControlEndMargin
 
   static readonly sheetCenterWidth: number = 480
   static readonly sheetCenterWideWidth: number = 560

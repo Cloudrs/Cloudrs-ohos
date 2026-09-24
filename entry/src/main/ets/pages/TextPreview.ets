@@ -21,6 +21,7 @@ import {
   TextDecodeFailure, TextDecodeResult, TextEncodeOptions, TextFileCodec, TextLineEnding
 } from '../utils/TextFileCodec'
 import AppLogger from '../utils/AppLogger'
+import { WindowMover } from '../utils/WindowMover'
 
 const TAG: string = 'TextPreview'
 /** 与 CommonUtil.getEditorLanguage 的返回值一致，只有它才给 Markdown 预览入口 */
@@ -38,6 +39,8 @@ export struct TextPreviewPage {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
+  // 2in1 隐藏系统标题栏后窗口三键浮在右上角，顶栏右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @State loadState: TextLoadState = TextLoadState.LOADING
   @State failedTitle: string = ''
   @State failedDescription: string = ''
@@ -165,6 +168,8 @@ export struct TextPreviewPage {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
+          .height('100%')
+          .onTouch(WindowMover.onTouch)
 
         CloudIconButton({
           icon: $r('app.media.ic_copy'),
@@ -209,7 +214,7 @@ export struct TextPreviewPage {
       }
       .height(CloudThemeToken.titleBarHeight)
       .width('100%')
-      .padding({ left: CloudThemeToken.spacingXs, right: CloudThemeToken.spacingXs })
+      .padding({ left: CloudThemeToken.spacingXs, right: CloudThemeToken.spacingXs + this.titleButtonInsetEnd })
       .alignItems(VerticalAlign.Center)
     }
     .width('100%')

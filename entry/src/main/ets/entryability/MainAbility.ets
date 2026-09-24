@@ -4,6 +4,8 @@ import { deviceInfo, SuppressWarnings, SuppressWarningsType } from '@kit.BasicSe
 import { window } from '@kit.ArkUI';
 import { resourceManager } from '@kit.LocalizationKit';
 import Constant from '../model/Constant';
+import { CloudThemeToken } from '../model/CloudTheme';
+import { WindowMover } from '../utils/WindowMover';
 import UserDatabase from '../model/UserDatabase';
 import TransferDatabase from '../model/TransferDatabase';
 import UserPreferences from '../model/UserPreferences';
@@ -103,7 +105,8 @@ export default class MainAbility extends UIAbility {
         return;
       }
       hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
-      // 窗口颜色设置必须在 loadContent 生效之后（否则抛 "window state abnormal"）
+      // 窗口装饰与颜色设置必须在 loadContent 生效之后（否则抛 "window state abnormal"）
+      this.applyTwoInOneDecor()
       this.applyWindowChromeColor()
     });
     perfMark('loadContent dispatched')
@@ -281,6 +284,55 @@ export default class MainAbility extends UIAbility {
     }
   }
 
+  /**
+   * 2in1：隐藏系统标题栏，由应用顶部自绘（侧栏顶行放图标/名称/折叠键），窗口三键浮在右上角。
+   * 必须在 loadContent 生效后调用——此前放在 loadContent 之前，每次都抛 "window state abnormal"。
+   */
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  private applyTwoInOneDecor(): void {
+    if (deviceInfo.deviceType !== '2in1') {
+      return
+    }
+    try {
+      const win = this.windowStage?.getMainWindowSync()
+      if (!win) {
+        return
+      }
+      win.setWindowDecorVisible(false)
+      WindowMover.attach(win)
+      // 系统三键也隐藏，改由应用自绘（WindowControls），与标题栏按钮同一套样式与光感；
+      // 隐藏失败则保留系统三键，按其实际矩形让位
+      try {
+        win.setWindowTitleButtonVisible(false, false, false)
+        AppStorage.setOrCreate(Constant.TITLE_BUTTON_INSET_END, CloudThemeToken.windowControlsInset)
+        AppStorage.setOrCreate(Constant.WINDOW_CONTROLS_CUSTOM, true)
+        return
+      } catch (err) {
+        hilog.warn(0x0000, 'testTag', 'hide title buttons failed. Cause: %{public}s', (err as Error)?.message ?? '')
+      }
+      // 三键区高度与内容顶部标题行同高（HDS 标题栏基础高度），三键与标题行按钮垂直居中对齐
+      win.setWindowDecorHeight(CloudThemeToken.rowHeight5xl)
+      const publish = (rect: window.TitleButtonRect) => {
+        const inset = rect.width > 0 ? rect.width + rect.right : 0
+        AppStorage.setOrCreate(Constant.TITLE_BUTTON_INSET_END, inset)
+        hilog.info(0x0000, 'testTag', 'title button rect right=%{public}d top=%{public}d w=%{public}d h=%{public}d',
+          rect.right, rect.top, rect.width, rect.height)
+      }
+      // 刚隐藏时布局未完成，同步查询返回全 0；以变化回调为准，再补一次延迟查询兜底
+      win.on('windowTitleButtonRectChange', publish)
+      publish(win.getTitleButtonRect())
+      setTimeout(() => {
+        try {
+          publish(win.getTitleButtonRect())
+        } catch (e) {
+          hilog.warn(0x0000, 'testTag', 'query title button rect failed')
+        }
+      }, 500)
+    } catch (err) {
+      hilog.warn(0x0000, 'testTag', 'hide window decor failed. Cause: %{public}s', (err as Error)?.message ?? '')
+    }
+  }
+
   onConfigurationUpdate(newConfig: Configuration): void {
     // 应用内切换深浅色走 context.setColorMode，会回调到这里，标题栏颜色要跟着换
     this.applyWindowChromeColor()
@@ -289,16 +341,8 @@ export default class MainAbility extends UIAbility {
   private async applyImmersiveSystemBars(windowClass: window.Window, themeMode: string): Promise<void> {
     const useLightIcon = themeMode === Constant.APP_THEME_DARK
     try {
-      if (deviceInfo.deviceType === '2in1') {
-        // 2in1 上隐藏窗口装饰条，由应用自绘控制
-        try {
-          windowClass.setWindowDecorVisible(false)
-          windowClass.setWindowDecorHeight(64)
-        } catch (err) {
-          hilog.warn(0x0000, 'testTag', 'setWindowDecor failed. Cause: %{public}s',
-            (err as Error)?.message ?? '')
-        }
-      } else {
+      // 2in1 隐藏标题栏必须在 loadContent 之后，见 applyTwoInOneDecor；这里只处理非 2in1
+      if (deviceInfo.deviceType !== '2in1') {
         windowClass.setWindowLayoutFullScreen(true)
       }
       await windowClass.setWindowSystemBarProperties({

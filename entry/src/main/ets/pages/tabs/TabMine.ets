@@ -86,7 +86,11 @@ export struct TabMine {
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
-  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
+  @StorageProp(Constant.WINDOW_WIDTH_VP) @Watch('onLayoutMetricChanged') sheetLayoutWidth: number = 0
+  // 宽屏侧栏收起时，HomePage 的悬浮折叠键会压在页面左上角，用来给内容让位避免和头像重叠
+  @StorageProp(Constant.SIDEBAR_VISIBLE) @Watch('onLayoutMetricChanged') sidebarVisible: boolean = true
+  // 我的页顶部让位（避开折叠键）；@StorageProp 只在方法里读不会被 build 追踪，故用 @Watch 驱动 @State
+  @State mineTopPadding: number = 0
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
@@ -130,6 +134,7 @@ export struct TabMine {
   @State knockPasswordEnabled: boolean = false
 
   aboutToAppear() {
+    this.onLayoutMetricChanged()
     this.loadLocalPreferences()
     if (this.isActive) {
       this.loadMineData()
@@ -279,11 +284,19 @@ export struct TabMine {
     })
   }
 
+  // 宽屏且侧栏收起时，给内容顶部让出 HomePage 悬浮折叠键的高度，避免头像被压住
+  private onLayoutMetricChanged(): void {
+    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+    this.mineTopPadding = (CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible)
+      ? CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+      : CloudThemeToken.zero
+  }
+
   build() {
     Stack() {
       CloudScaffold({
         scroller: this.scroller,
-        topPadding: CloudThemeToken.zero,
+        topPadding: this.mineTopPadding,
         bottomPadding: CloudThemeToken.pageBottomPadding,
         // 沉浸：底色让位，2in1 上透出桌面壁纸，卡片磨砂浮于其上；低版本回落不透明背板
         bgColor: CloudMaterial.materialSurface(CloudThemeToken.background)
@@ -675,6 +688,10 @@ export struct TabMine {
           .borderWidth(CloudThemeToken.lineWidth)
           .borderColor(CloudThemeToken.line)
           .backgroundColor(CloudThemeToken.primarySoft)
+          // 头像暂不支持在端上换图，点击等同点名字：进入账号切换
+          .onClick(() => {
+            this.openUserSwitchSheet()
+          })
 
         Column({ space: CloudThemeToken.spacingMd }) {
           Text(this.getNicknameText())

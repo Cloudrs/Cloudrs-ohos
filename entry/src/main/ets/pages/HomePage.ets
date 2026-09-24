@@ -98,14 +98,15 @@ export struct HomePage {
       .verticalAlign(VerticalAlign.Center)
       .layoutMode(LayoutMode.VERTICAL)
       .padding(CloudThemeToken.bottomTabBarItemPadding)
+      // 未选中用正文黑（参考 IT之家 风格，细描边图标配黑色更利落），选中主色
       .labelStyle({
         font: { size: CloudThemeToken.textSizeSmall },
         selectedColor: CloudThemeToken.primary,
-        unselectedColor: CloudThemeToken.textSecondary
+        unselectedColor: CloudThemeToken.textPrimary
       })
       .iconStyle({
         selectedColor: CloudThemeToken.primary,
-        unselectedColor: CloudThemeToken.textSecondary
+        unselectedColor: CloudThemeToken.textPrimary
       })
   }
 
@@ -317,11 +318,12 @@ export struct HomePage {
   @Builder sideNavItem(tab: TabItem) {
     if (this.currentBreakpoint() === CloudBreakpoint.XL) {
       Row({ space: CloudThemeToken.spacingSection }) {
+        // 细描边图标自带约 3vp 内缩，28 的框里字形约 24，与 14 号字搭配匀称
         Image(tab.image)
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
+          .width(CloudThemeToken.icon4xl)
+          .height(CloudThemeToken.icon4xl)
           .fillColor(this.currentIndex === tab.tabId ?
-            CloudThemeToken.primary : CloudThemeToken.textSecondary)
+            CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .draggable(false)
         Text(tab.text)
           .fontSize(CloudThemeToken.textSizeBody)
@@ -346,15 +348,15 @@ export struct HomePage {
     } else {
       Column({ space: CloudThemeToken.spacingXs }) {
         Image(tab.image)
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
+          .width(CloudThemeToken.icon4xl)
+          .height(CloudThemeToken.icon4xl)
           .fillColor(this.currentIndex === tab.tabId ?
-            CloudThemeToken.primary : CloudThemeToken.textSecondary)
+            CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .draggable(false)
         Text(tab.text)
           .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(this.currentIndex === tab.tabId ?
-            CloudThemeToken.primary : CloudThemeToken.textSecondary)
+            CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .fontWeight(this.currentIndex === tab.tabId ? FontWeight.Medium : FontWeight.Regular)
           .maxLines(1)
       }

@@ -2258,19 +2258,7 @@ export struct TabFiles {
             this.searchEmptyState()
           }
 
-          Button() {
-            Image($r('app.media.ic_arrowshape_up'))
-              .width(CloudThemeToken.icon3xl)
-              .height(CloudThemeToken.icon3xl)
-              .fillColor(CloudThemeToken.onPrimary)
-          }
-          .width(CloudThemeToken.iconBox3xl)
-          .height(CloudThemeToken.rowHeight4xl)
-          .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
-            CloudThemeToken.controlRadiusRoundXl))
-          .backgroundColor(CloudThemeToken.primary)
-          .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
-          .onClick(() => { this.openSelectFileSheet() })
+          this.uploadFab()
         }
         .width('100%')
         .height('100%')
@@ -2586,6 +2574,30 @@ export struct TabFiles {
     })
     .bindToScrollable([this.scrollerForList])
     .backgroundColor(CloudThemeToken.background)
+  }
+
+  // 上传 FAB：容器承载材质（Button 挂不上 systemMaterial），与标题栏按钮同款默认沉浸光感
+  // （titleControlMaterial：高算力档通透玻璃，其余档 surfaceSubtle 底）+ 按压形变
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  @Builder uploadFab() {
+    Stack() {
+      Image($r('app.media.ic_arrowshape_up'))
+        .width(CloudThemeToken.icon3xl)
+        .height(CloudThemeToken.icon3xl)
+        .fillColor(CloudThemeToken.textPrimary)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.iconBox3xl)
+    .height(CloudThemeToken.rowHeight4xl)
+    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
+      CloudThemeToken.controlRadiusRoundXl))
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
+    .systemMaterial(CloudMaterial.titleControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
+    .accessibilityText('上传')
+    .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
+    .onClick(() => { this.openSelectFileSheet() })
   }
 
   @Builder multiSelectTitle() {

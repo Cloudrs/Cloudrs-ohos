@@ -1,7 +1,8 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { deviceInfo, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
+import { resourceManager } from '@kit.LocalizationKit';
 import Constant from '../model/Constant';
 import UserDatabase from '../model/UserDatabase';
 import TransferDatabase from '../model/TransferDatabase';
@@ -102,9 +103,8 @@ export default class MainAbility extends UIAbility {
         return;
       }
       hilog.info(0x0000, 'testTag', 'Succeeded in loading the content.');
-      // 窗口透明必须在 loadContent 生效之后才能调用（否则抛 "window state abnormal"）。
-      // 仅 2in1：让侧栏沉浸光感透出桌面壁纸；内容区各页面自铺不透明底遮住。
-      this.applyWindowTransparency()
+      // 窗口颜色设置必须在 loadContent 生效之后（否则抛 "window state abnormal"）
+      this.applyWindowChromeColor()
     });
     perfMark('loadContent dispatched')
 
@@ -248,13 +248,14 @@ export default class MainAbility extends UIAbility {
   }
 
   /**
-   * 2in1 上把窗口背景与容器置透明，让侧栏沉浸光感透出桌面壁纸。
-   * 必须在 loadContent 生效后调用（早于此会抛 "window state abnormal"）。
-   * 需权限 ohos.permission.SET_WINDOW_TRANSPARENT（normal/system_grant，装机自动授予）。
-   * 背景色 + 容器色两者都要置透明，PC 窗口才真正透明（见官方 FAQ「如何设置PC窗口透明」）。
+   * 2in1：把系统标题栏（窗口容器）和窗口底色都设为应用背景色，与侧栏、内容区同色一体。
+   * 不设的话标题栏是系统中性灰，跟应用的偏蓝背景色明显拼接。
+   * 必须在 loadContent 生效后调用（早于此会抛 "window state abnormal"）；
+   * 容器色需权限 ohos.permission.SET_WINDOW_TRANSPARENT（normal/system_grant）。
+   * 颜色读 cloud_background 资源，跟随当前深浅色；切换主题时由 onConfigurationUpdate 重设。
    */
   @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  private applyWindowTransparency(): void {
+  private applyWindowChromeColor(): void {
     if (deviceInfo.deviceType !== '2in1') {
       return
     }
@@ -263,13 +264,26 @@ export default class MainAbility extends UIAbility {
       if (!win) {
         return
       }
-      win.setWindowBackgroundColor('#00000000')
-      win.setWindowContainerColor('#00000000', '#00000000')
-      hilog.info(0x0000, 'testTag', 'window transparency applied')
+      // 应用用 setColorMode 自己决定深浅色，Ability 的 resourceManager 不跟着变（实测深色下仍解析出浅色），
+      // 故按保存的主题模式构造指定深浅色的 resourceManager 再取色
+      const rm = this.context.resourceManager
+      const cfg = rm.getOverrideConfiguration()
+      cfg.colorMode = this.getSavedThemeMode() === Constant.APP_THEME_DARK
+        ? resourceManager.ColorMode.DARK : resourceManager.ColorMode.LIGHT
+      const argb = rm.getOverrideResourceManager(cfg).getColorSync($r('app.color.cloud_background'))
+      const color = '#' + (argb >>> 0).toString(16).padStart(8, '0').toUpperCase()
+      win.setWindowBackgroundColor(color)
+      win.setWindowContainerColor(color, color)
+      hilog.info(0x0000, 'testTag', 'window chrome color %{public}s', color)
     } catch (err) {
-      hilog.warn(0x0000, 'testTag', 'setWindowTransparent failed. Cause: %{public}s',
+      hilog.warn(0x0000, 'testTag', 'set window chrome color failed. Cause: %{public}s',
         (err as Error)?.message ?? '')
     }
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    // 应用内切换深浅色走 context.setColorMode，会回调到这里，标题栏颜色要跟着换
+    this.applyWindowChromeColor()
   }
 
   private async applyImmersiveSystemBars(windowClass: window.Window, themeMode: string): Promise<void> {

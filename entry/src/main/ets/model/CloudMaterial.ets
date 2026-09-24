@@ -91,15 +91,6 @@ export class CloudMaterial {
     return CloudMaterial.isExquisite ? Color.Transparent : CloudThemeToken.surfaceTranslucent
   }
 
-  /**
-   * 侧栏选中框底色：EXQUISITE 高算力档用半透明主色，让透明窗+侧栏磨砂透出带蓝调
-   * （activity/vibrancy 选中）；其余档与手机回落不透明 primarySoft 实色块，保证选中清晰。
-   * 选中块本身不再叠第二层材质（材质叠材质在繁忙壁纸下易发浑），只靠半透色让侧栏材质透出。
-   */
-  static navHighlightSurface(): ResourceColor {
-    return CloudMaterial.isExquisite ? CloudThemeToken.navHighlightGlass : CloudThemeToken.primarySoft
-  }
-
   /** sheet 内层卡片材质：仅 EXQUISITE 高算力档挂 THIN 磨砂，其余档由 cardBackground 兜色。 */
   static cardMaterial(): SystemUiMaterial | undefined {
     // apiAvailable 字面量守卫必须单独用 if 块直接包住 uiMaterial 使用点，编译器才认得出并消除

@@ -142,8 +142,7 @@ export struct HomePage {
     }
     .width('100%')
     .height('100%')
-    // 根不铺底：手机布局与宽屏内容区各自铺不透明底，宽屏侧栏区留透明给沉浸光感透出壁纸（2in1）
-    .backgroundColor(Color.Transparent)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder phoneLayout() {
@@ -244,8 +243,7 @@ export struct HomePage {
       })
       .width('100%')
       .height('100%')
-      // 侧栏区不铺底，交给 sideBarContent 的材质透出壁纸；内容区由 mainTabsContent 自铺不透明底
-      .backgroundColor(Color.Transparent)
+      .backgroundColor(CloudThemeToken.background)
       .foregroundBlurStyle(this.appLocked ? BlurStyle.Thin : BlurStyle.NONE, {
         colorMode: ThemeColorMode.SYSTEM,
         adaptiveColor: AdaptiveColor.DEFAULT
@@ -291,9 +289,7 @@ export struct HomePage {
     })
   }
 
-  // 侧栏接沉浸光感：2in1 上底色让位、挂 panelMaterial 透出桌面壁纸；
-  // 非 2in1 / 低版本回落原 surface 实色（materialSurface/panelMaterial 内部按版本分档）
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  // 侧栏与内容区、标题栏同用应用背景色（同色统一），仅靠 SideBarContainer 分隔线与选中高亮区分
   @Builder sideBarContent() {
     Column({ space: CloudThemeToken.sideNavGap }) {
       ForEach(TabList, (tab: TabItem) => {
@@ -310,9 +306,7 @@ export struct HomePage {
     })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
-    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
-    .systemMaterial(CloudMaterial.panelMaterial())
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder sideNavItem(tab: TabItem) {
@@ -340,7 +334,7 @@ export struct HomePage {
       })
       .borderRadius(CloudThemeToken.sideNavItemRadius)
       .backgroundColor(this.currentIndex === tab.tabId ?
-        CloudMaterial.navHighlightSurface() : CloudThemeToken.transparent)
+        CloudThemeToken.primarySoft : CloudThemeToken.transparent)
       .alignItems(VerticalAlign.Center)
       .onClick(() => {
         this.switchTab(tab.tabId)
@@ -364,7 +358,7 @@ export struct HomePage {
       .height(CloudThemeToken.sideNavItemHeight)
       .borderRadius(CloudThemeToken.sideNavItemRadius)
       .backgroundColor(this.currentIndex === tab.tabId ?
-        CloudMaterial.navHighlightSurface() : CloudThemeToken.transparent)
+        CloudThemeToken.primarySoft : CloudThemeToken.transparent)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
       .onClick(() => {
@@ -397,9 +391,7 @@ export struct HomePage {
     .width('100%')
     .height('100%')
     .clip(true)
-    // 内容区自铺不透明底遮住壁纸；「我的」页做全沉浸时让位透明，透出壁纸给其磨砂卡片
-    // （其余 Tab 各自铺不透明底，不受影响）
-    .backgroundColor(this.currentIndex === TabId.MINE ? Color.Transparent : CloudThemeToken.background)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder appLockOverlay() {

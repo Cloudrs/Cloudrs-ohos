@@ -297,9 +297,7 @@ export struct TabMine {
       CloudScaffold({
         scroller: this.scroller,
         topPadding: this.mineTopPadding,
-        bottomPadding: CloudThemeToken.pageBottomPadding,
-        // 沉浸：底色让位，2in1 上透出桌面壁纸，卡片磨砂浮于其上；低版本回落不透明背板
-        bgColor: CloudMaterial.materialSurface(CloudThemeToken.background)
+        bottomPadding: CloudThemeToken.pageBottomPadding
       }) {
         Column({ space: CloudThemeToken.sectionGap }) {
           this.userInfo()
@@ -655,7 +653,6 @@ export struct TabMine {
       })
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder userInfo() {
     Column() {
       Row({ space: CloudThemeToken.spacingPanel }) {
@@ -758,8 +755,7 @@ export struct TabMine {
     .padding(CloudThemeToken.spacingPage)
       .width('100%')
       .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-      .systemMaterial(CloudMaterial.cardMaterial())
+      .backgroundColor(CloudThemeToken.surface)
   }
 
   @Builder switchAccountAction() {
@@ -886,7 +882,6 @@ export struct TabMine {
     .backgroundColor(CloudThemeToken.surfaceSubtle)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder storageInfo() {
     Column({ space: CloudThemeToken.spacingPanel }) {
       Row() {
@@ -962,8 +957,7 @@ export struct TabMine {
     .padding(CloudThemeToken.spacingPage)
     .width('100%')
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
+    .backgroundColor(CloudThemeToken.surface)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
@@ -974,7 +968,6 @@ export struct TabMine {
     return `${(this.userStorage.used * CloudThemeToken.percentageFull / this.userStorage.total).toFixed(1)}%`
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder logoutButton() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Image($r('app.media.ic_square_logout'))
@@ -993,8 +986,7 @@ export struct TabMine {
     .height(CloudThemeToken.rowHeight4xl)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
+    .backgroundColor(CloudThemeToken.surface)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
     .alignItems(VerticalAlign.Center)
@@ -1010,7 +1002,6 @@ export struct TabMine {
     })
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder rowWithNext(icon: ResourceStr, backgroundColor: ResourceColor,
     title: ResourceStr, sub_title?: ResourceStr, onClickCallback?: ()=>void) {
     Row({ space: CloudThemeToken.spacingCard }) {
@@ -1043,8 +1034,7 @@ export struct TabMine {
     .height(CloudThemeToken.rowHeight4xl)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
+    .backgroundColor(CloudThemeToken.surface)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .alignItems(VerticalAlign.Center)
@@ -1057,7 +1047,6 @@ export struct TabMine {
 
   // 「外观偏好」行单独实现：右侧文案用响应式子组件 ThemeModeText，
   // 这样在设置弹窗里切换深浅色后，外面右侧文案能立即同步（rowWithNext 按值传参做不到）。
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder themeRow() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Image($r('app.media.ic_theme_setting'))
@@ -1086,8 +1075,7 @@ export struct TabMine {
     .height(CloudThemeToken.rowHeight4xl)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
+    .backgroundColor(CloudThemeToken.surface)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .alignItems(VerticalAlign.Center)
@@ -1098,7 +1086,6 @@ export struct TabMine {
 
   // 「相册备份」行单独实现：状态文字用响应式子组件 PhotoBackupStatusText，
   // 这样在设置弹窗里切换开关后，外面右侧文案能立即同步（rowWithNext 按值传参做不到）。
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder photoBackupRow() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Image($r('app.media.ic_externaldrive_fill'))
@@ -1127,8 +1114,7 @@ export struct TabMine {
     .height(CloudThemeToken.rowHeight4xl)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
+    .backgroundColor(CloudThemeToken.surface)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .alignItems(VerticalAlign.Center)
@@ -1960,7 +1946,6 @@ export struct TabMine {
     .justifyContent(FlexAlign.Center)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder feedbackEntryRow() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Image($r('app.media.ic_feedback'))
@@ -1987,8 +1972,7 @@ export struct TabMine {
     .height(CloudThemeToken.rowHeight3xl)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
+    .backgroundColor(CloudThemeToken.surface)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .alignItems(VerticalAlign.Center)

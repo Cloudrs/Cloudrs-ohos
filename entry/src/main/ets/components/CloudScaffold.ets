@@ -11,8 +11,6 @@ export struct CloudScaffold {
   horizontalPadding: number = CloudThemeToken.pagePadding
   scrollable: boolean = true
   avoidTabBar: boolean = true
-  // 页面底色，默认不透明背板；沉浸页（如 2in1 我的页透壁纸）可传透明让位给身后
-  bgColor: ResourceColor = CloudThemeToken.background
   scroller?: Scroller
   @BuilderParam content: () => void = this.defaultContent
 
@@ -39,7 +37,7 @@ export struct CloudScaffold {
       }
       .width('100%')
       .height('100%')
-      .backgroundColor(this.bgColor)
+      .backgroundColor(CloudThemeToken.background)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     } else {
@@ -54,7 +52,7 @@ export struct CloudScaffold {
         top: this.getTopInset() + this.topPadding,
         bottom: (this.avoidTabBar ? this.tabBarHeight : 0) + this.bottomPadding
       })
-      .backgroundColor(this.bgColor)
+      .backgroundColor(CloudThemeToken.background)
     }
   }
 }

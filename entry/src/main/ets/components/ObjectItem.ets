@@ -4,6 +4,7 @@ import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
 import { CommonUtil, FileType } from "../utils/CommonUtil";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { DateFormatUtil } from "../utils/DateFormatUtil";
 
 const TAG = 'ObjectItem';
@@ -383,7 +384,7 @@ export struct ObjectItem {
     .width(CloudThemeToken.menuWidth)
     .padding(CloudThemeToken.zero)
     .margin(CloudThemeToken.zero)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
     .menuItemDivider({
       color: CloudThemeToken.line,
       strokeWidth: {value: CloudThemeToken.strongLineWidth, unit: LengthUnit.PX}

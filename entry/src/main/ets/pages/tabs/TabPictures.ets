@@ -1,5 +1,5 @@
 import { abilityAccessCtrl, common, PermissionRequestResult, Permissions } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { connection, http } from '@kit.NetworkKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
@@ -15,10 +15,12 @@ import {
 import { CloudApi, FileLockConflict } from '../../model/net/CloudApi';
 import UserPreferences from '../../model/UserPreferences';
 import AppLogger from '../../utils/AppLogger';
+import { WindowMover } from '../../utils/WindowMover';
 import { showToast } from '../../utils/ToastUtil';
 import { CloudBreakpoint, CloudThemeToken } from '../../model/CloudTheme';
+import { CloudMaterial } from '../../model/CloudMaterial';
 import { EmptyState } from '../../components/EmptyState';
-import { CloudIconButton } from '../../components/CloudIconButton';
+import { TitleControlButton } from '../../components/TitleControlButton';
 import { FileSystemUtil } from '../../utils/FileSystemUtil';
 import { NetworkStateUtil } from '../../utils/NetworkStateUtil';
 import { DirectoryInfo, ObjectInfo } from '../../model/net/ApiTypes';
@@ -92,6 +94,8 @@ export struct TabPictures {
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true
+  // 2in1 窗口三键浮在右上角，标题行右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @Watch('onForegroundTickChanged')
   @StorageProp(Constant.APP_FOREGROUND_TICK) foregroundTick: number = 0;
   @State settingsEnabled: boolean = false;
@@ -3124,19 +3128,30 @@ export struct TabPictures {
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.textPrimary)
         .maxLines(1)
+        .onTouch((event: TouchEvent) => {
+          WindowMover.onTouch(event)
+        })
+      // 标题与按钮之间的空白作为 2in1 窗口拖动区（不挂整行，免得按按钮也拖窗口）
       Blank().layoutWeight(1)
-      CloudIconButton({
-        icon: $r('app.media.ic_chevron_down'),
-        iconColor: CloudThemeToken.textPrimary,
-        onAction: () => { this.toggleDrawer(); }
-      })
-        .rotate({ angle: this.drawerOpen ? 180 : 0 })
+        .height('100%')
+        .onTouch((event: TouchEvent) => {
+          WindowMover.onTouch(event)
+        })
+      // 与 HDS 标题栏菜单键同款（TitleControlButton），和其它页标题栏按钮观感一致
+      Column() {
+        TitleControlButton({
+          icon: $r('app.media.ic_title_chevron_down'),
+          label: this.drawerOpen ? '收起相册列表' : '展开相册列表',
+          onAction: () => { this.toggleDrawer(); }
+        })
+      }
+      .rotate({ angle: this.drawerOpen ? 180 : 0 })
     }
     .width('100%')
     .height('100%')
     .padding({
       left: this.getPicturesTitleLeftPadding(),
-      right: CloudThemeToken.filesTitleHorizontalPadding
+      right: CloudThemeToken.filesTitleHorizontalPadding + this.titleButtonInsetEnd
     })
     .alignItems(VerticalAlign.Center)
   }
@@ -3173,6 +3188,8 @@ export struct TabPictures {
    * Backup-status drawer inlined here (not a child component) so the live counts
    * read directly from @State — child @Prop bindings were not refreshing mid-backup.
    */
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder drawerCard() {
     Column({ space: CloudThemeToken.spacingSection }) {
       if (!this.getSettingsEnabled()) {
@@ -3271,8 +3288,9 @@ export struct TabPictures {
       bottomLeft: CloudThemeToken.surfaceRadius,
       bottomRight: CloudThemeToken.surfaceRadius
     })
-    .backgroundColor(CloudThemeToken.surfaceTranslucent)
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surfaceTranslucent))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
@@ -3313,14 +3331,17 @@ export struct TabPictures {
   }
 
   /** Frosted vertical capsule pinned at the left-center to switch 时间 / 相册. */
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder floatingSwitcher() {
     Column({ space: SWITCHER_GAP }) {
       this.switcherItem('时间', GallerySegment.TIME)
       this.switcherItem('相册', GallerySegment.ALBUM)
     }
     .padding(SWITCHER_PADDING)
-    .backgroundColor('rgba(120, 120, 128, 0.22)')
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface('rgba(120, 120, 128, 0.22)'))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .borderRadius(SWITCHER_ITEM_SIZE / 2 + SWITCHER_PADDING)
     .position({ x: CloudThemeToken.spacingSm, y: '50%' })
     .markAnchor({ x: 0, y: '50%' })
@@ -3350,6 +3371,7 @@ export struct TabPictures {
       .opacity(CloudThemeToken.zero)
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder refreshingHintOverlay() {
     Column() {
       Row({ space: CloudThemeToken.spacingXl }) {
@@ -3364,7 +3386,8 @@ export struct TabPictures {
       .height(CloudThemeToken.iconBoxSm)
       .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
       .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.panelMaterial())
       .justifyContent(FlexAlign.Center)
     }
     .width('100%')

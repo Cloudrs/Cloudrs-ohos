@@ -1,8 +1,9 @@
 import { photoAccessHelper } from "@kit.MediaLibraryKit"
-import { BusinessError } from "@kit.BasicServicesKit"
+import { BusinessError, SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit"
 import { common } from "@kit.AbilityKit"
 import { picker } from "@kit.CoreFileKit"
 import { CloudThemeToken } from "../model/CloudTheme"
+import { CloudMaterial } from "../model/CloudMaterial"
 import Constant from "../model/Constant"
 import { showToastTips, ToastType } from "../utils/ToastUtil"
 import AppLogger from "../utils/AppLogger"
@@ -56,50 +57,45 @@ export struct SelectFileSheet {
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .zIndex(1)
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder uploadSourceItem(icon: Resource, title: ResourceStr, description: ResourceStr, onClick: () => void) {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: CloudThemeToken.uploadSourceItemGap }) {
-        Stack() {
-          Image(icon)
-            .width(CloudThemeToken.icon3xl)
-            .height(CloudThemeToken.icon3xl)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.uploadSourceIconBoxSize)
-        .height(CloudThemeToken.uploadSourceIconBoxSize)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-
-        Column({ space: CloudThemeToken.uploadSourceTextGap }) {
-          Text(title)
-            .fontSize(CloudThemeToken.uploadSourceTitleTextSize)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(description)
-            .fontSize(CloudThemeToken.uploadSourceDescriptionSize)
-            .fontColor(CloudThemeToken.textSecondary)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-
-        Image($r('app.media.ic_chevron_right'))
-          .width(CloudThemeToken.sheetActionIconSize)
-          .height(CloudThemeToken.sheetActionIconSize)
-          .fillColor(CloudThemeToken.textSecondary)
+    Row({ space: CloudThemeToken.uploadSourceItemGap }) {
+      Stack() {
+        Image(icon)
+          .width(CloudThemeToken.icon3xl)
+          .height(CloudThemeToken.icon3xl)
           .draggable(false)
       }
-      .width('100%')
-      .height('100%')
-      .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.SpaceBetween)
+      .width(CloudThemeToken.uploadSourceIconBoxSize)
+      .height(CloudThemeToken.uploadSourceIconBoxSize)
+      .borderRadius(CloudThemeToken.controlRadius)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
+
+      Column({ space: CloudThemeToken.uploadSourceTextGap }) {
+        Text(title)
+          .fontSize(CloudThemeToken.uploadSourceTitleTextSize)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(description)
+          .fontSize(CloudThemeToken.uploadSourceDescriptionSize)
+          .fontColor(CloudThemeToken.textSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Image($r('app.media.ic_chevron_right'))
+        .width(CloudThemeToken.sheetActionIconSize)
+        .height(CloudThemeToken.sheetActionIconSize)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
     }
     .width('100%')
     .height(CloudThemeToken.uploadSourceRowHeight)
@@ -110,7 +106,13 @@ export struct SelectFileSheet {
     .enabled(!this.isPicking)
     .opacity(this.isPicking ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.SpaceBetween)
+    // 容器替代 Button（Button 挂不上材质）：按压反馈用 clickEffect，不占用 opacity
+    .clickEffect({ level: ClickEffectLevel.LIGHT })
+    .focusable(true)
     .onClick(onClick)
   }
 

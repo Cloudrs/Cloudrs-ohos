@@ -1,4 +1,6 @@
 import { CloudThemeToken } from '../model/CloudTheme';
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { PhotoBackupSettings } from '../model/PhotoBackupModel';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_PATH_KEY } from '../model/PhotoBackupSettingsStore';
 import Constant from '../model/Constant';
@@ -31,6 +33,8 @@ export struct PhotoBackupSettingsSheet {
     PhotoBackupSettingsStore.save(next);
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder switchRow(title: string, desc: string, value: boolean, onToggle: (v: boolean) => void) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -57,7 +61,8 @@ export struct PhotoBackupSettingsSheet {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
@@ -78,6 +83,8 @@ export struct PhotoBackupSettingsSheet {
       })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   build() {
     Column({ space: CloudThemeToken.spacingPage }) {
       // Switch row: 开启自动备份
@@ -118,7 +125,8 @@ export struct PhotoBackupSettingsSheet {
       .alignItems(VerticalAlign.Center)
       .borderRadius(CloudThemeToken.controlRadiusLg)
       .clip(true)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
       .onClick(() => {
         this.onPickPath();
@@ -180,7 +188,8 @@ export struct PhotoBackupSettingsSheet {
       .alignItems(VerticalAlign.Center)
       .borderRadius(CloudThemeToken.controlRadiusLg)
       .clip(true)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     }
     .width('100%')
@@ -192,6 +201,6 @@ export struct PhotoBackupSettingsSheet {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 }

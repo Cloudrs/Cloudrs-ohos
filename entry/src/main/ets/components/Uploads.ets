@@ -1,7 +1,9 @@
 import { LengthMetrics, LengthUnit } from "@kit.ArkUI"
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { EmptyState } from "./EmptyState"
 import { FileModelState } from "../model/FileModel"
 import { CloudThemeToken } from "../model/CloudTheme"
+import { CloudMaterial } from "../model/CloudMaterial"
 import { TransportObject } from "../model/TransportObject"
 import { CommonUtil } from "../utils/CommonUtil"
 import LazyDataSource from "../utils/LazyDataSource"
@@ -62,6 +64,8 @@ export struct Uploads {
     return TransferStateUtil.getStateColor(state)
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder uploadItem(object: TransportObject) {
     Row({ space: CloudThemeToken.transferItemGap }) {
       Image(CommonUtil.getFileIconInfo(object.item.name).icon)
@@ -130,7 +134,8 @@ export struct Uploads {
     .width('100%')
     .padding(CloudThemeToken.transferItemPadding)
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.Center)
   }

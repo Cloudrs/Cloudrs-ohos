@@ -6,6 +6,8 @@ import UserPreferences from "../../model/UserPreferences";
 import { CloudApi } from "../../model/net/CloudApi";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { CloudThemeToken } from "../../model/CloudTheme";
+import { WindowMover } from "../../utils/WindowMover";
+import { CloudMaterial } from "../../model/CloudMaterial";
 import { CloudScaffold } from "../../components/CloudScaffold";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { FeedbackSheet } from "../../components/FeedbackSheet";
@@ -22,7 +24,7 @@ import AppLogger from "../../utils/AppLogger";
 import { showToast } from "../../utils/ToastUtil";
 import { AppLockUtil } from "../../utils/AppLockUtil";
 import { SystemAuthResult } from "../../utils/SystemAuthUtil";
-import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
+import { BusinessError, SuppressWarnings, SuppressWarningsType, pasteboard } from "@kit.BasicServicesKit";
 import { PhotoBackupSettingsSheet } from '../../components/PhotoBackupSettingsSheet';
 import { PathSelectSheet } from '../../components/PathSelectSheet';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_ENABLED_KEY } from '../../model/PhotoBackupSettingsStore';
@@ -85,7 +87,14 @@ export struct TabMine {
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
-  @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0
+  @StorageProp(Constant.WINDOW_WIDTH_VP) @Watch('onLayoutMetricChanged') sheetLayoutWidth: number = 0
+  // 宽屏侧栏收起时，HomePage 的悬浮折叠键会压在页面左上角，用来给内容让位避免和头像重叠
+  @StorageProp(Constant.SIDEBAR_VISIBLE) @Watch('onLayoutMetricChanged') sidebarVisible: boolean = true
+  // 2in1 隐藏系统标题栏后窗口三键区宽度（其它设备为 0）；>0 时顶部加一行固定标题，卡片从其下开始
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) @Watch('onLayoutMetricChanged') titleButtonInsetEnd: number = 0
+  // 我的页顶部让位（避开折叠键）；@StorageProp 只在方法里读不会被 build 追踪，故用 @Watch 驱动 @State
+  @State mineTopPadding: number = 0
+  @State mineTitleLeftPadding: number = CloudThemeToken.pagePadding
   @State siteConfig?: SiteConfig = undefined
   @State userStorage?: UserStorage = undefined
   @State userSetting?: UserSetting = undefined
@@ -129,6 +138,7 @@ export struct TabMine {
   @State knockPasswordEnabled: boolean = false
 
   aboutToAppear() {
+    this.onLayoutMetricChanged()
     this.loadLocalPreferences()
     if (this.isActive) {
       this.loadMineData()
@@ -278,23 +288,67 @@ export struct TabMine {
     })
   }
 
+  // 宽屏且侧栏收起时，给内容顶部让出 HomePage 悬浮折叠键的高度，避免头像被压住
+  private onLayoutMetricChanged(): void {
+    const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
+    const toggleFloating = CloudThemeToken.isWideBreakpoint(bp) && !this.sidebarVisible
+    const toggleSpace = CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
+    // 有标题行时折叠键落在标题行里，由标题行左内边距让位；否则整页下移让开折叠键
+    this.mineTopPadding = (toggleFloating && this.titleButtonInsetEnd <= 0) ? toggleSpace : CloudThemeToken.zero
+    this.mineTitleLeftPadding = toggleFloating ? toggleSpace : CloudThemeToken.pagePadding
+  }
+
+  // 2in1：与文件页「存储」、相册页「相册」同一行位置的固定标题，兼作窗口拖动区（行内无按钮）
+  @Builder mineTitleRow() {
+    Row() {
+      Text('我的')
+        .fontSize(CloudThemeToken.textSizeHeadline)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(CloudThemeToken.textPrimary)
+        .maxLines(1)
+    }
+    .width('100%')
+    .height(CloudThemeToken.rowHeight5xl)
+    .padding({
+      left: this.mineTitleLeftPadding,
+      right: CloudThemeToken.pagePadding + this.titleButtonInsetEnd
+    })
+    .alignItems(VerticalAlign.Center)
+    .backgroundColor(CloudThemeToken.background)
+    .onTouch((event: TouchEvent) => {
+      WindowMover.onTouch(event)
+    })
+  }
+
   build() {
     Stack() {
-      CloudScaffold({
-        scroller: this.scroller,
-        topPadding: CloudThemeToken.zero,
-        bottomPadding: CloudThemeToken.pageBottomPadding
-      }) {
-        Column({ space: CloudThemeToken.sectionGap }) {
-          this.userInfo()
-          this.storageInfo()
-          SectionHeader({ title: $r('app.string.more_setting') })
-          this.settingButton()
-          this.webButton()
-          this.logoutButton()
+      Column() {
+        if (this.titleButtonInsetEnd > 0) {
+          this.mineTitleRow()
+        }
+        // 自定义组件尾随闭包后不能再链属性，故外包一层承接 layoutWeight
+        Column() {
+          CloudScaffold({
+            scroller: this.scroller,
+            topPadding: this.mineTopPadding,
+            bottomPadding: CloudThemeToken.pageBottomPadding
+          }) {
+            Column({ space: CloudThemeToken.sectionGap }) {
+              this.userInfo()
+              this.storageInfo()
+              SectionHeader({ title: $r('app.string.more_setting') })
+              this.settingButton()
+              this.webButton()
+              this.logoutButton()
+            }
+            .width('100%')
+          }
         }
         .width('100%')
+        .layoutWeight(1)
       }
+      .width('100%')
+      .height('100%')
 
       Column()
         .width(0)
@@ -303,7 +357,8 @@ export struct TabMine {
           detents: [SheetSize.FIT_CONTENT],
           title: { title: '问题反馈', subtitle: '优先邮件反馈，附带日志和诊断信息方便快速定位' },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
         })
@@ -315,7 +370,8 @@ export struct TabMine {
           detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           title: { title: '日志与诊断', subtitle: '已脱敏 · 复制诊断会一并带上日志尾部' },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
         })
@@ -327,7 +383,8 @@ export struct TabMine {
           detents: [SheetSize.MEDIUM, SheetSize.LARGE],
           title: { title: $r('app.string.about') },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onDisappear: () => {
@@ -342,7 +399,8 @@ export struct TabMine {
           detents: [SheetSize.FIT_CONTENT],
           title: { title: this.getSettingsSheetTitle() },
           showClose: true,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onWillAppear: () => {
@@ -372,7 +430,8 @@ export struct TabMine {
         .height(0)
         .bindSheet($$this.showPhotoBackupPathSheet, this.photoBackupPathSheet(), {
           showClose: false,
-          backgroundColor: CloudThemeToken.background,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
           preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
           width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
           onDisappear: () => {
@@ -666,6 +725,10 @@ export struct TabMine {
           .borderWidth(CloudThemeToken.lineWidth)
           .borderColor(CloudThemeToken.line)
           .backgroundColor(CloudThemeToken.primarySoft)
+          // 头像暂不支持在端上换图，点击等同点名字：进入账号切换
+          .onClick(() => {
+            this.openUserSwitchSheet()
+          })
 
         Column({ space: CloudThemeToken.spacingMd }) {
           Text(this.getNicknameText())
@@ -1100,6 +1163,8 @@ export struct TabMine {
     })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder rowWithSelect(title: ResourceStr) {
     Row({ space: CloudThemeToken.spacingCard }) {
       Column({ space: CloudThemeToken.spacingSm }) {
@@ -1142,21 +1207,32 @@ export struct TabMine {
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .alignItems(VerticalAlign.Center)
   }
 
   @Builder concurrentStepButton(text: string, disabled: boolean, onClick: () => void) {
+    // 点击热区放大到 48×48（填满步进器行高），字形不变、四周留白变大，手机上不易点空；
+    // 按下给一层 primarySoft 底反馈，明确「点到了」
     Text(text)
-      .width(CloudThemeToken.rowHeightSm)
-      .height(CloudThemeToken.rowHeightSm)
+      .width(CloudThemeToken.rowHeight2xl)
+      .height(CloudThemeToken.rowHeight2xl)
       .fontSize(CloudThemeToken.textSizeLarge)
       .fontWeight(FontWeight.Bold)
       .fontColor(disabled ? CloudThemeToken.textSecondary : CloudThemeToken.textPrimary)
       .textAlign(TextAlign.Center)
       .borderRadius(CloudThemeToken.controlRadiusRoundMd)
       .opacity(disabled ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
+      .stateStyles({
+        pressed: {
+          .backgroundColor(disabled ? CloudThemeToken.transparent : CloudThemeToken.primarySoft)
+        },
+        normal: {
+          .backgroundColor(CloudThemeToken.transparent)
+        }
+      })
       .onClick(() => {
         if (!disabled) {
           onClick()
@@ -1287,32 +1363,6 @@ export struct TabMine {
     })
   }
 
-  @Builder userSwitchOverlay() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.overlayScrim)
-        .onClick(() => {
-          this.showUserSwitchSheet = false
-        })
-
-      Column() {
-        this.userSwitchSheet()
-      }
-      .width('100%')
-      .padding({
-        bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-      })
-      .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
-      .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-      .backgroundColor(CloudThemeToken.background)
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
-  }
-
   @Builder settingsSheet() {
     if (this.showUserSwitchSheet) {
       this.userSwitchSheet()
@@ -1334,6 +1384,8 @@ export struct TabMine {
     })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder privacySettingsSheet() {
     Column({ space: CloudThemeToken.spacingPage }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1356,7 +1408,8 @@ export struct TabMine {
       .padding(CloudThemeToken.spacingPanel)
       .alignItems(HorizontalAlign.Start)
       .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
 
       this.systemAuthActionRow()
@@ -1378,9 +1431,11 @@ export struct TabMine {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder privacyActionRow(title: string, description: string, danger: boolean, onClick: () => void) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1407,11 +1462,14 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(danger ? CloudThemeToken.dangerSoft : CloudThemeToken.surface)
+    .backgroundColor(danger ? CloudThemeToken.dangerSoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: danger ? CloudThemeToken.danger : CloudThemeToken.line })
     .onClick(onClick)
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder systemAuthActionRow() {
     Row({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1441,7 +1499,8 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(this.systemAuthEnabled ? CloudThemeToken.successSoft : CloudThemeToken.surface)
+    .backgroundColor(this.systemAuthEnabled ? CloudThemeToken.successSoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({
       width: CloudThemeToken.lineWidth,
       color: this.systemAuthEnabled ? CloudThemeToken.success : CloudThemeToken.line
@@ -1480,9 +1539,11 @@ export struct TabMine {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder settingSwitchRow(title: string, desc: string, value: boolean, onToggle: (v: boolean) => void) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -1515,7 +1576,8 @@ export struct TabMine {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
@@ -1554,9 +1616,11 @@ export struct TabMine {
     })
     .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder knockExpireRow() {
     Column({ space: CloudThemeToken.spacingMd }) {
       Text('分享链接有效期')
@@ -1575,7 +1639,8 @@ export struct TabMine {
     .alignItems(HorizontalAlign.Start)
     .padding(CloudThemeToken.spacingPanel)
     .borderRadius(CloudThemeToken.controlRadiusLg)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 

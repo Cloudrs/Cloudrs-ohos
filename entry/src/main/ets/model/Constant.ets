@@ -203,6 +203,12 @@ class Constant {
   LAYOUT_MODE: string = 'layoutMode'
 
   SIDEBAR_VISIBLE: string = 'sidebarVisible'
+  // 2in1 隐藏标题栏后，右上角窗口三键区占用的宽度（vp，含距右边缘距离）；非 2in1 恒为 0
+  TITLE_BUTTON_INSET_END: string = 'titleButtonInsetEnd'
+  // 2in1 主窗口状态（window.WindowStatusType），自绘窗口三键据此切换最大化/还原、全屏时隐藏
+  WINDOW_STATUS: string = 'windowStatus'
+  // 2in1 系统三键已隐藏、改由应用自绘（WindowControls）
+  WINDOW_CONTROLS_CUSTOM: string = 'windowControlsCustom'
 
   CLOUD_BASE_URL: string = 'cloudBaseUrl'
 

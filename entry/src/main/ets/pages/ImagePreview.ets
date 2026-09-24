@@ -1,3 +1,4 @@
+import { LengthMetrics } from '@kit.ArkUI';
 import Constant from "../model/Constant";
 import { image } from "@kit.ImageKit";
 import { CloudApi } from "../model/net/CloudApi";
@@ -10,6 +11,8 @@ import { uniformTypeDescriptor } from "@kit.ArkData";
 import { common } from "@kit.AbilityKit";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
+import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
 import AppLogger from "../utils/AppLogger";
@@ -25,6 +28,8 @@ export struct ImagePreviewPage {
   routeParam?: ImagePreview
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0;
   @State isLoading: boolean = true;
   @State currentIndex: number = 0
@@ -302,6 +307,10 @@ export struct ImagePreviewPage {
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
         }
       },
+      padding: {
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
+      },
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false
     })
@@ -345,8 +354,11 @@ export struct ImagePreviewPage {
     }
   }
 
+  // 压在图片上的翻页圆钮：容器 + floatingControlMaterial（Button 挂不上材质）；
+  // EXQUISITE 档留薄染保白箭头对比，其余档/低版本回落原深色毛玻璃。
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder navArrowButton(isNext: boolean) {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
+    Stack() {
       SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
         .fontColor([CloudThemeToken.onPrimary])
@@ -354,8 +366,12 @@ export struct ImagePreviewPage {
     }
     .width(CloudThemeToken.imagePreviewArrowButtonSize)
     .height(CloudThemeToken.imagePreviewArrowButtonSize)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .borderRadius(CloudThemeToken.imagePreviewArrowButtonSize / CloudThemeToken.halfDivisor)
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .enabled(this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {

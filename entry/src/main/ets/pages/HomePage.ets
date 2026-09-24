@@ -9,10 +9,18 @@ import { TabId, TabItem, TabList } from '../model/TabData';
 import { HdsTabs, hdsMaterial } from '@kit.UIDesignKit';
 import { CloudRouter } from '../utils/CloudRouter';
 import { common } from '@kit.AbilityKit';
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { deviceInfo, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { AppLockUtil } from '../utils/AppLockUtil';
 import { showToast } from '../utils/ToastUtil';
 import AppLogger from '../utils/AppLogger';
+import { TitleControlButton } from '../components/TitleControlButton';
+import { WindowMover } from '../utils/WindowMover';
+import UserPreferences from '../model/UserPreferences';
+import UserDatabase from '../model/UserDatabase';
+import { DbUserInfo } from '../model/net/ApiTypes';
+import { AccountAvatar } from '../components/AccountAvatar';
+import { UserSwitchSheet } from '../components/UserSwitchSheet';
 
 const HOME_TAB_NAMES: Record<number, string> = { 0: 'files', 1: 'pictures', 2: 'remoteDown', 3: 'mine' };
 
@@ -31,11 +39,19 @@ export struct HomePage {
   @State appLockError: string = ''
   @State preloadMineIconsEnabled: boolean = false
   @State showSideBar: boolean = true
+  // 侧栏底部账号卡片：切账号后按 scope 变化重读
+  @Watch('loadAccountCard')
+  @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
+  @State accountInfo: DbUserInfo | null = null
+  @State showAccountSheet: boolean = false
+  private accountUser: string = ''
+  private accountUrl: string = ''
   private appLockVerifyTimer: number = -1
 
   aboutToAppear(): void {
     AppStorage.set(Constant.TAB_BAR_HEIGHT, CloudThemeToken.tabBarHeight)
     AppStorage.setOrCreate(Constant.SIDEBAR_VISIBLE, this.showSideBar)
+    this.loadAccountCard()
     CloudRouter.setHomeBackEnabled(this.currentIndex === TabId.FILES)
     this.scheduleVerifyAppLock()
     setTimeout(() => {
@@ -97,14 +113,15 @@ export struct HomePage {
       .verticalAlign(VerticalAlign.Center)
       .layoutMode(LayoutMode.VERTICAL)
       .padding(CloudThemeToken.bottomTabBarItemPadding)
+      // 未选中用正文黑（参考 IT之家 风格，细描边图标配黑色更利落），选中主色
       .labelStyle({
         font: { size: CloudThemeToken.textSizeSmall },
         selectedColor: CloudThemeToken.primary,
-        unselectedColor: CloudThemeToken.textSecondary
+        unselectedColor: CloudThemeToken.textPrimary
       })
       .iconStyle({
         selectedColor: CloudThemeToken.primary,
-        unselectedColor: CloudThemeToken.textSecondary
+        unselectedColor: CloudThemeToken.textPrimary
       })
   }
 
@@ -198,6 +215,37 @@ export struct HomePage {
     })
   }
 
+  private loadAccountCard(): void {
+    this.accountUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
+    this.accountUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
+    this.accountInfo = this.accountUser.length > 0 ? UserDatabase.getUserInfo(this.accountUser, this.accountUrl) : null
+  }
+
+  private accountHost(): string {
+    return this.accountUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+  }
+
+  // 折叠键：XL 展开时收进侧栏顶行右端，LG 展开时居中于图标栏顶部，收起时停在内容区左上角
+  private sideBarToggleLeft(): number {
+    if (!this.showSideBar) {
+      return CloudThemeToken.spacingCard
+    }
+    const width = this.currentSideBarWidth()
+    if (this.currentBreakpoint() === CloudBreakpoint.XL) {
+      return width - CloudThemeToken.spacingCard - CloudThemeToken.sideBarToggleSize
+    }
+    return (width - CloudThemeToken.sideBarToggleSize) / CloudThemeToken.halfDivisor
+  }
+
+  private sideBarToggleTop(): number {
+    if (deviceInfo.deviceType === '2in1') {
+      // 系统标题栏已隐藏，顶行与窗口三键区同高（rowHeight5xl），折叠键在其中垂直居中
+      return (CloudThemeToken.rowHeight5xl - CloudThemeToken.sideBarToggleSize) / CloudThemeToken.halfDivisor
+    }
+    // 上移一点，与 HDS 标题栏返回键垂直居中对齐（两者分属不同布局系统，实测偏低约 3vp）
+    return this.controlButtonTop() - CloudThemeToken.spacingTiny
+  }
+
   private currentSideBarWidth(): number {
     return new BreakpointType<number>(0, 0,
       CloudThemeToken.sideNavWidthLg, CloudThemeToken.sideNavWidthXl).getValue(this.currentBreakpoint())
@@ -214,6 +262,7 @@ export struct HomePage {
     return Math.max(this.topRectHeight, CloudThemeToken.statusBarFallbackHeight) + CloudThemeToken.spacingCard
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder wideLayout() {
     Stack({ alignContent: Alignment.TopStart }) {
       SideBarContainer(SideBarContainerType.Embed) {
@@ -249,40 +298,182 @@ export struct HomePage {
 
       // 自定义折叠按钮（圆角浅灰背景由 Button 自带）
       this.sideBarToggleButton()
+
+      Column()
+        .width(0)
+        .height(0)
+        .bindSheet($$this.showAccountSheet, this.accountSwitchSheet(), {
+          detents: [SheetSize.FIT_CONTENT],
+          title: { title: '选择账号' },
+          showClose: true,
+          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+          systemMaterial: CloudMaterial.sheetMaterial(),
+          preferType: CloudThemeToken.sheetTypeForWidth(this.windowWidth),
+          width: CloudThemeToken.sheetWidthForWidth(this.windowWidth)
+        })
     }
     .width('100%')
     .height('100%')
   }
 
+  // 折叠键与文件页 HDS 返回键并排：同用 TitleControlButton，底色、光感与菜单键一致。
+  // 图标表达当前状态：展开为通长分隔线的侧栏面板，收起时分隔线缩成框内短竖条
   @Builder sideBarToggleButton() {
-    Button({ type: ButtonType.Normal }) {
-      SymbolGlyph(this.showSideBar ?
-        $r('sys.symbol.close_sidebar') : $r('sys.symbol.open_sidebar'))
-        .fontSize(CloudThemeToken.sideBarToggleIconSize)
-        .fontColor([CloudThemeToken.textPrimary])
-        .draggable(false)
-    }
-    .width(CloudThemeToken.sideBarToggleSize)
-    .height(CloudThemeToken.sideBarToggleSize)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
-    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.windowWidth, CloudThemeToken.sideBarToggleRadius))
-    .padding(0)
-    .margin({
-      left: CloudThemeToken.spacingCard,
-      top: this.controlButtonTop()
-    })
-    .onClick(() => {
-      this.getUIContext().animateTo({
-        duration: CloudThemeToken.defaultAnimationDuration,
-        curve: Curve.EaseInOut
-      }, () => {
-        this.showSideBar = !this.showSideBar
-        AppStorage.setOrCreate(Constant.SIDEBAR_VISIBLE, this.showSideBar)
+    Column() {
+      TitleControlButton({
+        icon: this.showSideBar ? $r('app.media.ic_sidebar_panel') : $r('app.media.ic_sidebar_panel_collapsed'),
+        label: this.showSideBar ? '收起侧栏' : '展开侧栏',
+        onAction: () => {
+          this.getUIContext().animateTo({
+            duration: CloudThemeToken.defaultAnimationDuration,
+            curve: Curve.EaseInOut
+          }, () => {
+            this.showSideBar = !this.showSideBar
+            AppStorage.setOrCreate(Constant.SIDEBAR_VISIBLE, this.showSideBar)
+          })
+        }
       })
+    }
+    .margin({
+      left: this.sideBarToggleLeft(),
+      top: this.sideBarToggleTop()
     })
   }
 
+  // 侧栏与内容区同用应用背景色（同色统一），仅靠 SideBarContainer 分隔线与选中高亮区分。
+  // XL 为原生风侧栏；LG 为图标栏（Rail）
   @Builder sideBarContent() {
+    if (this.currentBreakpoint() === CloudBreakpoint.XL) {
+      this.sideBarContentXl()
+    } else {
+      this.sideBarContentRail()
+    }
+  }
+
+  // 参照系统「文件管理」：顶行品牌（兼窗口拖动区，折叠键浮在其右端）、分组小标题、紧凑导航行、底部账号卡片
+  @Builder sideBarContentXl() {
+    Column() {
+      Row({ space: CloudThemeToken.spacingCard }) {
+        Image($r('app.media.cloudrs'))
+          .width(CloudThemeToken.sideNavLogoSize)
+          .height(CloudThemeToken.sideNavLogoSize)
+          .borderRadius(CloudThemeToken.controlRadiusSm)
+          .draggable(false)
+        Text('Cloudrs')
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+      }
+      .width('100%')
+      .height(CloudThemeToken.rowHeight5xl)
+      .padding({
+        left: CloudThemeToken.spacingSection,
+        right: CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize
+      })
+      // 隐藏系统标题栏后由这行承担窗口拖动（折叠键是浮层，不在此行内，不会误触发）
+      .onTouch((event: TouchEvent) => {
+        WindowMover.onTouch(event)
+      })
+
+      Text('浏览')
+        .fontSize(CloudThemeToken.textSizeSmall)
+        .fontColor(CloudThemeToken.textSecondary)
+        .padding({
+          left: CloudThemeToken.spacingSection,
+          top: CloudThemeToken.spacingXs,
+          bottom: CloudThemeToken.spacingSm
+        })
+
+      Column({ space: CloudThemeToken.sideNavRowGap }) {
+        ForEach(TabList, (tab: TabItem) => {
+          this.sideNavItem(tab)
+        }, (tab: TabItem) => `sideNav-${tab.tabId}`)
+      }
+      .width('100%')
+
+      Blank()
+
+      this.sideAccountCard()
+    }
+    .width('100%')
+    .height('100%')
+    .padding({
+      left: CloudThemeToken.spacingCard,
+      right: CloudThemeToken.spacingCard,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingCard
+    })
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor(CloudThemeToken.background)
+  }
+
+  // 当前账号：头像 + 昵称 + 站点，点击弹出账号切换
+  @Builder sideAccountCard() {
+    Row({ space: CloudThemeToken.spacingCard }) {
+      if (this.accountInfo) {
+        AccountAvatar({
+          baseUrl: this.accountInfo.url,
+          userId: this.accountInfo.userinfo.id,
+          avatar: this.accountInfo.userinfo.avatar,
+          cookie: this.accountInfo.cookie,
+          refreshToken: this.accountInfo.refresh_token,
+          username: this.accountInfo.username,
+          avatarSize: CloudThemeToken.iconBoxXs,
+          radius: CloudThemeToken.iconBoxXs / CloudThemeToken.halfDivisor
+        })
+      }
+      Column({ space: CloudThemeToken.spacingTiny }) {
+        Text(this.accountInfo?.userinfo.nickname || this.accountUser)
+          .fontSize(CloudThemeToken.textSizeBody)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.accountHost())
+          .fontSize(CloudThemeToken.textSizeMicro)
+          .fontColor(CloudThemeToken.textSecondary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(CloudThemeToken.iconMd)
+        .fontColor([CloudThemeToken.textSecondary])
+    }
+    .width('100%')
+    .padding(CloudThemeToken.spacingCard)
+    .borderRadius(CloudThemeToken.controlRadiusLg)
+    .backgroundColor(CloudThemeToken.surface)
+    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+    .alignItems(VerticalAlign.Center)
+    .clickEffect({ level: ClickEffectLevel.LIGHT })
+    .accessibilityText('切换账号')
+    .onClick(() => {
+      this.loadAccountCard()
+      this.showAccountSheet = true
+    })
+  }
+
+  @Builder accountSwitchSheet() {
+    UserSwitchSheet({
+      currentUser: this.accountUser,
+      currentUrl: this.accountUrl,
+      onSelect: (user: DbUserInfo) => {
+        // 过期账号会跳登录页，得先把 sheet 关掉再跳
+        if (CloudRouter.switchToUser(user.username, user.url, () => { this.showAccountSheet = false })) {
+          this.showAccountSheet = false
+          this.loadAccountCard()
+        }
+      },
+      onClose: () => {
+        this.showAccountSheet = false
+      }
+    })
+  }
+
+  @Builder sideBarContentRail() {
     Column({ space: CloudThemeToken.sideNavGap }) {
       ForEach(TabList, (tab: TabItem) => {
         this.sideNavItem(tab)
@@ -298,17 +489,18 @@ export struct HomePage {
     })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder sideNavItem(tab: TabItem) {
     if (this.currentBreakpoint() === CloudBreakpoint.XL) {
-      Row({ space: CloudThemeToken.spacingSection }) {
+      Row({ space: CloudThemeToken.spacingCard }) {
+        // 细描边图标自带约 3vp 内缩，24 的框里字形约 20，与紧凑行 14 号字匀称
         Image(tab.image)
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
+          .width(CloudThemeToken.icon3xl)
+          .height(CloudThemeToken.icon3xl)
           .fillColor(this.currentIndex === tab.tabId ?
-            CloudThemeToken.primary : CloudThemeToken.textSecondary)
+            CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .draggable(false)
         Text(tab.text)
           .fontSize(CloudThemeToken.textSizeBody)
@@ -318,12 +510,12 @@ export struct HomePage {
           .layoutWeight(1)
       }
       .width('100%')
-      .height(CloudThemeToken.sideNavItemHeight)
+      .height(CloudThemeToken.sideNavRowHeight)
       .padding({
-        left: CloudThemeToken.spacingPage,
-        right: CloudThemeToken.spacingPage
+        left: CloudThemeToken.spacingSection,
+        right: CloudThemeToken.spacingSection
       })
-      .borderRadius(CloudThemeToken.sideNavItemRadius)
+      .borderRadius(CloudThemeToken.sideNavRowRadius)
       .backgroundColor(this.currentIndex === tab.tabId ?
         CloudThemeToken.primarySoft : CloudThemeToken.transparent)
       .alignItems(VerticalAlign.Center)
@@ -333,15 +525,15 @@ export struct HomePage {
     } else {
       Column({ space: CloudThemeToken.spacingXs }) {
         Image(tab.image)
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
+          .width(CloudThemeToken.icon4xl)
+          .height(CloudThemeToken.icon4xl)
           .fillColor(this.currentIndex === tab.tabId ?
-            CloudThemeToken.primary : CloudThemeToken.textSecondary)
+            CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .draggable(false)
         Text(tab.text)
           .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(this.currentIndex === tab.tabId ?
-            CloudThemeToken.primary : CloudThemeToken.textSecondary)
+            CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .fontWeight(this.currentIndex === tab.tabId ? FontWeight.Medium : FontWeight.Regular)
           .maxLines(1)
       }
@@ -382,6 +574,7 @@ export struct HomePage {
     .width('100%')
     .height('100%')
     .clip(true)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder appLockOverlay() {

@@ -1,5 +1,7 @@
 import Constant from '../model/Constant';
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { CloudThemeToken } from '../model/CloudTheme';
+import { CloudMaterial } from '../model/CloudMaterial';
 import { PhotoBackupItem, PhotoBackupStatus } from '../model/PhotoBackupModel';
 import { PhotoLocalPreviewParam } from '../model/Params';
 import { CommonUtil } from '../utils/CommonUtil';
@@ -23,6 +25,8 @@ export struct PhotoLocalPreviewPage {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
+  // 2in1 隐藏系统标题栏后窗口三键浮在右上角，顶栏右侧给它让位；其它设备为 0
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @State items: PhotoBackupItem[] = []
   @State index: number = 0
   @State backupEnabled: boolean = false
@@ -156,6 +160,8 @@ export struct PhotoLocalPreviewPage {
     .height('100%')
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder infoBar(item: PhotoBackupItem) {
     // 文件名已移到顶栏,剩余信息合并为单行,降低底栏高度
     Row() {
@@ -177,10 +183,13 @@ export struct PhotoLocalPreviewPage {
       top: CloudThemeToken.spacingPanel,
       bottom: this.bottomRectHeight + CloudThemeToken.spacingPanel
     })
-    .backgroundColor('rgba(0, 0, 0, 0.32)')
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
   }
 
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder topChrome() {
     Row({ space: CloudThemeToken.spacingCard }) {
       this.backButton()
@@ -201,16 +210,20 @@ export struct PhotoLocalPreviewPage {
       top: this.sysTopRectHeight + CloudThemeToken.spacingPanel,
       bottom: CloudThemeToken.spacingPanel,
       left: CloudThemeToken.spacingPage,
-      right: CloudThemeToken.spacingPage
+      right: CloudThemeToken.spacingPage + this.titleButtonInsetEnd
     })
-    .backgroundColor('rgba(0, 0, 0, 0.32)')
-    .backdropBlur(18)
+    .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
+    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    .systemMaterial(CloudMaterial.panelMaterial())
     .position({ x: 0, y: 0 })
     .opacity(this.chromeVisible ? 1 : 0)
   }
 
+  // 压在照片上的圆控件：容器 + floatingControlMaterial（Button 挂不上材质）；
+  // EXQUISITE 档留薄染保白图标对比，其余档/低版本回落原深色毛玻璃。
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder backButton() {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
+    Stack() {
       SymbolGlyph($r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.photoLocalPreviewBackIconSize)
         .fontColor([Color.White])
@@ -218,9 +231,14 @@ export struct PhotoLocalPreviewPage {
     }
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .enabled(this.chromeVisible)
+    .accessibilityText('返回')
     .onClick(() => {
       CloudRouter.pop()
     })
@@ -241,8 +259,9 @@ export struct PhotoLocalPreviewPage {
     }
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder navArrowButton(isNext: boolean) {
-    Button({ type: ButtonType.Circle, stateEffect: false }) {
+    Stack() {
       SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
         .fontColor([Color.White])
@@ -250,8 +269,12 @@ export struct PhotoLocalPreviewPage {
     }
     .width(CloudThemeToken.imagePreviewArrowButtonSize)
     .height(CloudThemeToken.imagePreviewArrowButtonSize)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
+    .borderRadius(CloudThemeToken.imagePreviewArrowButtonSize / CloudThemeToken.halfDivisor)
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
+      CloudThemeToken.videoPreviewControlMaterialTint))
+    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
+    .systemMaterial(CloudMaterial.floatingControlMaterial())
     .enabled(this.chromeVisible && this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {

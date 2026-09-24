@@ -1,6 +1,8 @@
 import { DbUserInfo } from "../model/net/ApiTypes";
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import UserDatabase from "../model/UserDatabase";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { showCloudConfirmDialog } from "../utils/CloudDialogUtil";
 import { ActiveAccount } from "../utils/ActiveAccount";
 import { AccountAvatar } from "./AccountAvatar";
@@ -50,6 +52,7 @@ export struct UserSwitchSheet {
     })
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   build() {
     Column({ space: CloudThemeToken.spacingPage }) {
       if (this.currentUrl.length > 0) {
@@ -68,7 +71,8 @@ export struct UserSwitchSheet {
         .height(CloudThemeToken.rowHeightSm)
         .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
         .borderRadius(CloudThemeToken.cardRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surfaceSubtle))
+        .systemMaterial(CloudMaterial.cardMaterial())
         .alignItems(VerticalAlign.Center)
       }
 
@@ -101,9 +105,11 @@ export struct UserSwitchSheet {
       bottom: CloudThemeToken.spacingSheetBottom
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder userRow(user: DbUserInfo) {
     Row({ space: CloudThemeToken.spacingCard }) {
       AccountAvatar({
@@ -119,13 +125,15 @@ export struct UserSwitchSheet {
 
       Column({ space: CloudThemeToken.spacingTiny }) {
         Row({ space: CloudThemeToken.spacingXs }) {
+          // 名字可收缩、超长省略；「已过期」紧跟其后（flexShrink(0) 不被挤压），
+          // 不再用 layoutWeight 把徽标顶到右缘——那样各行徽标 x 会因是否有勾选而参差
           Text(user.userinfo.nickname.length > 0 ? user.userinfo.nickname : user.username)
             .fontSize(CloudThemeToken.textSizeLarge)
             .fontWeight(FontWeight.Medium)
             .fontColor(CloudThemeToken.textPrimary)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
+            .flexShrink(1)
 
           if (this.isExpired(user)) {
             Text('已过期')
@@ -133,6 +141,7 @@ export struct UserSwitchSheet {
               .fontColor(CloudThemeToken.danger)
               .backgroundColor(CloudThemeToken.dangerSoft)
               .borderRadius(CloudThemeToken.controlRadiusSm)
+              .flexShrink(0)
               .padding({
                 left: CloudThemeToken.spacingXs + CloudThemeToken.spacingTiny,
                 right: CloudThemeToken.spacingXs + CloudThemeToken.spacingTiny,
@@ -142,6 +151,7 @@ export struct UserSwitchSheet {
           }
         }
         .width('100%')
+        .justifyContent(FlexAlign.Start)
         .alignItems(VerticalAlign.Center)
 
         Text(user.username)
@@ -181,7 +191,8 @@ export struct UserSwitchSheet {
     .height(CloudThemeToken.cardHeightLg)
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(this.isCurrentUser(user) ? CloudThemeToken.primarySoft : CloudThemeToken.surface)
+    .backgroundColor(this.isCurrentUser(user) ? CloudThemeToken.primarySoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
     .border({
       width: CloudThemeToken.lineWidth,
       color: this.isCurrentUser(user) ? CloudThemeToken.primary : CloudThemeToken.line

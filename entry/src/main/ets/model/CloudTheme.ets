@@ -514,13 +514,14 @@ export class CloudThemeToken {
   static readonly selectedHighlight: ResourceColor = '#66FFFFFF'
   static readonly imagePreviewCounterBackground: ResourceColor = 'rgba(255, 255, 255, 0.14)'
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
+  // 高算力档材质接管后的薄染：白图标压在亮画面上仍需一点深底保对比
+  static readonly videoPreviewControlMaterialTint: ResourceColor = 'rgba(18, 22, 30, 0.3)'
   static readonly videoPreviewControlBorder: ResourceColor = 'rgba(255, 255, 255, 0.18)'
   static readonly videoPreviewControlsBackground: ResourceColor = 'rgba(0, 0, 0, 0.54)'
   // 续播浮条的"从头播放"按钮底色。浮条整体只用白与半透明黑，不吃主题色：
   // cloud_primary 压在深色画面上对比度不足，且视频画面本身与深浅色模式无关
   static readonly videoPreviewResumeActionBackground: ResourceColor = 'rgba(255, 255, 255, 0.16)'
   static readonly refreshShadow: ResourceColor = 'rgba(24, 36, 56, 0.12)'
-  static readonly overlayScrim: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'
 
   static getSafeTopInset(topRectHeight: number): number {
@@ -562,7 +563,12 @@ export class CloudThemeToken {
 
   // sm/md 不需要（手机端用底部浮动 tab），lg/xl 是侧边栏宽度
   static readonly sideNavWidthLg: number = 96
-  static readonly sideNavWidthXl: number = 240
+  static readonly sideNavWidthXl: number = 208
+  // XL 原生风侧栏：紧凑导航行、品牌顶行、底部账号卡片（参照系统「文件管理」）
+  static readonly sideNavRowHeight: number = 40
+  static readonly sideNavRowRadius: number = 10
+  static readonly sideNavRowGap: number = 2
+  static readonly sideNavLogoSize: number = 24
   static readonly sideNavItemHeight: number = 56
   static readonly sideNavItemRadius: number = 14
   static readonly sideNavVerticalPadding: number = 24
@@ -570,8 +576,16 @@ export class CloudThemeToken {
   static readonly sideNavGap: number = 6
   // 与标题栏图标按钮（iconButtonSize 40 / actionIconSize 22 级别）保持一致
   static readonly sideBarToggleSize: number = 40
-  static readonly sideBarToggleIconSize: number = 28
-  static readonly sideBarToggleRadius: number = 16
+  // 2in1 自绘窗口三键：与标题栏 HDS 按钮同尺寸（40vp 方块、圆角 actionSquircleRadius），
+  // 左侧一条短竖线与页面按钮分组；inset 为整组占用宽度，各页标题栏右侧按它让位
+  static readonly windowControlSize: number = 40
+  static readonly windowControlIconSize: number = 24
+  static readonly windowControlGap: number = 8
+  static readonly windowControlEndMargin: number = 12
+  static readonly windowControlDividerHeight: number = 20
+  static readonly windowControlDividerWidth: number = 1
+  static readonly windowControlsInset: number = CloudThemeToken.windowControlDividerWidth +
+    CloudThemeToken.windowControlGap * 3 + CloudThemeToken.windowControlSize * 3 + CloudThemeToken.windowControlEndMargin
 
   static readonly sheetCenterWidth: number = 480
   static readonly sheetCenterWideWidth: number = 560

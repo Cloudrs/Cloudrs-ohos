@@ -1,6 +1,8 @@
 import Constant from "../model/Constant"
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { CloudApi } from "../model/net/CloudApi";
 import { CloudThemeToken } from "../model/CloudTheme";
+import { CloudMaterial } from "../model/CloudMaterial";
 import { PathSelectSheet } from "./PathSelectSheet";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
 import AppLogger from "../utils/AppLogger";
@@ -41,6 +43,8 @@ export struct Aria2Create {
     })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   build() {
     Column({ space: CloudThemeToken.aria2CreateGap }){
       TextArea({placeholder: $r('app.string.aria2_url_input_placeholder'), text: $$this.inputUrls})
@@ -81,7 +85,8 @@ export struct Aria2Create {
       .borderRadius(CloudThemeToken.cardRadius)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
-      .backgroundColor(CloudThemeToken.surface)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .systemMaterial(CloudMaterial.cardMaterial())
       .onClick(() => {
         this.isShowPathSelect = true
       })
@@ -121,10 +126,11 @@ export struct Aria2Create {
     })
     .alignItems(HorizontalAlign.Start)
     .justifyContent(FlexAlign.Start)
-    .backgroundColor(CloudThemeToken.background)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .bindSheet($$this.isShowPathSelect, this.selectPathSheet(), {
       showClose: false,
-      backgroundColor: CloudThemeToken.background,
+      backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+      systemMaterial: CloudMaterial.sheetMaterial(),
       preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
       width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
       onDisappear: () => {

@@ -5,7 +5,8 @@ import { CloudThemeToken } from '../model/CloudTheme';
 export struct CloudScaffold {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
-  topPadding: number = CloudThemeToken.scaffoldTopPadding
+  // @Prop：随父组件状态变化刷新（如宽屏侧栏收起时动态让位）
+  @Prop topPadding: number = CloudThemeToken.scaffoldTopPadding
   bottomPadding: number = CloudThemeToken.scaffoldBottomPadding
   horizontalPadding: number = CloudThemeToken.pagePadding
   scrollable: boolean = true

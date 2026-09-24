@@ -1,5 +1,7 @@
 import Constant from "../model/Constant"
+import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { CloudThemeToken } from "../model/CloudTheme"
+import { CloudMaterial } from "../model/CloudMaterial"
 import { Aria2Files, Aria2Finished, Aria2Status, TaskError } from "../model/net/ApiTypes"
 import { CommonUtil } from "../utils/CommonUtil"
 import { DateFormatUtil } from "../utils/DateFormatUtil"
@@ -197,6 +199,8 @@ export struct Aria2FinishedDetail {
     })
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder taskDetailItem(title: ResourceStr, content: ResourceStr, icon: Resource) {
     Row() {
       Column({ space: CloudThemeToken.aria2DetailCardTextGap }) {
@@ -225,9 +229,12 @@ export struct Aria2FinishedDetail {
     .borderRadius(CloudThemeToken.cardRadius)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
+  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder fileItem(fileName: string) {
     Row() {
       Text(fileName)
@@ -241,7 +248,8 @@ export struct Aria2FinishedDetail {
     .width('100%')
     .padding(CloudThemeToken.aria2DetailFilePadding)
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
   @Builder detailTool() {

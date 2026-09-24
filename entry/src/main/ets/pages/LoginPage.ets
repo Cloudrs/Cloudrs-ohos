@@ -17,6 +17,7 @@ import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { CloudIconButton } from '../components/CloudIconButton';
 import AppLogger from '../utils/AppLogger';
+import { WindowMover } from '../utils/WindowMover';
 import { common } from '@kit.AbilityKit';
 
 @Extend(Row)
@@ -127,6 +128,8 @@ struct PrivacyConfirmDialog {
 export struct LoginPage {
   routeParam?: LoginParam
   @StorageProp(Constant.CLOUD_COOKIE) cookie: string = '';
+  // 2in1 隐藏系统标题栏后 >0；此时登录页顶部需要自备窗口拖动区
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @StorageProp(Constant.CLOUD_COOKIE_EXPIRES) cookieExpires: string = '';
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
@@ -300,88 +303,104 @@ export struct LoginPage {
   }
 
   build() {
-    Row() {
-      Column({ space: CloudThemeToken.loginPageGap }) {
-      Column() {
-        Row() {
-          CloudIconButton({
-            icon: $r('app.media.ic_back'),
-            buttonSize: CloudThemeToken.iconButtonSize,
-            iconSize: CloudThemeToken.actionIconSize,
-            buttonBackground: CloudThemeToken.surfaceSubtle,
-            iconColor: CloudThemeToken.textPrimary,
-            onAction: () => {
-              if (this.needs2FA) {
-                this.needs2FA = false
-              } else {
-                this.loginTitle = $r('app.string.website_title')
-                this.websiteInvalid = false
+    Stack({ alignContent: Alignment.Top }) {
+      Row() {
+        Column({ space: CloudThemeToken.loginPageGap }) {
+        Column() {
+          Row() {
+            CloudIconButton({
+              icon: $r('app.media.ic_back'),
+              buttonSize: CloudThemeToken.iconButtonSize,
+              iconSize: CloudThemeToken.actionIconSize,
+              buttonBackground: CloudThemeToken.surfaceSubtle,
+              iconColor: CloudThemeToken.textPrimary,
+              onAction: () => {
+                if (this.needs2FA) {
+                  this.needs2FA = false
+                } else {
+                  this.loginTitle = $r('app.string.website_title')
+                  this.websiteInvalid = false
+                }
               }
+            })
+          }
+          .height(CloudThemeToken.loginBackRowHeight)
+          .margin({ top: CloudThemeToken.loginBackTopMargin })
+          .width('100%')
+          .justifyContent(FlexAlign.Start)
+          .visibility(this.websiteInvalid ? Visibility.Visible : Visibility.Hidden)
+          .animation({ duration: CloudThemeToken.loginTransitionDuration })
+
+          Column({ space: CloudThemeToken.loginContentGap }) {
+            // 显示login及标题
+            this.showLoginHeader()
+            // 根据状态显示不同输入框
+            if (!this.websiteInvalid) {
+              this.showWebsiteInput()
+            } else if (this.needs2FA) {
+              this.showOtpInput()
+            } else {
+              this.showLoginInput()
             }
-          })
-        }
-        .height(CloudThemeToken.loginBackRowHeight)
-        .margin({ top: CloudThemeToken.loginBackTopMargin })
-        .width('100%')
-        .justifyContent(FlexAlign.Start)
-        .visibility(this.websiteInvalid ? Visibility.Visible : Visibility.Hidden)
-        .animation({ duration: CloudThemeToken.loginTransitionDuration })
-
-        Column({ space: CloudThemeToken.loginContentGap }) {
-          // 显示login及标题
-          this.showLoginHeader()
-          // 根据状态显示不同输入框
-          if (!this.websiteInvalid) {
-            this.showWebsiteInput()
-          } else if (this.needs2FA) {
-            this.showOtpInput()
-          } else {
-            this.showLoginInput()
+            // 继续按钮
+            this.buttonContinue();
+            // 提示
+            if (!this.websiteInvalid) {
+              Text($r("app.string.login_tips"))
+                .fontSize(CloudThemeToken.loginTipsTextSize)
+                .fontColor(CloudThemeToken.textSecondary)
+                .margin({
+                  left: CloudThemeToken.loginTipsHorizontalMargin,
+                  right: CloudThemeToken.loginTipsHorizontalMargin
+                })
+            }
           }
-          // 继续按钮
-          this.buttonContinue();
-          // 提示
-          if (!this.websiteInvalid) {
-            Text($r("app.string.login_tips"))
-              .fontSize(CloudThemeToken.loginTipsTextSize)
-              .fontColor(CloudThemeToken.textSecondary)
-              .margin({
-                left: CloudThemeToken.loginTipsHorizontalMargin,
-                right: CloudThemeToken.loginTipsHorizontalMargin
-              })
+          .width('100%')
+        }
+
+        if (!this.isKeyboardVisible()) {
+          Column({ space: CloudThemeToken.loginFooterGap }) {
+            // 扫描添加及历史账户
+            this.buttonScanAndUsers()
+
+            // 隐私条款声明
+            this.privacyText()
           }
+          .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginTransitionDuration }))
         }
-        .width('100%')
-      }
-
-      if (!this.isKeyboardVisible()) {
-        Column({ space: CloudThemeToken.loginFooterGap }) {
-          // 扫描添加及历史账户
-          this.buttonScanAndUsers()
-
-          // 隐私条款声明
-          this.privacyText()
         }
-        .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginTransitionDuration }))
+        .height("100%")
+        .width(this.sheetLayoutWidth >= CloudThemeToken.loginContentMaxWidth
+          ? CloudThemeToken.loginContentMaxWidth
+          : '100%')
+        .padding({
+          top: CloudThemeToken.loginPageVerticalPadding,
+          left: CloudThemeToken.pagePadding,
+          right: CloudThemeToken.pagePadding,
+          bottom: this.keyHeight ? CloudThemeToken.zero
+            : CloudThemeToken.loginPageVerticalPadding + this.bottomRectHeight
+        })
+        .justifyContent(FlexAlign.SpaceBetween)
       }
-      }
+      .width("100%")
       .height("100%")
-      .width(this.sheetLayoutWidth >= CloudThemeToken.loginContentMaxWidth
-        ? CloudThemeToken.loginContentMaxWidth
-        : '100%')
-      .padding({
-        top: CloudThemeToken.loginPageVerticalPadding,
-        left: CloudThemeToken.pagePadding,
-        right: CloudThemeToken.pagePadding,
-        bottom: this.keyHeight ? CloudThemeToken.zero
-          : CloudThemeToken.loginPageVerticalPadding + this.bottomRectHeight
-      })
-      .justifyContent(FlexAlign.SpaceBetween)
+      .backgroundColor(CloudThemeToken.background)
+      .justifyContent(FlexAlign.Center)
+
+      // 2in1 隐藏系统标题栏后登录页没有其它可拖处：顶部整宽留一条拖动带，
+      // 止于返回键上沿（返回键 40vp 在 30vp 行内居中，向上溢出 5vp），不挡返回键
+      if (this.titleButtonInsetEnd > 0) {
+        Column()
+          .width('100%')
+          .height(CloudThemeToken.loginPageVerticalPadding + CloudThemeToken.loginBackTopMargin -
+            (CloudThemeToken.iconButtonSize - CloudThemeToken.loginBackRowHeight) / CloudThemeToken.halfDivisor)
+          .onTouch((event: TouchEvent) => {
+            WindowMover.onTouch(event)
+          })
+      }
     }
     .width("100%")
     .height("100%")
-    .backgroundColor(CloudThemeToken.background)
-    .justifyContent(FlexAlign.Center)
     .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
       detents: [SheetSize.FIT_CONTENT],
       title: { title: '选择账号' },

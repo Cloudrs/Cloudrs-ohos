@@ -1,6 +1,5 @@
 import { CloudThemeToken } from '../model/CloudTheme';
 
-
 @Component
 export struct CloudIconButton {
   @Prop icon: ResourceStr = ''

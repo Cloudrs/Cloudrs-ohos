@@ -482,17 +482,18 @@ export struct VideoPreviewPage {
           enableScrollEffect: false
         },
         originalStyle: {
+          // 预览页跟随主题（亮色浅底、暗色深底），标题与按钮配色同文件页，窗口三键自然一致
           backgroundStyle: {
-            backgroundColor: CloudThemeToken.previewTitleBarBackground
+            backgroundColor: CloudThemeToken.background
           },
           contentStyle: {
             titleStyle: {
-              mainTitleColor: CloudThemeToken.onPrimary
+              mainTitleColor: CloudThemeToken.textPrimary
             },
             // 高算力档置透明露出 HDS 材质的通透玻璃，与 TitleControlButton 一致；其余档实色
             backIconStyle: {
-              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground),
-              iconColor: CloudThemeToken.onPrimary
+              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary
             }
           }
         },
@@ -508,7 +509,8 @@ export struct VideoPreviewPage {
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false
     })
-    .backgroundColor(CloudThemeToken.previewBackground)
+    // 页面与标题栏跟随主题；视频画面区（播放器舞台）仍保持黑底
+    .backgroundColor(CloudThemeToken.background)
   }
 
   private loadVideoUrl(forceRefresh: boolean = false): void {

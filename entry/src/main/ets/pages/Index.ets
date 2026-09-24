@@ -408,12 +408,12 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor(CloudThemeToken.previewBackground)
+        .backgroundColor(CloudThemeToken.background)
       }
       .hideTitleBar(true)
       .width('100%')
       .height('100%')
-      .backgroundColor(CloudThemeToken.previewBackground)
+      .backgroundColor(CloudThemeToken.background)
     } else if (name === Constant.VIDEO_PREVIEW_PAGE) {
       NavDestination() {
         Stack() {
@@ -421,12 +421,12 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-        .backgroundColor(CloudThemeToken.previewBackground)
+        .backgroundColor(CloudThemeToken.background)
       }
       .hideTitleBar(true)
       .width('100%')
       .height('100%')
-      .backgroundColor(CloudThemeToken.previewBackground)
+      .backgroundColor(CloudThemeToken.background)
     } else if (name === Constant.TEXT_PREVIEW_PAGE) {
       NavDestination() {
         Stack() {

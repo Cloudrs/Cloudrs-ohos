@@ -399,7 +399,6 @@ export class CloudThemeToken {
   static readonly imagePreviewCounterTextSize: number = 13
   static readonly imagePreviewCounterHeight: number = 28
   static readonly imagePreviewCounterAreaHeight: number = 36
-  static readonly previewTitleBarBackground: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly videoPreviewControlBorderWidth: number = 1
   static readonly videoPreviewControlSize: number = 42
   static readonly videoPreviewControlIconSize: number = 18
@@ -520,7 +519,6 @@ export class CloudThemeToken {
   static readonly floatingShadow: ResourceColor = '#260A59F7'
   static readonly selectedGlow: ResourceColor = '#33115DFC'
   static readonly selectedHighlight: ResourceColor = '#66FFFFFF'
-  static readonly imagePreviewCounterBackground: ResourceColor = 'rgba(255, 255, 255, 0.14)'
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
   // 高算力档材质接管后的薄染：白图标压在亮画面上仍需一点深底保对比
   static readonly videoPreviewControlMaterialTint: ResourceColor = 'rgba(18, 22, 30, 0.3)'

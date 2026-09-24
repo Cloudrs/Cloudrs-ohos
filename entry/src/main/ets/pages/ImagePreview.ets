@@ -227,12 +227,12 @@ export struct ImagePreviewPage {
         })
         .width('100%')
         .height('100%')
-        .backgroundColor(CloudThemeToken.previewBackground)
+        .backgroundColor(CloudThemeToken.background)
 
         this.navArrows()
       }
       .width('100%')
-      .backgroundColor(CloudThemeToken.previewBackground)
+      .backgroundColor(CloudThemeToken.background)
       .layoutWeight(1)
 
       this.previewCounter()
@@ -244,7 +244,7 @@ export struct ImagePreviewPage {
           })
       }
       .width('100%')
-      .backgroundColor(CloudThemeToken.previewBackground)
+      .backgroundColor(CloudThemeToken.background)
       .alignItems(HorizontalAlign.Center)
       .padding({
         top: CloudThemeToken.imagePreviewSaveTopPadding,
@@ -285,21 +285,22 @@ export struct ImagePreviewPage {
           enableScrollEffect: false
         },
         originalStyle: {
+          // 预览页跟随主题（亮色浅底、暗色深底），标题与按钮配色同文件页，窗口三键自然一致
           backgroundStyle: {
-            backgroundColor: CloudThemeToken.previewTitleBarBackground
+            backgroundColor: CloudThemeToken.background
           },
           contentStyle: {
             titleStyle: {
-              mainTitleColor: CloudThemeToken.onPrimary
+              mainTitleColor: CloudThemeToken.textPrimary
             },
             // 高算力档置透明露出 HDS 材质的通透玻璃，与 TitleControlButton 一致；其余档实色
             backIconStyle: {
-              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground),
-              iconColor: CloudThemeToken.onPrimary
+              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary
             },
             menuStyle: {
-              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground),
-              iconColor: CloudThemeToken.onPrimary
+              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary
             }
           }
         },
@@ -315,7 +316,7 @@ export struct ImagePreviewPage {
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false
     })
-    .backgroundColor(CloudThemeToken.previewBackground)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder previewCounter() {
@@ -324,20 +325,20 @@ export struct ImagePreviewPage {
         Text(this.getPreviewCounterText())
           .fontSize(CloudThemeToken.imagePreviewCounterTextSize)
           .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.onPrimary)
+          .fontColor(CloudThemeToken.textSecondary)
           .height(CloudThemeToken.imagePreviewCounterHeight)
           .padding({
             left: CloudThemeToken.spacingPanel,
             right: CloudThemeToken.spacingPanel
           })
           .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-          .backgroundColor(CloudThemeToken.imagePreviewCounterBackground)
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
       }
       .width('100%')
       .height(CloudThemeToken.imagePreviewCounterAreaHeight)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor(CloudThemeToken.previewBackground)
+      .backgroundColor(CloudThemeToken.background)
     }
   }
 
@@ -355,24 +356,22 @@ export struct ImagePreviewPage {
     }
   }
 
-  // 压在图片上的翻页圆钮：容器 + floatingControlMaterial（Button 挂不上材质）；
-  // EXQUISITE 档留薄染保白箭头对比，其余档/低版本回落原深色毛玻璃。
+  // 翻页圆钮：容器（Button 挂不上材质）+ titleControlMaterial，与标题栏按钮同款、跟随主题
+  // （预览页底色已跟随主题，白箭头深玻璃在亮色浅底上会看不见）。
   @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder navArrowButton(isNext: boolean) {
     Stack() {
       SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
-        .fontColor([CloudThemeToken.onPrimary])
+        .fontColor([CloudThemeToken.textPrimary])
         .fontWeight(FontWeight.Medium)
     }
     .width(CloudThemeToken.imagePreviewArrowButtonSize)
     .height(CloudThemeToken.imagePreviewArrowButtonSize)
     .borderRadius(CloudThemeToken.imagePreviewArrowButtonSize / CloudThemeToken.halfDivisor)
     .clip(true)
-    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
-      CloudThemeToken.videoPreviewControlMaterialTint))
-    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
-    .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
+    .systemMaterial(CloudMaterial.titleControlMaterial())
     .enabled(this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {
@@ -430,7 +429,7 @@ export struct ImagePreviewPage {
     })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
-    .backgroundColor(CloudThemeToken.previewBackground)
+    .backgroundColor(CloudThemeToken.background)
   }
 
   async saveImage() {

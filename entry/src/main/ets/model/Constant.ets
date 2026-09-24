@@ -248,8 +248,6 @@ class Constant {
   CURRENT_SHOW_TYPE = 'showType'
 
   PHOTO_BACKUP_SETTINGS = 'photoBackupSettings'
-  // 相册页「备份未开启」提示条被用户关掉后不再显示（Preferences 持久化）
-  PHOTO_BACKUP_BANNER_DISMISSED = 'photoBackupBannerDismissed'
 
   PHOTO_BACKUP_DONE_IDS = 'photoBackupDoneIds'
 

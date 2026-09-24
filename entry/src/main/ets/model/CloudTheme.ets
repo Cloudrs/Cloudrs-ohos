@@ -62,6 +62,10 @@ export class CloudThemeToken {
   // HDS MINI 标题栏按钮的居中基准行高（实测其返回/菜单键中心距窗口顶 28vp）；
   // 2in1 自绘的顶行（窗口三键、侧栏品牌行/折叠键、我的/下载页标题行）按它居中，才能与 HDS 按钮齐平
   static readonly titleRowHeight: number = 56
+  // 相册页标题旁备份状态胶囊
+  static readonly backupPillHeight: number = 28
+  static readonly backupPillDotSize: number = 6
+  static readonly backupPillRingStroke: number = 2
   static readonly cardHeightSm: number = 64
   static readonly cardHeightMd: number = 70
   static readonly cardHeightLg: number = 76
@@ -500,6 +504,7 @@ export class CloudThemeToken {
   static readonly danger: ResourceColor = $r('app.color.cloud_danger')
   static readonly dangerSoft: ResourceColor = $r('app.color.cloud_danger_soft')
   static readonly success: ResourceColor = $r('app.color.cloud_success')
+  static readonly warning: ResourceColor = $r('app.color.cloud_warning')
   static readonly successSoft: ResourceColor = $r('app.color.cloud_success_soft')
   static readonly uploadFileSoft: ResourceColor = '#EAF2FF'
   static readonly uploadPhotoSoft: ResourceColor = '#EAF9F0'

@@ -265,6 +265,10 @@
       "value": "#2EAD5B"
     },
     {
+      "name": "cloud_warning",
+      "value": "#F59E0B"
+    },
+    {
       "name": "cloud_success_soft",
       "value": "#EAF8EF"
     },

@@ -2,6 +2,7 @@ import Constant from "../model/Constant";
 import { EmptyState } from "./EmptyState";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
+import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../utils/ToastUtil";
@@ -156,6 +157,7 @@ export struct PathSelectSheet {
     }
   }
 
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder header() {
     Column() {
       Row({ space: CloudThemeToken.pathSheetTitleGap }) {
@@ -180,14 +182,21 @@ export struct PathSelectSheet {
       Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
 
         Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
-          Button({ type: ButtonType.Circle }) {
+          // 圆按钮用容器代替 Button（Button 挂不上材质），与系统 sheet 关闭键同为材质观感
+          Stack() {
             SymbolGlyph($r('sys.symbol.xmark'))
               .fontSize(CloudThemeToken.sheetActionIconSize)
               .fontColor([CloudThemeToken.textSecondary])
           }
           .width(CloudThemeToken.iconBoxSm)
           .height(CloudThemeToken.iconBoxSm)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .borderRadius(CloudThemeToken.iconBoxSm / CloudThemeToken.halfDivisor)
+          .clip(true)
+          .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
+          .systemMaterial(CloudMaterial.sheetControlMaterial())
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .focusable(true)
+          .accessibilityText('关闭')
           .onClick(() => {
             if (this.onClose) {
               this.onClose(false)
@@ -204,14 +213,20 @@ export struct PathSelectSheet {
             .textOverflow({ overflow: TextOverflow.MARQUEE })
             .layoutWeight(1)
 
-          Button({ type: ButtonType.Circle }) {
+          Stack() {
             SymbolGlyph($r('sys.symbol.checkmark'))
               .fontSize(CloudThemeToken.sheetActionIconSize)
               .fontColor([CloudThemeToken.primary])
           }
           .width(CloudThemeToken.iconBoxSm)
           .height(CloudThemeToken.iconBoxSm)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .borderRadius(CloudThemeToken.iconBoxSm / CloudThemeToken.halfDivisor)
+          .clip(true)
+          .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
+          .systemMaterial(CloudMaterial.sheetControlMaterial())
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .focusable(true)
+          .accessibilityText('确认')
           .onClick(() => {
             if (this.onClose) {
               this.onClose(true, this.currentPath)

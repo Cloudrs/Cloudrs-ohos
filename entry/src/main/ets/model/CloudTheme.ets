@@ -522,7 +522,6 @@ export class CloudThemeToken {
   // cloud_primary 压在深色画面上对比度不足，且视频画面本身与深浅色模式无关
   static readonly videoPreviewResumeActionBackground: ResourceColor = 'rgba(255, 255, 255, 0.16)'
   static readonly refreshShadow: ResourceColor = 'rgba(24, 36, 56, 0.12)'
-  static readonly overlayScrim: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'
 
   static getSafeTopInset(topRectHeight: number): number {

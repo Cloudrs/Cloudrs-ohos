@@ -3769,60 +3769,6 @@ export struct TabFiles {
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
-  @Builder selectFileOverlay() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.overlayScrim)
-        .zIndex(0)
-        .onClick(() => {
-          this.closeFileSheet()
-        })
-
-      this.selectFileSheetBuilder()
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
-  }
-
-  @Builder inputSheetOverlay() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.overlayScrim)
-        .zIndex(0)
-        .onClick(() => {
-          this.closeInputSheet()
-        })
-
-      this.inputSheetBuilder()
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
-  }
-
-  @Builder shareSheetOverlay() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.overlayScrim)
-        .zIndex(0)
-        .onClick(() => {
-          this.closeShareSheet()
-        })
-
-      this.shareSheetBuilder()
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
-  }
-
   @Builder selectFileSheetBuilder() {
     SelectFileSheet({
       extraBottomPadding: CloudThemeToken.hdsTabBarBottomMargin,
@@ -4445,10 +4391,6 @@ export struct TabFiles {
 
   private closeInputSheet(): void {
     this.showInputSheet = false
-  }
-
-  private closeShareSheet(): void {
-    this.showShareSheet = false
   }
 
   private closeDetailSheet(): void {

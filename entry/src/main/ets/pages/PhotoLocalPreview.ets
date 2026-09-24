@@ -237,6 +237,7 @@ export struct PhotoLocalPreviewPage {
       CloudThemeToken.videoPreviewControlMaterialTint))
     .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .enabled(this.chromeVisible)
     .accessibilityText('返回')
     .onClick(() => {
@@ -275,6 +276,7 @@ export struct PhotoLocalPreviewPage {
       CloudThemeToken.videoPreviewControlMaterialTint))
     .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .enabled(this.chromeVisible && this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {

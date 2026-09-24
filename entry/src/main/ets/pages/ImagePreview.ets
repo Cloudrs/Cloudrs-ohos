@@ -372,6 +372,7 @@ export struct ImagePreviewPage {
     .clip(true)
     .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
     .systemMaterial(CloudMaterial.titleControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .enabled(this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {

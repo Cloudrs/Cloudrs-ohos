@@ -3278,6 +3278,7 @@ export struct TabPictures {
     .backgroundColor(CloudMaterial.materialSurface('rgba(120, 120, 128, 0.22)'))
     .backdropBlur(CloudMaterial.backdropBlurFallback(18))
     .systemMaterial(CloudMaterial.panelMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .clickEffect({ level: ClickEffectLevel.LIGHT })
     .accessibilityText(this.getSettingsEnabled() ? `相册备份：${this.getBackupPillText()}` : '开启相册备份')
     .onClick(() => {
@@ -3431,6 +3432,7 @@ export struct TabPictures {
       .fontColor(this.segment === value ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
       .backgroundColor(this.segment === value ? CloudThemeToken.primary : Color.Transparent)
       .borderRadius(SWITCHER_ITEM_SIZE / 2)
+      .hoverEffect(HoverEffect.Highlight)
       .onClick(() => { this.selectSegment(value); })
   }
 

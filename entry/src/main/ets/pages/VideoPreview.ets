@@ -765,6 +765,7 @@ export struct VideoPreviewPage {
       CloudThemeToken.videoPreviewControlMaterialTint))
     .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THIN))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,
       color: CloudThemeToken.videoPreviewControlBorder
@@ -791,6 +792,7 @@ export struct VideoPreviewPage {
       CloudThemeToken.videoPreviewControlMaterialTint))
     .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THIN))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,
       color: CloudThemeToken.videoPreviewControlBorder
@@ -819,6 +821,7 @@ export struct VideoPreviewPage {
       CloudThemeToken.videoPreviewControlMaterialTint))
     .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THIN))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .border({
       width: CloudThemeToken.videoPreviewControlBorderWidth,
       color: CloudThemeToken.videoPreviewControlBorder

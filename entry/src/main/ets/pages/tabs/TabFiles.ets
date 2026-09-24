@@ -2722,6 +2722,7 @@ export struct TabFiles {
         .backgroundColor(CloudMaterial.materialSurface(this.getMultiActionBackground(danger)))
         .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
         .systemMaterial(CloudMaterial.floatingControlMaterial())
+        .hoverEffect(HoverEffect.Highlight)
         .shadow({
           radius: CloudThemeToken.refreshShadowRadius,
           color: danger ? 'rgba(255, 77, 79, 0.10)' : 'rgba(17, 93, 252, 0.10)',

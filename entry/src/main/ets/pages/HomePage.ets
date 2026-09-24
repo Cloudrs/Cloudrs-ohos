@@ -53,6 +53,7 @@ export struct HomePage {
     AppStorage.setOrCreate(Constant.SIDEBAR_VISIBLE, this.showSideBar)
     this.loadAccountCard()
     CloudRouter.setHomeBackEnabled(this.currentIndex === TabId.FILES)
+    AppStorage.setOrCreate(Constant.HOME_TAB_INDEX, this.currentIndex)
     this.scheduleVerifyAppLock()
     setTimeout(() => {
       this.preloadMineIconsEnabled = true
@@ -132,6 +133,7 @@ export struct HomePage {
     const prev = this.currentIndex
     this.currentIndex = index
     CloudRouter.setHomeBackEnabled(index === TabId.FILES)
+    AppStorage.setOrCreate(Constant.HOME_TAB_INDEX, index)
     AppLogger.info('HomePage', `tab change ${HOME_TAB_NAMES[prev] ?? prev} -> ${HOME_TAB_NAMES[index] ?? index}`)
   }
 

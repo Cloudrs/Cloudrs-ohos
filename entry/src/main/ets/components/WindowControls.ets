@@ -15,6 +15,8 @@ export struct WindowControls {
   @StorageProp(Constant.WINDOW_STATUS) windowStatus: number = window.WindowStatusType.UNDEFINED
   // 视频全屏播放时由 Index 置 true：全屏态让出画面；其它来源的全屏仍显示，保证能还原
   @Prop hideInFullScreen: boolean = false
+  // 左侧有页面按钮时才显示分隔竖线，否则竖线孤零零悬着（由 Index 按当前页面决定）
+  @Prop showDivider: boolean = true
 
   private isMaximized(): boolean {
     return this.windowStatus === window.WindowStatusType.MAXIMIZE ||
@@ -24,11 +26,13 @@ export struct WindowControls {
   build() {
     if (!(this.hideInFullScreen && this.windowStatus === window.WindowStatusType.FULL_SCREEN)) {
       Row({ space: CloudThemeToken.windowControlGap }) {
-        Divider()
-          .vertical(true)
-          .height(CloudThemeToken.windowControlDividerHeight)
-          .strokeWidth(CloudThemeToken.windowControlDividerWidth)
-          .color(CloudThemeToken.line)
+        if (this.showDivider) {
+          Divider()
+            .vertical(true)
+            .height(CloudThemeToken.windowControlDividerHeight)
+            .strokeWidth(CloudThemeToken.windowControlDividerWidth)
+            .color(CloudThemeToken.line)
+        }
 
         TitleControlButton({ icon: $r('app.media.ic_window_minimize'), label: '最小化', onAction: () => {
           WindowMover.minimize()

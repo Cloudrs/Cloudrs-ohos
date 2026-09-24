@@ -14,6 +14,7 @@ import { AboutPage } from './AboutPage';
 import { FileSearchPage } from './FileSearchPage';
 import { PhotoLocalPreviewPage } from './PhotoLocalPreview';
 import { WindowControls } from '../components/WindowControls';
+import { TabId } from '../model/TabData';
 import { window } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
@@ -30,6 +31,7 @@ struct Index {
   @State rootLoginParam: LoginParam = new LoginParam(false, Constant.HOME_PAGE);
   @State overlayPage: string = '';
   @StorageProp(Constant.WINDOW_CONTROLS_CUSTOM) windowControlsCustom: boolean = false;
+  @StorageProp(Constant.HOME_TAB_INDEX) homeTabIndex: number = TabId.FILES;
   @State fileSearchVisible: boolean = false;
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
@@ -331,7 +333,10 @@ struct Index {
 
       // 2in1 自绘窗口三键：叠在所有页面与覆盖层之上，各页标题栏右侧已按 TITLE_BUTTON_INSET_END 让位
       if (this.windowControlsCustom) {
-        WindowControls({ hideInFullScreen: this.overlayPage === Constant.VIDEO_PREVIEW_PAGE })
+        WindowControls({
+          hideInFullScreen: this.overlayPage === Constant.VIDEO_PREVIEW_PAGE,
+          showDivider: this.windowControlsDividerVisible()
+        })
           .position({ top: 0, right: 0 })
           .zIndex(CloudThemeToken.overlayZIndex + 1)
       }
@@ -340,6 +345,19 @@ struct Index {
     .height('100%')
   }
 
+
+  // 窗口三键左侧紧挨着页面自己的标题栏按钮时才显示分隔竖线：
+  // 文件/相册/下载 Tab、搜索、图片与文本预览有按钮；我的、登录、视频与本地照片预览没有
+  private windowControlsDividerVisible(): boolean {
+    if (this.overlayPage.length > 0) {
+      return this.overlayPage === Constant.IAMGE_PREVIEW_PAGE || this.overlayPage === Constant.TEXT_PREVIEW_PAGE ||
+        this.overlayPage === Constant.FILE_SEARCH_PAGE;
+    }
+    if (this.rootPage !== Constant.HOME_PAGE) {
+      return false;
+    }
+    return this.homeTabIndex !== TabId.MINE;
+  }
 
   @Builder rootBuilder() {
     if (this.rootPage === Constant.LOGIN_PAGE) {

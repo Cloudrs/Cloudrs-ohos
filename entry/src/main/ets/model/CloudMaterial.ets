@@ -155,6 +155,26 @@ export class CloudMaterial {
     return undefined
   }
 
+  private static cachedBanner: SystemUiMaterial | undefined = undefined
+
+  /**
+   * 页内提示条（如相册页「备份未开启」）：THIN 材质染品牌浅蓝 primarySoft，
+   * 保留提示条的蓝色身份又有沉浸光感；材质会盖住 backgroundColor，故色调放进 materialColor。
+   */
+  static bannerMaterial(): SystemUiMaterial | undefined {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedBanner === undefined) {
+        CloudMaterial.cachedBanner = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          materialColor: $r('app.color.cloud_primary_soft'),
+          lightEffect: { color: undefined }
+        })
+      }
+      return CloudMaterial.cachedBanner
+    }
+    return undefined
+  }
+
   private static cachedTitleControl: SystemUiMaterial | undefined = undefined
 
   /**

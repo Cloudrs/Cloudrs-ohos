@@ -175,6 +175,9 @@ export struct TabPictures {
   private lastRemotePath: string = '';
   private lastRemoteReconcileAt: number = 0;
   @State drawerOpen: boolean = false;
+  // 相册页顶部「备份未开启」提示条是否已被用户关掉
+  @State backupBannerDismissed: boolean =
+    UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_BANNER_DISMISSED, false) as boolean;
   @State segment: GallerySegment = GallerySegment.TIME;
   @State galleryGroups: PhotoGroup[] = [];
   @State isRefreshing: boolean = false;
@@ -3185,6 +3188,84 @@ export struct TabPictures {
 
 
   /**
+   * 在相册页直接开关备份：与「我的 - 相册备份」写同一份设置，
+   * 本页经 PHOTO_BACKUP_REVISION_KEY 监听到变化后自动扫描/取消，「我的」页状态文字也随之同步。
+   */
+  private setBackupEnabled(enabled: boolean): void {
+    const settings: PhotoBackupSettings = PhotoBackupSettingsStore.load();
+    if (settings.enabled === enabled) {
+      return;
+    }
+    settings.enabled = enabled;
+    PhotoBackupSettingsStore.save(settings);
+  }
+
+  private dismissBackupBanner(): void {
+    this.backupBannerDismissed = true;
+    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.PHOTO_BACKUP_BANNER_DISMISSED, true);
+  }
+
+  /** 备份未开启时显示在照片列表顶部（随列表滚动），一键开启；关掉后不再显示，仍可在 ↓ 卡片里开。 */
+  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  @Builder backupBanner() {
+    if (!this.getSettingsEnabled() && !this.backupBannerDismissed) {
+      Row({ space: CloudThemeToken.spacingSection }) {
+        Image($r('app.media.ic_icloud'))
+          .width(CloudThemeToken.iconBoxSm)
+          .height(CloudThemeToken.iconBoxSm)
+          .padding(CloudThemeToken.spacingCard)
+          .borderRadius(CloudThemeToken.controlRadiusLg)
+          .backgroundColor(CloudThemeToken.surface)
+          .fillColor(CloudThemeToken.primary)
+          .draggable(false)
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text('相册备份未开启')
+            .fontSize(CloudThemeToken.textSizeBody)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('自动把本机照片备份到云端')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        Button('开启')
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .height(CloudThemeToken.rowHeightSm)
+          .onClick(() => { this.setBackupEnabled(true); })
+        Image($r('app.media.ic_window_close'))
+          .width(CloudThemeToken.icon3xl)
+          .height(CloudThemeToken.icon3xl)
+          .padding(CloudThemeToken.spacingXs)
+          .fillColor(CloudThemeToken.textSecondary)
+          .draggable(false)
+          .accessibilityText('不再提示')
+          .onClick(() => { this.dismissBackupBanner(); })
+      }
+      .width('100%')
+      .padding({
+        left: CloudThemeToken.spacingSection,
+        right: CloudThemeToken.spacingSection,
+        top: CloudThemeToken.spacingCard,
+        bottom: CloudThemeToken.spacingCard
+      })
+      .alignItems(VerticalAlign.Center)
+      .borderRadius(CloudThemeToken.controlRadiusLg)
+      .clip(true)
+      // 低版本 ROM 用实色浅蓝；26+ 由染同色的 bannerMaterial 接管出沉浸光感
+      .backgroundColor(CloudThemeToken.primarySoft)
+      .systemMaterial(CloudMaterial.bannerMaterial())
+      // ↓ 卡片是半透明浮层、恰好盖在提示条上且内容重复：展开时淡出但保留占位，免得照片跳动
+      .opacity(this.drawerOpen ? CloudThemeToken.zero : CloudThemeToken.fullOpacity)
+      .hitTestBehavior(this.drawerOpen ? HitTestMode.None : HitTestMode.Default)
+      .animation({ duration: CloudThemeToken.defaultAnimationDuration })
+    }
+  }
+
+  /**
    * Backup-status drawer inlined here (not a child component) so the live counts
    * read directly from @State — child @Prop bindings were not refreshing mid-backup.
    */
@@ -3192,50 +3273,32 @@ export struct TabPictures {
   @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder drawerCard() {
     Column({ space: CloudThemeToken.spacingSection }) {
-      if (!this.getSettingsEnabled()) {
-        Row() {
-          Text('备份已关闭')
+      // 开关常驻顶部：未开启时直接在这里打开，不必再去「我的」页
+      Row({ space: CloudThemeToken.spacingSection }) {
+        Column({ space: CloudThemeToken.spacingXs }) {
+          Text('相册备份')
             .fontSize(CloudThemeToken.textSizeBody)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text(this.getSettingsEnabled() ?
+            `${this.getStatusText()} · 已备份 ${this.completedPhotoCount} / ${this.localPhotoCount}` :
+            '自动把本机照片备份到云端')
+            .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
-            .layoutWeight(1)
-          Button('去开启')
-            .fontSize(CloudThemeToken.textSizeSmallPlus)
-            .height(CloudThemeToken.rowHeightSm)
-            .onClick(() => { showToast('请在「我的 - 相册备份」中开启备份'); })
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-      } else {
-        Row() {
-          Column({ space: CloudThemeToken.spacingXs }) {
-            Text(this.getStatusText())
-              .fontSize(CloudThemeToken.textSizeBody)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(CloudThemeToken.textPrimary)
-            Text(`已备份 ${this.completedPhotoCount} / ${this.localPhotoCount}`)
-              .fontSize(CloudThemeToken.textSizeSmall)
-              .fontColor(CloudThemeToken.textSecondary)
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
 
-          if (this.isBackupRunning() || this.backupState === PhotoBackupState.PAUSED) {
-            Button(this.backupState === PhotoBackupState.PAUSED ? '继续' : '暂停')
-              .fontSize(CloudThemeToken.textSizeSmallPlus)
-              .height(CloudThemeToken.rowHeightSm)
-              .backgroundColor(CloudThemeToken.surface)
-              .fontColor(CloudThemeToken.primary)
-              .onClick(() => { this.isBackupRunning() ? this.pauseBackup() : this.startBackup(); })
-          } else {
-            Button('立即备份')
-              .fontSize(CloudThemeToken.textSizeSmallPlus)
-              .height(CloudThemeToken.rowHeightSm)
-              .onClick(() => { this.startBackup(); })
-          }
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+        Toggle({ type: ToggleType.Switch, isOn: this.getSettingsEnabled() })
+          .selectedColor(CloudThemeToken.primary)
+          .onChange((isOn: boolean) => { this.setBackupEnabled(isOn); })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
 
+      if (this.getSettingsEnabled()) {
         Progress({ value: this.completedPhotoCount, total: Math.max(this.localPhotoCount, 1), type: ProgressType.Capsule })
           .width('100%')
           .height(CloudThemeToken.storageProgressHeight)
@@ -3277,9 +3340,25 @@ export struct TabPictures {
           .onClick(() => {
             if (this.failedPhotoCount > 0) { this.retryFailedPhotos(); }
           })
+
+          Blank()
+
+          if (this.isBackupRunning() || this.backupState === PhotoBackupState.PAUSED) {
+            Button(this.backupState === PhotoBackupState.PAUSED ? '继续' : '暂停')
+              .fontSize(CloudThemeToken.textSizeSmallPlus)
+              .height(CloudThemeToken.rowHeightSm)
+              .backgroundColor(CloudThemeToken.surface)
+              .fontColor(CloudThemeToken.primary)
+              .onClick(() => { this.isBackupRunning() ? this.pauseBackup() : this.startBackup(); })
+          } else {
+            Button('立即备份')
+              .fontSize(CloudThemeToken.textSizeSmallPlus)
+              .height(CloudThemeToken.rowHeightSm)
+              .onClick(() => { this.startBackup(); })
+          }
         }
         .width('100%')
-        .justifyContent(FlexAlign.Start)
+        .alignItems(VerticalAlign.Center)
       }
     }
     .width('100%')
@@ -3434,7 +3513,8 @@ export struct TabPictures {
               scroller: this.gridScroller,
               onScroll: (yOffset: number) => { this.onGridScroll(yOffset); },
               onRequestThumb: (item: PhotoBackupItem) => { this.loadPhotoThumbnail(item); },
-              onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); }
+              onTapPhoto: (item: PhotoBackupItem) => { this.openLocalPreview(item); },
+              headerContent: (): void => { this.backupBanner(); }
             })
               .width('100%')
               .height('100%')

@@ -59,6 +59,13 @@ export class CloudThemeToken {
   static readonly rowHeight3xl: number = 50
   static readonly rowHeight4xl: number = 52
   static readonly rowHeight5xl: number = 58
+  // HDS MINI 标题栏按钮的居中基准行高（实测其返回/菜单键中心距窗口顶 28vp）；
+  // 2in1 自绘的顶行（窗口三键、侧栏品牌行/折叠键、我的/下载页标题行）按它居中，才能与 HDS 按钮齐平
+  static readonly titleRowHeight: number = 56
+  // 相册页标题旁备份状态胶囊
+  static readonly backupPillHeight: number = 28
+  static readonly backupPillDotSize: number = 6
+  static readonly backupPillRingStroke: number = 2
   static readonly cardHeightSm: number = 64
   static readonly cardHeightMd: number = 70
   static readonly cardHeightLg: number = 76
@@ -392,7 +399,6 @@ export class CloudThemeToken {
   static readonly imagePreviewCounterTextSize: number = 13
   static readonly imagePreviewCounterHeight: number = 28
   static readonly imagePreviewCounterAreaHeight: number = 36
-  static readonly previewTitleBarBackground: ResourceColor = 'rgba(0, 0, 0, 0.28)'
   static readonly videoPreviewControlBorderWidth: number = 1
   static readonly videoPreviewControlSize: number = 42
   static readonly videoPreviewControlIconSize: number = 18
@@ -497,6 +503,7 @@ export class CloudThemeToken {
   static readonly danger: ResourceColor = $r('app.color.cloud_danger')
   static readonly dangerSoft: ResourceColor = $r('app.color.cloud_danger_soft')
   static readonly success: ResourceColor = $r('app.color.cloud_success')
+  static readonly warning: ResourceColor = $r('app.color.cloud_warning')
   static readonly successSoft: ResourceColor = $r('app.color.cloud_success_soft')
   static readonly uploadFileSoft: ResourceColor = '#EAF2FF'
   static readonly uploadPhotoSoft: ResourceColor = '#EAF9F0'
@@ -512,7 +519,6 @@ export class CloudThemeToken {
   static readonly floatingShadow: ResourceColor = '#260A59F7'
   static readonly selectedGlow: ResourceColor = '#33115DFC'
   static readonly selectedHighlight: ResourceColor = '#66FFFFFF'
-  static readonly imagePreviewCounterBackground: ResourceColor = 'rgba(255, 255, 255, 0.14)'
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
   // 高算力档材质接管后的薄染：白图标压在亮画面上仍需一点深底保对比
   static readonly videoPreviewControlMaterialTint: ResourceColor = 'rgba(18, 22, 30, 0.3)'

@@ -798,7 +798,8 @@ export struct FileSearchPage {
               mainTitleColor: CloudThemeToken.textPrimary
             },
             backIconStyle: {
-              backgroundColor: CloudThemeToken.surfaceSubtle,
+              // 高算力档置透明露出 HDS 材质的通透玻璃，与 TitleControlButton 一致；其余档实色
+              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle),
               iconColor: CloudThemeToken.textPrimary
             }
           }

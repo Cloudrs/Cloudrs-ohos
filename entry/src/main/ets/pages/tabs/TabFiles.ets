@@ -531,8 +531,10 @@ export struct TabFiles {
     this.visibleSheetCount = Math.max(0, this.visibleSheetCount - 1)
   }
 
+  // HDS 返回键与菜单键底色：高算力档置透明，露出 HDS 自带材质的通透玻璃观感，
+  // 与自绘 TitleControlButton（折叠键、窗口三键）一致；其余档与低版本保留 surfaceSubtle 实色
   private getFileTitleActionBackground(): ResourceColor {
-    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudThemeToken.surfaceSubtle
+    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle)
   }
 
   private getFileTitleActionIconColor(): ResourceColor {
@@ -2256,19 +2258,7 @@ export struct TabFiles {
             this.searchEmptyState()
           }
 
-          Button() {
-            Image($r('app.media.ic_arrowshape_up'))
-              .width(CloudThemeToken.icon3xl)
-              .height(CloudThemeToken.icon3xl)
-              .fillColor(CloudThemeToken.onPrimary)
-          }
-          .width(CloudThemeToken.iconBox3xl)
-          .height(CloudThemeToken.rowHeight4xl)
-          .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
-            CloudThemeToken.controlRadiusRoundXl))
-          .backgroundColor(CloudThemeToken.primary)
-          .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
-          .onClick(() => { this.openSelectFileSheet() })
+          this.uploadFab()
         }
         .width('100%')
         .height('100%')
@@ -2586,6 +2576,30 @@ export struct TabFiles {
     .backgroundColor(CloudThemeToken.background)
   }
 
+  // 上传 FAB：容器承载材质（Button 挂不上 systemMaterial），与标题栏按钮同款默认沉浸光感
+  // （titleControlMaterial：高算力档通透玻璃，其余档 surfaceSubtle 底）+ 按压形变
+  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  @Builder uploadFab() {
+    Stack() {
+      Image($r('app.media.ic_arrowshape_up'))
+        .width(CloudThemeToken.icon3xl)
+        .height(CloudThemeToken.icon3xl)
+        .fillColor(CloudThemeToken.textPrimary)
+        .draggable(false)
+    }
+    .width(CloudThemeToken.iconBox3xl)
+    .height(CloudThemeToken.rowHeight4xl)
+    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
+      CloudThemeToken.controlRadiusRoundXl))
+    .clip(true)
+    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
+    .systemMaterial(CloudMaterial.titleControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
+    .accessibilityText('上传')
+    .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
+    .onClick(() => { this.openSelectFileSheet() })
+  }
+
   @Builder multiSelectTitle() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Button({ type: ButtonType.Normal }) {
@@ -2720,6 +2734,7 @@ export struct TabFiles {
         .backgroundColor(CloudMaterial.materialSurface(this.getMultiActionBackground(danger)))
         .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
         .systemMaterial(CloudMaterial.floatingControlMaterial())
+        .hoverEffect(HoverEffect.Highlight)
         .shadow({
           radius: CloudThemeToken.refreshShadowRadius,
           color: danger ? 'rgba(255, 77, 79, 0.10)' : 'rgba(17, 93, 252, 0.10)',

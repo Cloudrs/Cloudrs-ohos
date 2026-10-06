@@ -195,6 +195,8 @@ class Constant {
   KEYBOARD_HEIGHT_VP: string = 'keyboardHeightVp'
 
   TAB_BAR_HEIGHT: string = 'tabBarHeight'
+  // 首页当前 Tab（TabId），供 Index 判断窗口三键左侧分隔线是否需要显示
+  HOME_TAB_INDEX: string = 'homeTabIndex'
 
   WINDOW_WIDTH_VP: string = 'windowWidthVp'
 

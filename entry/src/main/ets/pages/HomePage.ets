@@ -53,6 +53,7 @@ export struct HomePage {
     AppStorage.setOrCreate(Constant.SIDEBAR_VISIBLE, this.showSideBar)
     this.loadAccountCard()
     CloudRouter.setHomeBackEnabled(this.currentIndex === TabId.FILES)
+    AppStorage.setOrCreate(Constant.HOME_TAB_INDEX, this.currentIndex)
     this.scheduleVerifyAppLock()
     setTimeout(() => {
       this.preloadMineIconsEnabled = true
@@ -132,6 +133,7 @@ export struct HomePage {
     const prev = this.currentIndex
     this.currentIndex = index
     CloudRouter.setHomeBackEnabled(index === TabId.FILES)
+    AppStorage.setOrCreate(Constant.HOME_TAB_INDEX, index)
     AppLogger.info('HomePage', `tab change ${HOME_TAB_NAMES[prev] ?? prev} -> ${HOME_TAB_NAMES[index] ?? index}`)
   }
 
@@ -239,8 +241,8 @@ export struct HomePage {
 
   private sideBarToggleTop(): number {
     if (deviceInfo.deviceType === '2in1') {
-      // 系统标题栏已隐藏，顶行与窗口三键区同高（rowHeight5xl），折叠键在其中垂直居中
-      return (CloudThemeToken.rowHeight5xl - CloudThemeToken.sideBarToggleSize) / CloudThemeToken.halfDivisor
+      // 系统标题栏已隐藏，顶行与窗口三键区同高（titleRowHeight），折叠键在其中垂直居中，与 HDS 按钮齐平
+      return (CloudThemeToken.titleRowHeight - CloudThemeToken.sideBarToggleSize) / CloudThemeToken.halfDivisor
     }
     // 上移一点，与 HDS 标题栏返回键垂直居中对齐（两者分属不同布局系统，实测偏低约 3vp）
     return this.controlButtonTop() - CloudThemeToken.spacingTiny
@@ -366,7 +368,7 @@ export struct HomePage {
           .maxLines(1)
       }
       .width('100%')
-      .height(CloudThemeToken.rowHeight5xl)
+      .height(CloudThemeToken.titleRowHeight)
       .padding({
         left: CloudThemeToken.spacingSection,
         right: CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize

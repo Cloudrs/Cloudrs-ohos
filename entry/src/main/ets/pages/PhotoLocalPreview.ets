@@ -185,7 +185,8 @@ export struct PhotoLocalPreviewPage {
     })
     .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
     .backdropBlur(CloudMaterial.backdropBlurFallback(18))
-    .systemMaterial(CloudMaterial.panelMaterial())
+    // 与顶栏一致用 THICK，底下照片不干扰日期/大小文字
+    .systemMaterial(CloudMaterial.sheetMaterial())
   }
 
   // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
@@ -214,7 +215,8 @@ export struct PhotoLocalPreviewPage {
     })
     .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
     .backdropBlur(CloudMaterial.backdropBlurFallback(18))
-    .systemMaterial(CloudMaterial.panelMaterial())
+    // 顶栏压在照片上，THIN 过透：用 sheet 同款 THICK，只留一层磨砂，文件名清楚
+    .systemMaterial(CloudMaterial.sheetMaterial())
     .position({ x: 0, y: 0 })
     .opacity(this.chromeVisible ? 1 : 0)
   }
@@ -237,6 +239,7 @@ export struct PhotoLocalPreviewPage {
       CloudThemeToken.videoPreviewControlMaterialTint))
     .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .enabled(this.chromeVisible)
     .accessibilityText('返回')
     .onClick(() => {
@@ -275,6 +278,7 @@ export struct PhotoLocalPreviewPage {
       CloudThemeToken.videoPreviewControlMaterialTint))
     .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .enabled(this.chromeVisible && this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
     .onClick(() => {

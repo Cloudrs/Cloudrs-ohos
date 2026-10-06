@@ -1,6 +1,7 @@
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudRouter } from "../utils/CloudRouter";
+import { TitleControlButton } from "./TitleControlButton";
 
 @Component
 export struct CommonTitle {
@@ -15,22 +16,16 @@ export struct CommonTitle {
         .height(CloudThemeToken.getSafeTopInset(this.topRectHeight))
 
       Row({ space: CloudThemeToken.spacingPage }) {
-        Button({ type: ButtonType.Normal }) {
-          Image($r('app.media.ic_back'))
-            .width(CloudThemeToken.actionIconSize)
-            .height(CloudThemeToken.actionIconSize)
-            .fillColor(CloudThemeToken.textPrimary)
-            .draggable(false)
-        }
-        .width(CloudThemeToken.iconButtonSize)
-        .height(CloudThemeToken.iconButtonSize)
-        .borderRadius(CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius))
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        .onClick(() => {
-          if (this.onBackClick) {
-            this.onBackClick()
-          } else {
-            CloudRouter.pop()
+        // 与 HDS 返回键、标题栏其它按钮同款（TitleControlButton：通透材质 + 光感）
+        TitleControlButton({
+          icon: $r('app.media.ic_back'),
+          label: '返回',
+          onAction: () => {
+            if (this.onBackClick) {
+              this.onBackClick()
+            } else {
+              CloudRouter.pop()
+            }
           }
         })
 

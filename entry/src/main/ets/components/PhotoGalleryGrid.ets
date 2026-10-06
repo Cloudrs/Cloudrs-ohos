@@ -212,6 +212,7 @@ export struct PhotoGalleryGrid {
     .backgroundColor(CloudMaterial.controlSurface('rgba(150, 150, 150, 0.25)'))
     .backdropBlur(CloudMaterial.controlBackdropBlur(18))
     .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .hoverEffect(HoverEffect.Highlight)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .margin({ right: CloudThemeToken.spacingPage, bottom: this.bottomInset + CloudThemeToken.spacingPage })
     .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))

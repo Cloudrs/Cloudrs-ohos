@@ -6,6 +6,7 @@ import { CloudApi } from '../model/net/CloudApi'
 import { TextPreviewParam } from '../model/Params'
 import { common } from '@kit.AbilityKit'
 import { CloudIconButton } from '../components/CloudIconButton'
+import { TitleControlButton } from '../components/TitleControlButton'
 import { CodeEditor, CodeEditorController, EditorThemeMode } from '../components/CodeEditor'
 import { MarkdownToolbar } from '../components/MarkdownToolbar'
 import { EmptyState } from '../components/EmptyState'
@@ -152,10 +153,10 @@ export struct TextPreviewPage {
       Blank().height(CloudThemeToken.getSafeTopInset(this.topRectHeight))
 
       Row({ space: CloudThemeToken.spacingSection }) {
-        CloudIconButton({
+        // 标题栏按钮与其它页同款（TitleControlButton：通透材质 + 光感）；保存键保留品牌色强调
+        TitleControlButton({
           icon: $r('app.media.ic_back'),
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          buttonRadius: CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius),
+          label: '返回',
           onAction: () => {
             CloudRouter.pop()
           }
@@ -171,23 +172,23 @@ export struct TextPreviewPage {
           .height('100%')
           .onTouch(WindowMover.onTouch)
 
-        CloudIconButton({
+        TitleControlButton({
           icon: $r('app.media.ic_copy'),
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          buttonRadius: CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius),
+          label: '复制全文',
           isEnabled: this.loadState === TextLoadState.READY,
           onAction: () => {
             this.copyAll()
           }
         })
 
-        CloudIconButton({
-          icon: $r('app.media.ic_square_more'),
-          buttonBackground: CloudThemeToken.surfaceSubtle,
-          buttonRadius: CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius),
-          isEnabled: this.loadState === TextLoadState.READY
-        })
-          .bindMenu(this.toolMenu())
+        Column() {
+          TitleControlButton({
+            icon: $r('app.media.ic_square_more'),
+            label: '更多',
+            isEnabled: this.loadState === TextLoadState.READY
+          })
+        }
+        .bindMenu(this.toolMenu())
 
         if (this.editMode) {
           CloudIconButton({
@@ -201,10 +202,9 @@ export struct TextPreviewPage {
             }
           })
         } else if (this.canEdit) {
-          CloudIconButton({
+          TitleControlButton({
             icon: $r('app.media.ic_pencil'),
-            buttonBackground: CloudThemeToken.surfaceSubtle,
-            buttonRadius: CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius),
+            label: '编辑',
             isEnabled: this.loadState === TextLoadState.READY,
             onAction: () => {
               this.enterEditMode()

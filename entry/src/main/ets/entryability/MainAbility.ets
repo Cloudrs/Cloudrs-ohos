@@ -310,8 +310,8 @@ export default class MainAbility extends UIAbility {
       } catch (err) {
         hilog.warn(0x0000, 'testTag', 'hide title buttons failed. Cause: %{public}s', (err as Error)?.message ?? '')
       }
-      // 三键区高度与内容顶部标题行同高（HDS 标题栏基础高度），三键与标题行按钮垂直居中对齐
-      win.setWindowDecorHeight(CloudThemeToken.rowHeight5xl)
+      // 三键区高度与内容顶部标题行同高（HDS 标题栏按钮居中基准），三键与标题行按钮垂直居中对齐
+      win.setWindowDecorHeight(CloudThemeToken.titleRowHeight)
       const publish = (rect: window.TitleButtonRect) => {
         const inset = rect.width > 0 ? rect.width + rect.right : 0
         AppStorage.setOrCreate(Constant.TITLE_BUTTON_INSET_END, inset)

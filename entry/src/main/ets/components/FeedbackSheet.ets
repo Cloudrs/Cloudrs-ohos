@@ -2,7 +2,6 @@ import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 
 import { CloudMaterial } from "../model/CloudMaterial";
-import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 @Component
 export struct FeedbackSheet {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
@@ -69,7 +68,6 @@ export struct FeedbackSheet {
     .zIndex(1)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder feedbackActionItem(icon: Resource, title: ResourceStr, description: ResourceStr, onClick: () => void) {
     Row({ space: CloudThemeToken.uploadSourceItemGap }) {
       Stack() {
@@ -114,7 +112,6 @@ export struct FeedbackSheet {
     })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     // 容器替代 Button（Button 挂不上材质）：按压反馈用 clickEffect，不占用 opacity

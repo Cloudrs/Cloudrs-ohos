@@ -1,6 +1,5 @@
-import { CloudThemeToken } from '../model/CloudTheme';
 import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
-import { CloudMaterial } from '../model/CloudMaterial';
+import { CloudThemeToken } from '../model/CloudTheme';
 import { PhotoBackupItem } from '../model/PhotoBackupModel';
 import {
   PhotoGroup,
@@ -193,9 +192,7 @@ export struct PhotoGalleryGrid {
     .onClick(() => { this.toggleCollapse(row.title); })
   }
 
-  // 回顶键：容器（非 Button，Button 挂不上材质）+ floatingControlMaterial 光感与按压形变，
-  // 与 PC 侧栏折叠键同一套；底色让位给材质，低算力档/低版本回落原灰色手写毛玻璃。
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  // 回到顶部：内容区、不在沉浸光感生效范围，与文件页上传 FAB 同款磨砂（淡染 + 强背景模糊 + 光边 + 投影）
   @Builder backTopFab() {
     Stack() {
       Image($r('app.media.ic_chevron_down'))
@@ -209,11 +206,11 @@ export struct PhotoGalleryGrid {
     .height(FAB_SIZE)
     .borderRadius(FAB_SIZE / 2)
     .clip(true)
-    .backgroundColor(CloudMaterial.controlSurface('rgba(150, 150, 150, 0.25)'))
-    .backdropBlur(CloudMaterial.controlBackdropBlur(18))
-    .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .backgroundColor(CloudThemeToken.controlFrost)
+    .backdropBlur(CloudThemeToken.controlFrostBlur)
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
     .hoverEffect(HoverEffect.Highlight)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .margin({ right: CloudThemeToken.spacingPage, bottom: this.bottomInset + CloudThemeToken.spacingPage })
     .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
     .accessibilityText('回到顶部')

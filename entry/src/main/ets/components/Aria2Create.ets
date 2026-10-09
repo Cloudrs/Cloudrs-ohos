@@ -86,7 +86,6 @@ export struct Aria2Create {
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
       .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-      .systemMaterial(CloudMaterial.cardMaterial())
       .onClick(() => {
         this.isShowPathSelect = true
       })

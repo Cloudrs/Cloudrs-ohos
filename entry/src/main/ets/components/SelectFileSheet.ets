@@ -1,5 +1,5 @@
 import { photoAccessHelper } from "@kit.MediaLibraryKit"
-import { BusinessError, SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit"
+import { BusinessError } from "@kit.BasicServicesKit"
 import { common } from "@kit.AbilityKit"
 import { picker } from "@kit.CoreFileKit"
 import { CloudThemeToken } from "../model/CloudTheme"
@@ -61,7 +61,6 @@ export struct SelectFileSheet {
     .zIndex(1)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder uploadSourceItem(icon: Resource, title: ResourceStr, description: ResourceStr, onClick: () => void) {
     Row({ space: CloudThemeToken.uploadSourceItemGap }) {
       Stack() {
@@ -107,7 +106,6 @@ export struct SelectFileSheet {
     .opacity(this.isPicking ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
     // 容器替代 Button（Button 挂不上材质）：按压反馈用 clickEffect，不占用 opacity

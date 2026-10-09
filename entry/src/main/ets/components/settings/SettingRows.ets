@@ -94,8 +94,8 @@ export struct SettingRow {
   @Prop showChevron: boolean = true
   @Prop tappable: boolean = true
   @Prop rowEnabled: boolean = true
+  // 线性图标（与底部导航栏 ic_tabbar_* 同款：描边转填充轮廓），随文字色着色，不带底色块
   icon?: ResourceStr = undefined
-  iconBackground: ResourceColor = CloudThemeToken.primary
   onTap?: () => void
 
   build() {
@@ -109,12 +109,9 @@ export struct SettingRow {
       Row({ space: CloudThemeToken.spacingSection }) {
         if (this.icon) {
           Image(this.icon)
-            .width(CloudThemeToken.settingIconBoxSize)
-            .height(CloudThemeToken.settingIconBoxSize)
-            .padding((CloudThemeToken.settingIconBoxSize - CloudThemeToken.settingIconSize) / CloudThemeToken.halfDivisor)
-            .borderRadius(CloudThemeToken.cardRadius)
-            .fillColor(CloudThemeToken.onPrimary)
-            .backgroundColor(this.iconBackground)
+            .width(CloudThemeToken.settingLineIconSize)
+            .height(CloudThemeToken.settingLineIconSize)
+            .fillColor(this.danger ? CloudThemeToken.danger : CloudThemeToken.textPrimary)
             .draggable(false)
         }
         Column({ space: CloudThemeToken.spacingTiny }) {

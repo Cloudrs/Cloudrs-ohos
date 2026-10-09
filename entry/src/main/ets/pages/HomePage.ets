@@ -570,7 +570,8 @@ export struct HomePage {
       } else if (this.currentIndex === TabId.REMOTE_DOWN) {
         TabRemoteDown({ overLap: this.overLap, isActive: true })
       } else if (this.currentIndex === TabId.MINE) {
-        TabMine({ overLap: this.overLap, isActive: true })
+        // 宽屏：设置 / 账号与安全 / 关于在「我的」内容区内原地打开，保留左侧导航栏
+        TabMine({ overLap: this.overLap, isActive: true, inlineSubPages: true })
       }
     }
     .width('100%')
@@ -641,15 +642,13 @@ export struct HomePage {
 
   @Builder preloadMineIcons() {
     Row() {
-      this.preloadIcon($r('app.media.ic_externaldrive_fill'))
-      this.preloadIcon($r('app.media.ic_square_logout'))
-      this.preloadIcon($r('app.media.ic_privacy_secure'))
-      this.preloadIcon($r('app.media.ic_theme_setting'))
-      this.preloadIcon($r('app.media.ic_more_setting'))
-      this.preloadIcon($r('app.media.ic_info_circle'))
+      this.preloadIcon($r('app.media.ic_mine_backup'))
+      this.preloadIcon($r('app.media.ic_mine_security'))
+      this.preloadIcon($r('app.media.ic_mine_settings'))
+      this.preloadIcon($r('app.media.ic_mine_feedback'))
+      this.preloadIcon($r('app.media.ic_mine_about'))
+      this.preloadIcon($r('app.media.ic_mine_switch_account'))
       this.preloadIcon($r('app.media.ic_chevron_right'))
-      this.preloadIcon($r('app.media.ic_feedback'))
-      this.preloadIcon($r('app.media.ic_web_jump'))
     }
     .width(1)
     .height(1)

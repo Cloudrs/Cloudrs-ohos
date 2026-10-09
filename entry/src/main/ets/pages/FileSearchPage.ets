@@ -2,7 +2,6 @@ import { LengthMetrics } from '@kit.ArkUI';
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
-import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 import { ObjectItem } from "../components/ObjectItem";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import { DirectoryInfo, ObjectInfo } from "../model/net/ApiTypes";
@@ -798,8 +797,8 @@ export struct FileSearchPage {
               mainTitleColor: CloudThemeToken.textPrimary
             },
             backIconStyle: {
-              // 高算力档置透明露出 HDS 材质的通透玻璃，与 TitleControlButton 一致；其余档实色
-              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle),
+              // 置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应）；<26 实色
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
               iconColor: CloudThemeToken.textPrimary
             }
           }
@@ -1186,8 +1185,7 @@ export struct FileSearchPage {
     })
   }
 
-  // 磨砂多选栏，与文件页多选栏同款；底色让位给材质，低算力档/低版本回落实色 surface
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  // 磨砂多选栏，与文件页多选栏同款：内容区不在沉浸光感生效范围，实色 surface + 系统厚模糊
   @Builder multiSelectActionBar() {
     Row() {
       Button(this.areAllResultsSelected() ? '取消全选' : '全选')
@@ -1224,9 +1222,8 @@ export struct FileSearchPage {
       left: CloudThemeToken.spacingPage,
       right: CloudThemeToken.spacingPage
     })
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
-    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
-    .systemMaterial(CloudMaterial.panelMaterial())
+    .backgroundColor(CloudThemeToken.surface)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
     .border({
       width: { top: CloudThemeToken.lineWidth },
       color: CloudThemeToken.line

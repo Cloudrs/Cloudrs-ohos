@@ -1,5 +1,4 @@
 import Constant from "../model/Constant"
-import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { CloudThemeToken } from "../model/CloudTheme"
 import { CloudMaterial } from "../model/CloudMaterial"
 import { DetailData } from "../model/DetailData"
@@ -54,8 +53,6 @@ export struct DetailSheet {
     .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder summary() {
     Row({ space: CloudThemeToken.detailSheetSummaryGap }) {
       Stack() {
@@ -88,11 +85,8 @@ export struct DetailSheet {
     .padding(CloudThemeToken.detailSheetSummaryPadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder detailList() {
     Column({ space: CloudThemeToken.zero }) {
       this.commonRow(this.getTypeText(), this.detailData.name)
@@ -126,7 +120,6 @@ export struct DetailSheet {
     })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
   @Builder pathRow() {

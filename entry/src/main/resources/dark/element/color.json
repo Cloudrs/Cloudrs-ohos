@@ -29,6 +29,14 @@
       "value": "#CC151B23"
     },
     {
+      "name": "cloud_control_rim",
+      "value": "#33FFFFFF"
+    },
+    {
+      "name": "cloud_control_frost",
+      "value": "#401F2937"
+    },
+    {
       "name": "cloud_search_field_background",
       "value": "#E6151B23"
     },

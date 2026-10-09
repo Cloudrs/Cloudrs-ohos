@@ -24,6 +24,9 @@ import {
 } from '../utils/TextFileCodec'
 import AppLogger from '../utils/AppLogger'
 import { WindowMover } from '../utils/WindowMover'
+import { LengthMetrics } from '@kit.ArkUI'
+import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from '@kit.UIDesignKit'
+import { CloudMaterial } from '../model/CloudMaterial'
 
 const TAG: string = 'TextPreview'
 /** 与 CommonUtil.getEditorLanguage 的返回值一致，只有它才给 Markdown 预览入口 */
@@ -60,6 +63,8 @@ export struct TextPreviewPage {
   @State currentSize: number = -1
   @State canEdit: boolean = false
   @State editMode: boolean = false
+  // 「更多」菜单显隐：按钮在标题栏里会自己吃掉点击，外层点击触发的 bindMenu 弹不出，改由状态驱动
+  @State showToolMenu: boolean = false
   @State dirty: boolean = false
   @State saving: boolean = false
   @State lineWrap: boolean = true
@@ -122,9 +127,67 @@ export struct TextPreviewPage {
     return AppSettings.isDarkEffective(context) ? EditorThemeMode.DARK : EditorThemeMode.LIGHT
   }
 
+  // 顶栏走 HdsNavigation 标题栏：返回键用 HDS 原生 backIcon，文件名与复制/更多/编辑放 stackBuilder，
+  // 都在沉浸光感生效范围内（效果随设备档位由系统自适应）；正文从标题栏下沿起排，编辑器不从标题栏底下滚过
   build() {
+    HdsNavigation() {
+      this.pageBody()
+    }
+    .width('100%')
+    .height('100%')
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(false)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: ' '
+        },
+        backIcon: {
+          icon: $r('app.media.ic_back'),
+          action: () => {
+            CloudRouter.pop()
+          }
+        },
+        stackBuilder: () => {
+          this.headerStack()
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: false
+        },
+        originalStyle: {
+          contentStyle: {
+            // 置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应）；<26 实色
+            backIconStyle: {
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      padding: {
+        start: LengthMetrics.vp(CloudThemeToken.spacingPage),
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
+    })
+    .backgroundColor(CloudThemeToken.background)
+  }
+
+  @Builder pageBody() {
     Column() {
-      this.header()
       if (this.loadState === TextLoadState.READY && this.editorLanguage === EDITOR_LANGUAGE_MARKDOWN) {
         MarkdownToolbar({
           previewMode: this.previewMode,
@@ -145,83 +208,82 @@ export struct TextPreviewPage {
     }
     .width('100%')
     .height('100%')
+    .padding({ top: CloudThemeToken.hdsTitleBarHeight(this.topRectHeight) })
     .backgroundColor(CloudThemeToken.background)
   }
 
-  @Builder header() {
-    Column() {
-      Blank().height(CloudThemeToken.getSafeTopInset(this.topRectHeight))
+  // 标题栏 stackBuilder：左侧让出 HDS 原生返回键（padding.start + 键宽 + 间距），右侧让出 2in1 窗口三键；
+  // 按钮用 TitleControlButton(inTitleBar) 拿到标题栏材质与按压形变，保存键保留品牌色强调
+  @Builder headerStack() {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Text(this.routeParam?.fileName ?? '')
+        .fontColor(CloudThemeToken.textPrimary)
+        .fontSize(CloudThemeToken.textPreviewTitleSize)
+        .fontWeight(FontWeight.Bold)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+        .height('100%')
+        .onTouch(WindowMover.onTouch)
 
-      Row({ space: CloudThemeToken.spacingSection }) {
-        // 标题栏按钮与其它页同款（TitleControlButton：通透材质 + 光感）；保存键保留品牌色强调
+      TitleControlButton({
+        icon: $r('app.media.ic_copy'),
+        label: '复制全文',
+        inTitleBar: true,
+        isEnabled: this.loadState === TextLoadState.READY,
+        onAction: () => {
+          this.copyAll()
+        }
+      })
+
+      Column() {
         TitleControlButton({
-          icon: $r('app.media.ic_back'),
-          label: '返回',
-          onAction: () => {
-            CloudRouter.pop()
-          }
-        })
-
-        Text(this.routeParam?.fileName ?? '')
-          .fontColor(CloudThemeToken.textPrimary)
-          .fontSize(CloudThemeToken.textPreviewTitleSize)
-          .fontWeight(FontWeight.Bold)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-          .height('100%')
-          .onTouch(WindowMover.onTouch)
-
-        TitleControlButton({
-          icon: $r('app.media.ic_copy'),
-          label: '复制全文',
+          icon: $r('app.media.ic_square_more'),
+          label: '更多',
+          inTitleBar: true,
           isEnabled: this.loadState === TextLoadState.READY,
           onAction: () => {
-            this.copyAll()
+            this.showToolMenu = true
           }
         })
-
-        Column() {
-          TitleControlButton({
-            icon: $r('app.media.ic_square_more'),
-            label: '更多',
-            isEnabled: this.loadState === TextLoadState.READY
-          })
-        }
-        .bindMenu(this.toolMenu())
-
-        if (this.editMode) {
-          CloudIconButton({
-            icon: $r('app.media.ic_save'),
-            buttonBackground: CloudThemeToken.primarySoft,
-            buttonRadius: CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius),
-            iconColor: CloudThemeToken.primary,
-            isEnabled: this.dirty && !this.saving,
-            onAction: () => {
-              this.startSave()
-            }
-          })
-        } else if (this.canEdit) {
-          TitleControlButton({
-            icon: $r('app.media.ic_pencil'),
-            label: '编辑',
-            isEnabled: this.loadState === TextLoadState.READY,
-            onAction: () => {
-              this.enterEditMode()
-            }
-          })
-        }
       }
-      .height(CloudThemeToken.titleBarHeight)
-      .width('100%')
-      .padding({ left: CloudThemeToken.spacingXs, right: CloudThemeToken.spacingXs + this.titleButtonInsetEnd })
-      .alignItems(VerticalAlign.Center)
+      .bindMenu(this.showToolMenu, this.toolMenu(), {
+        onDisappear: () => {
+          this.showToolMenu = false
+        }
+      })
+
+      if (this.editMode) {
+        CloudIconButton({
+          icon: $r('app.media.ic_save'),
+          buttonBackground: CloudThemeToken.primarySoft,
+          buttonRadius: CloudThemeToken.actionRadiusForWidth(this.windowWidthVp, CloudThemeToken.controlRadius),
+          iconColor: CloudThemeToken.primary,
+          isEnabled: this.dirty && !this.saving,
+          onAction: () => {
+            this.startSave()
+          }
+        })
+      } else if (this.canEdit) {
+        TitleControlButton({
+          icon: $r('app.media.ic_pencil'),
+          label: '编辑',
+          inTitleBar: true,
+          isEnabled: this.loadState === TextLoadState.READY,
+          onAction: () => {
+            this.enterEditMode()
+          }
+        })
+      }
     }
     .width('100%')
-    .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
-    .backgroundColor(CloudThemeToken.background)
+    .height('100%')
+    .padding({
+      left: CloudThemeToken.spacingPage + CloudThemeToken.iconButtonSize + CloudThemeToken.spacingSection,
+      right: CloudThemeToken.spacingPage + this.titleButtonInsetEnd
+    })
+    .alignItems(VerticalAlign.Center)
   }
-
   @Builder body() {
     Stack() {
       if (this.loadState === TextLoadState.FAILED) {

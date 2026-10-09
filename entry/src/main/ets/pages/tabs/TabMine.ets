@@ -25,6 +25,9 @@ import { ACCOUNT_PROFILE_STORE_KEY, AccountProfileStore } from '../../model/Acco
 import { SheetPhaseController } from '../../utils/SheetPhaseController';
 import { SettingGroup, SettingRow } from '../../components/settings/SettingRows';
 import { MineProfileCard, MineStorageCard } from '../../components/settings/MineCards';
+import { SettingsPage } from '../SettingsPage';
+import { AccountSecurityPage } from '../AccountSecurityPage';
+import { AboutPage } from '../AboutPage';
 
 const TAG:string = 'TabMine'
 // 切到「我的」时延后一点再拉数据，避开 Tab 切换动画
@@ -35,6 +38,8 @@ export struct TabMine {
   @Link overLap: boolean
   @Watch('onActiveChanged')
   @Prop isActive: boolean = false
+  // 宽屏（HomePage 侧栏布局）为 true：二级页在本 Tab 内容区内原地切换，左侧导航栏保留；手机为 false，走 CloudRouter 整页推入
+  @Prop inlineSubPages: boolean = false
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @StorageProp(Constant.WINDOW_WIDTH_VP) @Watch('onLayoutMetricChanged') sheetLayoutWidth: number = 0
   // 宽屏侧栏收起时，HomePage 的悬浮折叠键会压在页面左上角，用来给内容让位避免和头像重叠
@@ -45,12 +50,17 @@ export struct TabMine {
   // 我的页顶部让位（避开折叠键）；@StorageProp 只在方法里读不会被 build 追踪，故用 @Watch 驱动 @State
   @State mineTopPadding: number = 0
   @State mineTitleLeftPadding: number = CloudThemeToken.pagePadding
+  // 内容区内二级页（SETTINGS_PAGE / ACCOUNT_SECURITY_PAGE / ABOUT_PAGE），空串为我的页本身
+  @State subPage: string = ''
+  // 二级页标题栏左内边距：侧栏收起时让出悬浮折叠键
+  @State subTitleStartPadding: number = CloudThemeToken.pagePadding
   @State currentUser: string = ''
   @State currentUrl: string = ''
   @State showUserSwitchSheet: boolean = false
   @State showPhotoBackupSheet: boolean = false
   @State showPhotoBackupPathSheet: boolean = false
   @State showFeedbackSheet: boolean = false
+  @State showAboutSheet: boolean = false
   @State showLogViewerSheet: boolean = false
   // @Observed 单例经 AppStorage 共享；@StorageLink 订阅后字段重新赋值才会刷新 V1 组件
   @StorageLink(ACCOUNT_PROFILE_STORE_KEY) store: AccountProfileStore = AccountProfileStore.instance
@@ -69,6 +79,7 @@ export struct TabMine {
 
   aboutToDisappear(): void {
     this.cancelRefresh()
+    CloudRouter.clearHomeBackHandler(this.subPageBackHandler)
     this.overLap = true
   }
 
@@ -104,6 +115,41 @@ export struct TabMine {
     this.mineTopPadding = (toggleFloating && this.titleButtonInsetEnd <= 0) ? toggleSpace : CloudThemeToken.zero
     // 其它 Tab 的 HdsTitleBar 标题文字距内容左缘约 20vp（MateBook 实测），这里对齐它而不是 pagePadding
     this.mineTitleLeftPadding = toggleFloating ? toggleSpace : CloudThemeToken.pagePadding + CloudThemeToken.spacingXs
+    this.subTitleStartPadding = toggleFloating ? toggleSpace : CloudThemeToken.pagePadding
+  }
+
+  // 二级页打开期间的返回处理器；保留引用以便只清自己注册的那个
+  private subPageBackHandler: () => boolean = (): boolean => {
+    if (this.subPage.length === 0) {
+      return false
+    }
+    this.closeSubPage()
+    return true
+  }
+
+  private openSubPage(page: string): void {
+    if (!this.inlineSubPages) {
+      CloudRouter.push(page)
+      return
+    }
+    this.subPage = page
+    // 返回键（平板手势 / 2in1 Esc）先退回我的页；HomePage 宽屏下文件页已销毁，不会抢这个处理器
+    CloudRouter.setHomeBackHandler(this.subPageBackHandler)
+  }
+
+  private closeSubPage(): void {
+    this.subPage = ''
+    CloudRouter.clearHomeBackHandler(this.subPageBackHandler)
+  }
+
+  @Builder subPageView() {
+    if (this.subPage === Constant.SETTINGS_PAGE) {
+      SettingsPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
+    } else if (this.subPage === Constant.ACCOUNT_SECURITY_PAGE) {
+      AccountSecurityPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
+    } else if (this.subPage === Constant.ABOUT_PAGE) {
+      AboutPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
+    }
   }
 
   // 2in1：与文件页「存储」、相册页「相册」同一行位置的固定标题，兼作窗口拖动区（行内无按钮）
@@ -130,30 +176,34 @@ export struct TabMine {
 
   build() {
     Stack() {
-      Column() {
-        if (this.titleButtonInsetEnd > 0) {
-          this.mineTitleRow()
-        }
-        // 自定义组件尾随闭包后不能再链属性，故外包一层承接 layoutWeight
+      if (this.subPage.length > 0) {
+        this.subPageView()
+      } else {
         Column() {
-          CloudScaffold({
-            scroller: this.scroller,
-            topPadding: this.mineTopPadding,
-            bottomPadding: CloudThemeToken.pageBottomPadding
-          }) {
-            Column({ space: CloudThemeToken.sectionGap }) {
-              MineProfileCard()
-              MineStorageCard()
-              this.entryGroups()
-            }
-            .width('100%')
+          if (this.titleButtonInsetEnd > 0) {
+            this.mineTitleRow()
           }
+          // 自定义组件尾随闭包后不能再链属性，故外包一层承接 layoutWeight
+          Column() {
+            CloudScaffold({
+              scroller: this.scroller,
+              topPadding: this.mineTopPadding,
+              bottomPadding: CloudThemeToken.pageBottomPadding
+            }) {
+              Column({ space: CloudThemeToken.sectionGap }) {
+                MineProfileCard({ onOpen: () => this.openSubPage(Constant.ACCOUNT_SECURITY_PAGE) })
+                MineStorageCard()
+                this.entryGroups()
+              }
+              .width('100%')
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
         }
         .width('100%')
-        .layoutWeight(1)
+        .height('100%')
       }
-      .width('100%')
-      .height('100%')
 
       this.sheetHosts()
     }
@@ -165,42 +215,49 @@ export struct TabMine {
     SettingGroup() {
       SettingRow({
         title: '相册备份', value: this.photoBackupEnabled ? '已开启' : '未开启',
-        icon: $r('app.media.ic_externaldrive_fill'), iconBackground: CloudThemeToken.settingIconPhotoBackupBackground,
+        icon: $r('app.media.ic_mine_backup'),
         onTap: () => this.photoBackupCtrl.requestOpen(() => this.showPhotoBackupSheet, (v: boolean) => {
           this.showPhotoBackupSheet = v
         })
       })
       SettingRow({
         title: '账号与安全', value: this.securityValue(), divider: true,
-        icon: $r('app.media.ic_privacy_secure'), iconBackground: CloudThemeToken.settingIconPrivacyBackground,
-        onTap: () => CloudRouter.push(Constant.ACCOUNT_SECURITY_PAGE)
+        icon: $r('app.media.ic_mine_security'),
+        onTap: () => this.openSubPage(Constant.ACCOUNT_SECURITY_PAGE)
       })
       SettingRow({
         title: '设置', divider: true,
-        icon: $r('app.media.ic_more_setting'), iconBackground: CloudThemeToken.settingIconMoreBackground,
-        onTap: () => CloudRouter.push(Constant.SETTINGS_PAGE)
+        icon: $r('app.media.ic_mine_settings'),
+        onTap: () => this.openSubPage(Constant.SETTINGS_PAGE)
       })
     }
 
     SettingGroup() {
       SettingRow({
         title: $r('app.string.feedback'),
-        icon: $r('app.media.ic_feedback'), iconBackground: CloudThemeToken.settingIconWebJumpBackground,
+        icon: $r('app.media.ic_mine_feedback'),
         onTap: () => {
           this.showFeedbackSheet = true
         }
       })
       SettingRow({
-        title: '关于 Cloudrs', value: this.appVersion, divider: true,
-        icon: $r('app.media.ic_info_circle'), iconBackground: CloudThemeToken.settingIconAboutBackground,
-        onTap: () => CloudRouter.push(Constant.ABOUT_PAGE)
+        title: $r('app.string.about'), value: this.appVersion, divider: true,
+        icon: $r('app.media.ic_mine_about'),
+        // 宽屏在内容区内原地打开；手机沿用半模态，不推整页
+        onTap: () => {
+          if (this.inlineSubPages) {
+            this.openSubPage(Constant.ABOUT_PAGE)
+          } else {
+            this.showAboutSheet = true
+          }
+        }
       })
     }
 
     SettingGroup() {
       SettingRow({
         title: '切换账号',
-        icon: $r('app.media.ic_person'), iconBackground: CloudThemeToken.settingIconThemeBackground,
+        icon: $r('app.media.ic_mine_switch_account'),
         onTap: () => this.userSwitchCtrl.requestOpen(() => this.showUserSwitchSheet, (v: boolean) => {
           this.showUserSwitchSheet = v
         })
@@ -269,6 +326,20 @@ export struct TabMine {
         systemMaterial: CloudMaterial.sheetMaterial(),
         preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
         width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
+      })
+
+    Column().width(0).height(0)
+      .bindSheet($$this.showAboutSheet, this.aboutSheet(), {
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
+        title: { title: $r('app.string.about') },
+        showClose: true,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+        onDisappear: () => {
+          this.showAboutSheet = false
+        }
       })
 
     Column().width(0).height(0)
@@ -429,6 +500,10 @@ export struct TabMine {
   private openLogViewer(): void {
     this.closeFeedbackSheet()
     this.showLogViewerSheet = true
+  }
+
+  @Builder aboutSheet() {
+    AboutPage({ embedded: true })
   }
 
   @Builder logViewerSheet() {

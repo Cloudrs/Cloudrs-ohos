@@ -124,9 +124,11 @@ export class CloudThemeToken {
   static readonly detailSpacerHeight: number = 4
   static readonly mineSelectWidth: number = 70
   static readonly settingGroupRadius: number = 16
-  static readonly settingIconBoxSize: number = 30
-  static readonly settingIconSize: number = 18
-  static readonly settingDividerInsetIcon: number = 56
+  // 设置行线性图标 24vp；有图标时分隔线缩进 = 行左内边距 14 + 图标 24 + 间距 12
+  static readonly settingLineIconSize: number = 24
+  static readonly settingDividerInsetIcon: number = 50
+  // 「我的」存储卡圆环中心「已用」小字
+  static readonly storageRingCaptionSize: number = 11
   static readonly settingValueMaxWidth: number = 160
   static readonly settingSectionTitleSize: number = 13
   static readonly settingChipRadius: number = 22
@@ -188,7 +190,6 @@ export class CloudThemeToken {
   static readonly topBarActionGap: number = 8
   static readonly inputHeight: number = 48
   static readonly menuWidth: number = 220
-  static readonly menuItemHeight: number = 45
   static readonly menuItemLabelHeight: number = 50
   static readonly transferFileIconSize: number = 40
   static readonly transferStateIconSize: number = 12
@@ -414,7 +415,6 @@ export class CloudThemeToken {
   static readonly videoPreviewControlIconSize: number = 18
   static readonly videoPreviewCloseIconSize: number = 18
   // 本地预览返回键与远程预览 HDS titleBar 返回图标(24vp)保持一致
-  static readonly photoLocalPreviewBackIconSize: number = 24
   static readonly videoPreviewControlsPanelRadius: number = 20
   // 续播浮条：胶囊高度即圆角基准，内嵌的"从头播放"按钮再小一号
   static readonly videoPreviewResumeBannerHeight: number = 40
@@ -492,6 +492,15 @@ export class CloudThemeToken {
   static readonly surfaceSubtle: ResourceColor = $r('app.color.cloud_surface_subtle')
   static readonly surfaceTranslucent: ResourceColor = $r('app.color.cloud_surface_translucent')
   static readonly surfaceGlassStrong: ResourceColor = $r('app.color.cloud_surface_glass_strong')
+  // 光边：HDS 标题栏键 / 底部悬浮页签边缘那圈 2~3px 的白光（Pura X View 实测），自绘控件同款
+  static readonly controlRim: ResourceColor = $r('app.color.cloud_control_rim')
+  static readonly controlRimWidth: number = 0.7
+  // 内容区磨砂键（仿底部悬浮页签）：极淡染色 + 强背景模糊，纯色底上与页底同色、只靠光边与投影显形，压在内容上透出模糊后的内容
+  static readonly controlFrost: ResourceColor = $r('app.color.cloud_control_frost')
+  static readonly controlFrostBlur: number = 30
+  // 内容区浮动键（不在沉浸光感生效范围，无材质交互形变）的按压缩放反馈
+  static readonly fabPressedScale: number = 0.92
+  static readonly fabPressAnimDuration: number = 160
   static readonly searchFieldBackground: ResourceColor = $r('app.color.cloud_search_field_background')
   static readonly headerGlass: ResourceColor = $r('app.color.cloud_header_glass')
   static readonly searchGlass: ResourceColor = $r('app.color.cloud_search_glass')
@@ -531,8 +540,6 @@ export class CloudThemeToken {
   static readonly selectedGlow: ResourceColor = '#33115DFC'
   static readonly selectedHighlight: ResourceColor = '#66FFFFFF'
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
-  // 高算力档材质接管后的薄染：白图标压在亮画面上仍需一点深底保对比
-  static readonly videoPreviewControlMaterialTint: ResourceColor = 'rgba(18, 22, 30, 0.3)'
   static readonly videoPreviewControlBorder: ResourceColor = 'rgba(255, 255, 255, 0.18)'
   static readonly videoPreviewControlsBackground: ResourceColor = 'rgba(0, 0, 0, 0.54)'
   // 续播浮条的"从头播放"按钮底色。浮条整体只用白与半透明黑，不吃主题色：
@@ -547,6 +554,11 @@ export class CloudThemeToken {
       return CloudThemeToken.systemTopFallbackHeight
     }
     return Math.min(topRectHeight, CloudThemeToken.systemTopFallbackHeight)
+  }
+
+  /** HdsNavigation MINI 标题栏（含状态栏）总高：内容从标题栏底下滚过时，滚动容器顶部要留出这么多 */
+  static hdsTitleBarHeight(topRectHeight: number): number {
+    return CloudThemeToken.getSafeTopInset(topRectHeight) + CloudThemeToken.rowHeight5xl
   }
 
   static getBreakpoint(widthVp: number): CloudBreakpoint {

@@ -5,19 +5,22 @@ import { Aria2Downloading,
   TaskError,
   UserTask, UserTasks } from "../../model/net/ApiTypes";
 import { CloudApi } from "../../model/net/CloudApi";
-import { ContentItem, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { ContentItem, LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import {
+  DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, hdsMaterial
+} from "@kit.UIDesignKit";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { Aria2Create } from "../../components/Aria2Create";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
-import { CloudScaffold } from "../../components/CloudScaffold";
+
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { CloudMaterial } from "../../model/CloudMaterial";
 import AppLogger from "../../utils/AppLogger";
 import { WindowMover } from "../../utils/WindowMover";
 import { EmptyState } from "../../components/EmptyState";
-import { TitleControlButton } from "../../components/TitleControlButton";
+
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { ActiveAccount } from "../../utils/ActiveAccount";
@@ -36,6 +39,7 @@ export struct TabRemoteDown {
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   // 2in1 窗口三键区宽度；其它设备为 0
   @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0;
+  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.download_offline') }, { text: $r('app.string.task_queue') }] as SegmentButtonItemTuple,
     multiply: false,
@@ -282,23 +286,97 @@ export struct TabRemoteDown {
     })
   }
 
+  // 顶栏走 HdsNavigation 标题栏（与文件页、相册页一致）：分段按钮放 stackBuilder 居中，
+  // 「新建离线下载」用 HDS 原生菜单键，都在沉浸光感生效范围内，效果随设备档位由系统自适应
   build() {
-    CloudScaffold({
-      scrollable: false,
-      avoidTabBar: false,
-      // 2in1 隐藏系统标题栏后，标题行与窗口三键区（titleRowHeight 高）垂直居中对齐
-      topPadding: this.titleButtonInsetEnd > 0 ?
-        (CloudThemeToken.titleRowHeight - CloudThemeToken.iconBoxLg) / CloudThemeToken.halfDivisor :
-        CloudThemeToken.pageTopPadding,
-      bottomPadding: CloudThemeToken.zero,
-      horizontalPadding: CloudThemeToken.pagePadding
-    }) {
-      this.title()
-      if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
-        this.offlineDownload()
+    HdsNavigation() {
+      Column() {
+        if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
+          this.offlineDownload()
+        }
+        else {
+          this.tasksQueue()
+        }
       }
-      else {
-        this.tasksQueue()
+      .width('100%')
+      .height('100%')
+      .padding({
+        left: CloudThemeToken.pagePadding,
+        right: CloudThemeToken.pagePadding,
+        top: CloudThemeToken.hdsTitleBarHeight(this.topRectHeight) + CloudThemeToken.spacingXs
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(true)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: ' '
+        },
+        menu: {
+          value: [this.getCreateMenuItem()],
+          maxCount: 1
+        },
+        stackBuilder: () => {
+          this.titleStack()
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: false
+        },
+        originalStyle: {
+          contentStyle: {
+            menuStyle: {
+              // 置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应）；<26 实色
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      padding: {
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
+    })
+    .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
+      showClose: true,
+      detents: [SheetSize.FIT_CONTENT],
+      title: {title: $r('app.string.download_offline')},
+      backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+      systemMaterial: CloudMaterial.sheetMaterial(),
+      preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+      width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+      onDisappear: () => {
+        this.showCreateSheet = false
+      }
+    })
+    .backgroundColor(CloudThemeToken.background)
+  }
+
+  private getCreateMenuItem(): HdsNavigationMenuItemOptions {
+    return {
+      content: {
+        icon: $r('app.media.ic_title_plus'),
+        label: '新建离线下载',
+        action: () => {
+          this.openCreateSheet()
+        }
       }
     }
   }
@@ -442,52 +520,33 @@ export struct TabRemoteDown {
     }})
   }
 
-  @Builder title() {
-    Stack({alignContent: Alignment.End}) {
-      Row() {
-        // 分段按钮两侧空白作为 2in1 窗口拖动区（不挂整行，免得点分段按钮也拖窗口）
-        Blank().layoutWeight(1).height('100%')
-          .onTouch((event: TouchEvent) => {
-            WindowMover.onTouch(event)
-          })
-        SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
-          .width(CloudThemeToken.filesSegmentWidth)
-        Blank().layoutWeight(1).height('100%')
-          .onTouch((event: TouchEvent) => {
-            WindowMover.onTouch(event)
-          })
-      }
-      .width('100%')
-      .height('100%')
-      .justifyContent(FlexAlign.Center)
-
-      // 与 HDS 标题栏菜单键同款（TitleControlButton），和其它页标题栏按钮观感一致
-      Column() {
-        TitleControlButton({
-          icon: $r('app.media.ic_title_plus'),
-          label: '新建离线下载',
-          onAction: () => {
-            this.openCreateSheet()
-          }
+  // 标题栏 stackBuilder：分段按钮居中。左右对称让出 HDS 菜单键（及 2in1 窗口三键）的宽度，
+  // 分段按钮仍在页面正中、也不盖住菜单键抢点击；两侧空白作为 2in1 窗口拖动区（不挂整行，免得点分段按钮也拖窗口）
+  @Builder titleStack() {
+    Row() {
+      Blank().layoutWeight(1).height('100%')
+        .onTouch((event: TouchEvent) => {
+          WindowMover.onTouch(event)
         })
-      }
-      .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
-        showClose: true,
-        detents: [SheetSize.FIT_CONTENT],
-        title: {title: $r('app.string.download_offline')},
-        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-        systemMaterial: CloudMaterial.sheetMaterial(),
-        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
-        onDisappear: () => {
-          this.showCreateSheet = false
-        }
-      })
-      // 2in1 窗口三键浮在右上角，新建按钮左移让位；分段按钮仍在页面居中
-      .margin({ right: this.titleButtonInsetEnd })
+      SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
+        .width(CloudThemeToken.filesSegmentWidth)
+      Blank().layoutWeight(1).height('100%')
+        .onTouch((event: TouchEvent) => {
+          WindowMover.onTouch(event)
+        })
     }
     .width('100%')
-    .height(CloudThemeToken.iconBoxLg)
+    .height('100%')
+    .padding({
+      left: this.getTitleStackSidePadding(),
+      right: this.getTitleStackSidePadding()
+    })
+    .alignItems(VerticalAlign.Center)
+    .justifyContent(FlexAlign.Center)
+  }
+
+  private getTitleStackSidePadding(): number {
+    return CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.rowHeight5xl + this.titleButtonInsetEnd
   }
 
   getDownloadLength(files: Aria2Files[]) {

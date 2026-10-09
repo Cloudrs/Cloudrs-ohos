@@ -2,7 +2,6 @@ import Constant from "../model/Constant";
 import { EmptyState } from "./EmptyState";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
-import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../utils/ToastUtil";
@@ -157,7 +156,6 @@ export struct PathSelectSheet {
     }
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder header() {
     Column() {
       Row({ space: CloudThemeToken.pathSheetTitleGap }) {
@@ -192,8 +190,7 @@ export struct PathSelectSheet {
           .height(CloudThemeToken.iconBoxSm)
           .borderRadius(CloudThemeToken.iconBoxSm / CloudThemeToken.halfDivisor)
           .clip(true)
-          .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
-          .systemMaterial(CloudMaterial.sheetControlMaterial())
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
           .hoverEffect(HoverEffect.Highlight)
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .focusable(true)
@@ -223,8 +220,7 @@ export struct PathSelectSheet {
           .height(CloudThemeToken.iconBoxSm)
           .borderRadius(CloudThemeToken.iconBoxSm / CloudThemeToken.halfDivisor)
           .clip(true)
-          .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
-          .systemMaterial(CloudMaterial.sheetControlMaterial())
+          .backgroundColor(CloudThemeToken.surfaceSubtle)
           .hoverEffect(HoverEffect.Highlight)
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .focusable(true)

@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit'
 import Constant from '../model/Constant'
 import { CloudThemeToken } from '../model/CloudTheme'
 import { AppSettings } from '../model/AppSettings'
-import { CommonTitle } from '../components/CommonTitle'
+import { SubPageScaffold } from '../components/SubPageScaffold'
 import {
   SettingGroup, SettingSectionTitle, SettingSegmentRow, SettingStepperRow, SettingSwitchRow
 } from '../components/settings/SettingRows'
@@ -15,7 +15,13 @@ const KNOCK_EXPIRE_LABELS: string[] = ['1 天', '7 天', '30 天', '永久']
 /** 本机设置：所有项行内即改即存，不再弹窗 */
 @Component
 export struct SettingsPage {
+  // 宽屏在「我的」内容区内打开时由 TabMine 传入：标题栏左内边距（让出悬浮折叠键）与返回回调；
+  // 未传时 -1 / undefined，走默认 pagePadding 与 CloudRouter.pop()
+  @Prop titleStartPadding: number = -1
+  onBack?: () => void
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
+  private scroller: Scroller = new Scroller()
   @State themeIndex: number = 0
   @State uploadConcurrent: number = Constant.UPLOAD_CONCURRENT_DEFAULT
   @State imageDraggable: boolean = false
@@ -35,9 +41,11 @@ export struct SettingsPage {
   }
 
   build() {
-    Column() {
-      CommonTitle({ title: '设置' })
-      Scroll() {
+    SubPageScaffold({
+      title: '设置', startPadding: this.titleStartPadding, scroller: this.scroller, onBackClick: this.onBack
+    }) {
+      // 内容铺满全页、从标题栏底下滚过（顶部留出标题栏高度），上滑时标题栏出模糊材质
+      Scroll(this.scroller) {
         Column({ space: CloudThemeToken.sectionGap }) {
           Column({ space: CloudThemeToken.spacingXl }) {
             SettingSectionTitle({ title: '外观' })
@@ -69,18 +77,16 @@ export struct SettingsPage {
         .padding({
           left: CloudThemeToken.pagePadding,
           right: CloudThemeToken.pagePadding,
-          top: CloudThemeToken.spacingXs,
+          top: CloudThemeToken.hdsTitleBarHeight(this.topRectHeight) + CloudThemeToken.spacingXs,
           bottom: this.bottomRectHeight + CloudThemeToken.pageBottomPadding
         })
       }
-      .layoutWeight(1)
+      .width('100%')
+      .height('100%')
       .align(Alignment.Top)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(CloudThemeToken.background)
   }
 
   @Builder themeGroup() {

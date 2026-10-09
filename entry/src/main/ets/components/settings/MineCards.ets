@@ -4,12 +4,15 @@ import { CloudRouter } from '../../utils/CloudRouter'
 import Constant from '../../model/Constant'
 import { ACCOUNT_PROFILE_STORE_KEY, AccountProfileStore } from '../../model/AccountProfileStore'
 import { ChipTone, SettingChip } from './SettingRows'
+import { SettingsRules } from '../../utils/SettingsRules'
 
 // 「我的」页顶部资料卡：头像 + 昵称/账号 + 用户组/UID/加入天数，点击进入账号与安全页
 @Component
 export struct MineProfileCard {
   // 账号状态单例（@Observed，经 AppStorage 共享）；必须用 @StorageLink 绑定，普通字段持有不会触发 V1 组件刷新
   @StorageLink(ACCOUNT_PROFILE_STORE_KEY) store: AccountProfileStore = AccountProfileStore.instance
+  // 宽屏由 TabMine 在内容区内打开账号与安全页；未传时按整页路由推入
+  onOpen?: () => void
 
   build() {
     Row({ space: CloudThemeToken.spacingPanel }) {
@@ -59,7 +62,11 @@ export struct MineProfileCard {
       normal: { .backgroundColor(CloudThemeToken.surface) }
     })
     .onClick(() => {
-      CloudRouter.push(Constant.ACCOUNT_SECURITY_PAGE)
+      if (this.onOpen) {
+        this.onOpen()
+      } else {
+        CloudRouter.push(Constant.ACCOUNT_SECURITY_PAGE)
+      }
     })
   }
 
@@ -95,60 +102,62 @@ export struct MineProfileCard {
   }
 }
 
-// 「我的」页存储卡：已用/总量、容量条、剩余与存储包、更新时间
+// 「我的」页存储卡：左侧已用/总量、剩余与更新时间，右侧圆环（同改版前的 DataPanel 圆环）显示已用比例
 @Component
 export struct MineStorageCard {
   @StorageLink(ACCOUNT_PROFILE_STORE_KEY) store: AccountProfileStore = AccountProfileStore.instance
 
   build() {
-    Column({ space: CloudThemeToken.spacingCard }) {
-      Row() {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      Column({ space: CloudThemeToken.spacingXl }) {
         Text('存储空间')
           .fontSize(CloudThemeToken.textSizeBodyPlus)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-        Text(this.storagePercentText())
-          .fontSize(CloudThemeToken.textSizeBodyPlus)
+        Text(this.storageUsedText())
+          .fontSize(CloudThemeToken.textSizeHeadline)
           .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.primary)
-      }
-      .width('100%')
-
-      Text(this.storageUsedText())
-        .fontSize(CloudThemeToken.textSizeHeadline)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-
-      Progress({
-        value: this.store.storage?.used ?? 0,
-        total: Math.max(this.store.storage?.total ?? 0, 1),
-        type: ProgressType.Capsule
-      })
-        .width('100%')
-        .height(CloudThemeToken.storageProgressHeight)
-        .color(CloudThemeToken.primary)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
-        // 胶囊型 Progress 自带按钮式交互态，纯展示条需屏蔽，否则 2in1 悬停时横条晃动
-        .focusable(false)
-        .hitTestBehavior(HitTestMode.None)
-
-      Row() {
-        Text(this.storageFreeText())
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-          .layoutWeight(1)
-        Text(this.storageUpdatedText())
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(SettingsRules.joinNonEmpty([this.storageFreeText(), this.storageUpdatedText()], ' · '))
           .fontSize(CloudThemeToken.textSizeSmall)
           .fontColor(CloudThemeToken.textSecondary)
       }
-      .width('100%')
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Stack({ alignContent: Alignment.Center }) {
+        DataPanel({
+          values: [this.store.storage?.used ?? 0],
+          max: Math.max(this.store.storage?.total ?? 0, 1),
+          type: DataPanelType.Circle
+        })
+          .width(CloudThemeToken.panelLargeSize)
+          .height(CloudThemeToken.panelLargeSize)
+          .strokeWidth(CloudThemeToken.storageProgressStrokeWidth)
+          .valueColors([CloudThemeToken.primary])
+          .trackBackgroundColor(CloudThemeToken.surfaceSubtle)
+
+        Column({ space: CloudThemeToken.lineWidth }) {
+          Text(this.storagePercentText())
+            .fontSize(CloudThemeToken.textSizeBodyPlus)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(CloudThemeToken.textPrimary)
+          Text('已用')
+            .fontSize(CloudThemeToken.storageRingCaptionSize)
+            .fontColor(CloudThemeToken.textSecondary)
+        }
+        .alignItems(HorizontalAlign.Center)
+      }
+      .width(CloudThemeToken.panelLargeSize)
+      .height(CloudThemeToken.panelLargeSize)
     }
     .width('100%')
     .padding(CloudThemeToken.spacingPage)
     .borderRadius(CloudThemeToken.settingGroupRadius)
     .backgroundColor(CloudThemeToken.surface)
-    .alignItems(HorizontalAlign.Start)
+    .alignItems(VerticalAlign.Center)
   }
 
   private storagePercentText(): string {

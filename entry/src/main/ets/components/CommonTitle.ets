@@ -7,6 +7,8 @@ import { TitleControlButton } from "./TitleControlButton";
 export struct CommonTitle {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0;
+  // 2in1 隐藏系统标题栏后窗口三键区宽度（其它设备为 0）
+  @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0;
   @Prop title: ResourceStr
   onBackClick?: ()=>void
 
@@ -34,9 +36,11 @@ export struct CommonTitle {
           .fontSize(CloudThemeToken.commonTitleTextSize)
           .fontWeight(FontWeight.Bold)
       }
-      .height(CloudThemeToken.titleBarHeight)
+      // 2in1 自绘窗口三键在 titleRowHeight 行内垂直居中，标题行同高才能与三键对齐；右侧让出三键区
+      .height(this.titleButtonInsetEnd > 0 ? CloudThemeToken.titleRowHeight : CloudThemeToken.titleBarHeight)
       .width('100%')
-      .padding({ left: CloudThemeToken.spacingXs, right: CloudThemeToken.pagePadding })
+      // 返回键圆底与页面内容左缘对齐（pagePadding），与文本预览顶栏的 12+4 一致
+      .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding + this.titleButtonInsetEnd })
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
     }

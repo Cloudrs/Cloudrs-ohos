@@ -11,6 +11,7 @@ import { CodeEditor, CodeEditorController, EditorThemeMode } from '../components
 import { MarkdownToolbar } from '../components/MarkdownToolbar'
 import { EmptyState } from '../components/EmptyState'
 import UserPreferences from '../model/UserPreferences'
+import { AppSettings } from '../model/AppSettings'
 import { ObjectDetail } from '../model/net/ApiTypes'
 import { CloudRouter } from '../utils/CloudRouter'
 import { CommonUtil } from '../utils/CommonUtil'
@@ -117,9 +118,8 @@ export struct TextPreviewPage {
   }
 
   private resolveThemeMode(): string {
-    const mode = UserPreferences.getSync(
-      Constant.USER_PREFERENCES, Constant.APP_THEME_MODE, Constant.APP_THEME_LIGHT) as string
-    return mode === Constant.APP_THEME_DARK ? EditorThemeMode.DARK : EditorThemeMode.LIGHT
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    return AppSettings.isDarkEffective(context) ? EditorThemeMode.DARK : EditorThemeMode.LIGHT
   }
 
   build() {

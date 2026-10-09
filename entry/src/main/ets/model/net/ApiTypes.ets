@@ -135,16 +135,45 @@ export interface UserStorage {
   total: number;
 }
 
-/**
- * 用户存储信息
- */
-export interface UserSetting {
-  authn: string[];
-  homepage: boolean;
-  prefer_theme: string;
-  themes: string;
-  two_factor: boolean;
-  uid: number;
+/** 通行密钥（只读展示，可删除） */
+export interface AccountPasskey {
+  id: string;
+  name: string;
+  created_at: string;
+  /** 从未使用时为空串 */
+  used_at: string;
+}
+
+/** 登录记录（仅 Pro 服务端返回） */
+export interface AccountLoginActivity {
+  created_at: string;
+  ip: string;
+  browser: string;
+  device: string;
+  os: string;
+  login_with: string;
+  success: boolean;
+  webdav: boolean;
+}
+
+/** 存储包（仅 Pro 服务端返回） */
+export interface AccountStoragePack {
+  name: string;
+  active_since: string;
+  expire_at: string;
+  size: number;
+}
+
+/** native getAccountSettings 的扁平结构；v3 时 supported=false、其余为空 */
+export interface AccountSettings {
+  supported: boolean;
+  passwordless: boolean;
+  two_fa_enabled: boolean;
+  passkeys: AccountPasskey[];
+  login_activity: AccountLoginActivity[];
+  storage_packs: AccountStoragePack[];
+  /** 仅 Pro；空串表示不显示 */
+  group_expires: string;
 }
 
 /**

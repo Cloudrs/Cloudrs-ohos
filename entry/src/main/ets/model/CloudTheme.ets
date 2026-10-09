@@ -123,6 +123,16 @@ export class CloudThemeToken {
   static readonly storageProgressHeight: number = 8
   static readonly detailSpacerHeight: number = 4
   static readonly mineSelectWidth: number = 70
+  static readonly settingGroupRadius: number = 16
+  static readonly settingIconBoxSize: number = 30
+  static readonly settingIconSize: number = 18
+  static readonly settingDividerInsetIcon: number = 56
+  static readonly settingValueMaxWidth: number = 160
+  static readonly settingSectionTitleSize: number = 13
+  static readonly settingChipRadius: number = 22
+  static readonly settingSegmentHeight: number = 32
+  static readonly settingSegmentRadius: number = 16
+  static readonly qrCodeSize: number = 112
   static readonly defaultAnimationDuration: number = 300
   static readonly fullOpacity: number = 1
   static readonly pressedScale: number = 0.95
@@ -491,6 +501,7 @@ export class CloudThemeToken {
   static readonly previewCloseButtonBackground: ResourceColor = $r('app.color.cloud_preview_close_background')
   static readonly previewCloseIcon: ResourceColor = $r('app.color.cloud_preview_close_icon')
   static readonly line: ResourceColor = $r('app.color.cloud_line')
+  static readonly segmentSelected: ResourceColor = $r('app.color.cloud_segment_selected')
   // 滚动条滑块：比分隔线重一档（压在白卡上要看得见），比次要文字轻一档（不抢视线）
   static readonly scrollBar: ResourceColor = $r('app.color.cloud_scroll_bar')
   static readonly primary: ResourceColor = $r('app.color.cloud_primary')

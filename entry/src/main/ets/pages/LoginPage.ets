@@ -17,6 +17,7 @@ import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { CloudIconButton } from '../components/CloudIconButton';
 import { TitleControlButton } from '../components/TitleControlButton';
+import { OtpInput } from '../components/OtpInput';
 import AppLogger from '../utils/AppLogger';
 import { WindowMover } from '../utils/WindowMover';
 import { common } from '@kit.AbilityKit';
@@ -28,14 +29,6 @@ function rowCommonStyle() {
   .width('100%')
   .height(CloudThemeToken.inputHeight)
   .alignItems(VerticalAlign.Center)
-}
-
-function buildOtpIndexes(): number[] {
-  const indexes: number[] = []
-  for (let index = 0; index < CloudThemeToken.loginOtpLength; index++) {
-    indexes.push(index)
-  }
-  return indexes
 }
 
 class ScannedLoginData {
@@ -154,7 +147,6 @@ export struct LoginPage {
   @State private otpCode: string = ''
   scroller: Scroller = new Scroller();
   private nextPage: string|null = Constant.HOME_PAGE
-  private readonly otpIndexes: number[] = buildOtpIndexes()
   private readonly otpInputId: string = 'loginOtpInput'
   private readonly usernameInputId: string = 'loginUsernameInput'
   private readonly passwordInputId: string = 'loginPasswordInput'
@@ -1044,52 +1036,13 @@ export struct LoginPage {
         .width('100%')
         .textAlign(TextAlign.Center)
 
-      Stack() {
-        Row({ space: CloudThemeToken.loginOtpCellGap }) {
-          ForEach(this.otpIndexes, (item: number) => {
-            Column() {
-              Text(item < this.otpCode.length ? this.otpCode[item] : '')
-                .fontSize(CloudThemeToken.loginOtpCellTextSize)
-                .fontWeight(FontWeight.Bold)
-            }
-            .width(CloudThemeToken.loginOtpCellWidth)
-            .height(CloudThemeToken.loginOtpCellHeight)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
-            .borderRadius(CloudThemeToken.otpCellRadius)
-            .backgroundColor(CloudThemeToken.surface)
-            .border({
-              width: CloudThemeToken.loginOtpBorderWidth,
-              color: this.otpCode.length === item
-                ? CloudThemeToken.primary
-                : CloudThemeToken.transparent
-            })
-          }, (item: number) => item.toString())
+      OtpInput({
+        code: $otpCode,
+        inputId: this.otpInputId,
+        onComplete: () => {
+          this.submitOtp()
         }
-        .justifyContent(FlexAlign.Center)
-        .width('100%')
-
-        TextInput()
-          .id(this.otpInputId)
-          .type(InputType.Number)
-          .maxLength(CloudThemeToken.loginOtpLength)
-          .width('100%')
-          .height(CloudThemeToken.loginOtpCellHeight)
-          .opacity(CloudThemeToken.invisibleOpacity)
-          .defaultFocus(true)
-          .enterKeyType(EnterKeyType.Go)
-          .onChange((value) => {
-            this.otpCode = value
-            if (value.length === CloudThemeToken.loginOtpLength) {
-              this.submitOtp()
-            }
-          })
-          .onSubmit(() => {
-            this.submitOtp()
-          })
-      }
-      .width('100%')
-      .height(CloudThemeToken.loginOtpCellHeight)
+      })
     }
   }
 

@@ -279,6 +279,10 @@
     {
       "name": "cloud_preview_close_icon",
       "value": "#6B7280"
+    },
+    {
+      "name": "cloud_segment_selected",
+      "value": "#FFFFFF"
     }
   ]
 }

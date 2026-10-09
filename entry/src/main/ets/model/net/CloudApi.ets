@@ -1,8 +1,11 @@
+import { util } from '@kit.ArkTS';
 import {
-  nativeInit, nativeGetApiVersionInfo, nativeRestoreSession,
+  nativeInit, nativeGetApiVersionInfo, nativeRestoreSession, nativeClearSession,
   nativeGetSiteConfig, nativeLogin, nativeLogin2fa, nativeLoginWithRefreshToken,
-  nativeGetUserStorage, nativeGetUserSetting,
+  nativeGetUserStorage,
   nativeGetUserAvatar,
+  nativeGetAccountSettings, nativeUpdateNickname, nativeChangePassword, nativeInitTwoFactor,
+  nativeSetTwoFactor, nativeUploadAvatar, nativeResetAvatar, nativeDeletePasskey,
   nativeGetDirectory, nativeGetObjectDetail,
   nativeDeleteObjects, nativeDeleteObjectLockAware, nativeUnlockFiles,
   nativeDeleteObjectsBatch, nativeTransferObjectsBatch,
@@ -25,7 +28,7 @@ import {
   Aria2Downloading, Aria2Finished, DirectoryInfo,
   BaseResponse, HttpCallback, ObjectDetail, ProgressCallback,
   ObjectInfo, SiteConfig, UploadRequestResponse,
-  UserInfo, UserSetting, UserStorage, UserTasks,
+  AccountSettings, UserInfo, UserStorage, UserTasks,
   TwoFactorCallback
 } from './ApiTypes';
 import { ObjectSrc, ObjectCopy, ObjectMove, ObjectUpload } from './ObjectParam';
@@ -124,6 +127,11 @@ export class CloudApi {
     nativeRestoreSession(url, token, refreshToken, isV3);
   }
 
+  /** 登出 / 删除凭据：丢弃 native 层保存的会话（refresh token、未落库的续期结果、客户端 token）。 */
+  static clearSession(): void {
+    nativeClearSession();
+  }
+
   static getSiteConfig(callback?: HttpCallback<SiteConfig>): void {
     nativeGetSiteConfig(CloudApi.withApiLogging('getSiteConfig', callback));
   }
@@ -196,12 +204,42 @@ export class CloudApi {
     AppStorage.setOrCreate(Constant.CLOUD_REFRESH_TOKEN, refreshToken);
   }
 
-  static userSetting(callback?: HttpCallback<UserSetting>): void {
-    nativeGetUserSetting(CloudApi.withApiLogging('userSetting', callback));
-  }
-
   static userStorage(callback?: HttpCallback<UserStorage>): void {
     nativeGetUserStorage(CloudApi.withApiLogging('userStorage', callback));
+  }
+
+  static getAccountSettings(callback?: HttpCallback<AccountSettings>): void {
+    nativeGetAccountSettings(CloudApi.withApiLogging('getAccountSettings', callback));
+  }
+
+  static updateNickname(nick: string, callback?: HttpCallback<null>): void {
+    nativeUpdateNickname(nick, CloudApi.withApiLogging('updateNickname', callback));
+  }
+
+  // 日志名里不能带密码
+  static changePassword(current: string, next: string, callback?: HttpCallback<null>): void {
+    nativeChangePassword(current, next, CloudApi.withApiLogging('changePassword', callback));
+  }
+
+  static initTwoFactor(callback?: HttpCallback<string>): void {
+    nativeInitTwoFactor(CloudApi.withApiLogging('initTwoFactor', callback));
+  }
+
+  static setTwoFactor(enabled: boolean, code: string, callback?: HttpCallback<null>): void {
+    nativeSetTwoFactor(enabled, code, CloudApi.withApiLogging(`setTwoFactor(${enabled})`, callback));
+  }
+
+  static uploadAvatar(bytes: Uint8Array, contentType: string, callback?: HttpCallback<null>): void {
+    const base64Data = new util.Base64Helper().encodeToStringSync(bytes);
+    nativeUploadAvatar(base64Data, contentType, CloudApi.withApiLogging('uploadAvatar', callback));
+  }
+
+  static resetAvatar(callback?: HttpCallback<null>): void {
+    nativeResetAvatar(CloudApi.withApiLogging('resetAvatar', callback));
+  }
+
+  static deletePasskey(id: string, callback?: HttpCallback<null>): void {
+    nativeDeletePasskey(id, CloudApi.withApiLogging('deletePasskey', callback));
   }
 
   static getFilesInfo(path: string = '/', callback?: HttpCallback<DirectoryInfo>): void {

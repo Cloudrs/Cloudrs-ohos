@@ -1,10 +1,6 @@
-import { DbUserInfo, SiteConfig, UserInfo, UserSetting, UserStorage } from "../../model/net/ApiTypes";
-import { AboutPage } from "../AboutPage";
+import { DbUserInfo } from "../../model/net/ApiTypes";
 import Constant from "../../model/Constant";
-import UserDatabase from "../../model/UserDatabase";
 import UserPreferences from "../../model/UserPreferences";
-import { CloudApi } from "../../model/net/CloudApi";
-import { CommonUtil } from "../../utils/CommonUtil";
 import { CloudThemeToken } from "../../model/CloudTheme";
 import { WindowMover } from "../../utils/WindowMover";
 import { CloudMaterial } from "../../model/CloudMaterial";
@@ -12,72 +8,27 @@ import { CloudScaffold } from "../../components/CloudScaffold";
 import { UserSwitchSheet } from "../../components/UserSwitchSheet";
 import { FeedbackSheet } from "../../components/FeedbackSheet";
 import { LogViewerSheet } from "../../components/LogViewerSheet";
-import { SectionHeader } from "../../components/SectionHeader";
-import { common, ConfigurationConstant } from "@kit.AbilityKit";
-import { DateFormatUtil } from "../../utils/DateFormatUtil";
+import { common } from "@kit.AbilityKit";
 import { showCloudConfirmDialog } from "../../utils/CloudDialogUtil";
 import { CloudRouter } from "../../utils/CloudRouter";
 import { ActiveAccount } from "../../utils/ActiveAccount";
-import { AvatarUtil } from "../../utils/AvatarUtil";
+import { CloudApi } from "../../model/net/CloudApi";
 import FeedbackUtil from "../../utils/FeedbackUtil";
 import AppLogger from "../../utils/AppLogger";
 import { showToast } from "../../utils/ToastUtil";
-import { AppLockUtil } from "../../utils/AppLockUtil";
-import { SystemAuthResult } from "../../utils/SystemAuthUtil";
-import { BusinessError, SuppressWarnings, SuppressWarningsType, pasteboard } from "@kit.BasicServicesKit";
+import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
 import { PhotoBackupSettingsSheet } from '../../components/PhotoBackupSettingsSheet';
 import { PathSelectSheet } from '../../components/PathSelectSheet';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_ENABLED_KEY } from '../../model/PhotoBackupSettingsStore';
 import { PhotoBackupSettings } from '../../model/PhotoBackupModel';
+import { ACCOUNT_PROFILE_STORE_KEY, AccountProfileStore } from '../../model/AccountProfileStore';
+import { SheetPhaseController } from '../../utils/SheetPhaseController';
+import { SettingGroup, SettingRow } from '../../components/settings/SettingRows';
+import { MineProfileCard, MineStorageCard } from '../../components/settings/MineCards';
 
 const TAG:string = 'TabMine'
-// 主题在 AppStorage 里的镜像。@Builder 按值传参不会随 @State 重渲染，
-// 外观行的右侧文案与弹窗里的勾选态都靠子组件绑这个 key 才能即时刷新。
-const APP_THEME_MODE_MIRROR_KEY: string = 'appThemeModeMirror'
-const MINE_SETTINGS_REFRESH_INTERVAL_MS: number = 30000
-const MINE_SETTINGS_REFRESH_DELAY_MS: number = 360
-
-enum MineSheetType {
-  NONE = 'none',
-  MORE = 'more',
-  THEME = 'theme',
-  PRIVACY = 'privacy',
-  PHOTO_BACKUP = 'photo_backup'
-}
-
-// Real lifecycle phase of the shared settings sheet, driven by its
-// onWillAppear/onAppear/onWillDisappear/onDisappear callbacks. Open/close
-// decisions are made on this phase instead of the bound flag, which stays true
-// throughout the close animation and cannot tell "stuck" apart from "closing".
-enum SettingsSheetPhase {
-  CLOSED,
-  OPENING,
-  OPEN,
-  CLOSING
-}
-
-enum MineMetricType {
-  USER_ID = 'user_id',
-  USER_GROUP = 'user_group',
-  USER_DAYS = 'user_days'
-}
-
-class MinePageCache {
-  static key: string = ''
-  static siteConfig?: SiteConfig = undefined
-  static userStorage?: UserStorage = undefined
-  static userSetting?: UserSetting = undefined
-  static updateDate?: Date = undefined
-  static userAvatar?: PixelMap = undefined
-  static userAvatarCacheUri: string = ''
-  static diffDays: number = 0
-  static cachedUserId: string = ''
-  static cachedUserName: string = ''
-  static cachedNickname: string = ''
-  static cachedGroupName: string = ''
-  static cachedDiffDays: number = 0
-  static lastRefreshAt: number = 0
-}
+// 切到「我的」时延后一点再拉数据，避开 Tab 切换动画
+const MINE_REFRESH_DELAY_MS: number = 360
 
 @Component
 export struct TabMine {
@@ -85,207 +36,63 @@ export struct TabMine {
   @Watch('onActiveChanged')
   @Prop isActive: boolean = false
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
-  @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
-  @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) @Watch('onLayoutMetricChanged') sheetLayoutWidth: number = 0
   // 宽屏侧栏收起时，HomePage 的悬浮折叠键会压在页面左上角，用来给内容让位避免和头像重叠
   @StorageProp(Constant.SIDEBAR_VISIBLE) @Watch('onLayoutMetricChanged') sidebarVisible: boolean = true
   // 2in1 隐藏系统标题栏后窗口三键区宽度（其它设备为 0）；>0 时顶部加一行固定标题，卡片从其下开始
   @StorageProp(Constant.TITLE_BUTTON_INSET_END) @Watch('onLayoutMetricChanged') titleButtonInsetEnd: number = 0
+  @StorageProp(PHOTO_BACKUP_ENABLED_KEY) photoBackupEnabled: boolean = false
   // 我的页顶部让位（避开折叠键）；@StorageProp 只在方法里读不会被 build 追踪，故用 @Watch 驱动 @State
   @State mineTopPadding: number = 0
   @State mineTitleLeftPadding: number = CloudThemeToken.pagePadding
-  @State siteConfig?: SiteConfig = undefined
-  @State userStorage?: UserStorage = undefined
-  @State userSetting?: UserSetting = undefined
   @State currentUser: string = ''
   @State currentUrl: string = ''
-  @State updateDate?: Date = undefined
-  @State userAvatar?: PixelMap = undefined
-  @State userAvatarCacheUri: string = ''
-  @State diffDays: number = 0
-  @State cachedUserId: string = ''
-  @State cachedUserName: string = ''
-  @State cachedNickname: string = ''
-  @State cachedGroupName: string = ''
-  @State cachedDiffDays: number = 0
-  private avatarSize: number = CloudThemeToken.avatarLargeSize
   @State showUserSwitchSheet: boolean = false
-  @State showSettingsSheet: boolean = false
-  @State showPrivacySheet: boolean = false
-  @State showThemeSheet: boolean = false
-  @State showMoreSettingsSheet: boolean = false
+  @State showPhotoBackupSheet: boolean = false
+  @State showPhotoBackupPathSheet: boolean = false
   @State showFeedbackSheet: boolean = false
   @State showLogViewerSheet: boolean = false
-  @State showAboutSheet: boolean = false
-  @State activeSheetType: MineSheetType = MineSheetType.NONE
-  private settingsPhase: SettingsSheetPhase = SettingsSheetPhase.CLOSED
-  private reopenSettingsPending: boolean = false
-  @State showMetrics: boolean = false
-  // 主题只经 APP_THEME_MODE_MIRROR_KEY 驱动 UI，这里仅留一份当前值供落库用
-  private themeMode: string = Constant.APP_THEME_LIGHT
-  private scroller: Scroller = new Scroller;
-  @State versionInfo: string = ''
-  @State uploadMaxConcurrent: number = 3
-  @State systemAuthEnabled: boolean = false
-  @State systemAuthBusy: boolean = false
-  private settingsRefreshTimer: number = -1
-  @State showPhotoBackupPathSheet: boolean = false
-  @State imageDraggableEnabled: boolean = false
-  @State imageAiAnalyzerEnabled: boolean = true
-  @State knockUseShareLink: boolean = false
-  @State knockExpireDays: number = 1
-  @State knockPasswordEnabled: boolean = false
+  // @Observed 单例经 AppStorage 共享；@StorageLink 订阅后字段重新赋值才会刷新 V1 组件
+  @StorageLink(ACCOUNT_PROFILE_STORE_KEY) store: AccountProfileStore = AccountProfileStore.instance
+  private userSwitchCtrl: SheetPhaseController = new SheetPhaseController()
+  private photoBackupCtrl: SheetPhaseController = new SheetPhaseController()
+  private scroller: Scroller = new Scroller()
+  private refreshTimer: number = -1
 
-  aboutToAppear() {
+  aboutToAppear(): void {
     this.onLayoutMetricChanged()
-    this.loadLocalPreferences()
+    PhotoBackupSettingsStore.mirror(PhotoBackupSettingsStore.load())
     if (this.isActive) {
-      this.loadMineData()
+      this.syncActiveAccount()
     }
   }
 
   aboutToDisappear(): void {
-    this.cancelScheduledUserSettingsRefresh()
+    this.cancelRefresh()
     this.overLap = true
   }
 
   private onActiveChanged(): void {
-    if (!this.isActive) {
-      this.cancelScheduledUserSettingsRefresh()
-      return
+    if (this.isActive) {
+      this.syncActiveAccount()
+    } else {
+      this.cancelRefresh()
     }
-    this.loadMineData()
   }
 
-  private loadLocalPreferences(): void {
-    this.themeMode = UserPreferences.getSync(
-      Constant.USER_PREFERENCES,
-      Constant.APP_THEME_MODE,
-      Constant.APP_THEME_LIGHT
-    ) as string
-    AppStorage.setOrCreate(APP_THEME_MODE_MIRROR_KEY, this.themeMode)
-    this.systemAuthEnabled = AppLockUtil.isEnabled()
-
-    this.versionInfo = this.appVersion
-
-    const raw = UserPreferences.getSync(
-      Constant.USER_PREFERENCES,
-      Constant.UPLOAD_MAX_CONCURRENT,
-      Constant.UPLOAD_CONCURRENT_DEFAULT
-    ) as number;
-    this.uploadMaxConcurrent = this.normalizeUploadConcurrent(raw)
-    this.imageDraggableEnabled = UserPreferences.getSync(
-      Constant.USER_PREFERENCES,
-      Constant.IMAGE_DRAGGABLE_ENABLED,
-      false
-    ) as boolean
-    this.imageAiAnalyzerEnabled = UserPreferences.getSync(
-      Constant.USER_PREFERENCES,
-      Constant.IMAGE_AI_ANALYZER_ENABLED,
-      true
-    ) as boolean
-    this.knockUseShareLink = UserPreferences.getSync(
-      Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_USE_SHARE_LINK, false) as boolean
-    this.knockExpireDays = UserPreferences.getSync(
-      Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_EXPIRE_DAYS, 1) as number
-    this.knockPasswordEnabled = UserPreferences.getSync(
-      Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_PASSWORD_ENABLED, false) as boolean
-    const pbSettings = PhotoBackupSettingsStore.load();
-    // 把持久化的开关状态镜像进 AppStorage，供「相册备份」行的 PhotoBackupStatusText 子组件即时显示。
-    PhotoBackupSettingsStore.mirror(pbSettings);
-  }
-
-  private loadMineData(): void {
-    this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY) as string
+  private syncActiveAccount(): void {
+    this.currentUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
     this.currentUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
-    this.hydrateMineCacheOrReset()
-    const shouldRefresh = this.shouldRefreshUserSettings()
-    this.loadCachedUserInfo()
-    if (shouldRefresh) {
-      this.scheduleUserSettingsRefresh()
+    this.store.activate(this.currentUser, this.currentUrl)
+    this.cancelRefresh()
+    this.refreshTimer = setTimeout(() => { this.refreshTimer = -1; this.store.refreshIfStale() }, MINE_REFRESH_DELAY_MS)
+  }
+
+  private cancelRefresh(): void {
+    if (this.refreshTimer >= 0) {
+      clearTimeout(this.refreshTimer)
+      this.refreshTimer = -1
     }
-  }
-
-  private scheduleUserSettingsRefresh(): void {
-    this.cancelScheduledUserSettingsRefresh()
-    const cacheKey = this.getMineCacheKey()
-    this.settingsRefreshTimer = setTimeout(() => {
-      this.settingsRefreshTimer = -1
-      if (cacheKey === this.getMineCacheKey()) {
-        this.getUserSettings()
-      }
-    }, MINE_SETTINGS_REFRESH_DELAY_MS)
-  }
-
-  private cancelScheduledUserSettingsRefresh(): void {
-    if (this.settingsRefreshTimer >= 0) {
-      clearTimeout(this.settingsRefreshTimer)
-      this.settingsRefreshTimer = -1
-    }
-  }
-
-  getUserSettings() {
-    const cacheKey = this.getMineCacheKey()
-    this.markMineSettingsRefresh()
-    this.fetchMineRemoteData(cacheKey, true)
-  }
-
-  private fetchMineRemoteData(cacheKey: string, allowSessionRefresh: boolean): void {
-    CloudApi.getSiteConfig({
-      onSuccess: (data: SiteConfig) => {
-        if (cacheKey !== this.getMineCacheKey()) {
-          return
-        }
-        if (allowSessionRefresh && this.shouldRefreshV4SessionFromSiteConfig(data)) {
-          this.refreshV4Session(cacheKey, () => {
-            this.fetchMineRemoteData(cacheKey, false)
-          })
-          return
-        }
-        this.applySiteConfig(data)
-        this.fetchUserSettingAndStorage(cacheKey)
-      },
-      onFailure: (msg) => {
-        if (allowSessionRefresh && this.shouldRefreshStoredV4Session() && this.isUnauthorizedMessage(msg)) {
-          this.refreshV4Session(cacheKey, () => {
-            this.fetchMineRemoteData(cacheKey, false)
-          })
-          return
-        }
-        AppLogger.error(TAG, `SiteConfig get failed, ${msg}`)
-        this.fetchUserSettingAndStorage(cacheKey)
-      }
-    })
-  }
-
-  private fetchUserSettingAndStorage(cacheKey: string): void {
-    CloudApi.userSetting({
-      onSuccess: (data: UserSetting) => {
-        if (cacheKey !== this.getMineCacheKey()) {
-          return
-        }
-        this.userSetting = data
-        this.saveMineCache()
-      },
-      onFailure: (msg) => {
-        AppLogger.error(TAG, `Setting get failed, ${msg}`)
-      }
-    })
-
-    CloudApi.userStorage({
-      onSuccess: (data: UserStorage) => {
-        if (cacheKey !== this.getMineCacheKey()) {
-          return
-        }
-        this.userStorage = data
-        this.updateDate = new Date()
-        this.saveMineCache()
-      },
-      onFailure: (msg) => {
-        AppLogger.error(TAG, `Storage get failed, ${msg}`)
-      }
-    })
   }
 
   // 宽屏且侧栏收起时，给内容顶部让出 HomePage 悬浮折叠键的高度，避免头像被压住
@@ -295,7 +102,8 @@ export struct TabMine {
     const toggleSpace = CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingCard
     // 有标题行时折叠键落在标题行里，由标题行左内边距让位；否则整页下移让开折叠键
     this.mineTopPadding = (toggleFloating && this.titleButtonInsetEnd <= 0) ? toggleSpace : CloudThemeToken.zero
-    this.mineTitleLeftPadding = toggleFloating ? toggleSpace : CloudThemeToken.pagePadding
+    // 其它 Tab 的 HdsTitleBar 标题文字距内容左缘约 20vp（MateBook 实测），这里对齐它而不是 pagePadding
+    this.mineTitleLeftPadding = toggleFloating ? toggleSpace : CloudThemeToken.pagePadding + CloudThemeToken.spacingXs
   }
 
   // 2in1：与文件页「存储」、相册页「相册」同一行位置的固定标题，兼作窗口拖动区（行内无按钮）
@@ -334,12 +142,9 @@ export struct TabMine {
             bottomPadding: CloudThemeToken.pageBottomPadding
           }) {
             Column({ space: CloudThemeToken.sectionGap }) {
-              this.userInfo()
-              this.storageInfo()
-              SectionHeader({ title: $r('app.string.more_setting') })
-              this.settingButton()
-              this.webButton()
-              this.logoutButton()
+              MineProfileCard()
+              MineStorageCard()
+              this.entryGroups()
             }
             .width('100%')
           }
@@ -350,97 +155,166 @@ export struct TabMine {
       .width('100%')
       .height('100%')
 
-      Column()
-        .width(0)
-        .height(0)
-        .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
-          detents: [SheetSize.FIT_CONTENT],
-          title: { title: '问题反馈', subtitle: '优先邮件反馈，附带日志和诊断信息方便快速定位' },
-          showClose: true,
-          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-          systemMaterial: CloudMaterial.sheetMaterial(),
-          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
-        })
-
-      Column()
-        .width(0)
-        .height(0)
-        .bindSheet($$this.showLogViewerSheet, this.logViewerSheet(), {
-          detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-          title: { title: '日志与诊断', subtitle: '已脱敏 · 复制诊断会一并带上日志尾部' },
-          showClose: true,
-          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-          systemMaterial: CloudMaterial.sheetMaterial(),
-          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
-        })
-
-      Column()
-        .width(0)
-        .height(0)
-        .bindSheet($$this.showAboutSheet, this.aboutSheet(), {
-          detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-          title: { title: $r('app.string.about') },
-          showClose: true,
-          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-          systemMaterial: CloudMaterial.sheetMaterial(),
-          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
-          onDisappear: () => {
-            this.showAboutSheet = false
-          }
-        })
-
-      Column()
-        .width(0)
-        .height(0)
-        .bindSheet($$this.showSettingsSheet, this.settingsSheet(), {
-          detents: [SheetSize.FIT_CONTENT],
-          title: { title: this.getSettingsSheetTitle() },
-          showClose: true,
-          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-          systemMaterial: CloudMaterial.sheetMaterial(),
-          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
-          onWillAppear: () => {
-            this.settingsPhase = SettingsSheetPhase.OPENING
-          },
-          onAppear: () => {
-            this.settingsPhase = SettingsSheetPhase.OPEN
-          },
-          onWillDisappear: () => {
-            this.settingsPhase = SettingsSheetPhase.CLOSING
-          },
-          onDisappear: () => {
-            this.settingsPhase = SettingsSheetPhase.CLOSED
-            if (this.reopenSettingsPending) {
-              this.reopenSettingsPending = false
-              // Reopen on the next tick so it runs after the close flow fully
-              // settles, otherwise the re-set true gets swallowed by it.
-              setTimeout(() => { this.showSettingsSheet = true }, 50)
-            } else {
-              this.finishCloseSettingsSheet()
-            }
-          }
-        })
-
-      Column()
-        .width(0)
-        .height(0)
-        .bindSheet($$this.showPhotoBackupPathSheet, this.photoBackupPathSheet(), {
-          showClose: false,
-          backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-          systemMaterial: CloudMaterial.sheetMaterial(),
-          preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-          width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
-          onDisappear: () => {
-            this.showPhotoBackupPathSheet = false
-          }
-        })
+      this.sheetHosts()
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder entryGroups() {
+    SettingGroup() {
+      SettingRow({
+        title: '相册备份', value: this.photoBackupEnabled ? '已开启' : '未开启',
+        icon: $r('app.media.ic_externaldrive_fill'), iconBackground: CloudThemeToken.settingIconPhotoBackupBackground,
+        onTap: () => this.photoBackupCtrl.requestOpen(() => this.showPhotoBackupSheet, (v: boolean) => {
+          this.showPhotoBackupSheet = v
+        })
+      })
+      SettingRow({
+        title: '账号与安全', value: this.securityValue(), divider: true,
+        icon: $r('app.media.ic_privacy_secure'), iconBackground: CloudThemeToken.settingIconPrivacyBackground,
+        onTap: () => CloudRouter.push(Constant.ACCOUNT_SECURITY_PAGE)
+      })
+      SettingRow({
+        title: '设置', divider: true,
+        icon: $r('app.media.ic_more_setting'), iconBackground: CloudThemeToken.settingIconMoreBackground,
+        onTap: () => CloudRouter.push(Constant.SETTINGS_PAGE)
+      })
+    }
+
+    SettingGroup() {
+      SettingRow({
+        title: $r('app.string.feedback'),
+        icon: $r('app.media.ic_feedback'), iconBackground: CloudThemeToken.settingIconWebJumpBackground,
+        onTap: () => {
+          this.showFeedbackSheet = true
+        }
+      })
+      SettingRow({
+        title: '关于 Cloudrs', value: this.appVersion, divider: true,
+        icon: $r('app.media.ic_info_circle'), iconBackground: CloudThemeToken.settingIconAboutBackground,
+        onTap: () => CloudRouter.push(Constant.ABOUT_PAGE)
+      })
+    }
+
+    SettingGroup() {
+      SettingRow({
+        title: '切换账号',
+        icon: $r('app.media.ic_person'), iconBackground: CloudThemeToken.settingIconThemeBackground,
+        onTap: () => this.userSwitchCtrl.requestOpen(() => this.showUserSwitchSheet, (v: boolean) => {
+          this.showUserSwitchSheet = v
+        })
+      })
+      Row() {
+        Text($r('app.string.logout'))
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(CloudThemeToken.danger)
+      }
+      .width('100%')
+      .height(CloudThemeToken.rowHeight4xl)
+      .justifyContent(FlexAlign.Center)
+      .border({ width: { top: CloudThemeToken.lineWidth }, color: CloudThemeToken.line })
+      .stateStyles({
+        pressed: { .backgroundColor(CloudThemeToken.surfaceSubtle) },
+        normal: { .backgroundColor(CloudThemeToken.transparent) }
+      })
+      .onClick(() => this.confirmLogout())
+    }
+  }
+
+  @Builder sheetHosts() {
+    Column().width(0).height(0)
+      .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
+        detents: [SheetSize.FIT_CONTENT],
+        // 宽屏居中弹窗不认 detents，高度单独给成按内容
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '选择账号' },
+        showClose: true,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+        onWillAppear: () => this.userSwitchCtrl.onWillAppear(),
+        onAppear: () => this.userSwitchCtrl.onAppear(),
+        onWillDisappear: () => this.userSwitchCtrl.onWillDisappear(),
+        onDisappear: () => this.userSwitchCtrl.onDisappear((v: boolean) => { this.showUserSwitchSheet = v }, () => {})
+      })
+
+    Column().width(0).height(0)
+      .bindSheet($$this.showPhotoBackupSheet, this.photoBackupSheet(), {
+        detents: [SheetSize.FIT_CONTENT],
+        // 宽屏居中弹窗不认 detents，高度单独给成按内容
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '相册备份' },
+        showClose: true,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+        onWillAppear: () => this.photoBackupCtrl.onWillAppear(),
+        onAppear: () => this.photoBackupCtrl.onAppear(),
+        onWillDisappear: () => this.photoBackupCtrl.onWillDisappear(),
+        onDisappear: () => this.photoBackupCtrl.onDisappear((v: boolean) => { this.showPhotoBackupSheet = v }, () => {})
+      })
+
+    Column().width(0).height(0)
+      .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
+        detents: [SheetSize.FIT_CONTENT],
+        // 宽屏居中弹窗不认 detents，高度单独给成按内容
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '问题反馈', subtitle: '优先邮件反馈，附带日志和诊断信息方便快速定位' },
+        showClose: true,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
+      })
+
+    Column().width(0).height(0)
+      .bindSheet($$this.showLogViewerSheet, this.logViewerSheet(), {
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE],
+        title: { title: '日志与诊断', subtitle: '已脱敏 · 复制诊断会一并带上日志尾部' },
+        showClose: true,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
+      })
+
+    Column().width(0).height(0)
+      .bindSheet($$this.showPhotoBackupPathSheet, this.photoBackupPathSheet(), {
+        showClose: false,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+        onDisappear: () => {
+          this.showPhotoBackupPathSheet = false
+        }
+      })
+  }
+
+  @Builder userSwitchSheet() {
+    UserSwitchSheet({
+      currentUser: this.currentUser,
+      currentUrl: this.currentUrl,
+      onSelect: (user: DbUserInfo) => {
+        // 过期账号会跳登录页，得先把 sheet 关掉再跳
+        if (CloudRouter.switchToUser(user.username, user.url, () => { this.closeUserSwitch() })) {
+          this.closeUserSwitch()
+          this.syncActiveAccount()
+        }
+      },
+      onClose: () => this.closeUserSwitch()
+    })
+  }
+
+  @Builder photoBackupSheet() {
+    PhotoBackupSettingsSheet({
+      onClose: () => this.photoBackupCtrl.requestClose((v: boolean) => { this.showPhotoBackupSheet = v }),
+      onPickPath: () => { this.showPhotoBackupPathSheet = true }
+    })
   }
 
   @Builder photoBackupPathSheet() {
@@ -458,1364 +332,32 @@ export struct TabMine {
     })
   }
 
-  private applySiteConfig(data: SiteConfig): void {
-    this.siteConfig = data
-    this.diffDays = this.getCreatedDays(data.user.created_at)
-    this.refreshCachedUserInfo(data.user)
-    this.saveMineCache()
+  private closeUserSwitch(): void {
+    this.userSwitchCtrl.requestClose((v: boolean) => { this.showUserSwitchSheet = v })
   }
 
-  private refreshV4Session(cacheKey: string, onReady: () => void): void {
-    const dbUserInfo = this.getCurrentDbUserInfo()
-    if (!dbUserInfo || !this.isV4DbUser(dbUserInfo) || dbUserInfo.refresh_token.length === 0) {
-      onReady()
-      return
-    }
-    CloudApi.loginWithRefreshToken(dbUserInfo.url, dbUserInfo.refresh_token, {
-      onSuccess: (userInfo: UserInfo) => {
-        if (cacheKey !== this.getMineCacheKey()) {
-          return
-        }
-        const cookie = AppStorage.get<string>(Constant.CLOUD_COOKIE) ?? dbUserInfo.cookie
-        const expires = AppStorage.get<string>(Constant.CLOUD_COOKIE_EXPIRES) ?? dbUserInfo.expires
-        const refreshToken = AppStorage.get<string>(Constant.CLOUD_REFRESH_TOKEN) ?? dbUserInfo.refresh_token
-        dbUserInfo.cookie = cookie
-        dbUserInfo.expires = expires
-        dbUserInfo.refresh_token = refreshToken
-        if (!this.isAnonymousUserInfo(userInfo)) {
-          dbUserInfo.userinfo = userInfo
-        }
-        UserDatabase.insertUserInfo(dbUserInfo)
-        onReady()
-      },
-      onFailure: (msg: string) => {
-        AppLogger.error(TAG, `refresh v4 session failed, ${msg}`)
-        onReady()
+  private confirmLogout(): void {
+    showCloudConfirmDialog(this.getUIContext(), {
+      title: $r('app.string.logout_confim'),
+      message: '账号会保留在「切换账号」列表里，下次可直接切回',
+      confirmText: $r('app.string.dialog_logout'),
+      onConfirm: () => {
+        // 先丢掉 native 里这个账号的 refresh token：否则登录页对同一服务器的请求可能续期轮换它，
+        // 新 token 无活动账号可落库，「切换账号」里保存的凭据就作废了
+        CloudApi.clearSession()
+        ActiveAccount.clear()
+        CloudRouter.resetToLogin()
       }
     })
   }
 
-  private shouldRefreshV4SessionFromSiteConfig(data: SiteConfig): boolean {
-    return this.shouldRefreshStoredV4Session() && this.isAnonymousUserInfo(data.user)
-  }
-
-  private shouldRefreshStoredV4Session(): boolean {
-    const dbUserInfo = this.getCurrentDbUserInfo()
-    return !!dbUserInfo && this.isV4DbUser(dbUserInfo) && dbUserInfo.refresh_token.length > 0
-  }
-
-  private isV4DbUser(dbUserInfo: DbUserInfo): boolean {
-    return dbUserInfo.cookie.startsWith(Constant.CLOUD_V4_COOKIE_PREFIX)
-  }
-
-  private isAnonymousUserInfo(userInfo: UserInfo): boolean {
-    return userInfo.anonymous === true || this.isInvalidCreatedAt(userInfo.created_at)
-  }
-
-  private isUnauthorizedMessage(msg: string): boolean {
-    return msg.toLowerCase().indexOf('unauthorized') >= 0 || msg.indexOf('登录') >= 0
-  }
-
-  private getCreatedDays(createdAt?: string): number {
-    if (!createdAt || this.isInvalidCreatedAt(createdAt)) {
-      return 0
-    }
-    const createdDate = new Date(createdAt)
-    return CommonUtil.getDaysDifference(createdDate, new Date())
-  }
-
-  private isInvalidCreatedAt(createdAt?: string): boolean {
-    if (!createdAt || createdAt.length === 0) {
-      return true
-    }
-    const createdDate = new Date(createdAt)
-    return Number.isNaN(createdDate.getTime()) || createdDate.getFullYear() <= 1971
-  }
-
-  private getMineCacheKey(): string {
-    return `${this.currentUrl}|${this.currentUser}`
-  }
-
-  private hydrateMineCacheOrReset(): void {
-    if (MinePageCache.key === this.getMineCacheKey()) {
-      this.siteConfig = MinePageCache.siteConfig
-      this.userStorage = MinePageCache.userStorage
-      this.userSetting = MinePageCache.userSetting
-      this.updateDate = MinePageCache.updateDate
-      this.userAvatar = MinePageCache.userAvatar
-      this.userAvatarCacheUri = MinePageCache.userAvatarCacheUri
-      this.diffDays = MinePageCache.diffDays
-      this.cachedUserId = MinePageCache.cachedUserId
-      this.cachedUserName = MinePageCache.cachedUserName
-      this.cachedNickname = MinePageCache.cachedNickname
-      this.cachedGroupName = MinePageCache.cachedGroupName
-      this.cachedDiffDays = MinePageCache.cachedDiffDays
-      return
-    }
-    this.resetMineState()
-  }
-
-  private resetMineState(): void {
-    this.siteConfig = undefined
-    this.userStorage = undefined
-    this.userSetting = undefined
-    this.updateDate = undefined
-    this.userAvatar = undefined
-    this.userAvatarCacheUri = ''
-    this.diffDays = 0
-    this.cachedUserId = ''
-    this.cachedUserName = ''
-    this.cachedNickname = ''
-    this.cachedGroupName = ''
-    this.cachedDiffDays = 0
-  }
-
-  private saveMineCache(): void {
-    MinePageCache.key = this.getMineCacheKey()
-    MinePageCache.siteConfig = this.siteConfig
-    MinePageCache.userStorage = this.userStorage
-    MinePageCache.userSetting = this.userSetting
-    MinePageCache.updateDate = this.updateDate
-    MinePageCache.userAvatar = this.userAvatar
-    MinePageCache.userAvatarCacheUri = this.userAvatarCacheUri
-    MinePageCache.diffDays = this.diffDays
-    MinePageCache.cachedUserId = this.cachedUserId
-    MinePageCache.cachedUserName = this.cachedUserName
-    MinePageCache.cachedNickname = this.cachedNickname
-    MinePageCache.cachedGroupName = this.cachedGroupName
-    MinePageCache.cachedDiffDays = this.cachedDiffDays
-  }
-
-  private shouldRefreshUserSettings(): boolean {
-    return MinePageCache.key !== this.getMineCacheKey() ||
-      new Date().getTime() - MinePageCache.lastRefreshAt >= MINE_SETTINGS_REFRESH_INTERVAL_MS
-  }
-
-  private markMineSettingsRefresh(): void {
-    MinePageCache.key = this.getMineCacheKey()
-    MinePageCache.lastRefreshAt = new Date().getTime()
-  }
-
-  loadCachedUserInfo(): void {
-    const dbUserInfo = UserDatabase.getUserInfo(this.currentUser, this.currentUrl)
-    if (!dbUserInfo || !dbUserInfo.userinfo) {
-      return
-    }
-    this.cachedUserId = dbUserInfo.userinfo.id ?? ''
-    this.cachedUserName = dbUserInfo.userinfo.user_name ?? ''
-    this.cachedNickname = dbUserInfo.userinfo.nickname ?? ''
-    this.cachedGroupName = dbUserInfo.userinfo.group?.name ?? ''
-    this.userAvatarCacheUri = AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
-    const memoryAvatar = AvatarUtil.getMemoryCachedDbUserAvatar(dbUserInfo)
-    if (memoryAvatar) {
-      this.userAvatar = memoryAvatar
-    }
-    console.info(TAG, `Mine avatar cached user loaded, memory=${!!memoryAvatar}, cacheUri=${this.userAvatarCacheUri.length > 0}`)
-    if (dbUserInfo.userinfo.created_at && dbUserInfo.userinfo.created_at.length > 0) {
-      this.cachedDiffDays = this.getCreatedDays(dbUserInfo.userinfo.created_at)
-    }
-    if (!this.userAvatar && this.userAvatarCacheUri.length === 0) {
-      this.loadAvatar(dbUserInfo, false)
-    }
-    this.saveMineCache()
-  }
-
-  refreshCachedUserInfo(userInfo: UserInfo): void {
-    const dbUserInfo = UserDatabase.getUserInfo(this.currentUser, this.currentUrl)
-    if (!dbUserInfo) {
-      return
-    }
-    const previousUserId = dbUserInfo.userinfo?.id ?? ''
-    const previousAvatar = dbUserInfo.userinfo?.avatar ?? ''
-    dbUserInfo.userinfo = userInfo
-    UserDatabase.insertUserInfo(dbUserInfo)
-    this.cachedUserId = userInfo.id ?? ''
-    this.cachedUserName = userInfo.user_name ?? ''
-    this.cachedNickname = userInfo.nickname ?? ''
-    this.cachedGroupName = userInfo.group?.name ?? ''
-    this.userAvatarCacheUri = AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
-    if (userInfo.created_at && userInfo.created_at.length > 0) {
-      this.cachedDiffDays = this.getCreatedDays(userInfo.created_at)
-    }
-    const avatarChanged = previousUserId !== (userInfo.id ?? '') || previousAvatar !== (userInfo.avatar ?? '')
-    console.info(TAG, `Mine avatar refresh info, changed=${avatarChanged}, cacheUri=${this.userAvatarCacheUri.length > 0}`)
-    if (avatarChanged) {
-      this.loadAvatar(dbUserInfo, avatarChanged)
-    } else if (this.userAvatar) {
-      this.loadAvatar(dbUserInfo, true)
-    } else if (this.userAvatarCacheUri.length > 0) {
-      this.loadAvatar(dbUserInfo, true)
-    } else {
-      this.loadAvatar(dbUserInfo, false)
-    }
-    this.saveMineCache()
-  }
-
-  private loadCachedAvatar(dbUserInfo: DbUserInfo): void {
-    const cacheKey = this.getMineCacheKey()
-    AvatarUtil.loadCachedDbUserAvatar(dbUserInfo)
-      .then((pixMap?: PixelMap) => {
-        if (cacheKey !== this.getMineCacheKey()) {
-          return
-        }
-        if (pixMap) {
-          this.userAvatar = pixMap
-          this.userAvatarCacheUri = AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
-          this.saveMineCache()
-        } else {
-          this.loadAvatar(dbUserInfo, false)
-        }
-      })
-      .catch((err: Error) => {
-        AppLogger.warn(TAG, `load cached avatar failed: ${err.message}`)
-        this.loadAvatar(dbUserInfo, false)
-      })
-  }
-
-  private loadAvatar(dbUserInfo: DbUserInfo, forceRefresh: boolean): void {
-    const cacheKey = this.getMineCacheKey()
-    const start = Date.now()
-    console.info(TAG, `Mine avatar load start, force=${forceRefresh}`)
-    AvatarUtil.loadDbUserAvatar(dbUserInfo, forceRefresh)
-      .then((pixMap?: PixelMap) => {
-        if (cacheKey !== this.getMineCacheKey()) {
-          return
-        }
-        console.info(TAG, `Mine avatar load end, ok=${!!pixMap}, cost=${Date.now() - start}ms`)
-        if (pixMap) {
-          this.userAvatar = pixMap
-          this.userAvatarCacheUri = AvatarUtil.getDbUserAvatarCacheUri(dbUserInfo)
-          this.saveMineCache()
-        }
-      })
-      .catch((err: Error) => {
-        AppLogger.error(TAG, `User avatar get failed, ${err.message}`)
-      })
-  }
-
-  @Builder userInfo() {
-    Column() {
-      Row({ space: CloudThemeToken.spacingPanel }) {
-        Stack() {
-          Text(this.getAvatarFallbackText())
-            .fontSize(this.avatarSize * 0.36)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.primary)
-          if (this.userAvatarCacheUri.length > 0) {
-            Image(this.userAvatarCacheUri)
-              .width(this.avatarSize)
-              .height(this.avatarSize)
-              .objectFit(ImageFit.Cover)
-              .syncLoad(true)
-              .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
-              .draggable(false)
-          }
-          if (this.userAvatar) {
-            Image(this.userAvatar)
-              .width(this.avatarSize)
-              .height(this.avatarSize)
-              .objectFit(ImageFit.Cover)
-              .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
-              .draggable(false)
-          }
-        }
-          .width(this.avatarSize)
-          .height(this.avatarSize)
-          .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
-          .borderWidth(CloudThemeToken.lineWidth)
-          .borderColor(CloudThemeToken.line)
-          .backgroundColor(CloudThemeToken.primarySoft)
-          // 头像暂不支持在端上换图，点击等同点名字：进入账号切换
-          .onClick(() => {
-            this.openUserSwitchSheet()
-          })
-
-        Column({ space: CloudThemeToken.spacingMd }) {
-          Text(this.getNicknameText())
-            .fontSize(CloudThemeToken.textSizeHero)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-            .maxLines(1)
-            .textOverflow({overflow: TextOverflow.Ellipsis})
-
-          Text(this.getUserNameText())
-            .fontSize(CloudThemeToken.textSizeBody)
-            .fontColor(CloudThemeToken.textSecondary)
-            .maxLines(1)
-            .textOverflow({overflow: TextOverflow.Ellipsis})
-
-          Row({ space: CloudThemeToken.spacingCard }) {
-            Text(this.getGroupBadgeText())
-              .fontSize(CloudThemeToken.textSizeSmall)
-              .fontColor(CloudThemeToken.primary)
-              .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard, top: CloudThemeToken.spacingXs, bottom: CloudThemeToken.spacingXs })
-              .borderRadius(CloudThemeToken.controlRadius)
-              .backgroundColor(CloudThemeToken.primarySoft)
-
-            Image($r('app.media.ic_chevron_down'))
-              .width(CloudThemeToken.iconBoxXs - 12)
-              .height(CloudThemeToken.iconBoxXs - 12)
-              .fillColor(CloudThemeToken.onPrimary)
-              .rotate({ angle: this.showMetrics ? 180 : 0 })
-              .padding(CloudThemeToken.spacingXs)
-              .borderRadius(CloudThemeToken.controlRadius)
-              .backgroundColor(CloudThemeToken.primary)
-              .draggable(false)
-              .onClick(() => {
-                this.getUIContext().animateTo({
-                  duration: CloudThemeToken.defaultAnimationDuration,
-                  curve: Curve.EaseOut
-                }, () => {
-                  this.showMetrics = !this.showMetrics
-                })
-              })
-          }
-          .alignItems(VerticalAlign.Center)
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        .onClick(() => {
-          this.openUserSwitchSheet()
-        })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Row({ space: CloudThemeToken.spacingCard }) {
-        this.metricCell($r('app.string.user_id'), MineMetricType.USER_ID)
-        this.metricCell($r('app.string.user_group'), MineMetricType.USER_GROUP)
-        this.metricCell($r('app.string.user_days'), MineMetricType.USER_DAYS)
-      }
-      .width('100%')
-      .height(this.showMetrics ? CloudThemeToken.cardHeightLg : 0)
-      .margin({ top: this.showMetrics ? CloudThemeToken.spacingPage : 0 })
-      .opacity(this.showMetrics ? 1 : 0)
-      .clip(true)
-    }
-    .padding(CloudThemeToken.spacingPage)
-      .width('100%')
-      .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.surface)
-  }
-
-  @Builder switchAccountAction() {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Image($r('app.media.ic_person'))
-        .width(CloudThemeToken.iconBoxXs)
-        .height(CloudThemeToken.iconBoxXs)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .padding(CloudThemeToken.spacingLg)
-        .fillColor(CloudThemeToken.onPrimary)
-        .backgroundColor(CloudThemeToken.settingIconPrivacyBackground)
-        .draggable(false)
-      Text('切换账号')
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-      Image($r('app.media.ic_chevron_right'))
-        .width(CloudThemeToken.iconXs)
-        .height(CloudThemeToken.iconXs)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.openUserSwitchSheet()
-    })
-  }
-
-  getUserIdText(): string {
-    if (this.userSetting && this.userSetting.uid > 0) {
-      return this.userSetting.uid.toString()
-    }
-    if (this.siteConfig?.user.id && this.siteConfig.user.id.length > 0) {
-      return this.siteConfig.user.id
-    }
-    return this.cachedUserId.length > 0 ? this.cachedUserId : '-'
-  }
-
-  getNicknameText(): string {
-    if (this.siteConfig?.user.nickname && this.siteConfig.user.nickname.length > 0) {
-      return this.siteConfig.user.nickname
-    }
-    if (this.cachedNickname.length > 0) {
-      return this.cachedNickname
-    }
-    return this.currentUser.length > 0 ? this.currentUser : '-'
-  }
-
-  getAvatarFallbackText(): string {
-    const text = this.getNicknameText()
-    return text.length > 0 && text !== '-' ? text.substring(0, 1).toUpperCase() : 'C'
-  }
-
-  getUserNameText(): string {
-    if (this.siteConfig?.user.user_name && this.siteConfig.user.user_name.length > 0) {
-      return this.siteConfig.user.user_name
-    }
-    if (this.cachedUserName.length > 0) {
-      return this.cachedUserName
-    }
-    return this.currentUser.length > 0 ? this.currentUser : '-'
-  }
-
-  getGroupNameText(): string {
-    if (this.siteConfig?.user.group?.name && this.siteConfig.user.group.name.length > 0) {
-      return this.siteConfig.user.group.name
-    }
-    return this.cachedGroupName.length > 0 ? this.cachedGroupName : '-'
-  }
-
-  getGroupBadgeText(): string {
-    const groupName = this.getGroupNameText()
-    return groupName === '-' ? '' : groupName
-  }
-
-  getUserDaysText(): string {
-    if (this.diffDays > 0) {
-      return this.diffDays.toString()
-    }
-    if (this.cachedDiffDays > 0) {
-      return this.cachedDiffDays.toString()
-    }
-    return '-'
-  }
-
-  private getMetricText(type: MineMetricType): string {
-    switch (type) {
-      case MineMetricType.USER_ID:
-        return this.getUserIdText()
-      case MineMetricType.USER_GROUP:
-        return this.getGroupNameText()
-      case MineMetricType.USER_DAYS:
-        return this.getUserDaysText()
-      default:
-        return '-'
-    }
-  }
-
-  @Builder metricCell(label: ResourceStr, type: MineMetricType) {
-    Column({ space: CloudThemeToken.spacingMd }) {
-      Text(label)
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor(CloudThemeToken.textSecondary)
-      Text(this.getMetricText(type))
-        .fontSize(CloudThemeToken.textSizeTitle)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(CloudThemeToken.textPrimary)
-        .maxLines(1)
-        .textOverflow({overflow: TextOverflow.Ellipsis})
-    }
-    .layoutWeight(1)
-    .height('100%')
-    .padding(CloudThemeToken.spacingCard)
-    .alignItems(HorizontalAlign.Start)
-    .justifyContent(FlexAlign.Center)
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
-  }
-
-  @Builder storageInfo() {
-    Column({ space: CloudThemeToken.spacingPanel }) {
-      Row() {
-        Column({ space: CloudThemeToken.spacingXl }) {
-          Text($r('app.string.storage_used'))
-            .fontSize(CloudThemeToken.textSizeBodyPlus)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-
-          Text(this.userStorage ? `${CommonUtil.formatBytes(this.userStorage.used)} / ${CommonUtil.formatBytes(this.userStorage.total)}` : '')
-            .fontSize(CloudThemeToken.textSizeHeadline)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-
-          Row({ space: CloudThemeToken.spacingSm }) {
-            Text($r('app.string.storage_update_date'))
-              .fontSize(CloudThemeToken.textSizeSmall)
-              .fontColor(CloudThemeToken.textSecondary)
-            Text(this.updateDate ? `${DateFormatUtil.format(this.updateDate, 'yyyy/MM/dd')}` : '')
-              .fontSize(CloudThemeToken.textSizeSmall)
-              .fontColor(CloudThemeToken.textSecondary)
-          }
-          .justifyContent(FlexAlign.Start)
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-
-        Stack({alignContent: Alignment.Center}) {
-          DataPanel({ values: [this.userStorage?.used ?? 0], max: this.userStorage?.total ?? 100, type: DataPanelType.Circle })
-            .width(CloudThemeToken.panelLargeSize)
-            .height(CloudThemeToken.cardHeight2xl)
-            .strokeWidth(CloudThemeToken.storageProgressStrokeWidth)
-            .valueColors([CloudThemeToken.primary])
-
-          Text(this.getStoragePercentText())
-            .fontSize(CloudThemeToken.textSizeBodyPlus)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-        }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.SpaceBetween)
-
-      Column({ space: CloudThemeToken.spacingXl }) {
-        Progress({value: this.userStorage?.used ?? 0, total: this.userStorage?.total ?? 100, type: ProgressType.Capsule})
-          .width('100%')
-          .height(CloudThemeToken.storageProgressHeight)
-          .color(CloudThemeToken.primary)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          // 胶囊型 Progress 自带按钮式交互态(hover/获焦缩放),纯展示条需屏蔽,否则 2in1 鼠标悬停时横条左右晃动
-          .focusable(false)
-          .hitTestBehavior(HitTestMode.None)
-
-        Row({ space: CloudThemeToken.spacingXs }) {
-          Text($r('app.string.storage_available'))
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-          Text(this.userStorage ? CommonUtil.formatBytes(this.userStorage.free) : '')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-          Blank()
-          Image($r('app.media.ic_externaldrive_fill'))
-            .width(CloudThemeToken.iconMd)
-            .height(CloudThemeToken.iconMd)
-            .fillColor(CloudThemeToken.textSecondary)
-            .draggable(false)
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-      }
-    }
-    .padding(CloudThemeToken.spacingPage)
-    .width('100%')
-    .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-  }
-
-  getStoragePercentText(): string {
-    if (!this.userStorage || this.userStorage.total <= 0) {
-      return ''
-    }
-    return `${(this.userStorage.used * CloudThemeToken.percentageFull / this.userStorage.total).toFixed(1)}%`
-  }
-
-  @Builder logoutButton() {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Image($r('app.media.ic_square_logout'))
-        .width(CloudThemeToken.icon2xl)
-        .height(CloudThemeToken.icon2xl)
-        .fillColor(CloudThemeToken.danger)
-        .draggable(false)
-
-      Text($r('app.string.logout'))
-        .fontColor(CloudThemeToken.danger)
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontWeight(FontWeight.Medium)
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      showCloudConfirmDialog(this.getUIContext(), {
-        title: $r('app.string.logout_confim'),
-        confirmText: $r('app.string.dialog_logout'),
-        onConfirm: () => {
-          ActiveAccount.clear()
-          CloudRouter.resetToLogin()
-        }
-      })
-    })
-  }
-
-  @Builder rowWithNext(icon: ResourceStr, backgroundColor: ResourceColor,
-    title: ResourceStr, sub_title?: ResourceStr, onClickCallback?: ()=>void) {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Image(icon)
-        .width(CloudThemeToken.iconBoxXs)
-        .height(CloudThemeToken.iconBoxXs)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .padding(CloudThemeToken.spacingLg)
-        .fillColor(CloudThemeToken.onPrimary)
-        .backgroundColor(backgroundColor)
-        .draggable(false)
-
-      Text(title)
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-
-      if (sub_title) {
-        Text(sub_title)
-          .fontSize(CloudThemeToken.textSizeBody)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      Image($r('app.media.ic_chevron_right'))
-        .width(CloudThemeToken.iconXs)
-        .height(CloudThemeToken.iconXs)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      if (onClickCallback) {
-        onClickCallback()
-      }
-    })
-  }
-
-  // 「外观偏好」行单独实现：右侧文案用响应式子组件 ThemeModeText，
-  // 这样在设置弹窗里切换深浅色后，外面右侧文案能立即同步（rowWithNext 按值传参做不到）。
-  @Builder themeRow() {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Image($r('app.media.ic_theme_setting'))
-        .width(CloudThemeToken.iconBoxXs)
-        .height(CloudThemeToken.iconBoxXs)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .padding(CloudThemeToken.spacingLg)
-        .fillColor(CloudThemeToken.onPrimary)
-        .backgroundColor(CloudThemeToken.settingIconThemeBackground)
-        .draggable(false)
-
-      Text($r('app.string.user_theme_setting'))
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-
-      ThemeModeText()
-
-      Image($r('app.media.ic_chevron_right'))
-        .width(CloudThemeToken.iconXs)
-        .height(CloudThemeToken.iconXs)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.openSettingsSheet(MineSheetType.THEME)
-    })
-  }
-
-  // 「相册备份」行单独实现：状态文字用响应式子组件 PhotoBackupStatusText，
-  // 这样在设置弹窗里切换开关后，外面右侧文案能立即同步（rowWithNext 按值传参做不到）。
-  @Builder photoBackupRow() {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Image($r('app.media.ic_externaldrive_fill'))
-        .width(CloudThemeToken.iconBoxXs)
-        .height(CloudThemeToken.iconBoxXs)
-        .borderRadius(CloudThemeToken.cardRadius)
-        .padding(CloudThemeToken.spacingLg)
-        .fillColor(CloudThemeToken.onPrimary)
-        .backgroundColor(CloudThemeToken.settingIconPhotoBackupBackground)
-        .draggable(false)
-
-      Text('相册备份')
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-
-      PhotoBackupStatusText()
-
-      Image($r('app.media.ic_chevron_right'))
-        .width(CloudThemeToken.iconXs)
-        .height(CloudThemeToken.iconXs)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.openSettingsSheet(MineSheetType.PHOTO_BACKUP)
-    })
-  }
-
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder rowWithSelect(title: ResourceStr) {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Column({ space: CloudThemeToken.spacingSm }) {
-        Text(title)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-
-        Text('当前 ' + this.uploadMaxConcurrent.toString() + ' 个任务同时上传')
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Row() {
-        this.concurrentStepButton('-', this.uploadMaxConcurrent <= Constant.UPLOAD_CONCURRENT_MIN, () => {
-          this.changeUploadMaxConcurrent(-1)
-        })
-
-        Text(this.uploadMaxConcurrent.toString())
-          .width(CloudThemeToken.rowHeightMd)
-          .height(CloudThemeToken.rowHeightSm)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .textAlign(TextAlign.Center)
-
-        this.concurrentStepButton('+', this.uploadMaxConcurrent >= Constant.UPLOAD_CONCURRENT_MAX, () => {
-          this.changeUploadMaxConcurrent(1)
-        })
-      }
-      .height(CloudThemeToken.rowHeight2xl)
-      .padding({ left: CloudThemeToken.spacingSm, right: CloudThemeToken.spacingSm })
-      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-      .alignItems(VerticalAlign.Center)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .alignItems(VerticalAlign.Center)
-  }
-
-  @Builder concurrentStepButton(text: string, disabled: boolean, onClick: () => void) {
-    // 点击热区放大到 48×48（填满步进器行高），字形不变、四周留白变大，手机上不易点空；
-    // 按下给一层 primarySoft 底反馈，明确「点到了」
-    Text(text)
-      .width(CloudThemeToken.rowHeight2xl)
-      .height(CloudThemeToken.rowHeight2xl)
-      .fontSize(CloudThemeToken.textSizeLarge)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(disabled ? CloudThemeToken.textSecondary : CloudThemeToken.textPrimary)
-      .textAlign(TextAlign.Center)
-      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-      .opacity(disabled ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
-      .stateStyles({
-        pressed: {
-          .backgroundColor(disabled ? CloudThemeToken.transparent : CloudThemeToken.primarySoft)
-        },
-        normal: {
-          .backgroundColor(CloudThemeToken.transparent)
-        }
-      })
-      .onClick(() => {
-        if (!disabled) {
-          onClick()
-        }
-      })
-  }
-
-  @Builder settingButton() {
-    Column({ space: CloudThemeToken.spacingCard }) {
-      this.rowWithNext($r('app.media.ic_privacy_secure'),
-        CloudThemeToken.settingIconPrivacyBackground,
-        $r('app.string.user_privacy_secure'),
-        undefined,
-        () => {
-          this.openSettingsSheet(MineSheetType.PRIVACY)
-        })
-      this.themeRow()
-      this.photoBackupRow()
-      this.rowWithNext($r('app.media.ic_more_setting'),
-        CloudThemeToken.settingIconMoreBackground,
-        $r('app.string.more_setting'),
-        undefined,
-        () => {
-          this.openSettingsSheet(MineSheetType.MORE)
-        })
-      this.rowWithNext($r('app.media.ic_info_circle'),
-        CloudThemeToken.settingIconAboutBackground,
-        $r('app.string.about'),
-        this.versionInfo,
-        () => { this.showAboutSheet = true }
-      )
-    }
-    .width('100%')
-    .justifyContent(FlexAlign.Center)
-  }
-
-  private openSettingsSheet(type: MineSheetType): void {
-    this.activeSheetType = type
-    this.showUserSwitchSheet = false
-    this.showPrivacySheet = false
-    this.showThemeSheet = false
-    this.showMoreSettingsSheet = false
-    this.showPhotoBackupPathSheet = false
-    if (type === MineSheetType.PRIVACY) {
-      this.syncSystemAuthState()
-      this.showPrivacySheet = true
-    } else if (type === MineSheetType.THEME) {
-      this.showThemeSheet = true
-    } else if (type === MineSheetType.MORE) {
-      this.showMoreSettingsSheet = true
-    }
-    this.requestShowSettingsSheet()
-  }
-
-  private openUserSwitchSheet(): void {
-    this.activeSheetType = MineSheetType.NONE
-    this.showPrivacySheet = false
-    this.showThemeSheet = false
-    this.showMoreSettingsSheet = false
-    this.showUserSwitchSheet = true
-    this.requestShowSettingsSheet()
-  }
-
-  // Drive the shared settings sheet off its real lifecycle phase instead of
-  // guessing from the bound flag. The flag stays true during the close
-  // animation, so the old self-healing (set false then true) fought the closing
-  // animation and the sheet ended up dismissed — a tap right after closing did
-  // nothing. A request that arrives mid-close is queued and replayed once
-  // onDisappear fires. Content state is already set by the callers above, so a
-  // request while already open/opening just swaps content via activeSheetType.
-  private requestShowSettingsSheet(): void {
-    // Already visible or appearing — the caller just updated the content state,
-    // the builder re-renders it; nothing else to do.
-    if (this.showSettingsSheet &&
-      (this.settingsPhase === SettingsSheetPhase.OPEN || this.settingsPhase === SettingsSheetPhase.OPENING)) {
-      this.reopenSettingsPending = false
-      return
-    }
-    // Fully closed — open directly. Guard the rare stale case (flag left true
-    // with no visible sheet) by re-triggering the binding.
-    if (this.settingsPhase === SettingsSheetPhase.CLOSED) {
-      this.reopenSettingsPending = false
-      if (this.showSettingsSheet) {
-        this.showSettingsSheet = false
-        setTimeout(() => { this.showSettingsSheet = true }, 50)
-      } else {
-        this.showSettingsSheet = true
-      }
-      return
-    }
-    // Otherwise it is closing — or was just dismissed (flag already false) but
-    // the CLOSING callback hasn't landed yet. Queue the open and replay it in
-    // onDisappear instead of fighting the close animation.
-    this.reopenSettingsPending = true
-    this.showSettingsSheet = false
-  }
-
-  private closeSettingsSheet(): void {
-    this.showSettingsSheet = false
-  }
-
-  private finishCloseSettingsSheet(): void {
-    this.showUserSwitchSheet = false
-    this.showPrivacySheet = false
-    this.showThemeSheet = false
-    this.showMoreSettingsSheet = false
-    this.activeSheetType = MineSheetType.NONE
+  private securityValue(): string {
+    const account = this.store.account
+    return (this.store.isV3() || !account) ? '' : (account.two_fa_enabled ? '两步验证已开启' : '两步验证未开启')
   }
 
   private closeFeedbackSheet(): void {
     this.showFeedbackSheet = false
-  }
-
-  @Builder userSwitchSheet() {
-    UserSwitchSheet({
-      currentUser: this.currentUser,
-      currentUrl: this.currentUrl,
-      onSelect: (user: DbUserInfo) => {
-        // 过期账号会跳登录页，得先把 sheet 关掉再跳
-        if (CloudRouter.switchToUser(user.username, user.url, () => { this.closeSettingsSheet() })) {
-          this.closeSettingsSheet()
-          this.loadMineData()
-        }
-      },
-      onClose: () => {
-        this.closeSettingsSheet()
-      }
-    })
-  }
-
-  @Builder settingsSheet() {
-    if (this.showUserSwitchSheet) {
-      this.userSwitchSheet()
-    } else if (this.activeSheetType === MineSheetType.THEME) {
-      this.themeSettingsSheet()
-    } else if (this.activeSheetType === MineSheetType.PRIVACY) {
-      this.privacySettingsSheet()
-    } else if (this.activeSheetType === MineSheetType.PHOTO_BACKUP) {
-      this.photoBackupSheet()
-    } else {
-      this.moreSettingsSheet()
-    }
-  }
-
-  @Builder photoBackupSheet() {
-    PhotoBackupSettingsSheet({
-      onClose: () => { this.closeSettingsSheet() },
-      onPickPath: () => { this.showPhotoBackupPathSheet = true }
-    })
-  }
-
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder privacySettingsSheet() {
-    Column({ space: CloudThemeToken.spacingPage }) {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text(this.currentUser)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.currentUrl)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.getCredentialStatusText())
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.primary)
-      }
-      .width('100%')
-      .padding(CloudThemeToken.spacingPanel)
-      .alignItems(HorizontalAlign.Start)
-      .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-      .systemMaterial(CloudMaterial.cardMaterial())
-      .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-
-      this.systemAuthActionRow()
-      if (this.systemAuthEnabled) {
-        this.privacyActionRow('立即验证', '测试当前人脸或指纹认证是否可用', false, () => {
-          this.verifySystemAuth()
-        })
-      }
-      this.privacyActionRow('删除当前登录凭证', '清除本机保存的 token 并重新登录', true, () => {
-        this.deleteCurrentCredential()
-      })
-    }
-    .width('100%')
-    .padding({
-      left: CloudThemeToken.spacingSheetHorizontal,
-      right: CloudThemeToken.spacingSheetHorizontal,
-      top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-    })
-    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
-    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
-  }
-
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder privacyActionRow(title: string, description: string, danger: boolean, onClick: () => void) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text(title)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(danger ? CloudThemeToken.danger : CloudThemeToken.textPrimary)
-        Text(description)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Image($r('app.media.ic_chevron_right'))
-        .width(CloudThemeToken.iconXs)
-        .height(CloudThemeToken.iconXs)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-    .alignItems(VerticalAlign.Center)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(danger ? CloudThemeToken.dangerSoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
-    .border({ width: CloudThemeToken.lineWidth, color: danger ? CloudThemeToken.danger : CloudThemeToken.line })
-    .onClick(onClick)
-  }
-
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder systemAuthActionRow() {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text('系统认证保护')
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-        Text(this.getSystemAuthDescription())
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(this.systemAuthEnabled ? CloudThemeToken.success : CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Text(this.systemAuthBusy ? '处理中' : (this.systemAuthEnabled ? '已开启' : '未开启'))
-        .fontSize(CloudThemeToken.textSizeSmall)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.systemAuthEnabled ? CloudThemeToken.success : CloudThemeToken.textSecondary)
-        .padding({ left: CloudThemeToken.spacingLg, right: CloudThemeToken.spacingLg })
-        .height(CloudThemeToken.rowHeightSm)
-        .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-        .backgroundColor(this.systemAuthEnabled ? CloudThemeToken.successSoft : CloudThemeToken.surfaceSubtle)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight4xl)
-    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-    .alignItems(VerticalAlign.Center)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(this.systemAuthEnabled ? CloudThemeToken.successSoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
-    .border({
-      width: CloudThemeToken.lineWidth,
-      color: this.systemAuthEnabled ? CloudThemeToken.success : CloudThemeToken.line
-    })
-    .opacity(this.systemAuthBusy ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
-    .onClick(() => {
-      this.toggleSystemAuth()
-    })
-  }
-
-  @Builder themeSettingsSheet() {
-    Column({ space: CloudThemeToken.spacingPage }) {
-      ThemeOptionRow({
-        title: $r('app.string.theme_light_title'),
-        description: $r('app.string.theme_light_desc'),
-        mode: Constant.APP_THEME_LIGHT,
-        onSelect: (mode: string): void => {
-          this.setThemeMode(mode)
-        }
-      })
-      ThemeOptionRow({
-        title: $r('app.string.theme_dark_title'),
-        description: $r('app.string.theme_dark_desc'),
-        mode: Constant.APP_THEME_DARK,
-        onSelect: (mode: string): void => {
-          this.setThemeMode(mode)
-        }
-      })
-    }
-    .width('100%')
-    .padding({
-      left: CloudThemeToken.spacingSheetHorizontal,
-      right: CloudThemeToken.spacingSheetHorizontal,
-      top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-    })
-    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
-    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
-  }
-
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder settingSwitchRow(title: string, desc: string, value: boolean, onToggle: (v: boolean) => void) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text(title)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-        Text(desc)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      Toggle({ type: ToggleType.Switch, isOn: value })
-        .selectedColor(CloudThemeToken.primary)
-        .onChange((isOn: boolean) => {
-          onToggle(isOn);
-        })
-    }
-    .width('100%')
-    // 固定行高会在描述换行时挤压内容,改为最小高度 + 上下留白自适应
-    .constraintSize({ minHeight: CloudThemeToken.rowHeight4xl })
-    .padding({
-      left: CloudThemeToken.spacingPanel,
-      right: CloudThemeToken.spacingPanel,
-      top: CloudThemeToken.spacingMd,
-      bottom: CloudThemeToken.spacingMd
-    })
-    .alignItems(VerticalAlign.Center)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-  }
-
-  @Builder moreSettingsSheet() {
-    Column({ space: CloudThemeToken.spacingPage }) {
-      this.rowWithSelect($r('app.string.upload_max_concurrent'))
-      this.settingSwitchRow('开启图片拖拽', '拖拽进行 AI 分析', this.imageDraggableEnabled, (v: boolean) => {
-        this.imageDraggableEnabled = v
-        UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.IMAGE_DRAGGABLE_ENABLED, v)
-      })
-      this.settingSwitchRow('长按图片智能识图', '预览时长按提取主体或文字',
-        this.imageAiAnalyzerEnabled, (v: boolean) => {
-          this.imageAiAnalyzerEnabled = v
-          UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.IMAGE_AI_ANALYZER_ENABLED, v)
-        })
-      this.settingSwitchRow('碰一碰使用分享链接', '未下载文件以分享链接发送',
-        this.knockUseShareLink, (v: boolean) => {
-          this.knockUseShareLink = v
-          UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_USE_SHARE_LINK, v)
-        })
-      if (this.knockUseShareLink) {
-        this.knockExpireRow()
-        this.settingSwitchRow('分享链接附带提取码', '随机提取码，碰完后弹提示',
-          this.knockPasswordEnabled, (v: boolean) => {
-            this.knockPasswordEnabled = v
-            UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_PASSWORD_ENABLED, v)
-          })
-      }
-    }
-    .width('100%')
-    .padding({
-      left: CloudThemeToken.spacingSheetHorizontal,
-      right: CloudThemeToken.spacingSheetHorizontal,
-      top: CloudThemeToken.spacingSheetTop,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
-    })
-    .constraintSize({ minHeight: CloudThemeToken.detailSheetMinHeight })
-    .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
-  }
-
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder knockExpireRow() {
-    Column({ space: CloudThemeToken.spacingMd }) {
-      Text('分享链接有效期')
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(CloudThemeToken.textPrimary)
-      Row({ space: CloudThemeToken.spacingMd }) {
-        this.knockExpireChip('1天', 1)
-        this.knockExpireChip('7天', 7)
-        this.knockExpireChip('30天', 30)
-        this.knockExpireChip('永久', 0)
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .padding(CloudThemeToken.spacingPanel)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-  }
-
-  @Builder knockExpireChip(title: string, days: number) {
-    Button({ type: ButtonType.Normal }) {
-      Text(title)
-        .fontSize(CloudThemeToken.textSizeSmallPlus)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.knockExpireDays === days ? CloudThemeToken.onPrimary : CloudThemeToken.textPrimary)
-        .textAlign(TextAlign.Center)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .height(CloudThemeToken.rowHeightMd)
-    .layoutWeight(1)
-    .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-    .backgroundColor(this.knockExpireDays === days ? CloudThemeToken.primary : CloudThemeToken.surface)
-    .border({
-      width: CloudThemeToken.lineWidth,
-      color: this.knockExpireDays === days ? CloudThemeToken.primary : CloudThemeToken.line
-    })
-    .onClick(() => {
-      this.knockExpireDays = days
-      UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.KNOCK_SHARE_EXPIRE_DAYS, days)
-    })
-  }
-
-  private normalizeUploadConcurrent(raw: number): number {
-    if (typeof raw !== 'number') {
-      return Constant.UPLOAD_CONCURRENT_DEFAULT
-    }
-    return Math.max(Constant.UPLOAD_CONCURRENT_MIN, Math.min(Constant.UPLOAD_CONCURRENT_MAX, raw))
-  }
-
-  private changeUploadMaxConcurrent(delta: number): void {
-    this.uploadMaxConcurrent = this.normalizeUploadConcurrent(this.uploadMaxConcurrent + delta)
-    UserPreferences.putSync(
-      Constant.USER_PREFERENCES,
-      Constant.UPLOAD_MAX_CONCURRENT,
-      this.uploadMaxConcurrent
-    )
-  }
-
-  private getSettingsSheetTitle(): ResourceStr {
-    if (this.showUserSwitchSheet) {
-      return '选择账号'
-    }
-    switch (this.activeSheetType) {
-      case MineSheetType.THEME:
-        return $r('app.string.user_theme_setting')
-      case MineSheetType.PRIVACY:
-        return $r('app.string.user_privacy_secure')
-      case MineSheetType.PHOTO_BACKUP:
-        return '相册备份'
-      default:
-        return $r('app.string.more_setting')
-    }
-  }
-
-  setThemeMode(mode: string): void {
-    AppLogger.info(TAG, `theme mode ${mode}`)
-    this.themeMode = mode
-    AppStorage.setOrCreate(APP_THEME_MODE_MIRROR_KEY, mode)
-    UserPreferences.putSync(Constant.USER_PREFERENCES, Constant.APP_THEME_MODE, mode)
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-    try {
-      context.setColorMode(mode === Constant.APP_THEME_DARK
-        ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
-        : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT)
-    } catch (err) {
-      AppLogger.error(TAG, `set theme mode failed: ${(err as Error)?.message ?? err}`)
-    }
-  }
-
-  private getCurrentDbUserInfo(): DbUserInfo | null {
-    return UserDatabase.getUserInfo(this.currentUser, this.currentUrl)
-  }
-
-  private getCredentialStatusText(): string {
-    const dbUserInfo = this.getCurrentDbUserInfo()
-    if (!dbUserInfo) {
-      return '未找到本机登录凭证'
-    }
-    const expires = new Date(dbUserInfo.expires)
-    if (expires.getTime() <= Date.now()) {
-      return '登录凭证已过期'
-    }
-    return `登录凭证有效至 ${DateFormatUtil.format(expires, 'yyyy/MM/dd')}`
-  }
-
-  private getSystemAuthDescription(): string {
-    if (this.systemAuthBusy) {
-      return '正在等待系统认证'
-    }
-    return this.systemAuthEnabled ? '已开启，回到应用时需要人脸或指纹' : '未开启，可使用系统人脸或指纹保护应用'
-  }
-
-  private syncSystemAuthState(): void {
-    this.systemAuthEnabled = AppLockUtil.isEnabled()
-  }
-
-  private toggleSystemAuth(): void {
-    if (this.systemAuthBusy) {
-      return
-    }
-    if (this.systemAuthEnabled) {
-      AppLogger.info(TAG, 'system auth disabled')
-      AppLockUtil.setEnabled(false)
-      this.syncSystemAuthState()
-      showToast('已关闭系统认证保护')
-      return
-    }
-    AppLogger.info(TAG, 'system auth enable requested')
-
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
-    if (!context) {
-      showToast('无法唤起系统认证')
-      return
-    }
-    this.systemAuthBusy = true
-    AppLockUtil.authenticateForSettings(context, '开启系统认证保护')
-      .then((result: SystemAuthResult) => {
-        this.systemAuthBusy = false
-        if (result.success) {
-          AppLockUtil.setEnabled(true)
-          this.syncSystemAuthState()
-          showToast('已开启系统认证保护')
-        } else {
-          this.syncSystemAuthState()
-          showToast(result.message.length > 0 ? result.message : '系统认证失败')
-        }
-      })
-      .catch((err: Error) => {
-        this.systemAuthBusy = false
-        this.syncSystemAuthState()
-        AppLogger.error(TAG, `enable system auth failed: ${err.message}`)
-        showToast('系统认证失败')
-      })
-  }
-
-  private verifySystemAuth(): void {
-    if (this.systemAuthBusy) {
-      return
-    }
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined
-    if (!context) {
-      showToast('无法唤起系统认证')
-      return
-    }
-    this.systemAuthBusy = true
-    AppLockUtil.authenticateForSettings(context, '验证系统认证')
-      .then((result: SystemAuthResult) => {
-        this.systemAuthBusy = false
-        showToast(result.success ? '系统认证可用' : (result.message.length > 0 ? result.message : '系统认证失败'))
-      })
-      .catch((err: Error) => {
-        this.systemAuthBusy = false
-        AppLogger.error(TAG, `verify system auth failed: ${err.message}`)
-        showToast('系统认证失败')
-      })
-  }
-
-  private deleteCurrentCredential(): void {
-    showCloudConfirmDialog(this.getUIContext(), {
-      title: '删除当前登录凭证',
-      message: `${this.currentUser}\n${this.currentUrl}`,
-      confirmText: $r('app.string.dialog_delete'),
-      onConfirm: () => {
-        AppLogger.info(TAG, 'delete current credential')
-        UserDatabase.deleteUserInfo(this.currentUser, this.currentUrl)
-        ActiveAccount.clear()
-        this.closeSettingsSheet()
-        CloudRouter.resetToLogin()
-      }
-    })
   }
 
   private openExternalUrl(url: string): void {
@@ -1841,7 +383,7 @@ export struct TabMine {
       appVersion: this.appVersion,
       serverUrl: this.currentUrl,
       account: this.currentUser,
-      user: this.siteConfig?.user,
+      user: this.store.user,
       recentLogs: AppLogger.getRecentText(60),
       logFilePath: AppLogger.getFilePath()
     })
@@ -1868,7 +410,7 @@ export struct TabMine {
       appVersion: this.appVersion,
       serverUrl: this.currentUrl,
       account: this.currentUser,
-      user: this.siteConfig?.user
+      user: this.store.user
     }))
     this.closeFeedbackSheet()
   }
@@ -1879,7 +421,7 @@ export struct TabMine {
       appVersion: this.appVersion,
       serverUrl: this.currentUrl,
       account: this.currentUser,
-      user: this.siteConfig?.user
+      user: this.store.user
     }))
     this.closeFeedbackSheet()
   }
@@ -1887,10 +429,6 @@ export struct TabMine {
   private openLogViewer(): void {
     this.closeFeedbackSheet()
     this.showLogViewerSheet = true
-  }
-
-  @Builder aboutSheet() {
-    AboutPage({ embedded: true })
   }
 
   @Builder logViewerSheet() {
@@ -1901,85 +439,6 @@ export struct TabMine {
       onClose: () => {
         this.showLogViewerSheet = false
       }
-    })
-  }
-
-  @Builder rowWithJump(icon: ResourceStr, backgroundColor: ResourceColor, title: ResourceStr, url: string) {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Image(icon)
-        .width(CloudThemeToken.icon4xl)
-        .height(CloudThemeToken.icon4xl)
-        .borderRadius(CloudThemeToken.controlRadiusXl)
-        .padding(CloudThemeToken.spacingSm)
-        .fillColor(CloudThemeToken.onPrimary)
-        .backgroundColor(backgroundColor)
-        .draggable(false)
-
-      Text(title)
-        .height(CloudThemeToken.iconXl)
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-
-      Image($r('app.media.ic_web_jump'))
-        .width(CloudThemeToken.iconMd)
-        .height(CloudThemeToken.iconMd)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight3xl)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.openExternalUrl(url)
-    })
-  }
-
-  @Builder webButton() {
-    Column({ space: CloudThemeToken.spacingCard }) {
-      this.feedbackEntryRow()
-    }
-    .width('100%')
-    .justifyContent(FlexAlign.Center)
-  }
-
-  @Builder feedbackEntryRow() {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      Image($r('app.media.ic_feedback'))
-        .width(CloudThemeToken.icon4xl)
-        .height(CloudThemeToken.icon4xl)
-        .borderRadius(CloudThemeToken.controlRadiusXl)
-        .padding(CloudThemeToken.spacingSm)
-        .fillColor(CloudThemeToken.onPrimary)
-        .backgroundColor(CloudThemeToken.settingIconWebJumpBackground)
-        .draggable(false)
-
-      Text($r('app.string.feedback'))
-        .fontSize(CloudThemeToken.textSizeLarge)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-
-      Image($r('app.media.ic_chevron_right'))
-        .width(CloudThemeToken.iconMd)
-        .height(CloudThemeToken.iconMd)
-        .fillColor(CloudThemeToken.textSecondary)
-        .draggable(false)
-    }
-    .width('100%')
-    .height(CloudThemeToken.rowHeight3xl)
-    .borderRadius(CloudThemeToken.controlRadiusLg)
-    .clip(true)
-    .backgroundColor(CloudThemeToken.surface)
-    .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
-    .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.showFeedbackSheet = true
     })
   }
 
@@ -1998,79 +457,5 @@ export struct TabMine {
         this.closeFeedbackSheet()
       }
     })
-  }
-}
-
-// 「外观偏好」右侧当前模式文案。同上，绑 AppStorage 镜像才能在弹窗里切换后即时刷新。
-@Component
-struct ThemeModeText {
-  @StorageProp(APP_THEME_MODE_MIRROR_KEY) themeMode: string = Constant.APP_THEME_LIGHT;
-
-  build() {
-    Text(this.themeMode === Constant.APP_THEME_DARK
-      ? $r('app.string.theme_dark_title')
-      : $r('app.string.theme_light_title'))
-      .fontSize(CloudThemeToken.textSizeBody)
-      .fontColor(CloudThemeToken.textSecondary)
-  }
-}
-
-// 外观弹窗里的单个模式选项。勾选态同样绑 AppStorage 镜像，
-// 否则选中项停留在打开弹窗那一刻的取值。
-@Component
-struct ThemeOptionRow {
-  @StorageProp(APP_THEME_MODE_MIRROR_KEY) currentMode: string = Constant.APP_THEME_LIGHT;
-  @Require @Prop title: ResourceStr;
-  @Require @Prop description: ResourceStr;
-  @Require @Prop mode: string;
-  onSelect: (mode: string) => void = (): void => {};
-
-  build() {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Column({ space: CloudThemeToken.spacingXs }) {
-        Text(this.title)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textPrimary)
-        Text(this.description)
-          .fontSize(CloudThemeToken.textSizeSmall)
-          .fontColor(CloudThemeToken.textSecondary)
-      }
-      .layoutWeight(1)
-      .alignItems(HorizontalAlign.Start)
-
-      if (this.currentMode === this.mode) {
-        Image($r('app.media.ic_checkmark_circle'))
-          .width(CloudThemeToken.icon2xl)
-          .height(CloudThemeToken.icon2xl)
-          .fillColor(CloudThemeToken.primary)
-          .draggable(false)
-      }
-    }
-    .width('100%')
-    .height(CloudThemeToken.cardHeightSm)
-    .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
-    .borderRadius(CloudThemeToken.controlRadiusXl)
-    .backgroundColor(this.currentMode === this.mode ? CloudThemeToken.primarySoft : CloudThemeToken.surface)
-    .border({
-      width: CloudThemeToken.lineWidth,
-      color: this.currentMode === this.mode ? CloudThemeToken.primary : CloudThemeToken.line
-    })
-    .onClick(() => {
-      this.onSelect(this.mode)
-    })
-  }
-}
-
-// 「相册备份」开关状态文字。独立子组件直接绑定 @StorageProp，开关 save() 后 AppStorage 镜像
-// 一变即重渲染——避免把动态文案按值传给 @Builder（rowWithNext）导致内部 Text 不刷新的坑。
-@Component
-struct PhotoBackupStatusText {
-  @StorageProp(PHOTO_BACKUP_ENABLED_KEY) backupEnabled: boolean = false;
-
-  build() {
-    Text(this.backupEnabled ? '已开启' : '未开启')
-      .fontSize(CloudThemeToken.textSizeBody)
-      .fontColor(CloudThemeToken.textSecondary)
   }
 }

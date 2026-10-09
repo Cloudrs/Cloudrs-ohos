@@ -222,7 +222,6 @@ export struct TabFiles {
   @Provide thumbSource: Map<string, string> = new Map()
   @State isRefreshing:boolean = false
   @State showObjectDetail: boolean = false
-  @State visibleSheetCount: number = 0
   private detailSheetCtrl: SheetPhaseController = new SheetPhaseController()
   private selectFileSheetCtrl: SheetPhaseController = new SheetPhaseController()
   private inputSheetCtrl: SheetPhaseController = new SheetPhaseController()
@@ -429,29 +428,10 @@ export struct TabFiles {
     return this.downloadingCount + this.uploadingCount
   }
 
-  // Dim is driven by sheets actually on screen (onAppear/onDisappear), not by
-  // the request flags — a flag can get stuck true when a sheet open request is
-  // dropped mid context-menu dismissal, which used to leave the title buttons
-  // permanently gray.
-  private shouldDimFileTitleActions(): boolean {
-    return this.visibleSheetCount > 0
-  }
-
-  private markSheetVisible(): void {
-    this.visibleSheetCount += 1
-  }
-
-  private markSheetHidden(): void {
-    this.visibleSheetCount = Math.max(0, this.visibleSheetCount - 1)
-  }
-
-  // HDS 返回键与菜单键底色：置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应），<26 保留 surfaceSubtle 实色
+  // HDS 返回键与菜单键底色：置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应），<26 保留 surfaceSubtle 实色。
+  // 半模态打开时不再手动置灰：bindSheet 自带的模态遮罩会连标题栏一起压暗，且随开关动画同步淡入淡出
   private getFileTitleActionBackground(): ResourceColor {
-    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle)
-  }
-
-  private getFileTitleActionIconColor(): ResourceColor {
-    return this.shouldDimFileTitleActions() ? '#33111827' : CloudThemeToken.textPrimary
+    return CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle)
   }
 
   private getSearchMenuItem(): HdsNavigationMenuItemOptions {
@@ -2201,7 +2181,6 @@ export struct TabFiles {
               this.detailSheetCtrl.onWillAppear()
             },
             onAppear: () => {
-              this.markSheetVisible()
               this.detailSheetCtrl.onAppear()
               harmonyShare.on('knockShare', this.detailKnockShareCallback)
             },
@@ -2209,7 +2188,6 @@ export struct TabFiles {
               this.detailSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
-              this.markSheetHidden()
               harmonyShare.off('knockShare', this.detailKnockShareCallback)
               this.detailSheetCtrl.onDisappear((value: boolean) => {
                 this.showObjectDetail = value
@@ -2234,14 +2212,12 @@ export struct TabFiles {
               this.selectFileSheetCtrl.onWillAppear()
             },
             onAppear: () => {
-              this.markSheetVisible()
               this.selectFileSheetCtrl.onAppear()
             },
             onWillDisappear: () => {
               this.selectFileSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
-              this.markSheetHidden()
               this.selectFileSheetCtrl.onDisappear((value: boolean) => {
                 this.showSelectFileSheet = value
               }, () => {
@@ -2268,7 +2244,6 @@ export struct TabFiles {
               this.inputSheetCtrl.onWillAppear()
             },
             onAppear: () => {
-              this.markSheetVisible()
               this.inputSheetCtrl.onAppear()
               // 入场动画结束后再聚焦拉起键盘，动画期间弹键盘会错过 sheet 的避让时机
               this.applyInputSheetSelection()
@@ -2277,7 +2252,6 @@ export struct TabFiles {
               this.inputSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
-              this.markSheetHidden()
               this.inputSheetCtrl.onDisappear((value: boolean) => {
                 this.showInputSheet = value
               }, () => {
@@ -2302,14 +2276,12 @@ export struct TabFiles {
               this.shareSheetCtrl.onWillAppear()
             },
             onAppear: () => {
-              this.markSheetVisible()
               this.shareSheetCtrl.onAppear()
             },
             onWillDisappear: () => {
               this.shareSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
-              this.markSheetHidden()
               this.shareSheetCtrl.onDisappear((value: boolean) => {
                 this.showShareSheet = value
               }, () => {
@@ -2338,14 +2310,12 @@ export struct TabFiles {
               this.transportSheetCtrl.onWillAppear()
             },
             onAppear: () => {
-              this.markSheetVisible()
               this.transportSheetCtrl.onAppear()
             },
             onWillDisappear: () => {
               this.transportSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
-              this.markSheetHidden()
               this.transportSheetCtrl.onDisappear((value: boolean) => {
                 this.showTransportSheet = value
               }, () => {
@@ -2377,14 +2347,12 @@ export struct TabFiles {
               this.batchOperationSheetCtrl.onWillAppear()
             },
             onAppear: () => {
-              this.markSheetVisible()
               this.batchOperationSheetCtrl.onAppear()
             },
             onWillDisappear: () => {
               this.batchOperationSheetCtrl.onWillDisappear()
             },
             onDisappear: () => {
-              this.markSheetHidden()
               this.batchOperationSheetCtrl.onDisappear((value: boolean) => {
                 this.batchOperationVisible = value
               }, () => {
@@ -2446,12 +2414,12 @@ export struct TabFiles {
             },
             backIconStyle: {
               backgroundColor: this.getFileTitleActionBackground(),
-              iconColor: this.getFileTitleActionIconColor()
+              iconColor: CloudThemeToken.textPrimary
             },
             menuStyle: {
               backgroundColor: this.getFileTitleActionBackground(),
-              iconColor: this.getFileTitleActionIconColor(),
-              textColor: this.getFileTitleActionIconColor()
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
             }
           }
         },
@@ -2463,12 +2431,12 @@ export struct TabFiles {
             },
             backIconStyle: {
               backgroundColor: this.getFileTitleActionBackground(),
-              iconColor: this.getFileTitleActionIconColor()
+              iconColor: CloudThemeToken.textPrimary
             },
             menuStyle: {
               backgroundColor: this.getFileTitleActionBackground(),
-              iconColor: this.getFileTitleActionIconColor(),
-              textColor: this.getFileTitleActionIconColor()
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
             }
           }
         },
@@ -3601,14 +3569,12 @@ export struct TabFiles {
         this.pathSelectSheetCtrl.onWillAppear()
       },
       onAppear: () => {
-        this.markSheetVisible()
         this.pathSelectSheetCtrl.onAppear()
       },
       onWillDisappear: () => {
         this.pathSelectSheetCtrl.onWillDisappear()
       },
       onDisappear: () => {
-        this.markSheetHidden()
         this.pathSelectSheetCtrl.onDisappear((value: boolean) => {
           this.showPathSelect = value
         }, () => {

@@ -17,10 +17,7 @@ import FeedbackUtil from "../../utils/FeedbackUtil";
 import AppLogger from "../../utils/AppLogger";
 import { showToast } from "../../utils/ToastUtil";
 import { BusinessError, pasteboard } from "@kit.BasicServicesKit";
-import { PhotoBackupSettingsSheet } from '../../components/PhotoBackupSettingsSheet';
-import { PathSelectSheet } from '../../components/PathSelectSheet';
 import { PhotoBackupSettingsStore, PHOTO_BACKUP_ENABLED_KEY } from '../../model/PhotoBackupSettingsStore';
-import { PhotoBackupSettings } from '../../model/PhotoBackupModel';
 import { ACCOUNT_PROFILE_STORE_KEY, AccountProfileStore } from '../../model/AccountProfileStore';
 import { SheetPhaseController } from '../../utils/SheetPhaseController';
 import { SettingGroup, SettingRow } from '../../components/settings/SettingRows';
@@ -28,6 +25,7 @@ import { MineProfileCard, MineStorageCard } from '../../components/settings/Mine
 import { SettingsPage } from '../SettingsPage';
 import { AccountSecurityPage } from '../AccountSecurityPage';
 import { AboutPage } from '../AboutPage';
+import { PhotoBackupPage } from '../PhotoBackupPage';
 
 const TAG:string = 'TabMine'
 // 切到「我的」时延后一点再拉数据，避开 Tab 切换动画
@@ -50,22 +48,19 @@ export struct TabMine {
   // 我的页顶部让位（避开折叠键）；@StorageProp 只在方法里读不会被 build 追踪，故用 @Watch 驱动 @State
   @State mineTopPadding: number = 0
   @State mineTitleLeftPadding: number = CloudThemeToken.pagePadding
-  // 内容区内二级页（SETTINGS_PAGE / ACCOUNT_SECURITY_PAGE / ABOUT_PAGE），空串为我的页本身
+  // 内容区内二级页（SETTINGS_PAGE / ACCOUNT_SECURITY_PAGE / ABOUT_PAGE / PHOTO_BACKUP_PAGE），空串为我的页本身
   @State subPage: string = ''
   // 二级页标题栏左内边距：侧栏收起时让出悬浮折叠键
   @State subTitleStartPadding: number = CloudThemeToken.pagePadding
   @State currentUser: string = ''
   @State currentUrl: string = ''
   @State showUserSwitchSheet: boolean = false
-  @State showPhotoBackupSheet: boolean = false
-  @State showPhotoBackupPathSheet: boolean = false
   @State showFeedbackSheet: boolean = false
   @State showAboutSheet: boolean = false
   @State showLogViewerSheet: boolean = false
   // @Observed 单例经 AppStorage 共享；@StorageLink 订阅后字段重新赋值才会刷新 V1 组件
   @StorageLink(ACCOUNT_PROFILE_STORE_KEY) store: AccountProfileStore = AccountProfileStore.instance
   private userSwitchCtrl: SheetPhaseController = new SheetPhaseController()
-  private photoBackupCtrl: SheetPhaseController = new SheetPhaseController()
   private scroller: Scroller = new Scroller()
   private refreshTimer: number = -1
 
@@ -149,6 +144,8 @@ export struct TabMine {
       AccountSecurityPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
     } else if (this.subPage === Constant.ABOUT_PAGE) {
       AboutPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
+    } else if (this.subPage === Constant.PHOTO_BACKUP_PAGE) {
+      PhotoBackupPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
     }
   }
 
@@ -216,9 +213,7 @@ export struct TabMine {
       SettingRow({
         title: '相册备份', value: this.photoBackupEnabled ? '已开启' : '未开启',
         icon: $r('app.media.ic_mine_backup'),
-        onTap: () => this.photoBackupCtrl.requestOpen(() => this.showPhotoBackupSheet, (v: boolean) => {
-          this.showPhotoBackupSheet = v
-        })
+        onTap: () => this.openSubPage(Constant.PHOTO_BACKUP_PAGE)
       })
       SettingRow({
         title: '账号与安全', value: this.securityValue(), divider: true,
@@ -299,23 +294,6 @@ export struct TabMine {
       })
 
     Column().width(0).height(0)
-      .bindSheet($$this.showPhotoBackupSheet, this.photoBackupSheet(), {
-        detents: [SheetSize.FIT_CONTENT],
-        // 宽屏居中弹窗不认 detents，高度单独给成按内容
-        height: SheetSize.FIT_CONTENT,
-        title: { title: '相册备份' },
-        showClose: true,
-        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-        systemMaterial: CloudMaterial.sheetMaterial(),
-        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
-        onWillAppear: () => this.photoBackupCtrl.onWillAppear(),
-        onAppear: () => this.photoBackupCtrl.onAppear(),
-        onWillDisappear: () => this.photoBackupCtrl.onWillDisappear(),
-        onDisappear: () => this.photoBackupCtrl.onDisappear((v: boolean) => { this.showPhotoBackupSheet = v }, () => {})
-      })
-
-    Column().width(0).height(0)
       .bindSheet($$this.showFeedbackSheet, this.feedbackSheet(), {
         detents: [SheetSize.FIT_CONTENT],
         // 宽屏居中弹窗不认 detents，高度单独给成按内容
@@ -352,18 +330,6 @@ export struct TabMine {
         preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
         width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth)
       })
-
-    Column().width(0).height(0)
-      .bindSheet($$this.showPhotoBackupPathSheet, this.photoBackupPathSheet(), {
-        showClose: false,
-        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-        systemMaterial: CloudMaterial.sheetMaterial(),
-        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
-        onDisappear: () => {
-          this.showPhotoBackupPathSheet = false
-        }
-      })
   }
 
   @Builder userSwitchSheet() {
@@ -378,28 +344,6 @@ export struct TabMine {
         }
       },
       onClose: () => this.closeUserSwitch()
-    })
-  }
-
-  @Builder photoBackupSheet() {
-    PhotoBackupSettingsSheet({
-      onClose: () => this.photoBackupCtrl.requestClose((v: boolean) => { this.showPhotoBackupSheet = v }),
-      onPickPath: () => { this.showPhotoBackupPathSheet = true }
-    })
-  }
-
-  @Builder photoBackupPathSheet() {
-    PathSelectSheet({
-      title: $r('app.string.backup_to'),
-      filterDirId: '',
-      onClose: (isFinished: boolean, path?: string) => {
-        this.showPhotoBackupPathSheet = false
-        if (isFinished && path && path.length > 0) {
-          const s: PhotoBackupSettings = PhotoBackupSettingsStore.load()
-          s.remotePath = path
-          PhotoBackupSettingsStore.save(s)
-        }
-      }
     })
   }
 

@@ -240,6 +240,8 @@ class Constant {
 
   ACCOUNT_SECURITY_PAGE = 'AccountSecurityPage'
 
+  PHOTO_BACKUP_PAGE = 'PhotoBackupPage'
+
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
 
   CURRENT_PATH = 'currentPath'

@@ -13,6 +13,7 @@ import { TextPreviewPage } from './TextPreview';
 import { AboutPage } from './AboutPage';
 import { SettingsPage } from './SettingsPage';
 import { AccountSecurityPage } from './AccountSecurityPage';
+import { PhotoBackupPage } from './PhotoBackupPage';
 import { FileSearchPage } from './FileSearchPage';
 import { PhotoLocalPreviewPage } from './PhotoLocalPreview';
 import { WindowControls } from '../components/WindowControls';
@@ -379,7 +380,7 @@ struct Index {
   private isSlideOverlayVisible(): boolean {
     return this.fileSearchVisible || this.overlayPage === Constant.TEXT_PREVIEW_PAGE ||
       this.overlayPage === Constant.ABOUT_PAGE || this.overlayPage === Constant.SETTINGS_PAGE ||
-      this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE;
+      this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE || this.overlayPage === Constant.PHOTO_BACKUP_PAGE;
   }
 
   private pageSlideTransition(): TransitionEffect {
@@ -437,6 +438,12 @@ struct Index {
         .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE) {
       AccountSecurityPage()
+        .width('100%')
+        .height('100%')
+        .transition(this.pageSlideTransition())
+        .zIndex(CloudThemeToken.overlayZIndex)
+    } else if (this.overlayPage === Constant.PHOTO_BACKUP_PAGE) {
+      PhotoBackupPage()
         .width('100%')
         .height('100%')
         .transition(this.pageSlideTransition())
@@ -523,6 +530,19 @@ struct Index {
       NavDestination() {
         Stack() {
           AccountSecurityPage()
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.background)
+      }
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.background)
+    } else if (name === Constant.PHOTO_BACKUP_PAGE) {
+      NavDestination() {
+        Stack() {
+          PhotoBackupPage()
         }
         .width('100%')
         .height('100%')

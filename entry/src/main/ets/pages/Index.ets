@@ -34,6 +34,7 @@ struct Index {
   @State overlayPage: string = '';
   @StorageProp(Constant.WINDOW_CONTROLS_CUSTOM) windowControlsCustom: boolean = false;
   @StorageProp(Constant.HOME_TAB_INDEX) homeTabIndex: number = TabId.FILES;
+  @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0;
   @State fileSearchVisible: boolean = false;
   @State imagePreviewParam: ImagePreview = new ImagePreview('', '', '');
   @State videoPreviewParam: VideoPreview = new VideoPreview('', '', '');
@@ -330,6 +331,18 @@ struct Index {
       .navDestination((name: string, param: Object) => {
         this.destinationBuilder(name, param);
       })
+      // 二级页滑入时底下的页面联动左移
+      .translate({ x: this.isSlideOverlayVisible() ? -this.windowWidthVp * CloudThemeToken.pageSlideUnderlayShift : 0 })
+      .animation({ duration: CloudThemeToken.pageSlideDuration, curve: Curve.Friction })
+
+      // 二级页滑入时压暗底下的页面；不拦截触摸
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(Color.Black)
+        .opacity(this.isSlideOverlayVisible() ? CloudThemeToken.pageSlideUnderlayDim : 0)
+        .animation({ duration: CloudThemeToken.pageSlideDuration, curve: Curve.Friction })
+        .hitTestBehavior(HitTestMode.None)
 
       this.overlayBuilder()
 
@@ -361,6 +374,19 @@ struct Index {
     return this.homeTabIndex !== TabId.MINE;
   }
 
+  // 走整页滑入转场的覆盖层是否在屏上；图片、视频、本地照片预览有各自的进出方式，不在此列。
+  // 原先这些页面是淡入 + 右移 40vp，淡入过程中新页半透明，底下我的页的白卡片会透出来、看起来闪一下
+  private isSlideOverlayVisible(): boolean {
+    return this.fileSearchVisible || this.overlayPage === Constant.TEXT_PREVIEW_PAGE ||
+      this.overlayPage === Constant.ABOUT_PAGE || this.overlayPage === Constant.SETTINGS_PAGE ||
+      this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE;
+  }
+
+  private pageSlideTransition(): TransitionEffect {
+    return TransitionEffect.translate({ x: this.windowWidthVp })
+      .animation({ duration: CloudThemeToken.pageSlideDuration, curve: Curve.Friction });
+  }
+
   @Builder rootBuilder() {
     if (this.rootPage === Constant.LOGIN_PAGE) {
       LoginPage({ routeParam: this.rootLoginParam })
@@ -381,10 +407,7 @@ struct Index {
       FileSearchPage({ routeParam: this.fileSearchParam })
         .width('100%')
         .height('100%')
-        .transition(TransitionEffect.OPACITY
-          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
-          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
-            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .transition(this.pageSlideTransition())
         .zIndex(CloudThemeToken.overlayZIndex)
     }
 
@@ -398,37 +421,25 @@ struct Index {
       TextPreviewPage({ routeParam: this.textPreviewParam })
         .width('100%')
         .height('100%')
-        .transition(TransitionEffect.OPACITY
-          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
-          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
-            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .transition(this.pageSlideTransition())
         .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.ABOUT_PAGE) {
       AboutPage()
         .width('100%')
         .height('100%')
-        .transition(TransitionEffect.OPACITY
-          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
-          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
-            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .transition(this.pageSlideTransition())
         .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.SETTINGS_PAGE) {
       SettingsPage()
         .width('100%')
         .height('100%')
-        .transition(TransitionEffect.OPACITY
-          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
-          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
-            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .transition(this.pageSlideTransition())
         .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE) {
       AccountSecurityPage()
         .width('100%')
         .height('100%')
-        .transition(TransitionEffect.OPACITY
-          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
-          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
-            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .transition(this.pageSlideTransition())
         .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.PHOTO_LOCAL_PREVIEW_PAGE) {
       PhotoLocalPreviewPage({ routeParam: this.photoLocalPreviewParam })

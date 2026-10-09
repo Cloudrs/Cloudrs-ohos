@@ -132,6 +132,13 @@ export class CloudThemeToken {
   static readonly settingSegmentRadius: number = 16
   static readonly qrCodeSize: number = 112
   static readonly defaultAnimationDuration: number = 300
+  // 二级页推入（Index 覆盖层）：新页不透明、整页从右侧滑入，底下的页面联动左移并略微压暗
+  static readonly pageSlideDuration: number = 400
+  static readonly pageSlideUnderlayShift: number = 0.3
+  static readonly pageSlideUnderlayDim: number = 0.12
+  // 二级页标题栏入场：先内容后标题栏，页面滑到约四分之三时返回键和标题再从屏幕最右侧滑入
+  static readonly subPageTitleEnterDelay: number = 160
+  static readonly subPageTitleEnterDuration: number = 260
   static readonly fullOpacity: number = 1
   static readonly pressedScale: number = 0.95
   static readonly invisibleOpacity: number = 0.01

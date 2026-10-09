@@ -46,6 +46,9 @@
         ],
         "when": "always",
       }
+    }, {
+      // 智感握姿 motion.holdingHandChanged 所需（normal 级，system_grant 自动授予）
+      "name": "ohos.permission.DETECT_GESTURE",
     }],
     "deliveryWithInstall": true,
     "installationFree": false,

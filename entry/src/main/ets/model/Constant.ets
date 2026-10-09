@@ -290,6 +290,8 @@ class Constant {
   APP_THEME_MODE: string = 'app_theme_mode';
   IMAGE_DRAGGABLE_ENABLED: string = 'image_draggable_enabled';
   IMAGE_AI_ANALYZER_ENABLED: string = 'image_ai_analyzer_enabled';
+  // 智感握姿开关：首选项 key 与 AppStorage 镜像 key 共用，相册页 @StorageProp 实时响应
+  SMART_GRIP_ENABLED: string = 'smart_grip_enabled';
 
   APP_THEME_LIGHT: string = 'light';
 
@@ -304,6 +306,7 @@ class Constant {
   KNOCK_SHARE_PASSWORD_ENABLED: string = 'knock_share_password_enabled';
 
   APP_FOREGROUND_TICK: string = 'appForegroundTick';
+  APP_IN_FOREGROUND: string = 'appInForeground';
 
   APP_LOCKED: string = 'appLocked';
 

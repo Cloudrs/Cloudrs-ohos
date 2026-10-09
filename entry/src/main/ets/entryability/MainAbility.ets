@@ -201,6 +201,7 @@ export default class MainAbility extends UIAbility {
     AppLockUtil.syncLockPresentation();
     const tick = AppStorage.get<number>(Constant.APP_FOREGROUND_TICK) ?? 0;
     AppStorage.setOrCreate(Constant.APP_FOREGROUND_TICK, tick + 1);
+    AppStorage.setOrCreate(Constant.APP_IN_FOREGROUND, true);
     AppLogger.info('MainAbility', `foreground, tick=${tick + 1}`);
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onForeground');
   }
@@ -208,6 +209,7 @@ export default class MainAbility extends UIAbility {
   onBackground(): void {
     // Ability has back to background
     AppLockUtil.resetSession();
+    AppStorage.setOrCreate(Constant.APP_IN_FOREGROUND, false);
     AppLogger.info('MainAbility', 'background');
     hilog.info(0x0000, 'testTag', '%{public}s', 'Ability onBackground');
   }

@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit'
 import Constant from '../model/Constant'
 import { CloudThemeToken } from '../model/CloudTheme'
 import { AppSettings } from '../model/AppSettings'
+import { HoldingHandUtil } from '../utils/HoldingHandUtil'
 import { SubPageScaffold } from '../components/SubPageScaffold'
 import {
   SettingGroup, SettingSectionTitle, SettingSegmentRow, SettingStepperRow, SettingSwitchRow
@@ -29,6 +30,9 @@ export struct SettingsPage {
   @State knockUseShareLink: boolean = false
   @State knockExpireIndex: number = 0
   @State knockPassword: boolean = false
+  @State smartGrip: boolean = true
+  // 进页面时探测一次（订阅+立即退订，结论缓存），不支持的机型开关置灰
+  @State smartGripSupported: boolean = true
 
   aboutToAppear(): void {
     this.themeIndex = Math.max(0, THEME_MODES.indexOf(AppSettings.getThemeMode()))
@@ -38,6 +42,8 @@ export struct SettingsPage {
     this.knockUseShareLink = AppSettings.getBool(Constant.KNOCK_SHARE_USE_SHARE_LINK, false)
     this.knockExpireIndex = Math.max(0, KNOCK_EXPIRE_DAYS.indexOf(AppSettings.getKnockExpireDays()))
     this.knockPassword = AppSettings.getBool(Constant.KNOCK_SHARE_PASSWORD_ENABLED, false)
+    this.smartGrip = HoldingHandUtil.isEnabled()
+    this.smartGripSupported = HoldingHandUtil.isSupported()
   }
 
   build() {
@@ -60,6 +66,11 @@ export struct SettingsPage {
           Column({ space: CloudThemeToken.spacingXl }) {
             SettingSectionTitle({ title: '图片预览' })
             this.imageGroup()
+          }
+          .width('100%')
+          Column({ space: CloudThemeToken.spacingXl }) {
+            SettingSectionTitle({ title: '相册' })
+            this.albumGroup()
           }
           .width('100%')
           Column({ space: CloudThemeToken.spacingXl }) {
@@ -139,6 +150,28 @@ export struct SettingsPage {
           AppSettings.setBool(Constant.IMAGE_AI_ANALYZER_ENABLED, isOn)
         }
       })
+    }
+  }
+
+  @Builder albumGroup() {
+    SettingGroup() {
+      if (this.smartGripSupported) {
+        SettingSwitchRow({
+          title: '智感握姿',
+          desc: '相册切换按钮跟随握持手靠左或靠右',
+          isOn: this.smartGrip,
+          onChange: (isOn: boolean) => {
+            this.smartGrip = isOn
+            // 同时镜像进 AppStorage，相册页即时增减订阅
+            HoldingHandUtil.setEnabled(isOn)
+          }
+        })
+      } else {
+        Column() {
+          SettingSwitchRow({ title: '智感握姿', desc: '当前设备不支持', isOn: false, busy: true })
+        }
+        .opacity(CloudThemeToken.disabledOpacity)
+      }
     }
   }
 

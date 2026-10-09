@@ -4,6 +4,7 @@ import { connection, http } from '@kit.NetworkKit';
 import { dataSharePredicates } from '@kit.ArkData';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
+import { curves } from '@kit.ArkUI';
 import Constant from '../../model/Constant';
 import {
   PhotoBackupItem,
@@ -37,6 +38,7 @@ import PhotoBackupBackgroundTask, {
 } from '../../utils/PhotoBackupBackgroundTask';
 import { PhotoLocalPreviewParam, ImagePreview } from '../../model/Params';
 import { CloudRouter } from '../../utils/CloudRouter';
+import { GripSide, HoldingHandUtil } from '../../utils/HoldingHandUtil';
 import {
   HdsNavigation, HdsNavigationTitleMode, ScrollEffectType, DividerShowType, hdsMaterial
 } from '@kit.UIDesignKit';
@@ -56,10 +58,15 @@ function toMillis(value: number): number {
   return value > 0 && value < SECONDS_TO_MS_THRESHOLD ? value * 1000 : value;
 }
 
-// Left-center frosted capsule for switching the 时间 / 相册 grouping.
+// Vertically centered frosted capsule for switching the 时间 / 相册 grouping;
+// sits on the left by default, follows the holding hand when 智感握姿 is on.
 const SWITCHER_ITEM_SIZE: number = 44;
 const SWITCHER_PADDING: number = 4;
 const SWITCHER_GAP: number = 4;
+const SWITCHER_WIDTH: number = SWITCHER_ITEM_SIZE + SWITCHER_PADDING * 2;
+// 换边：原位淡出缩小 → 瞬移到另一侧 → 弹性淡入，避免胶囊横扫过照片
+const SWITCHER_FADE_OUT_MS: number = 150;
+const SWITCHER_HIDDEN_SCALE: number = 0.85;
 // 网络/设置/扫描事件后，自动备份评估的防抖间隔（合并短时间内的多次网络事件）。
 const AUTO_BACKUP_DEBOUNCE_MS: number = 1500;
 // 相册激活时远端目录对账的最小间隔：一次对账 = 一次目录列表请求，
@@ -98,6 +105,15 @@ export struct TabPictures {
   @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @Watch('onForegroundTickChanged')
   @StorageProp(Constant.APP_FOREGROUND_TICK) foregroundTick: number = 0;
+  // 智感握姿只在「相册可见 + 前台 + 开关打开」时订阅，任一不满足即退订省电
+  @StorageProp(Constant.APP_IN_FOREGROUND) @Watch('syncHoldingHand') appInForeground: boolean = true;
+  @StorageProp(Constant.SMART_GRIP_ENABLED) @Watch('syncHoldingHand') smartGripEnabled: boolean = true;
+  @State switcherSide: GripSide = GripSide.LEFT;
+  @State switcherOpacity: number = CloudThemeToken.fullOpacity;
+  @State switcherScale: number = 1;
+  private switcherTargetSide: GripSide = GripSide.LEFT;
+  private switcherFading: boolean = false;
+  private readonly onGripSide = (side: GripSide): void => { this.moveSwitcher(side); };
   @State settingsEnabled: boolean = false;
   @State settingsRemotePath: string = '/Photos/Camera';
   @State settingsWifiOnly: boolean = true;
@@ -195,6 +211,8 @@ export struct TabPictures {
     this.scheduleActiveAutoScan();
     this.syncMediaChangeRegistration();
     this.registerNetworkListener();
+    HoldingHandUtil.mirrorEnabled();
+    this.syncHoldingHand();
     // 解析数千条记录 + 建组较重，推到下一拍执行，避免阻塞 app 启动帧、导致刚进应用切页卡顿。
     // 相册非默认 Tab，启动时不可见；setTimeout(0) 在用户手动点击切页前即完成加载，无感知。
     this.deferredLoadTimer = setTimeout(() => {
@@ -270,6 +288,7 @@ export struct TabPictures {
     this.clearStalePhotoRefreshTimer();
     this.unregisterMediaChange();
     this.unregisterNetworkListener();
+    HoldingHandUtil.stop(this.onGripSide);
     this.clearAutoBackupTimer();
     this.stopCompletedPreviewFlush();
     this.flushDoneIdsSave();
@@ -287,6 +306,7 @@ export struct TabPictures {
   }
 
   onActiveStateChanged(): void {
+    this.syncHoldingHand();
     if (!this.isActive) {
       this.clearAutoScanTimer();
       this.clearBackupGridRefresh();
@@ -3411,6 +3431,49 @@ export struct TabPictures {
     }
   }
 
+  /** 按「相册可见 + 前台 + 开关」增减智感握姿订阅；关掉开关时胶囊回到默认左侧。 */
+  private syncHoldingHand(): void {
+    if (!this.smartGripEnabled) {
+      HoldingHandUtil.stop(this.onGripSide);
+      this.moveSwitcher(GripSide.LEFT);
+      return;
+    }
+    if (this.isActive && this.appInForeground) {
+      HoldingHandUtil.start(this.onGripSide);
+    } else {
+      HoldingHandUtil.stop(this.onGripSide);
+    }
+  }
+
+  private moveSwitcher(side: GripSide): void {
+    this.switcherTargetSide = side;
+    // 淡出中途又变了：等淡出结束时按最新目标落位
+    if (this.switcherFading || side === this.switcherSide) {
+      return;
+    }
+    // 页面不可见时直接换边：不可见节点上的动画回调时机不可靠，别让 switcherFading 卡死
+    if (!this.isActive) {
+      this.switcherSide = side;
+      return;
+    }
+    this.switcherFading = true;
+    this.getUIContext().animateTo({
+      duration: SWITCHER_FADE_OUT_MS,
+      curve: Curve.EaseIn,
+      onFinish: () => {
+        this.switcherSide = this.switcherTargetSide;
+        this.switcherFading = false;
+        this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.7) }, () => {
+          this.switcherOpacity = CloudThemeToken.fullOpacity;
+          this.switcherScale = 1;
+        });
+      }
+    }, () => {
+      this.switcherOpacity = CloudThemeToken.zero;
+      this.switcherScale = SWITCHER_HIDDEN_SCALE;
+    });
+  }
+
   private selectSegment(value: GallerySegment): void {
     if (this.segment === value) {
       return;
@@ -3436,7 +3499,7 @@ export struct TabPictures {
       .onClick(() => { this.selectSegment(value); })
   }
 
-  /** Frosted vertical capsule pinned at the left-center to switch 时间 / 相册. */
+  /** Frosted vertical capsule at the vertical center to switch 时间 / 相册; left by default, right for a right-hand grip. */
   @Builder floatingSwitcher() {
     Column({ space: SWITCHER_GAP }) {
       this.switcherItem('时间', GallerySegment.TIME)
@@ -3447,8 +3510,11 @@ export struct TabPictures {
     .backgroundColor('rgba(120, 120, 128, 0.22)')
     .backdropBlur(18)
     .borderRadius(SWITCHER_ITEM_SIZE / 2 + SWITCHER_PADDING)
-    .position({ x: CloudThemeToken.spacingSm, y: '50%' })
-    .markAnchor({ x: 0, y: '50%' })
+    // 右侧：锚点放在胶囊右缘外 spacingSm 处，再钉到容器右边缘
+    .position({ x: this.switcherSide === GripSide.RIGHT ? '100%' : CloudThemeToken.spacingSm, y: '50%' })
+    .markAnchor({ x: this.switcherSide === GripSide.RIGHT ? SWITCHER_WIDTH + CloudThemeToken.spacingSm : 0, y: '50%' })
+    .opacity(this.switcherOpacity)
+    .scale({ x: this.switcherScale, y: this.switcherScale })
   }
 
   @Builder emptyStateBody(icon: ResourceStr, title: string, description: string, actionText: string) {

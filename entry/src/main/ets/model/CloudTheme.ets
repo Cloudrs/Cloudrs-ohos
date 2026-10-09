@@ -399,7 +399,6 @@ export class CloudThemeToken {
   static readonly imagePreviewCounterTextSize: number = 13
   static readonly imagePreviewCounterHeight: number = 28
   static readonly imagePreviewCounterAreaHeight: number = 36
-  static readonly videoPreviewControlBorderWidth: number = 1
   static readonly videoPreviewControlSize: number = 42
   static readonly videoPreviewControlIconSize: number = 18
   static readonly videoPreviewCloseIconSize: number = 18
@@ -408,8 +407,6 @@ export class CloudThemeToken {
   // 续播浮条：胶囊高度即圆角基准，内嵌的"从头播放"按钮再小一号
   static readonly videoPreviewResumeBannerHeight: number = 40
   static readonly videoPreviewResumeActionHeight: number = 28
-  static readonly videoPreviewTitleShadowRadius: number = 6
-  static readonly videoPreviewTitleShadowColor: ResourceColor = 'rgba(0, 0, 0, 0.6)'
   static readonly loginPageGap: number = 10
   static readonly loginPageVerticalPadding: number = 20
   static readonly loginBackRowHeight: number = 30
@@ -494,6 +491,11 @@ export class CloudThemeToken {
   // 内容区磨砂键（仿底部悬浮页签）：极淡染色 + 强背景模糊，纯色底上与页底同色、只靠光边与投影显形，压在内容上透出模糊后的内容
   static readonly controlFrost: ResourceColor = $r('app.color.cloud_control_frost')
   static readonly controlFrostBlur: number = 30
+  // 视频底部控制面板与续播浮条：随深浅色的磨砂（浅色白磨砂 + 深色图标，深色深磨砂 + 浅色图标），
+  // 内容区挂不上官方材质，按上传 FAB 同一套磨砂（淡染 + 背景模糊 + 白光边 + 投影）贴近沉浸光感
+  static readonly videoControlsFrost: ResourceColor = $r('app.color.cloud_video_controls_frost')
+  static readonly videoControlButtonFrost: ResourceColor = $r('app.color.cloud_video_control_button')
+  static readonly videoSliderTrack: ResourceColor = $r('app.color.cloud_video_slider_track')
   // 内容区浮动键（不在沉浸光感生效范围，无材质交互形变）的按压缩放反馈
   static readonly fabPressedScale: number = 0.92
   static readonly fabPressAnimDuration: number = 160
@@ -536,11 +538,7 @@ export class CloudThemeToken {
   static readonly selectedGlow: ResourceColor = '#33115DFC'
   static readonly selectedHighlight: ResourceColor = '#66FFFFFF'
   static readonly videoPreviewControlBackground: ResourceColor = 'rgba(18, 22, 30, 0.72)'
-  static readonly videoPreviewControlBorder: ResourceColor = 'rgba(255, 255, 255, 0.18)'
   static readonly videoPreviewControlsBackground: ResourceColor = 'rgba(0, 0, 0, 0.54)'
-  // 续播浮条的"从头播放"按钮底色。浮条整体只用白与半透明黑，不吃主题色：
-  // cloud_primary 压在深色画面上对比度不足，且视频画面本身与深浅色模式无关
-  static readonly videoPreviewResumeActionBackground: ResourceColor = 'rgba(255, 255, 255, 0.16)'
   static readonly refreshShadow: ResourceColor = 'rgba(24, 36, 56, 0.12)'
   static readonly sheetShadow: ResourceColor = 'rgba(0, 0, 0, 0.18)'
 

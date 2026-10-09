@@ -600,15 +600,14 @@ export struct VideoPreviewPage {
   }
 
   /**
-   * 续播浮条。材质与圆形控制按钮同源（半透明黑底 + 白描边 + 背景模糊），
-   * 通篇只用白与半透明黑，不吃 cloud_primary：那个蓝压在深色画面上对比度不够，
-   * 而视频画面的明暗与系统深浅色模式无关。
+   * 续播浮条。与底部控制面板同一套随深浅色的磨砂（淡染 + 背景模糊 + 白光边 + 投影），
+   * 文字与「从头播放」按钮跟随主题色，紧贴在面板上方，两者观感一致。
    */
   @Builder resumeBanner() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Text(`已从 ${this.formatTime(this.resumedFrom)} 继续播放`)
         .fontSize(CloudThemeToken.textSizeBody)
-        .fontColor(CloudThemeToken.onPrimary)
+        .fontColor(CloudThemeToken.textPrimary)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
@@ -617,8 +616,9 @@ export struct VideoPreviewPage {
         .height(CloudThemeToken.videoPreviewResumeActionHeight)
         .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
         .fontSize(CloudThemeToken.textSizeSmallPlus)
-        .fontColor(CloudThemeToken.onPrimary)
-        .backgroundColor(CloudThemeToken.videoPreviewResumeActionBackground)
+        .fontColor(CloudThemeToken.textPrimary)
+        .backgroundColor(CloudThemeToken.videoControlButtonFrost)
+        .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
         .onClick(() => {
           this.restartFromBeginning()
         })
@@ -628,13 +628,10 @@ export struct VideoPreviewPage {
     .padding({ left: CloudThemeToken.spacingPage, right: CloudThemeToken.spacingXl })
     .margin({ bottom: this.resumeBannerBottomMargin() })
     .borderRadius(CloudThemeToken.videoPreviewResumeBannerHeight / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
-    .border({
-      width: CloudThemeToken.videoPreviewControlBorderWidth,
-      color: CloudThemeToken.videoPreviewControlBorder
-    })
-    .clip(true)
+    .backgroundColor(CloudThemeToken.videoControlsFrost)
+    .backdropBlur(CloudThemeToken.controlFrostBlur)
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
     .transition(TransitionEffect.OPACITY
       .combine(TransitionEffect.translate({ y: CloudThemeToken.spacingXl }))
       .animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
@@ -652,8 +649,11 @@ export struct VideoPreviewPage {
         .width('100%')
         .height(CloudThemeToken.rowHeightSm)
         .selectedColor(CloudThemeToken.primary)
-        .trackColor('rgba(255, 255, 255, 0.28)')
+        .trackColor(CloudThemeToken.videoSliderTrack)
         .blockColor(CloudThemeToken.onPrimary)
+        // 白色滑块压在浅色磨砂上会融进底色，补一圈细描边
+        .blockBorderColor(CloudThemeToken.line)
+        .blockBorderWidth(CloudThemeToken.lineWidth)
         .trackThickness(CloudThemeToken.spacingXs)
         .blockSize({
           width: CloudThemeToken.spacingPage,
@@ -668,7 +668,7 @@ export struct VideoPreviewPage {
 
         Text(`${this.formatTime(this.currentTime)} / ${this.formatTime(this.duration)}`)
           .fontSize(CloudThemeToken.textSizeBody)
-          .fontColor(CloudThemeToken.onPrimary)
+          .fontColor(CloudThemeToken.textPrimary)
           .textAlign(TextAlign.Start)
           .layoutWeight(1)
 
@@ -688,31 +688,47 @@ export struct VideoPreviewPage {
       // 全屏时导航条已隐藏，控制栏贴近屏幕底部
       bottom: this.isFullscreen ? CloudThemeToken.spacingPage : this.bottomRectHeight + CloudThemeToken.spacingPage
     })
+    // 随深浅色的磨砂面板：内容区挂不上官方材质，按上传 FAB 同一套磨砂（淡染 + 背景模糊 + 白光边 + 投影）
     .borderRadius(CloudThemeToken.videoPreviewControlsPanelRadius)
-    .backgroundColor(CloudThemeToken.videoPreviewControlsBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudThemeToken.videoControlsFrost)
+    .backdropBlur(CloudThemeToken.controlFrostBlur)
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
     .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
   @Builder fullscreenTopBar() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Row({ space: CloudThemeToken.spacingCard }) {
-        this.videoControlButton($r('app.media.ic_back'), CloudThemeToken.videoPreviewCloseIconSize, () => {
-          CloudRouter.pop()
-        })
-        Text(this.fileParam?.fileName ?? '')
-          .fontSize(CloudThemeToken.textSizeBodyPlus)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.onPrimary)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .wordBreak(WordBreak.BREAK_ALL)
-          // 无背景,浅色画面下靠阴影保证可读
-          .textShadow({
-            radius: CloudThemeToken.videoPreviewTitleShadowRadius,
-            color: CloudThemeToken.videoPreviewTitleShadowColor
+      Row() {
+        // 返回键与文件名收进一条磨砂胶囊，与底部控制面板同一套随深浅色的磨砂：
+        // 单独一个圆键压在黑边上会发灰，文件名也不必再靠文字阴影保证可读
+        Row({ space: CloudThemeToken.spacingCard }) {
+          this.videoControlButton($r('app.media.ic_back'), CloudThemeToken.videoPreviewCloseIconSize, () => {
+            CloudRouter.pop()
           })
-          .hitTestBehavior(HitTestMode.None)
+          Text(this.fileParam?.fileName ?? '')
+            .fontSize(CloudThemeToken.textSizeBodyPlus)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .wordBreak(WordBreak.BREAK_ALL)
+            .flexShrink(1)
+            .hitTestBehavior(HitTestMode.None)
+        }
+        .alignItems(VerticalAlign.Center)
+        .padding({
+          left: CloudThemeToken.spacingXs,
+          right: CloudThemeToken.spacingPage,
+          top: CloudThemeToken.spacingXs,
+          bottom: CloudThemeToken.spacingXs
+        })
+        .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor + CloudThemeToken.spacingXs)
+        .backgroundColor(CloudThemeToken.videoControlsFrost)
+        .backdropBlur(CloudThemeToken.controlFrostBlur)
+        .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+        .shadow(ShadowStyle.OUTER_DEFAULT_SM)
+        .constraintSize({ maxWidth: '100%' })
       }
       .alignItems(VerticalAlign.Center)
       .width('100%')
@@ -729,57 +745,50 @@ export struct VideoPreviewPage {
     .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.filesHeaderTransitionDuration }))
   }
 
-  // 压在视频画面上的圆控件：内容区不在沉浸光感生效范围，深色半透明底 + 系统薄模糊，白图标在亮画面上也清楚
+  // 控制面板里的圆键：随深浅色的磨砂小底 + 白光边，面板本身已有背景模糊，键上不再叠一层
   @Builder playbackButton() {
     Stack() {
       if (this.isPlaying) {
         Image($r('app.media.ic_pause_fill'))
           .width(CloudThemeToken.videoPreviewControlIconSize)
           .height(CloudThemeToken.videoPreviewControlIconSize)
-          .fillColor(CloudThemeToken.onPrimary)
+          .fillColor(CloudThemeToken.textPrimary)
           .draggable(false)
       } else {
         Image($r('app.media.ic_play_fill'))
           .width(CloudThemeToken.videoPreviewControlIconSize)
           .height(CloudThemeToken.videoPreviewControlIconSize)
-          .fillColor(CloudThemeToken.onPrimary)
+          .fillColor(CloudThemeToken.textPrimary)
           .draggable(false)
       }
     }
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
     .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudThemeToken.videoControlButtonFrost)
     .hoverEffect(HoverEffect.Highlight)
-    .border({
-      width: CloudThemeToken.videoPreviewControlBorderWidth,
-      color: CloudThemeToken.videoPreviewControlBorder
-    })
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
     .clip(true)
     .onClick(() => {
       this.togglePlayback()
     })
   }
 
+  // 全屏顶栏胶囊里的圆键：与底部面板里的圆键同款（磨砂小底 + 白光边），胶囊本身已有背景模糊与投影
   @Builder videoControlButton(icon: ResourceStr, iconSize: number, onAction: () => void) {
     Stack() {
       Image(icon)
         .width(iconSize)
         .height(iconSize)
-        .fillColor(CloudThemeToken.onPrimary)
+        .fillColor(CloudThemeToken.textPrimary)
         .draggable(false)
     }
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
     .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudThemeToken.videoControlButtonFrost)
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
     .hoverEffect(HoverEffect.Highlight)
-    .border({
-      width: CloudThemeToken.videoPreviewControlBorderWidth,
-      color: CloudThemeToken.videoPreviewControlBorder
-    })
     .clip(true)
     .onClick(() => {
       onAction()
@@ -792,20 +801,16 @@ export struct VideoPreviewPage {
         ? $r('sys.symbol.arrow_down_right_and_arrow_up_left')
         : $r('sys.symbol.arrow_up_left_and_arrow_down_right'))
         .fontSize(CloudThemeToken.videoPreviewControlIconSize)
-        .fontColor([CloudThemeToken.onPrimary])
+        .fontColor([CloudThemeToken.textPrimary])
         .fontWeight(FontWeight.Medium)
         .draggable(false)
     }
     .width(CloudThemeToken.videoPreviewControlSize)
     .height(CloudThemeToken.videoPreviewControlSize)
     .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
-    .backgroundColor(CloudThemeToken.videoPreviewControlBackground)
-    .backgroundBlurStyle(BlurStyle.BACKGROUND_THIN)
+    .backgroundColor(CloudThemeToken.videoControlButtonFrost)
     .hoverEffect(HoverEffect.Highlight)
-    .border({
-      width: CloudThemeToken.videoPreviewControlBorderWidth,
-      color: CloudThemeToken.videoPreviewControlBorder
-    })
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
     .clip(true)
     .onClick(() => {
       this.toggleFullscreen()

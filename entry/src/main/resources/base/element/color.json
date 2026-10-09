@@ -213,6 +213,18 @@
       "value": "#26FFFFFF"
     },
     {
+      "name": "cloud_video_controls_frost",
+      "value": "#D9FFFFFF"
+    },
+    {
+      "name": "cloud_video_control_button",
+      "value": "#8CFFFFFF"
+    },
+    {
+      "name": "cloud_video_slider_track",
+      "value": "#26111827"
+    },
+    {
       "name": "cloud_search_field_background",
       "value": "#FFFFFFFF"
     },

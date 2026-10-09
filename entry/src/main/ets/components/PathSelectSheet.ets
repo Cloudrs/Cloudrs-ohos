@@ -123,6 +123,7 @@ export struct PathSelectSheet {
           icon: $r('app.media.ic_icloud_slash_fill'),
           title: '文件夹加载失败',
           description: '请检查网络后重试。',
+          plain: true,
           actionText: '重新加载',
           onAction: () => {
             this.getFileList(this.currentPath.length > 0 ? this.currentPath : '/')
@@ -137,7 +138,8 @@ export struct PathSelectSheet {
         EmptyState({
           icon: $r('app.media.ic_empty_folder'),
           title: '没有可选文件夹',
-          description: '当前空间暂时没有可展开的目录。'
+          description: '当前空间暂时没有可展开的目录。',
+          plain: true
         })
       }
       .width('100%')

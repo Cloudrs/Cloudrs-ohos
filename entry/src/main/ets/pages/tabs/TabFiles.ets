@@ -2326,6 +2326,8 @@ export struct TabFiles {
           .width(CloudThemeToken.zero)
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showTransportSheet, this.transportSheetBuilder(), {
+            // 默认半屏，上拉（或列表上滑）切到全屏，同「关于」；宽屏居中弹窗不认 detents
+            detents: [SheetSize.MEDIUM, SheetSize.LARGE],
             backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surface),
             systemMaterial: CloudMaterial.sheetMaterial(),
             title: { title: $r('app.string.transport_title') },

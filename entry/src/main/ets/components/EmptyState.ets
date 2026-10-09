@@ -5,6 +5,8 @@ export struct EmptyState {
   icon: ResourceStr = ''
   title: ResourceStr = ''
   description: ResourceStr = ''
+  // 不铺卡片底，直接放在半模态材质上（传输进度、路径选择）；卡片底和半模态的大圆角、材质对不上
+  plain: boolean = false
   actionText?: ResourceStr
   secondaryActionText?: ResourceStr
   onAction?: () => void
@@ -53,7 +55,7 @@ export struct EmptyState {
     .width('100%')
     .padding(CloudThemeToken.emptyStatePadding)
     .borderRadius(CloudThemeToken.cardRadius)
-    .backgroundColor(CloudThemeToken.surface)
+    .backgroundColor(this.plain ? Color.Transparent : CloudThemeToken.surface)
     .alignItems(HorizontalAlign.Center)
   }
 }

@@ -43,20 +43,24 @@ export struct Downloads {
           }, (item: TransportObject, index) => item.item.id + index)
         }
         .scrollBar(BarState.Off)
+        // 列表直接放在半模态材质上，滚动时上下边缘渐隐，避免条目被齐刷刷切断
+        .fadingEdge(true)
         .width('100%')
         .height('100%')
       }
     }
     .height('100%')
     .width('100%')
-    .backgroundColor(CloudThemeToken.background)
+    // 不铺底色，让出半模态材质；空状态在剩余空间居中
+    .justifyContent(FlexAlign.Center)
   }
 
   @Builder noItem() {
     EmptyState({
       icon: $r('app.media.ic_arrowshape_down'),
       title: $r('app.string.no_download_task'),
-      description: '下载任务会显示在这里。'
+      description: '下载任务会显示在这里。',
+      plain: true
     })
   }
 

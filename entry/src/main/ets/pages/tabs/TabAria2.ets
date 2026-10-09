@@ -7,7 +7,7 @@ import { Aria2Downloading,
 import { CloudApi } from "../../model/net/CloudApi";
 import { ContentItem, LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
 import {
-  DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, hdsMaterial
+  DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
 } from "@kit.UIDesignKit";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
@@ -54,6 +54,8 @@ export struct TabRemoteDown {
   @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex]
   @State downloadRefresh: boolean = false
   @State tasksQueueRefresh: boolean = false
+  // 下拉距离，驱动标题栏下方的刷新提示（两个分段同一时刻只挂一个 Refresh，共用即可）
+  @State refreshPullOffset: number = 0
   private finishedPage: number = 1
   private isLastFinishedPage: boolean = false
   private tasksQueuePage: number = 1
@@ -286,25 +288,66 @@ export struct TabRemoteDown {
     })
   }
 
+  // 内容顶部让出 HDS 标题栏的距离；列表铺满全页、用首项占位让开，滚动时从标题栏底下穿过
+  private getContentTopInset(): number {
+    return CloudThemeToken.hdsTitleBarHeight(this.topRectHeight) + CloudThemeToken.spacingXs
+  }
+
+  // 首项占位高度：rowsGap 会再补一段间距，这里扣掉
+  private getGridTopSpacerHeight(): number {
+    return Math.max(CloudThemeToken.zero, this.getContentTopInset() - CloudThemeToken.spacingCard)
+  }
+
+  private isCurrentRefreshing(): boolean {
+    return this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex ?
+      this.downloadRefresh : this.tasksQueueRefresh
+  }
+
+  private shouldShowRefreshHint(): boolean {
+    return this.isCurrentRefreshing() || this.refreshPullOffset > CloudThemeToken.spacingSm
+  }
+
+  private getRefreshHintTop(): number {
+    const pullDistance = this.isCurrentRefreshing() ? CloudThemeToken.refreshOffset :
+      Math.max(CloudThemeToken.zero, this.refreshPullOffset)
+    return this.getContentTopInset() + Math.max(CloudThemeToken.zero, pullDistance - CloudThemeToken.iconBoxSm) / 2
+  }
+
+  private getRefreshHintOpacity(): number {
+    if (this.isCurrentRefreshing()) {
+      return CloudThemeToken.fullOpacity
+    }
+    return Math.min(CloudThemeToken.fullOpacity,
+      Math.max(CloudThemeToken.zero, this.refreshPullOffset / CloudThemeToken.refreshOffset))
+  }
+
   // 顶栏走 HdsNavigation 标题栏（与文件页、相册页一致）：分段按钮放 stackBuilder 居中，
-  // 「新建离线下载」用 HDS 原生菜单键，都在沉浸光感生效范围内，效果随设备档位由系统自适应
+  // 「新建离线下载」用 HDS 原生菜单键，都在沉浸光感生效范围内，效果随设备档位由系统自适应。
+  // 列表铺满全页，上滑时从标题栏底下穿过、标题栏渐变出沉浸模糊
   build() {
     HdsNavigation() {
-      Column() {
-        if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
-          this.offlineDownload()
+      Stack({ alignContent: Alignment.TopStart }) {
+        Column() {
+          if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
+            this.offlineDownload()
+          }
+          else {
+            this.tasksQueue()
+          }
         }
-        else {
-          this.tasksQueue()
+        .width('100%')
+        .height('100%')
+        .padding({
+          left: CloudThemeToken.pagePadding,
+          right: CloudThemeToken.pagePadding
+        })
+
+        if (this.shouldShowRefreshHint()) {
+          this.refreshingHintOverlay()
         }
       }
       .width('100%')
       .height('100%')
-      .padding({
-        left: CloudThemeToken.pagePadding,
-        right: CloudThemeToken.pagePadding,
-        top: CloudThemeToken.hdsTitleBarHeight(this.topRectHeight) + CloudThemeToken.spacingXs
-      })
     }
     .width('100%')
     .height('100%')
@@ -329,13 +372,31 @@ export struct TabRemoteDown {
         }
       },
       style: {
+        // 与文件页、相册页同款：内容滚入标题栏底下时渐变出沉浸模糊
         scrollEffectOpts: {
-          enableScrollEffect: false
+          enableScrollEffect: true,
+          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
         },
         originalStyle: {
           contentStyle: {
+            // 标题是空占位，但这里必须给：开了滚动效果后 HDS 按标题色推状态栏图标深浅，缺省会推成白色
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary
+            },
             menuStyle: {
               // 置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应）；<26 实色
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary,
+              textColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        scrollEffectStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary
+            },
+            menuStyle: {
               backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
               iconColor: CloudThemeToken.textPrimary,
               textColor: CloudThemeToken.textPrimary
@@ -354,6 +415,8 @@ export struct TabRemoteDown {
       avoidLayoutSafeArea: true,
       enableComponentSafeArea: false
     })
+    // 两个分段各自的列表都绑上，切到哪个就跟哪个的滚动
+    .bindToScrollable([this.scroller, this.tasksQueueScroller])
     .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
       showClose: true,
       detents: [SheetSize.FIT_CONTENT],
@@ -823,9 +886,57 @@ export struct TabRemoteDown {
     }
   }
 
+  // 首项占位：让列表从标题栏下方开始，滚动时可从标题栏底下穿过
+  @Builder gridTopSpacer() {
+    GridItem() {
+      Row().height(this.getGridTopSpacerHeight())
+    }
+    .selectable(false)
+  }
+
+  // 系统刷新指示器画在 Refresh 顶部、会被标题栏挡住，隐藏掉，改在标题栏下方单独画（同文件页）
+  @Builder hiddenRefreshHint() {
+    Column()
+      .width(CloudThemeToken.zero)
+      .height(CloudThemeToken.zero)
+      .opacity(CloudThemeToken.zero)
+  }
+
+  @Builder refreshingHintOverlay() {
+    Column() {
+      Row({ space: CloudThemeToken.spacingXl }) {
+        LoadingProgress()
+          .width(CloudThemeToken.iconLg)
+          .height(CloudThemeToken.iconLg)
+          .color(CloudThemeToken.primary)
+        Text('正在刷新')
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
+          .fontColor(CloudThemeToken.textPrimary)
+      }
+      .height(CloudThemeToken.iconBoxSm)
+      .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
+      .borderRadius(CloudThemeToken.controlRadiusRoundMd)
+      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .shadow({
+        radius: CloudThemeToken.refreshShadowRadius,
+        color: CloudThemeToken.refreshShadow,
+        offsetY: CloudThemeToken.refreshShadowOffsetY
+      })
+      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: this.getRefreshHintTop() })
+    .alignItems(HorizontalAlign.Center)
+    .justifyContent(FlexAlign.Start)
+    .opacity(this.getRefreshHintOpacity())
+    .hitTestBehavior(HitTestMode.None)
+  }
+
   @Builder offlineDownload() {
-    Refresh({refreshing: $$this.downloadRefresh}) {
+    Refresh({ refreshing: $$this.downloadRefresh, builder: this.hiddenRefreshHint }) {
       Grid(this.scroller) {
+        this.gridTopSpacer()
         this.downloading()
         GridItem() {
           Row().height(CloudThemeToken.spacingCard)
@@ -866,6 +977,9 @@ export struct TabRemoteDown {
     .layoutWeight(1)
     .refreshOffset(CloudThemeToken.refreshOffset)
     .pullToRefresh(true)
+    .onOffsetChange((offset: number) => {
+      this.refreshPullOffset = Math.max(CloudThemeToken.zero, offset)
+    })
     .onRefreshing(() => {
       this.getAria2Downloading();
       this.getAria2Finished(true);
@@ -873,8 +987,9 @@ export struct TabRemoteDown {
   }
 
   @Builder tasksQueue() {
-    Refresh({refreshing: $$this.tasksQueueRefresh}) {
+    Refresh({ refreshing: $$this.tasksQueueRefresh, builder: this.hiddenRefreshHint }) {
       Grid(this.tasksQueueScroller) {
+        this.gridTopSpacer()
         if (this.totalTasks == 0) {
           GridItem() {
             this.noTask($r('app.string.no_task_queue'))
@@ -908,6 +1023,9 @@ export struct TabRemoteDown {
     .layoutWeight(1)
     .refreshOffset(CloudThemeToken.refreshOffset)
     .pullToRefresh(true)
+    .onOffsetChange((offset: number) => {
+      this.refreshPullOffset = Math.max(CloudThemeToken.zero, offset)
+    })
     .onRefreshing(() => {
       this.getUserTasks(true);
     })

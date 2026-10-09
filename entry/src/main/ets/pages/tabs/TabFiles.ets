@@ -44,7 +44,8 @@ import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import {
   DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
 } from "@kit.UIDesignKit";
-import { LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { curves, LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import { GripSide, HoldingHandUtil } from "../../utils/HoldingHandUtil";
 import { Downloads, TransferAction } from "../../components/Downloads";
 import { Uploads } from "../../components/Uploads";
 import { saveImagesToAlbum, SaveAlbumResult } from "../../utils/PhotoSaveUtil";
@@ -84,6 +85,9 @@ const CONFLICT_DIALOG_MAX_WIDTH: number = 420
 const BATCH_SHEET_SHOW_DELAY_MS: number = 400
 /** 面板一旦露面就至少驻留这么久，避免刚展开就被收起 */
 const BATCH_SHEET_MIN_VISIBLE_MS: number = 500
+/** 智感握姿换边：上传 FAB 原位淡出的时长与缩小比例（与相册页切换胶囊一致） */
+const FAB_GRIP_FADE_OUT_MS: number = 150
+const FAB_GRIP_HIDDEN_SCALE: number = 0.85
 
 interface BatchItemResult {
   item: ObjectInfo
@@ -211,6 +215,15 @@ export struct TabFiles {
   // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧菜单要给它让位；其它设备为 0
   @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0;
   @State uploadFabPressed: boolean = false;
+  // 智感握姿：上传 FAB 默认在右下，识别到左手握持换到左下；只在「文件页可见 + 前台 + 开关打开」时订阅
+  @StorageProp(Constant.APP_IN_FOREGROUND) @Watch('syncHoldingHand') appInForeground: boolean = true;
+  @StorageProp(Constant.SMART_GRIP_ENABLED) @Watch('syncHoldingHand') smartGripEnabled: boolean = true;
+  @State fabSide: GripSide = GripSide.RIGHT;
+  @State fabGripOpacity: number = CloudThemeToken.fullOpacity;
+  @State fabGripScale: number = 1;
+  private fabTargetSide: GripSide = GripSide.RIGHT;
+  private fabFading: boolean = false;
+  private readonly onGripSide = (side: GripSide): void => { this.moveFab(side); };
   @StorageLink(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageLink(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
   @StorageLink(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
@@ -345,6 +358,7 @@ export struct TabFiles {
   private thumbsDeferredUntilActive: boolean = false
 
   private onActiveChanged(): void {
+    this.syncHoldingHand()
     if (!this.isActive) {
       if (this.thumbQueueTimer >= 0) {
         clearTimeout(this.thumbQueueTimer)
@@ -890,12 +904,59 @@ export struct TabFiles {
       this.restoreTransfers()
     }
     this.registerKnockReceive()
+    HoldingHandUtil.mirrorEnabled()
+    this.syncHoldingHand()
   }
 
   aboutToDisappear(): void {
+    HoldingHandUtil.stop(this.onGripSide)
     this.unregisterKnockReceive()
     // 兜底:组件销毁时详情面板可能未走完关闭流程,监听未及反注册
     harmonyShare.off('knockShare', this.detailKnockShareCallback)
+  }
+
+  /** 按「文件页可见 + 前台 + 开关」增减智感握姿订阅；关掉开关时 FAB 回到默认右侧。 */
+  private syncHoldingHand(): void {
+    if (!this.smartGripEnabled) {
+      HoldingHandUtil.stop(this.onGripSide)
+      this.moveFab(GripSide.RIGHT)
+      return
+    }
+    if (this.isActive && this.appInForeground) {
+      HoldingHandUtil.start(this.onGripSide)
+    } else {
+      HoldingHandUtil.stop(this.onGripSide)
+    }
+  }
+
+  // 换边：原位淡出缩小，换到另一侧后弹性淡入（同相册页切换胶囊）
+  private moveFab(side: GripSide): void {
+    this.fabTargetSide = side
+    // 淡出中途又变了：等淡出结束时按最新目标落位
+    if (this.fabFading || side === this.fabSide) {
+      return
+    }
+    // 页面不可见时直接换边：不可见节点上的动画回调时机不可靠，别让 fabFading 卡死
+    if (!this.isActive) {
+      this.fabSide = side
+      return
+    }
+    this.fabFading = true
+    this.getUIContext().animateTo({
+      duration: FAB_GRIP_FADE_OUT_MS,
+      curve: Curve.EaseIn,
+      onFinish: () => {
+        this.fabSide = this.fabTargetSide
+        this.fabFading = false
+        this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.7) }, () => {
+          this.fabGripOpacity = CloudThemeToken.fullOpacity
+          this.fabGripScale = 1
+        })
+      }
+    }, () => {
+      this.fabGripOpacity = CloudThemeToken.zero
+      this.fabGripScale = FAB_GRIP_HIDDEN_SCALE
+    })
   }
 
   // ---- 碰一碰沙箱接收(平板/2in1 作为接收端):手机轻碰屏幕,文件进沙箱后自动上传到当前目录 ----
@@ -2470,34 +2531,44 @@ export struct TabFiles {
   // 极淡染色 + 强背景模糊 + 光感细边 + 投影，深浅色走资源色、各设备通用；按压缩放代替材质的交互形变
   @Builder uploadFab() {
     Stack() {
-      Image($r('app.media.ic_arrowshape_up'))
-        .width(CloudThemeToken.icon3xl)
-        .height(CloudThemeToken.icon3xl)
-        .fillColor(CloudThemeToken.textPrimary)
-        .draggable(false)
-    }
-    .width(CloudThemeToken.iconBox3xl)
-    .height(CloudThemeToken.rowHeight4xl)
-    .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
-      CloudThemeToken.controlRadiusRoundXl))
-    .backgroundColor(CloudThemeToken.controlFrost)
-    .backdropBlur(CloudThemeToken.controlFrostBlur)
-    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
-    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
-    .scale({ x: this.uploadFabPressed ? CloudThemeToken.fabPressedScale : 1,
-      y: this.uploadFabPressed ? CloudThemeToken.fabPressedScale : 1 })
-    .animation({ duration: CloudThemeToken.fabPressAnimDuration, curve: Curve.Friction })
-    .hoverEffect(HoverEffect.Highlight)
-    .accessibilityText('上传')
-    .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
-    .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
-        this.uploadFabPressed = true
-      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.uploadFabPressed = false
+      Stack() {
+        Image($r('app.media.ic_arrowshape_up'))
+          .width(CloudThemeToken.icon3xl)
+          .height(CloudThemeToken.icon3xl)
+          .fillColor(CloudThemeToken.textPrimary)
+          .draggable(false)
       }
+      .width(CloudThemeToken.iconBox3xl)
+      .height(CloudThemeToken.rowHeight4xl)
+      .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
+        CloudThemeToken.controlRadiusRoundXl))
+      .backgroundColor(CloudThemeToken.controlFrost)
+      .backdropBlur(CloudThemeToken.controlFrostBlur)
+      .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+      .shadow(ShadowStyle.OUTER_DEFAULT_SM)
+      .scale({ x: this.uploadFabPressed ? CloudThemeToken.fabPressedScale : 1,
+        y: this.uploadFabPressed ? CloudThemeToken.fabPressedScale : 1 })
+      .animation({ duration: CloudThemeToken.fabPressAnimDuration, curve: Curve.Friction })
+      .hoverEffect(HoverEffect.Highlight)
+      .accessibilityText('上传')
+      .onTouch((event: TouchEvent) => {
+        if (event.type === TouchType.Down) {
+          this.uploadFabPressed = true
+        } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+          this.uploadFabPressed = false
+        }
+      })
+      .onClick(() => { this.openSelectFileSheet() })
+    }
+    // 外层管落点与智感握姿换边的淡出淡入，内层管按压缩放，两套动画互不覆盖。
+    // 右侧：锚点放在按钮右缘外 spacingPage 处再钉到容器右边缘；左侧：距左缘 spacingPage
+    .position({ x: this.fabSide === GripSide.RIGHT ? '100%' : CloudThemeToken.spacingPage, y: '100%' })
+    .markAnchor({
+      x: this.fabSide === GripSide.RIGHT ? CloudThemeToken.iconBox3xl + CloudThemeToken.spacingPage : 0,
+      y: CloudThemeToken.rowHeight4xl + this.getFabBottomMargin()
     })
-    .onClick(() => { this.openSelectFileSheet() })
+    .opacity(this.fabGripOpacity)
+    .scale({ x: this.fabGripScale, y: this.fabGripScale })
   }
   @Builder multiSelectTitle() {
     Row({ space: CloudThemeToken.spacingCard }) {

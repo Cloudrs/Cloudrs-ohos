@@ -15,7 +15,7 @@ export enum GripSide {
 
 /**
  * 智感握姿（motion 'holdingHandChanged'，API 20+）封装。
- * 全局只维持一个订阅：相册页按「可见 + 前台 + 开关」调 start/stop，
+ * 全局只维持一个订阅：文件页、相册页各自按「可见 + 前台 + 开关」调 start/stop（同一时刻只有一个页签可见），
  * 只有明确识别出左/右手才回调；双手、未握持、未识别不回调，界面保持上一次的落点。
  * 仅「设置-系统」里有「智感握姿」开关的机型支持，其余机型订阅抛 801。
  * 每处 motion 调用都用 canIUse 字面量词法包住，syscap 检查才认（提前 return 的写法不认）。
@@ -25,6 +25,8 @@ export class HoldingHandUtil {
   private static supported: boolean | undefined = undefined;
   private static subscribed: boolean = false;
   private static onSide: ((side: GripSide) => void) | undefined = undefined;
+  // 当前订阅期内最近一次识别结果；新页面接管已有订阅时系统不会再回调，靠它补发一次
+  private static lastSide: GripSide | undefined = undefined;
   private static readonly listener = (status: motion.HoldingHandStatus): void => {
     AppLogger.debug(TAG, `holding hand status=${status}`);
     if (canIUse('SystemCapability.MultimodalAwareness.Motion')) {
@@ -45,7 +47,7 @@ export class HoldingHandUtil {
     AppStorage.setOrCreate(Constant.SMART_GRIP_ENABLED, enabled);
   }
 
-  /** 把持久化的开关镜像进 AppStorage，供相册页 @StorageProp 读取。 */
+  /** 把持久化的开关镜像进 AppStorage，供文件页、相册页 @StorageProp 读取。 */
   static mirrorEnabled(): void {
     AppStorage.setOrCreate(Constant.SMART_GRIP_ENABLED, HoldingHandUtil.isEnabled());
   }
@@ -77,6 +79,10 @@ export class HoldingHandUtil {
   static start(onSide: (side: GripSide) => void): boolean {
     HoldingHandUtil.onSide = onSide;
     if (HoldingHandUtil.subscribed) {
+      // 页签切换时新页面可能先于旧页面退订就来接管，订阅没断、系统不会再回调，补发最近一次结果
+      if (HoldingHandUtil.lastSide !== undefined) {
+        onSide(HoldingHandUtil.lastSide);
+      }
       return true;
     }
     if (HoldingHandUtil.supported === false) {
@@ -100,8 +106,8 @@ export class HoldingHandUtil {
   }
 
   /**
-   * 退订。传入 start 时的回调则只在它仍是当前回调时生效：HomePage 切换双布局时
-   * 旧页面的 aboutToDisappear 可能晚于新页面的 start，不能把新订阅一并退掉。
+   * 退订。传入 start 时的回调则只在它仍是当前回调时生效：HomePage 切换双布局、或在文件 / 相册页签间切换时，
+   * 旧页面的退订可能晚于新页面的 start，不能把新订阅一并退掉。
    */
   static stop(onSide?: (side: GripSide) => void): void {
     if (onSide !== undefined && HoldingHandUtil.onSide !== onSide) {
@@ -112,6 +118,8 @@ export class HoldingHandUtil {
       return;
     }
     HoldingHandUtil.subscribed = false;
+    // 重新订阅时系统会立即回调当前状态，不再沿用旧结果
+    HoldingHandUtil.lastSide = undefined;
     if (canIUse('SystemCapability.MultimodalAwareness.Motion')) {
       try {
         motion.off('holdingHandChanged', HoldingHandUtil.listener);
@@ -124,6 +132,7 @@ export class HoldingHandUtil {
   }
 
   private static dispatch(side: GripSide): void {
+    HoldingHandUtil.lastSide = side;
     if (HoldingHandUtil.onSide) {
       HoldingHandUtil.onSide(side);
     }

@@ -69,8 +69,8 @@ export struct SettingsPage {
           }
           .width('100%')
           Column({ space: CloudThemeToken.spacingXl }) {
-            SettingSectionTitle({ title: '相册' })
-            this.albumGroup()
+            SettingSectionTitle({ title: '单手操作' })
+            this.gripGroup()
           }
           .width('100%')
           Column({ space: CloudThemeToken.spacingXl }) {
@@ -153,16 +153,16 @@ export struct SettingsPage {
     }
   }
 
-  @Builder albumGroup() {
+  @Builder gripGroup() {
     SettingGroup() {
       if (this.smartGripSupported) {
         SettingSwitchRow({
           title: '智感握姿',
-          desc: '相册切换按钮跟随握持手靠左或靠右',
+          desc: '文件页上传按钮、相册切换按钮跟随握持手靠左或靠右',
           isOn: this.smartGrip,
           onChange: (isOn: boolean) => {
             this.smartGrip = isOn
-            // 同时镜像进 AppStorage，相册页即时增减订阅
+            // 同时镜像进 AppStorage，文件页、相册页即时增减订阅
             HoldingHandUtil.setEnabled(isOn)
           }
         })

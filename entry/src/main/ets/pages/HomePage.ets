@@ -570,7 +570,7 @@ export struct HomePage {
       } else if (this.currentIndex === TabId.REMOTE_DOWN) {
         TabRemoteDown({ overLap: this.overLap, isActive: true })
       } else if (this.currentIndex === TabId.MINE) {
-        // 宽屏：设置 / 账号与安全 / 关于在「我的」内容区内原地打开，保留左侧导航栏
+        // 宽屏：设置 / 账号与安全 / 相册备份在「我的」内容区内原地打开，保留左侧导航栏
         TabMine({ overLap: this.overLap, isActive: true, inlineSubPages: true })
       }
     }

@@ -108,10 +108,11 @@ export struct TabPictures {
   // 智感握姿只在「相册可见 + 前台 + 开关打开」时订阅，任一不满足即退订省电
   @StorageProp(Constant.APP_IN_FOREGROUND) @Watch('syncHoldingHand') appInForeground: boolean = true;
   @StorageProp(Constant.SMART_GRIP_ENABLED) @Watch('syncHoldingHand') smartGripEnabled: boolean = true;
-  @State switcherSide: GripSide = GripSide.LEFT;
+  // 默认在右侧（与文件页上传按钮一致），智感握姿识别到左手时换到左侧
+  @State switcherSide: GripSide = GripSide.RIGHT;
   @State switcherOpacity: number = CloudThemeToken.fullOpacity;
   @State switcherScale: number = 1;
-  private switcherTargetSide: GripSide = GripSide.LEFT;
+  private switcherTargetSide: GripSide = GripSide.RIGHT;
   private switcherFading: boolean = false;
   private readonly onGripSide = (side: GripSide): void => { this.moveSwitcher(side); };
   @State settingsEnabled: boolean = false;
@@ -3260,7 +3261,7 @@ export struct TabPictures {
   /**
    * 「相册」标题旁的备份状态胶囊（替代原整行提示卡，不占内容区）：
    * 未开启显示「● 未备份 开启」，点击直接开启；开启后显示进度环/状态点 + 短状态，点击展开 ↓ 卡片。
-   * 玻璃材质与左侧时间/相册切换胶囊同款（panelMaterial）。
+   * 玻璃材质与时间/相册切换胶囊同款（panelMaterial）。
    */
   // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
   @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
@@ -3431,11 +3432,11 @@ export struct TabPictures {
     }
   }
 
-  /** 按「相册可见 + 前台 + 开关」增减智感握姿订阅；关掉开关时胶囊回到默认左侧。 */
+  /** 按「相册可见 + 前台 + 开关」增减智感握姿订阅；关掉开关时胶囊回到默认右侧。 */
   private syncHoldingHand(): void {
     if (!this.smartGripEnabled) {
       HoldingHandUtil.stop(this.onGripSide);
-      this.moveSwitcher(GripSide.LEFT);
+      this.moveSwitcher(GripSide.RIGHT);
       return;
     }
     if (this.isActive && this.appInForeground) {
@@ -3499,7 +3500,7 @@ export struct TabPictures {
       .onClick(() => { this.selectSegment(value); })
   }
 
-  /** Frosted vertical capsule at the vertical center to switch 时间 / 相册; left by default, right for a right-hand grip. */
+  /** Frosted vertical capsule at the vertical center to switch 时间 / 相册; right by default, left for a left-hand grip. */
   @Builder floatingSwitcher() {
     Column({ space: SWITCHER_GAP }) {
       this.switcherItem('时间', GallerySegment.TIME)

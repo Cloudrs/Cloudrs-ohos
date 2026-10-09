@@ -2,13 +2,25 @@ export const init: (baseUrl: string) => Promise<string>;
 export const getApiVersionInfo: () => Promise<string[]>;
 export const restoreSession: (baseUrl: string, accessToken: string, refreshToken: string, isV3: boolean) => void;
 export const takeRefreshedSession: () => string[];
+/** 登出/删凭据：丢弃存着的 v4 refresh token、未取走的续期结果和当前客户端的 token。 */
+export const clearSession: () => void;
 export const getSiteConfig: () => Promise<string>;
 export const login: (username: string, password: string) => Promise<string[]>;
 export const login2fa: (code: string) => Promise<string[]>;
 export const loginWithRefreshToken: (baseUrl: string, refreshToken: string) => Promise<string[]>;
 export const getUserStorage: () => Promise<string>;
-export const getUserSetting: () => Promise<string>;
 export const getUserAvatar: (userId: string) => Promise<Uint8Array>;
+/** v4 账号设置的扁平 JSON（AccountSettings）；v3 返回 {"supported":false,...} */
+export const getAccountSettings: () => Promise<string>;
+export const updateNickname: (nick: string) => Promise<void>;
+export const changePassword: (current: string, next: string) => Promise<void>;
+/** 返回 TOTP secret，服务端 10 分钟内有效 */
+export const initTwoFactor: () => Promise<string>;
+export const setTwoFactor: (enabled: boolean, code: string) => Promise<void>;
+/** base64Data 为图片原始字节的 base64 */
+export const uploadAvatar: (base64Data: string, contentType: string) => Promise<void>;
+export const resetAvatar: () => Promise<void>;
+export const deletePasskey: (id: string) => Promise<void>;
 export const getDirectory: (path: string) => Promise<string>;
 export const getObjectDetail: (id: string, isFolder: boolean) => Promise<string>;
 export const deleteObjects: (items: string[], dirs: string[]) => Promise<void>;

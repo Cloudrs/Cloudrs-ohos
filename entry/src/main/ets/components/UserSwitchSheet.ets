@@ -1,5 +1,4 @@
 import { DbUserInfo } from "../model/net/ApiTypes";
-import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import UserDatabase from "../model/UserDatabase";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
@@ -52,7 +51,6 @@ export struct UserSwitchSheet {
     })
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   build() {
     Column({ space: CloudThemeToken.spacingPage }) {
       if (this.currentUrl.length > 0) {
@@ -72,7 +70,6 @@ export struct UserSwitchSheet {
         .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPanel })
         .borderRadius(CloudThemeToken.cardRadius)
         .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surfaceSubtle))
-        .systemMaterial(CloudMaterial.cardMaterial())
         .alignItems(VerticalAlign.Center)
       }
 
@@ -108,8 +105,6 @@ export struct UserSwitchSheet {
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder userRow(user: DbUserInfo) {
     Row({ space: CloudThemeToken.spacingCard }) {
       AccountAvatar({
@@ -192,7 +187,6 @@ export struct UserSwitchSheet {
     .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard })
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(this.isCurrentUser(user) ? CloudThemeToken.primarySoft : CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
     .border({
       width: CloudThemeToken.lineWidth,
       color: this.isCurrentUser(user) ? CloudThemeToken.primary : CloudThemeToken.line

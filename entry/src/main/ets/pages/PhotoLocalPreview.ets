@@ -1,5 +1,4 @@
 import Constant from '../model/Constant';
-import { SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { CloudThemeToken } from '../model/CloudTheme';
 import { CloudMaterial } from '../model/CloudMaterial';
 import { PhotoBackupItem, PhotoBackupStatus } from '../model/PhotoBackupModel';
@@ -8,13 +7,14 @@ import { CommonUtil } from '../utils/CommonUtil';
 import { DateFormatUtil } from '../utils/DateFormatUtil';
 import LazyDataSource from '../utils/LazyDataSource';
 import { common } from '@kit.AbilityKit';
-import { window } from '@kit.ArkUI';
+import { LengthMetrics, window } from '@kit.ArkUI';
 import { harmonyShare, systemShare } from '@kit.ShareKit';
 import { uniformTypeDescriptor } from '@kit.ArkData';
 import AppLogger from '../utils/AppLogger';
 import { CloudRouter } from '../utils/CloudRouter';
 import UserPreferences from '../model/UserPreferences';
 import { ZoomableImage } from '../components/ZoomableImage';
+import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from '@kit.UIDesignKit';
 
 const TAG: string = 'PhotoLocalPreview'
 const CHROME_ANIM_DURATION: number = 220
@@ -22,7 +22,6 @@ const CHROME_ANIM_DURATION: number = 220
 @Component
 export struct PhotoLocalPreviewPage {
   routeParam?: PhotoLocalPreviewParam
-  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) sysTopRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
   // 2in1 隐藏系统标题栏后窗口三键浮在右上角，顶栏右侧给它让位；其它设备为 0
@@ -125,7 +124,7 @@ export struct PhotoLocalPreviewPage {
         LoadingProgress()
           .width(48)
           .height(48)
-          .color(Color.White)
+          .color(CloudThemeToken.textSecondary)
         ZoomableImage({
           imageSource: item.uri,
           imageDraggable: this.imageDraggable,
@@ -160,15 +159,13 @@ export struct PhotoLocalPreviewPage {
     .height('100%')
   }
 
-  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder infoBar(item: PhotoBackupItem) {
     // 文件名已移到顶栏,剩余信息合并为单行,降低底栏高度
     Row() {
       Text(`${DateFormatUtil.format(new Date(item.takenAt > 0 ? item.takenAt : item.modifiedAt),
         'yyyy/MM/dd HH:mm')} · ${CommonUtil.formatBytes(item.size)}`)
         .fontSize(CloudThemeToken.textSizeSmall)
-        .fontColor('rgba(255, 255, 255, 0.75)')
+        .fontColor(CloudThemeToken.textSecondary)
 
       Blank()
 
@@ -183,68 +180,10 @@ export struct PhotoLocalPreviewPage {
       top: CloudThemeToken.spacingPanel,
       bottom: this.bottomRectHeight + CloudThemeToken.spacingPanel
     })
-    .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
-    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
-    // 与顶栏一致用 THICK，底下照片不干扰日期/大小文字
-    .systemMaterial(CloudMaterial.sheetMaterial())
-  }
-
-  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder topChrome() {
-    Row({ space: CloudThemeToken.spacingCard }) {
-      this.backButton()
-      Text(this.items[this.index]?.name ?? '')
-        .fontSize(CloudThemeToken.textSizeBodyPlus)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(Color.White)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        // 文件名多为无空格长串,按词边界截断会过早出省略号,改为任意字符处截断
-        .wordBreak(WordBreak.BREAK_ALL)
-        .layoutWeight(1)
-        .hitTestBehavior(HitTestMode.None)
-    }
-    .alignItems(VerticalAlign.Center)
-    .width('100%')
-    .padding({
-      top: this.sysTopRectHeight + CloudThemeToken.spacingPanel,
-      bottom: CloudThemeToken.spacingPanel,
-      left: CloudThemeToken.spacingPage,
-      right: CloudThemeToken.spacingPage + this.titleButtonInsetEnd
-    })
-    .backgroundColor(CloudMaterial.materialSurface('rgba(0, 0, 0, 0.32)'))
-    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
-    // 顶栏压在照片上，THIN 过透：用 sheet 同款 THICK，只留一层磨砂，文件名清楚
-    .systemMaterial(CloudMaterial.sheetMaterial())
-    .position({ x: 0, y: 0 })
-    .opacity(this.chromeVisible ? 1 : 0)
-  }
-
-  // 压在照片上的圆控件：容器 + floatingControlMaterial（Button 挂不上材质）；
-  // EXQUISITE 档留薄染保白图标对比，其余档/低版本回落原深色毛玻璃。
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder backButton() {
-    Stack() {
-      SymbolGlyph($r('sys.symbol.chevron_left'))
-        .fontSize(CloudThemeToken.photoLocalPreviewBackIconSize)
-        .fontColor([Color.White])
-        .fontWeight(FontWeight.Medium)
-    }
-    .width(CloudThemeToken.videoPreviewControlSize)
-    .height(CloudThemeToken.videoPreviewControlSize)
-    .borderRadius(CloudThemeToken.videoPreviewControlSize / CloudThemeToken.halfDivisor)
-    .clip(true)
-    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
-      CloudThemeToken.videoPreviewControlMaterialTint))
-    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
-    .systemMaterial(CloudMaterial.floatingControlMaterial())
-    .hoverEffect(HoverEffect.Highlight)
-    .enabled(this.chromeVisible)
-    .accessibilityText('返回')
-    .onClick(() => {
-      CloudRouter.pop()
-    })
+    // 随深浅色走（与云端图片预览一致）；内容区不在沉浸光感生效范围，半透明底 + 手写模糊出磨砂，
+    // 日期/大小文字压在照片上也清楚
+    .backgroundColor(CloudThemeToken.surfaceTranslucent)
+    .backdropBlur(18)
   }
 
   @Builder navArrows() {
@@ -262,22 +201,22 @@ export struct PhotoLocalPreviewPage {
     }
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  // 宽屏翻页圆钮：内容区、不在沉浸光感生效范围，用与文件页上传 FAB 同款磨砂（淡染 + 强背景模糊 + 光边 + 投影）
   @Builder navArrowButton(isNext: boolean) {
     Stack() {
       SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
         .fontSize(CloudThemeToken.imagePreviewArrowIconSize)
-        .fontColor([Color.White])
+        .fontColor([CloudThemeToken.textPrimary])
         .fontWeight(FontWeight.Medium)
     }
     .width(CloudThemeToken.imagePreviewArrowButtonSize)
     .height(CloudThemeToken.imagePreviewArrowButtonSize)
     .borderRadius(CloudThemeToken.imagePreviewArrowButtonSize / CloudThemeToken.halfDivisor)
     .clip(true)
-    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.videoPreviewControlBackground,
-      CloudThemeToken.videoPreviewControlMaterialTint))
-    .backgroundBlurStyle(CloudMaterial.controlBlurStyle(BlurStyle.BACKGROUND_THICK))
-    .systemMaterial(CloudMaterial.floatingControlMaterial())
+    .backgroundColor(CloudThemeToken.controlFrost)
+    .backdropBlur(CloudThemeToken.controlFrostBlur)
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
     .hoverEffect(HoverEffect.Highlight)
     .enabled(this.chromeVisible && this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)
@@ -294,31 +233,89 @@ export struct PhotoLocalPreviewPage {
     return isNext ? this.index < this.items.length - 1 : this.index > 0
   }
 
+  // 顶栏放进 HdsNavigation 标题栏：官方规定沉浸光感（材质、按压形变）只在 Navigation/NavDestination 标题栏
+  // 与底部 TabBar 内生效，内容区里自绘的返回键再怎么挂 systemMaterial 都不生效。返回键用 HDS 原生 backIcon，
+  // 与云端图片预览、设置页一致；照片铺满在标题栏底下，单击切换时标题栏随 chrome 一起隐藏/显示
   build() {
-    Stack() {
-      Swiper(this.swiperController) {
-        LazyForEach(this.itemSource, (item: PhotoBackupItem, index: number) => {
-          this.slide(item, index)
-        }, (item: PhotoBackupItem) => item.id)
+    HdsNavigation() {
+      Stack() {
+        Swiper(this.swiperController) {
+          LazyForEach(this.itemSource, (item: PhotoBackupItem, index: number) => {
+            this.slide(item, index)
+          }, (item: PhotoBackupItem) => item.id)
+        }
+        .index(this.index)
+        .loop(false)
+        .indicator(false)
+        .disableSwipe(this.zoomDisableSwipe)
+        .cachedCount(1)
+        .onChange((i: number) => {
+          this.index = i
+          // 新页总是未缩放状态;旧页重置的回调因索引已切换不会触达这里,须显式复位。
+          this.zoomDisableSwipe = false
+        })
+        .width('100%')
+        .height('100%')
+
+        this.navArrows()
       }
-      .index(this.index)
-      .loop(false)
-      .indicator(false)
-      .disableSwipe(this.zoomDisableSwipe)
-      .cachedCount(1)
-      .onChange((i: number) => {
-        this.index = i
-        // 新页总是未缩放状态;旧页重置的回调因索引已切换不会触达这里,须显式复位。
-        this.zoomDisableSwipe = false
-      })
       .width('100%')
       .height('100%')
-
-      this.navArrows()
-      this.topChrome()
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Color.Black)
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(false)
+    .hideTitleBar(!this.chromeVisible, true)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: this.items[this.index]?.name ?? ' '
+        },
+        backIcon: {
+          icon: $r('app.media.ic_back'),
+          action: () => {
+            CloudRouter.pop()
+          }
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: false
+        },
+        originalStyle: {
+          // 半透明底：照片在标题栏底下隐约透出，文件名仍清楚
+          backgroundStyle: {
+            backgroundColor: CloudThemeToken.surfaceTranslucent
+          },
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary
+            },
+            // 置透明露出 HDS 标题栏材质（随设备档位由系统自适应），<26 实色；与设置页 SubPageScaffold、云端图片预览一致
+            backIconStyle: {
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.IMMERSIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      padding: {
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
+    })
+    .backgroundColor(CloudThemeToken.background)
   }
 }

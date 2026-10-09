@@ -38,6 +38,7 @@ import { TextPreviewEntry } from "../../utils/TextPreviewEntry";
 import { ActiveAccount } from "../../utils/ActiveAccount";
 import UserPreferences from "../../model/UserPreferences";
 import { PhotoBackupSettingsStore } from "../../model/PhotoBackupSettingsStore";
+import { SheetPhaseController } from "../../utils/SheetPhaseController";
 import UploadSessionRelief, { UploadSessionSummary } from "../../utils/UploadSessionRelief";
 import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import {
@@ -84,15 +85,6 @@ const BATCH_SHEET_SHOW_DELAY_MS: number = 400
 /** 面板一旦露面就至少驻留这么久，避免刚展开就被收起 */
 const BATCH_SHEET_MIN_VISIBLE_MS: number = 500
 
-// Lifecycle phase of a bindSheet, driven by its
-// onWillAppear/onAppear/onWillDisappear/onDisappear callbacks.
-enum SheetPhase {
-  CLOSED,
-  OPENING,
-  OPEN,
-  CLOSING
-}
-
 interface BatchItemResult {
   item: ObjectInfo
   success: boolean
@@ -135,85 +127,6 @@ interface FileConflictRequest {
 interface ServerUploadSession {
   remotePath: string
   sessionId: string
-}
-
-// Drives a single bindSheet off its real lifecycle phase instead of the bound
-// flag (which stays true throughout the close animation). An open request that
-// arrives while the sheet is still closing is queued and replayed once it
-// finishes closing, instead of re-setting the flag mid-animation — which races
-// the close and ends up dismissing the sheet (so the tap does nothing). The
-// flag is only re-triggered (false→true) for a genuinely stale flag (true with
-// no visible sheet).
-class SheetPhaseController {
-  private phase: SheetPhase = SheetPhase.CLOSED
-  private reopenPending: boolean = false
-  /** 排队中的"稍后打开"，requestClose 要能把它撤销 */
-  private pendingOpenTimer: number = -1
-
-  requestOpen(getFlag: () => boolean, setFlag: (value: boolean) => void): void {
-    if (getFlag() && (this.phase === SheetPhase.OPEN || this.phase === SheetPhase.OPENING)) {
-      this.reopenPending = false
-      return
-    }
-    if (this.phase === SheetPhase.CLOSED) {
-      this.reopenPending = false
-      if (getFlag()) {
-        setFlag(false)
-        this.clearPendingOpen()
-        this.pendingOpenTimer = setTimeout(() => {
-          this.pendingOpenTimer = -1
-          setFlag(true)
-        }, 50)
-      } else {
-        setFlag(true)
-      }
-      return
-    }
-    this.reopenPending = true
-    setFlag(false)
-  }
-
-  /**
-   * 收起面板，并撤销一切待打开的意图。
-   *
-   * 直接把绑定量设 false 是不够的：requestOpen 可能已经排了个 50ms 后打开的
-   * 定时器，或标了 reopenPending，它们会在之后把面板重新拉起来——盖住此刻真正
-   * 要给用户看的那一层。想让路就得连意图一起撤掉。
-   */
-  requestClose(setFlag: (value: boolean) => void): void {
-    this.clearPendingOpen()
-    this.reopenPending = false
-    setFlag(false)
-  }
-
-  private clearPendingOpen(): void {
-    if (this.pendingOpenTimer >= 0) {
-      clearTimeout(this.pendingOpenTimer)
-      this.pendingOpenTimer = -1
-    }
-  }
-
-  onWillAppear(): void {
-    this.phase = SheetPhase.OPENING
-  }
-
-  onAppear(): void {
-    this.phase = SheetPhase.OPEN
-  }
-
-  onWillDisappear(): void {
-    this.phase = SheetPhase.CLOSING
-  }
-
-  onDisappear(setFlag: (value: boolean) => void, onClosed: () => void): void {
-    this.phase = SheetPhase.CLOSED
-    if (this.reopenPending) {
-      this.reopenPending = false
-      setTimeout(() => setFlag(true), 50)
-    } else {
-      onClosed()
-    }
-  }
 }
 
 PersistentStorage.persistProp(Constant.CURRENT_SHOW_TYPE, ShowType.SHOW_ICON)
@@ -297,6 +210,7 @@ export struct TabFiles {
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true;
   // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧菜单要给它让位；其它设备为 0
   @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0;
+  @State uploadFabPressed: boolean = false;
   @StorageLink(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageLink(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
   @StorageLink(Constant.CURRENT_SORT_TYPE_RESERVE) sortTypeReverse: Map<SortType, boolean> = new Map([])
@@ -531,10 +445,9 @@ export struct TabFiles {
     this.visibleSheetCount = Math.max(0, this.visibleSheetCount - 1)
   }
 
-  // HDS 返回键与菜单键底色：高算力档置透明，露出 HDS 自带材质的通透玻璃观感，
-  // 与自绘 TitleControlButton（折叠键、窗口三键）一致；其余档与低版本保留 surfaceSubtle 实色
+  // HDS 返回键与菜单键底色：置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应），<26 保留 surfaceSubtle 实色
   private getFileTitleActionBackground(): ResourceColor {
-    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle)
+    return this.shouldDimFileTitleActions() ? '#1AFFFFFF' : CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle)
   }
 
   private getFileTitleActionIconColor(): ResourceColor {
@@ -2267,9 +2180,7 @@ export struct TabFiles {
           this.multiSelectActionBar()
         }
 
-        if (this.showFileMoreMenu) {
-          this.fileMoreMenuOverlay()
-        }
+        this.fileMoreMenuAnchor()
 
         if (this.albumSaving) {
           this.albumSavingOverlay()
@@ -2576,9 +2487,10 @@ export struct TabFiles {
     .backgroundColor(CloudThemeToken.background)
   }
 
-  // 上传 FAB：容器承载材质（Button 挂不上 systemMaterial），与标题栏按钮同款默认沉浸光感
-  // （titleControlMaterial：高算力档通透玻璃，其余档 surfaceSubtle 底）+ 按压形变
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  // 上传 FAB。内容区不在沉浸光感生效范围（官方：除弹窗/菜单/半模态等，只在 Navigation 标题栏与底部 TabBar 内生效，
+  // 日志 "Material inactive: out of scope"），systemMaterial 挂了也不生效；按官方建议改用通用属性：
+  // 仿底部悬浮页签的磨砂（实测页签在纯色底上填充=页底、只靠 2~3px 白光边与浅投影显形，压在照片上透出模糊后的照片）：
+  // 极淡染色 + 强背景模糊 + 光感细边 + 投影，深浅色走资源色、各设备通用；按压缩放代替材质的交互形变
   @Builder uploadFab() {
     Stack() {
       Image($r('app.media.ic_arrowshape_up'))
@@ -2591,15 +2503,25 @@ export struct TabFiles {
     .height(CloudThemeToken.rowHeight4xl)
     .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
       CloudThemeToken.controlRadiusRoundXl))
-    .clip(true)
-    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
-    .systemMaterial(CloudMaterial.titleControlMaterial())
+    .backgroundColor(CloudThemeToken.controlFrost)
+    .backdropBlur(CloudThemeToken.controlFrostBlur)
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
+    .scale({ x: this.uploadFabPressed ? CloudThemeToken.fabPressedScale : 1,
+      y: this.uploadFabPressed ? CloudThemeToken.fabPressedScale : 1 })
+    .animation({ duration: CloudThemeToken.fabPressAnimDuration, curve: Curve.Friction })
     .hoverEffect(HoverEffect.Highlight)
     .accessibilityText('上传')
     .margin({ right: CloudThemeToken.spacingPage, bottom: this.getFabBottomMargin() })
+    .onTouch((event: TouchEvent) => {
+      if (event.type === TouchType.Down) {
+        this.uploadFabPressed = true
+      } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.uploadFabPressed = false
+      }
+    })
     .onClick(() => { this.openSelectFileSheet() })
   }
-
   @Builder multiSelectTitle() {
     Row({ space: CloudThemeToken.spacingCard }) {
       Button({ type: ButtonType.Normal }) {
@@ -2643,8 +2565,6 @@ export struct TabFiles {
     .alignItems(VerticalAlign.Center)
   }
 
-  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder multiSelectActionBar() {
     Column({ space: CloudThemeToken.spacingCard }) {
       Row() {
@@ -2690,9 +2610,8 @@ export struct TabFiles {
       bottom: CloudThemeToken.zero
     })
     .borderRadius({ topLeft: CloudThemeToken.surfaceRadius, topRight: CloudThemeToken.surfaceRadius })
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surfaceGlassStrong))
-    .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
-    .systemMaterial(CloudMaterial.panelMaterial())
+    .backgroundColor(CloudThemeToken.surfaceGlassStrong)
+    .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .shadow({
       radius: CloudThemeToken.sheetShadowRadius,
@@ -2715,8 +2634,6 @@ export struct TabFiles {
     .opacity(1.0)
   }
 
-  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder multiActionButton(icon: ResourceStr, title: string, action: () => void, danger: boolean = false) {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -2731,9 +2648,8 @@ export struct TabFiles {
         .height(CloudThemeToken.iconBoxXl)
         .borderRadius(CloudThemeToken.actionRadiusForWidth(this.sheetLayoutWidth,
           CloudThemeToken.controlRadiusRoundXl))
-        .backgroundColor(CloudMaterial.materialSurface(this.getMultiActionBackground(danger)))
-        .backgroundBlurStyle(CloudMaterial.blurFallback(BlurStyle.BACKGROUND_THICK))
-        .systemMaterial(CloudMaterial.floatingControlMaterial())
+        .backgroundColor(this.getMultiActionBackground(danger))
+        .backgroundBlurStyle(BlurStyle.BACKGROUND_THICK)
         .hoverEffect(HoverEffect.Highlight)
         .shadow({
           radius: CloudThemeToken.refreshShadowRadius,
@@ -2854,110 +2770,92 @@ export struct TabFiles {
     }
   }
 
-  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  @Builder fileMoreMenuOverlay() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.transparent)
-        .onClick(() => {
-          this.closeFileMoreMenu()
+  // 「更多」菜单：用系统 Menu（菜单控制在沉浸光感全页面生效范围内，材质随设备档位由系统自适应，与文本预览一致）。
+  // 触发键是 HDS 标题栏的原生菜单键、挂不了 bindMenu，故在其正下方放一个不可见锚点，由 showFileMoreMenu 状态驱动弹出
+  @Builder fileMoreMenuAnchor() {
+    Column() {
+      Row()
+        .width(CloudThemeToken.rowHeight5xl)
+        .height(CloudThemeToken.lineWidth)
+        .bindMenu(this.showFileMoreMenu, this.fileMoreMenu(), {
+          placement: Placement.BottomRight,
+          onDisappear: () => {
+            this.showFileMoreMenu = false
+          }
         })
-
-      Column() {
-        Column() {
-          // 用 checklist 图标而不是 ic_selected：后者是行尾表示"当前选中"的对勾，
-          // 同一个菜单里拿它当"多选"入口，会被读成"多选这项已被选中"
-          this.fileMoreCommonItem($r('app.string.more_multi_select'), $r('app.media.ic_multi_select'), false, () => {
-            this.closeFileMoreMenu()
-            this.onMoreClick(MoreMenuType.MULTI_SELECT)
-          })
-        }
-
-        this.fileMoreGroupDivider()
-
-        Column() {
-          this.fileMoreCommonItem($r('app.string.more_show_icon'), $r('app.media.ic_grid'),
-            this.showType === ShowType.SHOW_ICON, () => {
-              this.closeFileMoreMenu()
-              this.changeShowType(ShowType.SHOW_ICON)
-            })
-          this.fileMoreCommonItem($r('app.string.more_show_list'), $r('app.media.ic_list_bullet_circle'),
-            this.showType === ShowType.SHOW_LIST, () => {
-              this.closeFileMoreMenu()
-              this.changeShowType(ShowType.SHOW_LIST)
-            })
-        }
-
-        this.fileMoreGroupDivider()
-
-        Column() {
-          this.fileMoreSortItem($r('app.string.more_sort_by_name'), SortType.SORT_BY_NAME)
-          this.fileMoreSortItem($r('app.string.more_sort_by_time'), SortType.SORT_BY_TIME)
-          this.fileMoreSortItem($r('app.string.more_sort_by_size'), SortType.SORT_BY_SIZE)
-        }
-
-        this.fileMoreGroupDivider()
-
-        Column() {
-          this.fileMoreCommonItem($r('app.string.more_new_dir'), $r('app.media.ic_folder_badge_plus'), false, () => {
-            this.closeFileMoreMenu()
-            this.onMoreClick(MoreMenuType.NEW_DIR)
-          })
-          this.fileMoreCommonItem($r('app.string.more_new_file'), $r('app.media.ic_doc_badge_plus'), false, () => {
-            this.closeFileMoreMenu()
-            this.onMoreClick(MoreMenuType.NEW_FILE)
-          })
-        }
-
-        this.fileMoreGroupDivider()
-
-        Column() {
-          this.fileMoreCommonItem($r('app.string.more_upload_file'), $r('app.media.ic_arrowshape_up'), false, () => {
-            this.closeFileMoreMenu()
-            this.onMoreClick(MoreMenuType.UPLOAD_FILE)
-          })
-        }
-      }
-      .width(CloudThemeToken.menuWidth)
-      .padding(CloudThemeToken.zero)
-      .borderRadius(CloudThemeToken.controlRadiusXl)
-      .clip(true)
-      // 自绘菜单不在应用级 ENABLE 的系统组件清单里，材质要手动挂；底色分档：
-      // EXQUISITE 高算力档置透明、交给厚材质透出内容；中低算力档/23/24 用实心 surface 保可读
-      .backgroundColor(CloudMaterial.menuBackground())
-      .systemMaterial(CloudMaterial.menuMaterial())
-      .shadow({
-        radius: CloudThemeToken.sheetShadowRadius,
-        color: CloudThemeToken.sheetShadow,
-        offsetY: CloudThemeToken.refreshShadowOffsetY
-      })
-      .margin({
-        // 必须落在标题栏下沿之外。HdsNavigation 的毛玻璃画在内容区之上，而这个菜单
-        // 是内容区里的浮层，zIndex 只在内容区内部排序，管不到标题栏那一层。原先往上
-        // 顶了 spacingSm，第一项「多选」的上半截就被糊掉了。
-        top: this.getHdsTitleBarBaseHeight() + CloudThemeToken.spacingCard,
-        right: CloudThemeToken.filesHeaderPadding
-      })
     }
     .width('100%')
     .height('100%')
-    .zIndex(CloudThemeToken.overlayZIndex)
-    .transition(TransitionEffect.OPACITY
-      .combine(TransitionEffect.scale({ x: 0.9, y: 0.9, centerX: '100%', centerY: '0%' }))
-      .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut }))
+    .alignItems(HorizontalAlign.End)
+    .padding({
+      top: this.getHdsTitleBarBaseHeight(),
+      right: CloudThemeToken.filesHeaderPadding + this.titleButtonInsetEnd
+    })
+    .hitTestBehavior(HitTestMode.None)
   }
 
-  @Builder fileMoreGroupDivider() {
-    Blank()
-      .width('100%')
-      .height(CloudThemeToken.spacingSm)
-      .backgroundColor(CloudThemeToken.surfaceSubtle)
+  @Builder fileMoreMenu() {
+    Menu() {
+      MenuItemGroup() {
+        // 用 checklist 图标而不是 ic_selected：后者是行尾表示"当前选中"的对勾，
+        // 同一个菜单里拿它当"多选"入口，会被读成"多选这项已被选中"
+        MenuItem(this.fileMoreItemContent($r('app.string.more_multi_select'), $r('app.media.ic_multi_select'), false))
+          .onClick(() => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.MULTI_SELECT)
+          })
+      }
+
+      MenuItemGroup() {
+        MenuItem(this.fileMoreItemContent($r('app.string.more_show_icon'), $r('app.media.ic_grid'),
+          this.showType === ShowType.SHOW_ICON))
+          .onClick(() => {
+            this.closeFileMoreMenu()
+            this.changeShowType(ShowType.SHOW_ICON)
+          })
+        MenuItem(this.fileMoreItemContent($r('app.string.more_show_list'), $r('app.media.ic_list_bullet_circle'),
+          this.showType === ShowType.SHOW_LIST))
+          .onClick(() => {
+            this.closeFileMoreMenu()
+            this.changeShowType(ShowType.SHOW_LIST)
+          })
+      }
+
+      MenuItemGroup() {
+        this.fileMoreSortItem($r('app.string.more_sort_by_name'), SortType.SORT_BY_NAME)
+        this.fileMoreSortItem($r('app.string.more_sort_by_time'), SortType.SORT_BY_TIME)
+        this.fileMoreSortItem($r('app.string.more_sort_by_size'), SortType.SORT_BY_SIZE)
+      }
+
+      MenuItemGroup() {
+        MenuItem(this.fileMoreItemContent($r('app.string.more_new_dir'), $r('app.media.ic_folder_badge_plus'), false))
+          .onClick(() => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.NEW_DIR)
+          })
+        MenuItem(this.fileMoreItemContent($r('app.string.more_new_file'), $r('app.media.ic_doc_badge_plus'), false))
+          .onClick(() => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.NEW_FILE)
+          })
+      }
+
+      MenuItemGroup() {
+        MenuItem(this.fileMoreItemContent($r('app.string.more_upload_file'), $r('app.media.ic_arrowshape_up'), false))
+          .onClick(() => {
+            this.closeFileMoreMenu()
+            this.onMoreClick(MoreMenuType.UPLOAD_FILE)
+          })
+      }
+    }
+    .width(CloudThemeToken.menuWidth)
+    .padding(CloudThemeToken.zero)
+    .margin(CloudThemeToken.zero)
+    // 置透明让系统菜单材质透出；分隔线用系统默认的细线（与文本预览菜单一致），实色粗分组带压在磨砂上会断开通透感
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
   }
 
-  @Builder fileMoreCommonItem(content: ResourceStr, icon: Resource, isSelected: boolean, action: () => void) {
+  @Builder fileMoreItemContent(content: ResourceStr, icon: Resource, isSelected: boolean) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Image(icon)
         .width(CloudThemeToken.objectMenuIconSize)
@@ -2983,13 +2881,25 @@ export struct TabFiles {
       right: CloudThemeToken.objectMenuHorizontalPadding
     })
     .width('100%')
-    .height(CloudThemeToken.menuItemHeight)
+    .height(CloudThemeToken.menuItemLabelHeight)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
-    .onClick(action)
+  }
+  @Builder fileMoreSortItem(content: ResourceStr, type: SortType) {
+    MenuItem(this.fileMoreSortContent(content, type))
+      .onClick(() => {
+        this.closeFileMoreMenu()
+        if (type === SortType.SORT_BY_NAME) {
+          this.changeSortType(SortType.SORT_BY_NAME, MoreMenuType.SORT_BY_NAME)
+        } else if (type === SortType.SORT_BY_TIME) {
+          this.changeSortType(SortType.SORT_BY_TIME, MoreMenuType.SORT_BY_TIME)
+        } else if (type === SortType.SORT_BY_SIZE) {
+          this.changeSortType(SortType.SORT_BY_SIZE, MoreMenuType.SORT_BY_SIZE)
+        }
+      })
   }
 
-  @Builder fileMoreSortItem(content: ResourceStr, type: SortType) {
+  @Builder fileMoreSortContent(content: ResourceStr, type: SortType) {
     Row({ space: CloudThemeToken.spacingSection }) {
       Image($r('app.media.ic_sort_arrow_up'))
         .width(CloudThemeToken.objectMenuIconSize)
@@ -3025,19 +2935,9 @@ export struct TabFiles {
       right: CloudThemeToken.objectMenuHorizontalPadding
     })
     .width('100%')
-    .height(CloudThemeToken.menuItemHeight)
+    .height(CloudThemeToken.menuItemLabelHeight)
     .alignItems(VerticalAlign.Center)
     .justifyContent(FlexAlign.SpaceBetween)
-    .onClick(() => {
-      this.closeFileMoreMenu()
-      if (type === SortType.SORT_BY_NAME) {
-        this.changeSortType(SortType.SORT_BY_NAME, MoreMenuType.SORT_BY_NAME)
-      } else if (type === SortType.SORT_BY_TIME) {
-        this.changeSortType(SortType.SORT_BY_TIME, MoreMenuType.SORT_BY_TIME)
-      } else if (type === SortType.SORT_BY_SIZE) {
-        this.changeSortType(SortType.SORT_BY_SIZE, MoreMenuType.SORT_BY_SIZE)
-      }
-    })
   }
 
   @Builder transportSheetTitle(title: ResourceStr) {
@@ -3182,7 +3082,6 @@ export struct TabFiles {
     .hitTestBehavior(HitTestMode.None)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder refreshingHint() {
     Row({ space: CloudThemeToken.spacingXl }) {
       LoadingProgress()
@@ -3197,7 +3096,6 @@ export struct TabFiles {
     .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
     .borderRadius(CloudThemeToken.controlRadiusRoundMd)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.panelMaterial())
     .shadow({
       radius: CloudThemeToken.refreshShadowRadius,
       color: CloudThemeToken.refreshShadow,
@@ -3363,8 +3261,6 @@ export struct TabFiles {
     .zIndex(1)
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareTargetSummary() {
     Row({ space: CloudThemeToken.detailSheetSummaryGap }) {
       Stack() {
@@ -3402,11 +3298,8 @@ export struct TabFiles {
     .padding(CloudThemeToken.detailSheetSummaryPadding)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareLinkCard() {
     Column({ space: CloudThemeToken.spacingXl }) {
       Text('当前分享链接')
@@ -3429,11 +3322,8 @@ export struct TabFiles {
     .padding(CloudThemeToken.spacingSection)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareDetailCard() {
     Column({ space: CloudThemeToken.spacingXl }) {
       Text('分享详情')
@@ -3450,7 +3340,6 @@ export struct TabFiles {
     .padding(CloudThemeToken.spacingSection)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
   }
 
   @Builder shareDetailRow(label: string, value: string) {
@@ -3472,8 +3361,6 @@ export struct TabFiles {
     .alignItems(VerticalAlign.Center)
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder shareCreateOptions() {
     Column({ space: CloudThemeToken.spacingSection }) {
       Column({ space: CloudThemeToken.spacingXs }) {
@@ -3497,7 +3384,6 @@ export struct TabFiles {
         .fontColor(CloudThemeToken.textPrimary)
         .placeholderColor(CloudThemeToken.textSecondary)
         .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-        .systemMaterial(CloudMaterial.cardMaterial())
         .borderRadius(CloudThemeToken.controlRadius)
         .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
         .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
@@ -5242,7 +5128,6 @@ export struct TabFiles {
     requestDownload.downloadFileBackground(fileModel, context, begins)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder albumSavingOverlay() {
     Column() {
       Blank()
@@ -5284,9 +5169,9 @@ export struct TabFiles {
         topLeft: CloudThemeToken.controlRadiusXl,
         topRight: CloudThemeToken.controlRadiusXl
       })
-      // 自绘底部面板，与真 bindSheet 同档 THICK 材质，观感一致
-      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-      .systemMaterial(CloudMaterial.sheetMaterial())
+      // 自绘底部面板在内容区、不在沉浸光感生效范围（挂材质无效）：半透明 surface + 手写模糊出磨砂，观感贴近真 bindSheet
+      .backgroundColor(CloudThemeToken.surfaceTranslucent)
+      .backdropBlur(CloudThemeToken.controlFrostBlur)
       .shadow({
         radius: CloudThemeToken.spacingSection,
         color: 'rgba(0,0,0,0.22)',
@@ -5387,7 +5272,6 @@ export struct TabFiles {
     return parts.join(' · ')
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder occupiedDialog() {
     Column({ space: CloudThemeToken.spacingPanel }) {
       Text(this.occupiedRelieve
@@ -5429,7 +5313,6 @@ export struct TabFiles {
       .width('100%')
       .borderRadius(CloudThemeToken.controlRadiusMd)
       .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surfaceSubtle))
-      .systemMaterial(CloudMaterial.cardMaterial())
       .clip(true)
 
       if (this.occupiedRelieve) {
@@ -5535,7 +5418,6 @@ export struct TabFiles {
     .alignItems(VerticalAlign.Center)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder fileConflictDialog() {
     Column({ space: CloudThemeToken.spacingPanel }) {
       Text('目标位置已有同名文件')
@@ -5578,7 +5460,6 @@ export struct TabFiles {
       .padding(CloudThemeToken.spacingCard)
       .borderRadius(CloudThemeToken.controlRadiusMd)
       .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surfaceSubtle))
-      .systemMaterial(CloudMaterial.cardMaterial())
       .alignItems(VerticalAlign.Center)
 
       // "全部"是这个决策的作用范围，不是另外两个选项

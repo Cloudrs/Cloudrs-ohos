@@ -1,8 +1,10 @@
 import {
-  init, getApiVersionInfo, restoreSession,
+  init, getApiVersionInfo, restoreSession, clearSession,
   getSiteConfig, login, login2fa, loginWithRefreshToken,
-  getUserStorage, getUserSetting,
+  getUserStorage,
   getUserAvatar,
+  getAccountSettings, updateNickname, changePassword, initTwoFactor, setTwoFactor,
+  uploadAvatar, resetAvatar, deletePasskey,
   getDirectory, getObjectDetail,
   deleteObjects, deleteObjectLockAware, unlockFiles,
   deleteObjectsBatch, transferObjectsBatch,
@@ -70,6 +72,11 @@ export function nativeRestoreSession(url: string, accessToken: string, refreshTo
   restoreSession(url, accessToken, refreshToken, isV3);
 }
 
+/** 登出/删凭据前调用：清掉 native 侧留着的 refresh token 与当前客户端 token，避免被后续续期轮换。 */
+export function nativeClearSession(): void {
+  clearSession();
+}
+
 export function nativeGetSiteConfig<T>(callback?: HttpCallback<T>): void {
   wrapJson(getSiteConfig(), callback);
 }
@@ -101,12 +108,53 @@ export function nativeGetUserStorage<T>(callback?: HttpCallback<T>): void {
   wrapJson(getUserStorage(), callback);
 }
 
-export function nativeGetUserSetting<T>(callback?: HttpCallback<T>): void {
-  wrapJson(getUserSetting(), callback);
-}
-
 export function nativeGetUserAvatar(userId: string, callback?: HttpCallback<Uint8Array>): void {
   wrap(getUserAvatar(userId), callback);
+}
+
+function wrapVoid(promise: Promise<void>, callback?: HttpCallback<null>): void {
+  if (callback?.onStart) { callback.onStart(); }
+  promise
+    .then(() => {
+      syncSession();
+      callback?.onSuccess(null);
+    })
+    .catch((err: Error) => {
+      syncSession();
+      callback?.onFailure(ApiErrorUtil.translate(err.message ?? String(err)));
+    });
+}
+
+export function nativeGetAccountSettings<T>(callback?: HttpCallback<T>): void {
+  wrapJson(getAccountSettings(), callback);
+}
+
+export function nativeUpdateNickname(nick: string, callback?: HttpCallback<null>): void {
+  wrapVoid(updateNickname(nick), callback);
+}
+
+export function nativeChangePassword(current: string, next: string, callback?: HttpCallback<null>): void {
+  wrapVoid(changePassword(current, next), callback);
+}
+
+export function nativeInitTwoFactor(callback?: HttpCallback<string>): void {
+  wrap(initTwoFactor(), callback);
+}
+
+export function nativeSetTwoFactor(enabled: boolean, code: string, callback?: HttpCallback<null>): void {
+  wrapVoid(setTwoFactor(enabled, code), callback);
+}
+
+export function nativeUploadAvatar(base64Data: string, contentType: string, callback?: HttpCallback<null>): void {
+  wrapVoid(uploadAvatar(base64Data, contentType), callback);
+}
+
+export function nativeResetAvatar(callback?: HttpCallback<null>): void {
+  wrapVoid(resetAvatar(), callback);
+}
+
+export function nativeDeletePasskey(id: string, callback?: HttpCallback<null>): void {
+  wrapVoid(deletePasskey(id), callback);
 }
 
 export function nativeGetDirectory<T>(path: string, callback?: HttpCallback<T>): void {

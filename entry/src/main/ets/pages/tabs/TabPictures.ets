@@ -3138,11 +3138,13 @@ export struct TabPictures {
         .onTouch((event: TouchEvent) => {
           WindowMover.onTouch(event)
         })
-      // 与 HDS 标题栏菜单键同款（TitleControlButton），和其它页标题栏按钮观感一致
+      // 与 HDS 标题栏菜单键同款（TitleControlButton），和其它页标题栏按钮观感一致；
+      // 身处 HdsNavigation 标题栏，在沉浸光感生效范围内
       Column() {
         TitleControlButton({
           icon: $r('app.media.ic_title_chevron_down'),
           label: this.drawerOpen ? '收起相册列表' : '展开相册列表',
+          inTitleBar: true,
           onAction: () => { this.toggleDrawer(); }
         })
       }
@@ -3275,8 +3277,9 @@ export struct TabPictures {
     .borderRadius(CloudThemeToken.backupPillHeight / CloudThemeToken.halfDivisor)
     .clip(true)
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(CloudMaterial.materialSurface('rgba(120, 120, 128, 0.22)'))
-    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
+    // 标题栏里的文字胶囊（在沉浸光感生效范围内）：灰色薄底 + 手写模糊兜可读，材质叠加光感
+    .backgroundColor('rgba(120, 120, 128, 0.22)')
+    .backdropBlur(18)
     .systemMaterial(CloudMaterial.panelMaterial())
     .hoverEffect(HoverEffect.Highlight)
     .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -3294,8 +3297,6 @@ export struct TabPictures {
    * Backup-status drawer inlined here (not a child component) so the live counts
    * read directly from @State — child @Prop bindings were not refreshing mid-backup.
    */
-  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder drawerCard() {
     Column({ space: CloudThemeToken.spacingSection }) {
       // 开关常驻顶部：未开启时直接在这里打开，不必再去「我的」页
@@ -3392,10 +3393,9 @@ export struct TabPictures {
       bottomLeft: CloudThemeToken.surfaceRadius,
       bottomRight: CloudThemeToken.surfaceRadius
     })
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surfaceTranslucent))
-    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
-    // 文字密集的浮层：用 sheet 同款 THICK 材质，THIN 会透出下方日期与照片干扰阅读
-    .systemMaterial(CloudMaterial.sheetMaterial())
+    // 文字密集的浮层，在内容区、不在沉浸光感生效范围：半透明 surface 底 + 手写模糊出磨砂，下方日期不会透出来
+    .backgroundColor(CloudThemeToken.surfaceTranslucent)
+    .backdropBlur(18)
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 
@@ -3437,17 +3437,15 @@ export struct TabPictures {
   }
 
   /** Frosted vertical capsule pinned at the left-center to switch 时间 / 相册. */
-  // systemMaterial 的版本守卫在 CloudMaterial 内部，编译器看不见，故在此屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder floatingSwitcher() {
     Column({ space: SWITCHER_GAP }) {
       this.switcherItem('时间', GallerySegment.TIME)
       this.switcherItem('相册', GallerySegment.ALBUM)
     }
     .padding(SWITCHER_PADDING)
-    .backgroundColor(CloudMaterial.materialSurface('rgba(120, 120, 128, 0.22)'))
-    .backdropBlur(CloudMaterial.backdropBlurFallback(18))
-    .systemMaterial(CloudMaterial.panelMaterial())
+    // 压在照片上的文字胶囊，在内容区、不在沉浸光感生效范围：灰色薄底 + 手写模糊兜可读
+    .backgroundColor('rgba(120, 120, 128, 0.22)')
+    .backdropBlur(18)
     .borderRadius(SWITCHER_ITEM_SIZE / 2 + SWITCHER_PADDING)
     .position({ x: CloudThemeToken.spacingSm, y: '50%' })
     .markAnchor({ x: 0, y: '50%' })
@@ -3477,7 +3475,6 @@ export struct TabPictures {
       .opacity(CloudThemeToken.zero)
   }
 
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder refreshingHintOverlay() {
     Column() {
       Row({ space: CloudThemeToken.spacingXl }) {
@@ -3492,8 +3489,8 @@ export struct TabPictures {
       .height(CloudThemeToken.iconBoxSm)
       .padding({ left: CloudThemeToken.spacingPanel, right: CloudThemeToken.spacingPage })
       .borderRadius(CloudThemeToken.controlRadiusRoundMd)
-      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-      .systemMaterial(CloudMaterial.panelMaterial())
+      // 同上：压在照片上的提示条，半透明 surface 底
+      .backgroundColor(CloudThemeToken.surfaceTranslucent)
       .justifyContent(FlexAlign.Center)
     }
     .width('100%')

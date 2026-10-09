@@ -1,4 +1,4 @@
-import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { deviceInfo, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
 import { window } from '@kit.ArkUI';
@@ -9,6 +9,7 @@ import { WindowMover } from '../utils/WindowMover';
 import UserDatabase from '../model/UserDatabase';
 import TransferDatabase from '../model/TransferDatabase';
 import UserPreferences from '../model/UserPreferences';
+import { AppSettings } from '../model/AppSettings';
 import { AvatarUtil } from '../utils/AvatarUtil';
 import { AppLockUtil } from '../utils/AppLockUtil';
 import { AppBoot } from '../utils/AppBoot';
@@ -91,9 +92,9 @@ export default class MainAbility extends UIAbility {
     // 首帧前只做必须项：主题（避免暗色模式闪白）与沉浸式系统栏（不 await，IPC 与首帧并行）
     StorageMigration.migrate(this.context)
     UserPreferences.init(this.context, Constant.USER_PREFERENCES)
-    const themeMode = this.applySavedThemeMode()
+    this.applySavedThemeMode()
     if (windowClass) {
-      this.applyImmersiveSystemBars(windowClass, themeMode)
+      this.applyImmersiveSystemBars(windowClass, AppSettings.isDarkEffective(this.context))
     }
     AppStorage.setOrCreate(Constant.APP_VERSION, VERSION_NAME)
     perfMark('preLoadContent')
@@ -258,7 +259,7 @@ export default class MainAbility extends UIAbility {
    * 颜色读 cloud_background 资源，跟随当前深浅色；切换主题时由 onConfigurationUpdate 重设。
    */
   @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
-  private applyWindowChromeColor(): void {
+  private applyWindowChromeColor(isDark?: boolean): void {
     if (deviceInfo.deviceType !== '2in1') {
       return
     }
@@ -268,10 +269,10 @@ export default class MainAbility extends UIAbility {
         return
       }
       // 应用用 setColorMode 自己决定深浅色，Ability 的 resourceManager 不跟着变（实测深色下仍解析出浅色），
-      // 故按保存的主题模式构造指定深浅色的 resourceManager 再取色
+      // 故按实际生效的深浅色构造指定深浅色的 resourceManager 再取色
       const rm = this.context.resourceManager
       const cfg = rm.getOverrideConfiguration()
-      cfg.colorMode = this.getSavedThemeMode() === Constant.APP_THEME_DARK
+      cfg.colorMode = (isDark ?? AppSettings.isDarkEffective(this.context))
         ? resourceManager.ColorMode.DARK : resourceManager.ColorMode.LIGHT
       const argb = rm.getOverrideResourceManager(cfg).getColorSync($r('app.color.cloud_background'))
       const color = '#' + (argb >>> 0).toString(16).padStart(8, '0').toUpperCase()
@@ -334,12 +335,23 @@ export default class MainAbility extends UIAbility {
   }
 
   onConfigurationUpdate(newConfig: Configuration): void {
-    // 应用内切换深浅色走 context.setColorMode，会回调到这里，标题栏颜色要跟着换
-    this.applyWindowChromeColor()
+    // 应用内切换深浅色走 context.setColorMode，跟随系统时系统切换也会回调到这里：
+    // 标题栏底色与状态栏图标深浅都要跟着换
+    // 跟随系统时以回调带来的 newConfig.colorMode 为准（context.config 此刻可能还是旧值）
+    const isDark = AppSettings.isDarkFor(newConfig.colorMode)
+    this.applyWindowChromeColor(isDark)
+    try {
+      const win = this.windowStage?.getMainWindowSync()
+      if (win) {
+        this.applyImmersiveSystemBars(win, isDark)
+      }
+    } catch (err) {
+      hilog.warn(0x0000, 'testTag', 'refresh system bars failed. Cause: %{public}s', (err as Error)?.message ?? '')
+    }
   }
 
-  private async applyImmersiveSystemBars(windowClass: window.Window, themeMode: string): Promise<void> {
-    const useLightIcon = themeMode === Constant.APP_THEME_DARK
+  private async applyImmersiveSystemBars(windowClass: window.Window, isDark: boolean): Promise<void> {
+    const useLightIcon = isDark
     try {
       // 2in1 隐藏标题栏必须在 loadContent 之后，见 applyTwoInOneDecor；这里只处理非 2in1
       if (deviceInfo.deviceType !== '2in1') {
@@ -361,23 +373,9 @@ export default class MainAbility extends UIAbility {
     }
   }
 
-  private getSavedThemeMode(): string {
-    return UserPreferences.getSync(
-      Constant.USER_PREFERENCES,
-      Constant.APP_THEME_MODE,
-      Constant.APP_THEME_LIGHT
-    ) as string
-  }
-
   applySavedThemeMode(): string {
-    const themeMode = this.getSavedThemeMode()
-    try {
-      this.context.setColorMode(themeMode === Constant.APP_THEME_DARK
-        ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
-        : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT)
-    } catch (err) {
-      hilog.error(0x0000, 'testTag', 'Failed to apply theme mode. Cause: %{public}s', JSON.stringify(err) ?? '');
-    }
+    const themeMode = AppSettings.getThemeMode()
+    AppSettings.applyTheme(this.context, themeMode)
     return themeMode
   }
 }

@@ -16,7 +16,8 @@ import { UserSwitchSheet } from '../components/UserSwitchSheet';
 import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { CloudIconButton } from '../components/CloudIconButton';
-import { TitleControlButton } from '../components/TitleControlButton';
+import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from '@kit.UIDesignKit';
+import { OtpInput } from '../components/OtpInput';
 import AppLogger from '../utils/AppLogger';
 import { WindowMover } from '../utils/WindowMover';
 import { common } from '@kit.AbilityKit';
@@ -28,14 +29,6 @@ function rowCommonStyle() {
   .width('100%')
   .height(CloudThemeToken.inputHeight)
   .alignItems(VerticalAlign.Center)
-}
-
-function buildOtpIndexes(): number[] {
-  const indexes: number[] = []
-  for (let index = 0; index < CloudThemeToken.loginOtpLength; index++) {
-    indexes.push(index)
-  }
-  return indexes
 }
 
 class ScannedLoginData {
@@ -154,7 +147,6 @@ export struct LoginPage {
   @State private otpCode: string = ''
   scroller: Scroller = new Scroller();
   private nextPage: string|null = Constant.HOME_PAGE
-  private readonly otpIndexes: number[] = buildOtpIndexes()
   private readonly otpInputId: string = 'loginOtpInput'
   private readonly usernameInputId: string = 'loginUsernameInput'
   private readonly passwordInputId: string = 'loginPasswordInput'
@@ -303,31 +295,114 @@ export struct LoginPage {
     this.address = normalized
   }
 
+  // 顶栏走 HdsNavigation 标题栏：返回键用 HDS 原生 backIcon（只在账号密码 / 两步验证步骤出现），
+  // 在沉浸光感生效范围内，效果随设备档位由系统自适应；标题栏透明，登录内容版式不变
   build() {
+    HdsNavigation() {
+      this.loginBody()
+    }
+    .width("100%")
+    .height("100%")
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(!this.websiteInvalid)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: ' '
+        },
+        backIcon: {
+          icon: $r('app.media.ic_back'),
+          action: () => {
+            this.onLoginBack()
+          }
+        },
+        stackBuilder: () => {
+          this.titleDragStrip()
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: false
+        },
+        originalStyle: {
+          contentStyle: {
+            // 置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应）；<26 实色
+            backIconStyle: {
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
+              iconColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      padding: {
+        start: LengthMetrics.vp(CloudThemeToken.spacingPage),
+        end: this.titleButtonInsetEnd > 0 ?
+          LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
+    })
+    .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
+      detents: [SheetSize.FIT_CONTENT],
+      title: { title: '选择账号' },
+      showClose: true,
+      backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+      systemMaterial: CloudMaterial.sheetMaterial(),
+      preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+      width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+      onDisappear: () => {
+        this.showUserSwitchSheet = false
+      }
+    })
+    .backgroundColor(CloudThemeToken.background)
+  }
+
+  private onLoginBack(): void {
+    if (this.needs2FA) {
+      this.needs2FA = false
+    } else {
+      this.loginTitle = $r('app.string.website_title')
+      this.websiteInvalid = false
+    }
+  }
+
+  // 2in1 隐藏系统标题栏后登录页没有其它可拖处：标题栏里返回键右侧整段作为窗口拖动带
+  @Builder titleDragStrip() {
+    Row() {
+      Blank()
+        .layoutWeight(1)
+        .height('100%')
+        .onTouch((event: TouchEvent) => {
+          WindowMover.onTouch(event)
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({
+      left: CloudThemeToken.spacingPage + CloudThemeToken.iconButtonSize + CloudThemeToken.spacingSection,
+      right: this.titleButtonInsetEnd
+    })
+  }
+
+  @Builder loginBody() {
     Stack({ alignContent: Alignment.Top }) {
       Row() {
         Column({ space: CloudThemeToken.loginPageGap }) {
         Column() {
-          Row() {
-            TitleControlButton({
-              icon: $r('app.media.ic_back'),
-              label: '返回',
-              onAction: () => {
-                if (this.needs2FA) {
-                  this.needs2FA = false
-                } else {
-                  this.loginTitle = $r('app.string.website_title')
-                  this.websiteInvalid = false
-                }
-              }
-            })
-          }
-          .height(CloudThemeToken.loginBackRowHeight)
-          .margin({ top: CloudThemeToken.loginBackTopMargin })
-          .width('100%')
-          .justifyContent(FlexAlign.Start)
-          .visibility(this.websiteInvalid ? Visibility.Visible : Visibility.Hidden)
-          .animation({ duration: CloudThemeToken.loginTransitionDuration })
+          // 原返回键行，返回键已移到 HDS 标题栏；保留同高占位，登录内容版式不变
+          Row()
+            .height(CloudThemeToken.loginBackRowHeight)
+            .margin({ top: CloudThemeToken.loginBackTopMargin })
+            .width('100%')
 
           Column({ space: CloudThemeToken.loginContentGap }) {
             // 显示login及标题
@@ -384,33 +459,9 @@ export struct LoginPage {
       .height("100%")
       .backgroundColor(CloudThemeToken.background)
       .justifyContent(FlexAlign.Center)
-
-      // 2in1 隐藏系统标题栏后登录页没有其它可拖处：顶部整宽留一条拖动带，
-      // 止于返回键上沿（返回键 40vp 在 30vp 行内居中，向上溢出 5vp），不挡返回键
-      if (this.titleButtonInsetEnd > 0) {
-        Column()
-          .width('100%')
-          .height(CloudThemeToken.loginPageVerticalPadding + CloudThemeToken.loginBackTopMargin -
-            (CloudThemeToken.iconButtonSize - CloudThemeToken.loginBackRowHeight) / CloudThemeToken.halfDivisor)
-          .onTouch((event: TouchEvent) => {
-            WindowMover.onTouch(event)
-          })
-      }
     }
     .width("100%")
     .height("100%")
-    .bindSheet($$this.showUserSwitchSheet, this.userSwitchSheet(), {
-      detents: [SheetSize.FIT_CONTENT],
-      title: { title: '选择账号' },
-      showClose: true,
-      backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
-      systemMaterial: CloudMaterial.sheetMaterial(),
-      preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
-      width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
-      onDisappear: () => {
-        this.showUserSwitchSheet = false
-      }
-    })
   }
 
   private websiteTest(allowHttpFallback: boolean = false, focusNextStep: boolean = false) {
@@ -1044,52 +1095,13 @@ export struct LoginPage {
         .width('100%')
         .textAlign(TextAlign.Center)
 
-      Stack() {
-        Row({ space: CloudThemeToken.loginOtpCellGap }) {
-          ForEach(this.otpIndexes, (item: number) => {
-            Column() {
-              Text(item < this.otpCode.length ? this.otpCode[item] : '')
-                .fontSize(CloudThemeToken.loginOtpCellTextSize)
-                .fontWeight(FontWeight.Bold)
-            }
-            .width(CloudThemeToken.loginOtpCellWidth)
-            .height(CloudThemeToken.loginOtpCellHeight)
-            .justifyContent(FlexAlign.Center)
-            .alignItems(HorizontalAlign.Center)
-            .borderRadius(CloudThemeToken.otpCellRadius)
-            .backgroundColor(CloudThemeToken.surface)
-            .border({
-              width: CloudThemeToken.loginOtpBorderWidth,
-              color: this.otpCode.length === item
-                ? CloudThemeToken.primary
-                : CloudThemeToken.transparent
-            })
-          }, (item: number) => item.toString())
+      OtpInput({
+        code: $otpCode,
+        inputId: this.otpInputId,
+        onComplete: () => {
+          this.submitOtp()
         }
-        .justifyContent(FlexAlign.Center)
-        .width('100%')
-
-        TextInput()
-          .id(this.otpInputId)
-          .type(InputType.Number)
-          .maxLength(CloudThemeToken.loginOtpLength)
-          .width('100%')
-          .height(CloudThemeToken.loginOtpCellHeight)
-          .opacity(CloudThemeToken.invisibleOpacity)
-          .defaultFocus(true)
-          .enterKeyType(EnterKeyType.Go)
-          .onChange((value) => {
-            this.otpCode = value
-            if (value.length === CloudThemeToken.loginOtpLength) {
-              this.submitOtp()
-            }
-          })
-          .onSubmit(() => {
-            this.submitOtp()
-          })
-      }
-      .width('100%')
-      .height(CloudThemeToken.loginOtpCellHeight)
+      })
     }
   }
 

@@ -11,6 +11,8 @@ import { ImagePreviewPage } from './ImagePreview';
 import { VideoPreviewPage } from './VideoPreview';
 import { TextPreviewPage } from './TextPreview';
 import { AboutPage } from './AboutPage';
+import { SettingsPage } from './SettingsPage';
+import { AccountSecurityPage } from './AccountSecurityPage';
 import { FileSearchPage } from './FileSearchPage';
 import { PhotoLocalPreviewPage } from './PhotoLocalPreview';
 import { WindowControls } from '../components/WindowControls';
@@ -410,6 +412,24 @@ struct Index {
           .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
             .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
         .zIndex(CloudThemeToken.overlayZIndex)
+    } else if (this.overlayPage === Constant.SETTINGS_PAGE) {
+      SettingsPage()
+        .width('100%')
+        .height('100%')
+        .transition(TransitionEffect.OPACITY
+          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
+            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .zIndex(CloudThemeToken.overlayZIndex)
+    } else if (this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE) {
+      AccountSecurityPage()
+        .width('100%')
+        .height('100%')
+        .transition(TransitionEffect.OPACITY
+          .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: CloudThemeToken.iconBoxLg })
+            .animation({ duration: CloudThemeToken.defaultAnimationDuration, curve: Curve.EaseOut })))
+        .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.PHOTO_LOCAL_PREVIEW_PAGE) {
       PhotoLocalPreviewPage({ routeParam: this.photoLocalPreviewParam })
         .width('100%')
@@ -466,6 +486,32 @@ struct Index {
       NavDestination() {
         Stack() {
           AboutPage()
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.background)
+      }
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.background)
+    } else if (name === Constant.SETTINGS_PAGE) {
+      NavDestination() {
+        Stack() {
+          SettingsPage()
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(CloudThemeToken.background)
+      }
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(CloudThemeToken.background)
+    } else if (name === Constant.ACCOUNT_SECURITY_PAGE) {
+      NavDestination() {
+        Stack() {
+          AccountSecurityPage()
         }
         .width('100%')
         .height('100%')

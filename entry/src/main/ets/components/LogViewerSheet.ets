@@ -1,4 +1,4 @@
-import { BusinessError, SuppressWarnings, SuppressWarningsType } from '@kit.BasicServicesKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { common } from '@kit.AbilityKit';
 import { picker } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
@@ -65,8 +65,6 @@ export struct LogViewerSheet {
     .justifyContent(FlexAlign.SpaceBetween)
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder toolButton(title: string, icon: Resource, disabled: boolean, onTap: () => void) {
     Row({ space: CloudThemeToken.spacingXs }) {
       Image(icon)
@@ -85,7 +83,6 @@ export struct LogViewerSheet {
     .alignItems(VerticalAlign.Center)
     .borderRadius(CloudThemeToken.controlRadiusLg)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
     .opacity(disabled ? CloudThemeToken.disabledOpacity : CloudThemeToken.fullOpacity)
     .onClick(() => {
@@ -95,8 +92,6 @@ export struct LogViewerSheet {
     })
   }
 
-  // systemMaterial 版本守卫在 CloudMaterial 内部，编译器看不见，此处屏蔽兼容性告警
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
   @Builder logBody() {
     Stack() {
       if (this.logEmpty) {
@@ -133,7 +128,6 @@ export struct LogViewerSheet {
     .height(CloudThemeToken.logViewerBodyHeight)
     .borderRadius(CloudThemeToken.cardRadius)
     .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-    .systemMaterial(CloudMaterial.cardMaterial())
     .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
   }
 

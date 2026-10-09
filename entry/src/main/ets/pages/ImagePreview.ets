@@ -12,7 +12,6 @@ import { common } from "@kit.AbilityKit";
 import { HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from "@kit.UIDesignKit";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
-import { SuppressWarnings, SuppressWarningsType } from "@kit.BasicServicesKit";
 import { FileSystemUtil } from "../utils/FileSystemUtil";
 import { CloudRouter } from "../utils/CloudRouter";
 import AppLogger from "../utils/AppLogger";
@@ -293,13 +292,13 @@ export struct ImagePreviewPage {
             titleStyle: {
               mainTitleColor: CloudThemeToken.textPrimary
             },
-            // 高算力档置透明露出 HDS 材质的通透玻璃，与 TitleControlButton 一致；其余档实色
+            // 置透明露出 HDS 标题栏材质（效果随设备档位由系统自适应）；<26 实色
             backIconStyle: {
-              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle),
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
               iconColor: CloudThemeToken.textPrimary
             },
             menuStyle: {
-              backgroundColor: CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle),
+              backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surfaceSubtle),
               iconColor: CloudThemeToken.textPrimary
             }
           }
@@ -356,9 +355,8 @@ export struct ImagePreviewPage {
     }
   }
 
-  // 翻页圆钮：容器（Button 挂不上材质）+ titleControlMaterial，与标题栏按钮同款、跟随主题
-  // （预览页底色已跟随主题，白箭头深玻璃在亮色浅底上会看不见）。
-  @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
+  // 宽屏翻页圆钮：内容区、不在沉浸光感生效范围，用与文件页上传 FAB 同款磨砂（淡染 + 强背景模糊 + 光边 + 投影），
+  // 图标跟随主题（预览页底色已跟随主题，白箭头深玻璃在亮色浅底上会看不见）
   @Builder navArrowButton(isNext: boolean) {
     Stack() {
       SymbolGlyph(isNext ? $r('sys.symbol.chevron_right') : $r('sys.symbol.chevron_left'))
@@ -370,8 +368,10 @@ export struct ImagePreviewPage {
     .height(CloudThemeToken.imagePreviewArrowButtonSize)
     .borderRadius(CloudThemeToken.imagePreviewArrowButtonSize / CloudThemeToken.halfDivisor)
     .clip(true)
-    .backgroundColor(CloudMaterial.controlSurface(CloudThemeToken.surfaceSubtle))
-    .systemMaterial(CloudMaterial.titleControlMaterial())
+    .backgroundColor(CloudThemeToken.controlFrost)
+    .backdropBlur(CloudThemeToken.controlFrostBlur)
+    .border({ width: CloudThemeToken.controlRimWidth, color: CloudThemeToken.controlRim })
+    .shadow(ShadowStyle.OUTER_DEFAULT_SM)
     .hoverEffect(HoverEffect.Highlight)
     .enabled(this.canNavigate(isNext))
     .opacity(this.canNavigate(isNext) ? 1 : 0.35)

@@ -236,6 +236,10 @@ class Constant {
 
   PHOTO_LOCAL_PREVIEW_PAGE = 'PhotoLocalPreviewPage'
 
+  SETTINGS_PAGE = 'SettingsPage'
+
+  ACCOUNT_SECURITY_PAGE = 'AccountSecurityPage'
+
   ACCESS_INTERCEPTOR = 'AccessInterceptor'
 
   CURRENT_PATH = 'currentPath'
@@ -290,6 +294,8 @@ class Constant {
   APP_THEME_LIGHT: string = 'light';
 
   APP_THEME_DARK: string = 'dark';
+
+  APP_THEME_SYSTEM: string = 'system';
 
   PRIVACY_SYSTEM_AUTH_ENABLED: string = 'privacy_system_auth_enabled';
 

@@ -206,6 +206,13 @@ export class CloudRouter {
     CloudRouter.homeBackHandler = handler;
   }
 
+  /** 只在当前处理器仍是自己注册的那个时才清掉，避免卸载时抹掉别的 Tab 刚注册的处理器 */
+  static clearHomeBackHandler(handler: () => boolean): void {
+    if (CloudRouter.homeBackHandler === handler) {
+      CloudRouter.homeBackHandler = undefined;
+    }
+  }
+
   static setHomeBackEnabled(enabled: boolean): void {
     CloudRouter.homeBackEnabled = enabled;
   }

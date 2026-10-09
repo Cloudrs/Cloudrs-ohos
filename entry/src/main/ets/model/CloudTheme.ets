@@ -179,7 +179,6 @@ export class CloudThemeToken {
   static readonly twoInOneDecorPaddingVp: number = 5.4
   // 平板/折叠屏全屏下 status bar 高度的保底值，避免 topRectHeight 拿不到时控制按钮跑到状态栏
   static readonly statusBarFallbackHeight: number = 28
-  static readonly smallIconButtonSize: number = 36
   static readonly iconButtonSize: number = 40
   static readonly hdsIconButtonLightHeight: number = 18
   static readonly hdsIconButtonLightIntensity: number = 0.42
@@ -422,6 +421,8 @@ export class CloudThemeToken {
   static readonly loginTipsHorizontalMargin: number = 10
   static readonly loginFooterGap: number = 12
   static readonly loginLogoWidth: number = 180
+  // 键盘弹出时的 logo 宽度：腾出高度，保证登录按钮在键盘上方完整可见，余下空间再放底部入口与隐私勾选
+  static readonly loginLogoCompactWidth: number = 56
   static readonly loginTitleSize: number = 20
   static readonly loginContinueTopMargin: number = 10
   static readonly loginProtocolMenuWidth: number = 200
@@ -442,8 +443,13 @@ export class CloudThemeToken {
   static readonly loginInputGroupGap: number = 10
   static readonly loginPasswordTransitionOffsetY: number = -30
   static readonly loginInputDisappearDuration: number = 150
-  static readonly loginFooterButtonGap: number = 10
-  static readonly loginFooterIconPadding: number = 5
+  // 底部「扫码登录 / 已保存账号」：线性图标 + 文字，与我的页图标同一套
+  static readonly loginFooterButtonGap: number = 28
+  static readonly loginFooterIconSize: number = 24
+  static readonly loginFooterLabelGap: number = 4
+  static readonly loginFooterItemPadding: number = 6
+  // 键盘弹出时底部入口 / 隐私勾选放不下而收起时，向下移出的距离
+  static readonly loginPrivacyExitOffsetY: number = 24
   static readonly loginPrivacyTextSize: number = 11
   static readonly loginPrivacyLinkHeight: number = 13
   static readonly loginPrivacyCheckboxSize: number = 16

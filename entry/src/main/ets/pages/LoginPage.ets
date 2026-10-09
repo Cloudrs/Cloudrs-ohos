@@ -1,4 +1,4 @@
-import { LengthMetrics, window } from '@kit.ArkUI'
+import { KeyboardAvoidMode, LengthMetrics, window } from '@kit.ArkUI'
 import { DbUserInfo, SiteConfig, UserInfo, TwoFactorCallback } from '../model/net/ApiTypes';
 import { showToastTips, ToastType } from '../utils/ToastUtil';
 import Constant from '../model/Constant';
@@ -15,7 +15,6 @@ import { AvatarUtil } from '../utils/AvatarUtil';
 import { UserSwitchSheet } from '../components/UserSwitchSheet';
 import scanBarcode from '@hms.core.scan.scanBarcode';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { CloudIconButton } from '../components/CloudIconButton';
 import { DividerShowType, HdsNavigation, HdsNavigationTitleMode, hdsMaterial } from '@kit.UIDesignKit';
 import { OtpInput } from '../components/OtpInput';
 import AppLogger from '../utils/AppLogger';
@@ -129,8 +128,14 @@ export struct LoginPage {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @State protocolIndex: number = Constant.PROTOCOL_HTTPS_INDEX
   @State protocol: string = Constant.PROTOCOL_HTTPS_SCHEME
-  @State scrollHeight: number = 0;
   @State keyHeight: number = 0;
+  // 键盘弹出时底部显隐用的测量值（vp）：未弹键盘时的页面总高、主内容去掉 logo 的高度、两块底部内容的高度
+  @State private loginBodyHeight: number = 0
+  @State private contentNoLogoHeight: number = 0
+  @State private footerIconsHeight: number = 0
+  @State private privacyHeight: number = 0
+  private loginContentHeight: number = 0
+  private loginLogoHeight: number = 0
   @State websiteInvalid: boolean = false;
   @State loginInvalid: boolean = false;
   @State needs2FA: boolean = false;
@@ -151,6 +156,8 @@ export struct LoginPage {
   private readonly usernameInputId: string = 'loginUsernameInput'
   private readonly passwordInputId: string = 'loginPasswordInput'
   private scanShouldAutoLogin: boolean = false
+  private keyboardWindow?: window.Window
+  private avoidAreaListener?: (data: window.AvoidAreaOptions) => void
   private pendingPrivacyAgree: (() => void) | undefined = undefined
   private privacyDialogController: CustomDialogController = new CustomDialogController({
     builder: PrivacyConfirmDialog({
@@ -171,6 +178,34 @@ export struct LoginPage {
 
   private isKeyboardVisible(): boolean {
     return this.keyHeight > CloudThemeToken.zero
+  }
+
+  // logo 随键盘缩放，单独扣掉；剩下的部分只随登录步骤变化，键盘弹出前后不变
+  private updateContentNoLogoHeight(): void {
+    this.contentNoLogoHeight = Math.max(CloudThemeToken.zero, this.loginContentHeight - this.loginLogoHeight)
+  }
+
+  // 键盘弹出后（页面缩到键盘上方、logo 为紧凑尺寸）主内容下方还剩的高度
+  private keyboardFreeHeight(): number {
+    const bodyInner = this.loginBodyHeight - this.keyHeight -
+      CloudThemeToken.loginPageVerticalPadding - CloudThemeToken.spacingSection
+    return bodyInner - this.contentNoLogoHeight - CloudThemeToken.loginLogoCompactWidth - CloudThemeToken.loginPageGap
+  }
+
+  private shouldShowFooterIcons(): boolean {
+    return !this.isKeyboardVisible() || this.keyboardFreeHeight() >= this.footerIconsHeight
+  }
+
+  private shouldShowPrivacy(): boolean {
+    return !this.isKeyboardVisible() ||
+      this.keyboardFreeHeight() >= this.footerIconsHeight + CloudThemeToken.loginFooterGap + this.privacyHeight
+  }
+
+  // 底部两块的进出场：淡出时向下移出，键盘收起时从下方淡入回来
+  private footerItemTransition(): TransitionEffect {
+    return TransitionEffect.OPACITY
+      .combine(TransitionEffect.translate({ y: CloudThemeToken.loginPrivacyExitOffsetY }))
+      .animation({ duration: CloudThemeToken.loginTransitionDuration })
   }
 
   private requestOtpFocus(attempt: number = CloudThemeToken.zero): void {
@@ -209,24 +244,28 @@ export struct LoginPage {
       return;
     }
 
+    // 默认的键盘避让只保证获得焦点的输入框露出来，下面的登录按钮会被挡住一截（OTP 一步最明显）；
+    // 登录页期间改为 RESIZE：页面缩到键盘上方，配合键盘弹出时缩小 logo，按钮始终完整可见。离开时在 aboutToDisappear 恢复
+    uiContext.setKeyboardAvoidMode(KeyboardAvoidMode.RESIZE);
+
     window.getLastWindow(hostContext).then(currentWindow => {
       // 设置窗口的布局为沉浸式布局
       try {
         currentWindow.setWindowLayoutFullScreen(true);
-        let property = currentWindow.getWindowProperties();
+        // 页面出现时键盘可能已经弹着
+        const avoidArea = currentWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_KEYBOARD);
+        this.keyHeight = uiContext.px2vp(avoidArea.bottomRect.height);
 
-        // 初始化窗口高度
-        let avoidArea = currentWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_KEYBOARD);
-        this.scrollHeight = uiContext.px2vp(property.windowRect.height - avoidArea.bottomRect.height);
-
-        // 监听软键盘的隐藏和显示
-        currentWindow.on('avoidAreaChange', data => {
+        // 监听软键盘的隐藏和显示；logo 缩放与底部区域显隐一起过渡
+        this.avoidAreaListener = (data: window.AvoidAreaOptions) => {
           if (data.type == window.AvoidAreaType.TYPE_KEYBOARD) {
-            this.keyHeight = uiContext.px2vp(data.area.bottomRect.height);
-            this.scrollHeight = uiContext.px2vp(currentWindow.getWindowProperties().windowRect.height - data.area.bottomRect.height);
-            return;
+            uiContext.animateTo({ duration: CloudThemeToken.loginTransitionDuration, curve: Curve.EaseOut }, () => {
+              this.keyHeight = uiContext.px2vp(data.area.bottomRect.height);
+            });
           }
-        })
+        };
+        currentWindow.on('avoidAreaChange', this.avoidAreaListener);
+        this.keyboardWindow = currentWindow;
       } catch (err) {
         AppLogger.error('LoginPage', `Window layout init failed: ${(err as Error)?.message ?? err}`)
       }
@@ -241,6 +280,20 @@ export struct LoginPage {
     }
     this.refreshActiveUser()
     this.prefillActiveUserForRelogin()
+  }
+
+  aboutToDisappear(): void {
+    // 键盘避让是整个窗口的设置，离开登录页恢复系统默认
+    this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
+    if (this.keyboardWindow && this.avoidAreaListener) {
+      try {
+        this.keyboardWindow.off('avoidAreaChange', this.avoidAreaListener)
+      } catch (err) {
+        AppLogger.warn('LoginPage', `off avoidAreaChange failed: ${(err as Error)?.message ?? err}`)
+      }
+    }
+    this.keyboardWindow = undefined
+    this.avoidAreaListener = undefined
   }
 
   private refreshActiveUser(): void {
@@ -430,18 +483,45 @@ export struct LoginPage {
           }
           .width('100%')
         }
+        .onAreaChange((_oldArea: Area, newArea: Area) => {
+          this.loginContentHeight = Number(newArea.height)
+          this.updateContentNoLogoHeight()
+        })
 
-        if (!this.isKeyboardVisible()) {
-          Column({ space: CloudThemeToken.loginFooterGap }) {
-            // 扫描添加及历史账户
-            this.buttonScanAndUsers()
-
-            // 隐私条款声明
-            this.privacyText()
+        // 键盘弹出时页面缩到键盘上方：底部两块按剩余空间决定显隐（各步骤内容高度、各机型键盘高度都不同），
+        // 放得下就贴在键盘上方填掉空白，放不下就向下淡出收起
+        Column({ space: CloudThemeToken.loginFooterGap }) {
+          // 扫描添加及历史账户
+          if (this.shouldShowFooterIcons()) {
+            Column() {
+              this.buttonScanAndUsers()
+            }
+            .onAreaChange((_oldArea: Area, newArea: Area) => {
+              this.footerIconsHeight = Number(newArea.height)
+            })
+            .transition(this.footerItemTransition())
           }
-          .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginTransitionDuration }))
+
+          // 隐私条款声明
+          if (this.shouldShowPrivacy()) {
+            Column() {
+              this.privacyText()
+            }
+            .onAreaChange((_oldArea: Area, newArea: Area) => {
+              this.privacyHeight = Number(newArea.height)
+            })
+            .transition(this.footerItemTransition())
+          }
         }
+        // 固定整行宽：某一块收起时本列若随内容缩窄，正在淡出的那块会跟着重排，看起来像向右移出
+        .width('100%')
         }
+        .onAreaChange((_oldArea: Area, newArea: Area) => {
+          // 只记未弹键盘时的总高；弹键盘后的可用高按「总高 − 键盘高」推算，切换那一刻不会因测量滞后而闪一下
+          if (!this.isKeyboardVisible()) {
+            this.loginBodyHeight = Number(newArea.height)
+          }
+        })
         .height("100%")
         .width(this.sheetLayoutWidth >= CloudThemeToken.loginContentMaxWidth
           ? CloudThemeToken.loginContentMaxWidth
@@ -450,7 +530,8 @@ export struct LoginPage {
           top: CloudThemeToken.loginPageVerticalPadding,
           left: CloudThemeToken.pagePadding,
           right: CloudThemeToken.pagePadding,
-          bottom: this.keyHeight ? CloudThemeToken.zero
+          // 键盘弹出时页面已缩到键盘上方，底部只留一道间隙，图标不贴着键盘
+          bottom: this.isKeyboardVisible() ? CloudThemeToken.spacingSection
             : CloudThemeToken.loginPageVerticalPadding + this.bottomRectHeight
         })
         .justifyContent(FlexAlign.SpaceBetween)
@@ -1004,7 +1085,12 @@ export struct LoginPage {
   @Builder showLoginHeader() {
     Image(this.websiteLogo)
       .draggable(false)
-      .width(CloudThemeToken.loginLogoWidth)
+      // 键盘弹出时缩小，给输入框和登录按钮让出高度
+      .width(this.isKeyboardVisible() ? CloudThemeToken.loginLogoCompactWidth : CloudThemeToken.loginLogoWidth)
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.loginLogoHeight = Number(newArea.height)
+        this.updateContentNoLogoHeight()
+      })
 
     Text(this.loginTitle)
       .fontSize(CloudThemeToken.loginTitleSize)
@@ -1059,13 +1145,14 @@ export struct LoginPage {
 
   @Builder showWebsiteInput() {
     Row() {
-      Image($r("app.media.ic_worldclock_fill"))
+      Image($r("app.media.ic_login_globe"))
         .width(CloudThemeToken.loginInputIconSize)
         .margin({
           left: CloudThemeToken.loginWebsiteIconHorizontalMargin,
           right: CloudThemeToken.loginWebsiteIconHorizontalMargin
         })
-        .fillColor(CloudThemeToken.primary)
+        .fillColor(CloudThemeToken.textSecondary)
+        .draggable(false)
 
       Text(this.protocol)
         .fontColor(CloudThemeToken.textSecondary)
@@ -1109,13 +1196,13 @@ export struct LoginPage {
     Column({ space: CloudThemeToken.loginInputGroupGap }) {
       // 用户名
       Row() {
-        Image($r("app.media.ic_envelope"))
+        Image($r("app.media.ic_login_mail"))
           .width(CloudThemeToken.loginInputIconSize)
           .margin({
             left: CloudThemeToken.loginInputIconHorizontalMargin,
             right: CloudThemeToken.loginInputIconHorizontalMargin
           })
-          .fillColor(CloudThemeToken.primary)
+          .fillColor(CloudThemeToken.textSecondary)
           .draggable(false)
 
         TextInput({ placeholder: $r("app.string.login_user"), text: this.username })
@@ -1139,13 +1226,13 @@ export struct LoginPage {
 
       // 密码
       Row() {
-        Image($r("app.media.ic_key_horizontal"))
+        Image($r("app.media.ic_login_lock"))
           .width(CloudThemeToken.loginInputIconSize)
           .margin({
             left: CloudThemeToken.loginInputIconHorizontalMargin,
             right: CloudThemeToken.loginInputIconHorizontalMargin
           })
-          .fillColor(CloudThemeToken.primary)
+          .fillColor(CloudThemeToken.textSecondary)
           .draggable(false)
 
         TextInput({ placeholder: $r("app.string.login_password"), text: this.password })
@@ -1171,31 +1258,36 @@ export struct LoginPage {
       TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loginInputDisappearDuration })))
   }
 
+  // 底部入口：与我的页同一套线性图标，不加底色，下方配文字说明用途
+  @Builder footerEntry(icon: Resource, label: string, onAction: () => void) {
+    Column({ space: CloudThemeToken.loginFooterLabelGap }) {
+      Image(icon)
+        .width(CloudThemeToken.loginFooterIconSize)
+        .height(CloudThemeToken.loginFooterIconSize)
+        .fillColor(CloudThemeToken.textPrimary)
+        .draggable(false)
+      Text(label)
+        .fontSize(CloudThemeToken.textSizeSmall)
+        .fontColor(CloudThemeToken.textSecondary)
+    }
+    .padding(CloudThemeToken.loginFooterItemPadding)
+    .borderRadius(CloudThemeToken.controlRadius)
+    .alignItems(HorizontalAlign.Center)
+    .hoverEffect(HoverEffect.Highlight)
+    .clickEffect({ level: ClickEffectLevel.LIGHT })
+    .accessibilityText(label)
+    .onClick(() => onAction())
+  }
+
   @Builder buttonScanAndUsers() {
     Row({ space: CloudThemeToken.loginFooterButtonGap }) {
-      CloudIconButton({
-        icon: $r("app.media.ic_line_viewfinder"),
-        buttonSize: CloudThemeToken.smallIconButtonSize,
-        iconSize: CloudThemeToken.smallIconButtonSize,
-        iconPadding: CloudThemeToken.loginFooterIconPadding,
-        buttonBackground: CloudThemeToken.surface,
-        iconColor: CloudThemeToken.primary,
-        onAction: () => {
-          this.startScanLogin()
-        }
+      this.footerEntry($r("app.media.ic_login_scan"), '扫码登录', () => {
+        this.startScanLogin()
       })
 
-      CloudIconButton({
-        icon: $r("app.media.ic_person_2"),
-        buttonSize: CloudThemeToken.smallIconButtonSize,
-        iconSize: CloudThemeToken.smallIconButtonSize,
-        iconPadding: CloudThemeToken.loginFooterIconPadding,
-        buttonBackground: CloudThemeToken.surface,
-        iconColor: CloudThemeToken.textSecondary,
-        onAction: () => {
-          this.refreshActiveUser()
-          this.showUserSwitchSheet = true
-        }
+      this.footerEntry($r("app.media.ic_mine_switch_account"), '已保存账号', () => {
+        this.refreshActiveUser()
+        this.showUserSwitchSheet = true
       })
     }
   }

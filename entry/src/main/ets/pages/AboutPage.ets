@@ -1,6 +1,5 @@
 import { common } from "@kit.AbilityKit";
 import { BusinessError } from "@kit.BasicServicesKit";
-import { SubPageScaffold } from "../components/SubPageScaffold";
 import Constant from "../model/Constant";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from '../model/CloudMaterial';
@@ -15,20 +14,15 @@ const ABOUT_TAG: string = 'AboutPage'
 const GITHUB_URL: string = 'https://github.com/Cloudrs/Cloudrs-ohos'
 const GITEE_URL: string = 'https://gitee.com/larriti/cloudrs-ohos'
 
+/** 关于：「我的」页里以半模态打开（宽屏为居中弹窗），与反馈一致 */
 @Component
 export struct AboutPage {
-  // 宽屏在「我的」内容区内打开时由 TabMine 传入：标题栏左内边距（让出悬浮折叠键）与返回回调；
-  // 未传时 -1 / undefined，走默认 pagePadding 与 CloudRouter.pop()
-  @Prop titleStartPadding: number = -1
-  onBack?: () => void
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
-  @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.APP_VERSION) appVersion: string = '';
   @StorageProp(Constant.CLOUD_COOKIE) cloudCookie: string = '';
   @State cloudApiVersion: string = ''
   /** 版本号那一行是否正显示构建来源，点一下切换 */
   @State showGitCommit: boolean = false
-  embedded: boolean = false
 
   aboutToAppear(): void {
     this.cloudApiVersion = this.initialApiVersionText()
@@ -68,18 +62,6 @@ export struct AboutPage {
   }
 
   build() {
-    if (this.embedded) {
-      this.aboutBody()
-    } else {
-      // 独立成页（宽屏「我的」内容区内 / 路由页）：HDS 标题栏骨架，正文从标题栏下沿起排。
-      // logo 与应用名固定不滚（见 aboutBody），不绑标题栏滚动模糊
-      SubPageScaffold({ title: $r('app.string.about'), startPadding: this.titleStartPadding, onBackClick: this.onBack }) {
-        this.aboutBody()
-      }
-    }
-  }
-
-  @Builder aboutBody() {
     // 矮屏或大字体下本页装不下（半模态的 MEDIUM 挡位尤其明显），底部会被裁掉。
     // 只让信息卡与备案号那段滚动：标题栏、logo 与应用名是本页的身份，滚走了就
     // 不知道自己在看什么。底部安全距挂在最外层，滚动视口本身即止步于导航条之上，
@@ -123,16 +105,11 @@ export struct AboutPage {
     }
     .width('100%')
     .height('100%')
-    // 独立成页时顶部让出 HDS 标题栏；导航条高度必须原样留出，上面只压一道细缝：
-    // 本页最后一行是备案号，不是可点控件，不需要留出触摸安全距
-    .padding({
-      top: this.embedded ? CloudThemeToken.zero : CloudThemeToken.hdsTitleBarHeight(this.topRectHeight),
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSm
-    })
+    // 导航条高度必须原样留出，上面只压一道细缝：本页最后一行是备案号，不是可点控件，不需要留出触摸安全距
+    .padding({ bottom: this.bottomRectHeight + CloudThemeToken.spacingSm })
     .alignItems(HorizontalAlign.Center)
-    // 作为 sheet 内嵌时让位给系统材质；独立成页时仍要实色底
-    .backgroundColor(this.embedded ? CloudMaterial.materialSurface(CloudThemeToken.background) :
-    CloudThemeToken.background)
+    // 让位给半模态的系统材质
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder logoTitle() {

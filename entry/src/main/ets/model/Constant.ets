@@ -232,8 +232,6 @@ class Constant {
 
   FILE_SEARCH_PAGE = 'FileSearchPage'
 
-  ABOUT_PAGE = 'AboutPage'
-
   PHOTO_LOCAL_PREVIEW_PAGE = 'PhotoLocalPreviewPage'
 
   SETTINGS_PAGE = 'SettingsPage'

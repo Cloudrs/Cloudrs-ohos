@@ -1,4 +1,7 @@
 import { DbUserInfo } from "../../model/net/ApiTypes";
+import {
+  DividerShowType, HdsNavigation, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
+} from "@kit.UIDesignKit";
 import Constant from "../../model/Constant";
 import UserPreferences from "../../model/UserPreferences";
 import { CloudThemeToken } from "../../model/CloudTheme";
@@ -48,7 +51,7 @@ export struct TabMine {
   // 我的页顶部让位（避开折叠键）；@StorageProp 只在方法里读不会被 build 追踪，故用 @Watch 驱动 @State
   @State mineTopPadding: number = 0
   @State mineTitleLeftPadding: number = CloudThemeToken.pagePadding
-  // 内容区内二级页（SETTINGS_PAGE / ACCOUNT_SECURITY_PAGE / ABOUT_PAGE / PHOTO_BACKUP_PAGE），空串为我的页本身
+  // 内容区内二级页（SETTINGS_PAGE / ACCOUNT_SECURITY_PAGE / PHOTO_BACKUP_PAGE），空串为我的页本身
   @State subPage: string = ''
   // 二级页标题栏左内边距：侧栏收起时让出悬浮折叠键
   @State subTitleStartPadding: number = CloudThemeToken.pagePadding
@@ -142,14 +145,12 @@ export struct TabMine {
       SettingsPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
     } else if (this.subPage === Constant.ACCOUNT_SECURITY_PAGE) {
       AccountSecurityPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
-    } else if (this.subPage === Constant.ABOUT_PAGE) {
-      AboutPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
     } else if (this.subPage === Constant.PHOTO_BACKUP_PAGE) {
       PhotoBackupPage({ titleStartPadding: this.subTitleStartPadding, onBack: () => this.closeSubPage() })
     }
   }
 
-  // 2in1：与文件页「存储」、相册页「相册」同一行位置的固定标题，兼作窗口拖动区（行内无按钮）
+  // 2in1：与文件页「存储」、相册页「相册」同一行位置的标题，放在 HDS 标题栏里，兼作窗口拖动区（行内无按钮）
   @Builder mineTitleRow() {
     Row() {
       Text('我的')
@@ -159,47 +160,105 @@ export struct TabMine {
         .maxLines(1)
     }
     .width('100%')
-    .height(CloudThemeToken.titleRowHeight)
+    .height('100%')
     .padding({
       left: this.mineTitleLeftPadding,
       right: CloudThemeToken.pagePadding + this.titleButtonInsetEnd
     })
     .alignItems(VerticalAlign.Center)
-    .backgroundColor(CloudThemeToken.background)
     .onTouch((event: TouchEvent) => {
       WindowMover.onTouch(event)
     })
+  }
+
+  // 内容顶部让位：2in1 让出 HDS 标题栏（内容从标题栏底下滚过）；其余设备按折叠键让位
+  private getContentTopPadding(): number {
+    return this.titleButtonInsetEnd > 0 ? CloudThemeToken.rowHeight5xl + CloudThemeToken.spacingXs : this.mineTopPadding
+  }
+
+  @Builder mineContent() {
+    // 自定义组件尾随闭包后不能再链属性，故外包一层
+    Column() {
+      CloudScaffold({
+        scroller: this.scroller,
+        topPadding: this.getContentTopPadding(),
+        bottomPadding: CloudThemeToken.pageBottomPadding
+      }) {
+        Column({ space: CloudThemeToken.sectionGap }) {
+          MineProfileCard({ onOpen: () => this.openSubPage(Constant.ACCOUNT_SECURITY_PAGE) })
+          MineStorageCard()
+          this.entryGroups()
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  // 2in1：与文件页、相册页、下载页一样走 HDS 标题栏，上滑时内容从标题栏底下穿过、标题栏渐变出沉浸模糊
+  @Builder mineWithTitleBar() {
+    HdsNavigation() {
+      this.mineContent()
+    }
+    .width('100%')
+    .height('100%')
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(true)
+    .titleMode(HdsNavigationTitleMode.MINI)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: ' '
+        },
+        stackBuilder: () => {
+          this.mineTitleRow()
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: true,
+          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+        },
+        // 标题是空占位，但两态都得给标题色：开了滚动效果后 HDS 按它推状态栏图标深浅，缺省会推成白色
+        originalStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        scrollEffectStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      avoidLayoutSafeArea: true,
+      enableComponentSafeArea: false
+    })
+    .bindToScrollable([this.scroller])
+    .backgroundColor(CloudThemeToken.background)
   }
 
   build() {
     Stack() {
       if (this.subPage.length > 0) {
         this.subPageView()
+      } else if (this.titleButtonInsetEnd > 0) {
+        this.mineWithTitleBar()
       } else {
-        Column() {
-          if (this.titleButtonInsetEnd > 0) {
-            this.mineTitleRow()
-          }
-          // 自定义组件尾随闭包后不能再链属性，故外包一层承接 layoutWeight
-          Column() {
-            CloudScaffold({
-              scroller: this.scroller,
-              topPadding: this.mineTopPadding,
-              bottomPadding: CloudThemeToken.pageBottomPadding
-            }) {
-              Column({ space: CloudThemeToken.sectionGap }) {
-                MineProfileCard({ onOpen: () => this.openSubPage(Constant.ACCOUNT_SECURITY_PAGE) })
-                MineStorageCard()
-                this.entryGroups()
-              }
-              .width('100%')
-            }
-          }
-          .width('100%')
-          .layoutWeight(1)
-        }
-        .width('100%')
-        .height('100%')
+        this.mineContent()
       }
 
       this.sheetHosts()
@@ -238,13 +297,9 @@ export struct TabMine {
       SettingRow({
         title: $r('app.string.about'), value: this.appVersion, divider: true,
         icon: $r('app.media.ic_mine_about'),
-        // 宽屏在内容区内原地打开；手机沿用半模态，不推整页
+        // 与反馈一样用半模态（宽屏为居中弹窗）：反馈、关于是信息 / 操作类，不进二级页
         onTap: () => {
-          if (this.inlineSubPages) {
-            this.openSubPage(Constant.ABOUT_PAGE)
-          } else {
-            this.showAboutSheet = true
-          }
+          this.showAboutSheet = true
         }
       })
     }
@@ -447,7 +502,7 @@ export struct TabMine {
   }
 
   @Builder aboutSheet() {
-    AboutPage({ embedded: true })
+    AboutPage()
   }
 
   @Builder logViewerSheet() {

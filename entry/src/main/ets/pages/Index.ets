@@ -10,7 +10,6 @@ import { LoginPage } from './LoginPage';
 import { ImagePreviewPage } from './ImagePreview';
 import { VideoPreviewPage } from './VideoPreview';
 import { TextPreviewPage } from './TextPreview';
-import { AboutPage } from './AboutPage';
 import { SettingsPage } from './SettingsPage';
 import { AccountSecurityPage } from './AccountSecurityPage';
 import { PhotoBackupPage } from './PhotoBackupPage';
@@ -379,8 +378,8 @@ struct Index {
   // 原先这些页面是淡入 + 右移 40vp，淡入过程中新页半透明，底下我的页的白卡片会透出来、看起来闪一下
   private isSlideOverlayVisible(): boolean {
     return this.fileSearchVisible || this.overlayPage === Constant.TEXT_PREVIEW_PAGE ||
-      this.overlayPage === Constant.ABOUT_PAGE || this.overlayPage === Constant.SETTINGS_PAGE ||
-      this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE || this.overlayPage === Constant.PHOTO_BACKUP_PAGE;
+      this.overlayPage === Constant.SETTINGS_PAGE || this.overlayPage === Constant.ACCOUNT_SECURITY_PAGE ||
+      this.overlayPage === Constant.PHOTO_BACKUP_PAGE;
   }
 
   private pageSlideTransition(): TransitionEffect {
@@ -420,12 +419,6 @@ struct Index {
         .zIndex(CloudThemeToken.overlayZIndex)
     } else if (this.overlayPage === Constant.TEXT_PREVIEW_PAGE) {
       TextPreviewPage({ routeParam: this.textPreviewParam })
-        .width('100%')
-        .height('100%')
-        .transition(this.pageSlideTransition())
-        .zIndex(CloudThemeToken.overlayZIndex)
-    } else if (this.overlayPage === Constant.ABOUT_PAGE) {
-      AboutPage()
         .width('100%')
         .height('100%')
         .transition(this.pageSlideTransition())
@@ -500,19 +493,6 @@ struct Index {
       .onBackPressed(() => {
         return CloudRouter.interceptBack();
       })
-    } else if (name === Constant.ABOUT_PAGE) {
-      NavDestination() {
-        Stack() {
-          AboutPage()
-        }
-        .width('100%')
-        .height('100%')
-        .backgroundColor(CloudThemeToken.background)
-      }
-      .hideTitleBar(true)
-      .width('100%')
-      .height('100%')
-      .backgroundColor(CloudThemeToken.background)
     } else if (name === Constant.SETTINGS_PAGE) {
       NavDestination() {
         Stack() {

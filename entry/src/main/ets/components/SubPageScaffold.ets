@@ -8,7 +8,7 @@ import { WindowMover } from "../utils/WindowMover";
 import { TitleControlButton } from "./TitleControlButton";
 
 /**
- * 二级页骨架（设置、账号与安全、关于）：整页是一个 HdsNavigation，标题栏在沉浸光感生效范围内，效果随设备档位由系统自适应。
+ * 二级页骨架（设置、账号与安全、相册备份）：整页是一个 HdsNavigation，标题栏在沉浸光感生效范围内，效果随设备档位由系统自适应。
  * 内容铺满全页、从标题栏底下滚过：调用方的滚动容器顶部留出 CloudThemeToken.hdsTitleBarHeight，
  * 并把同一个 Scroller 传进来；上滑时标题栏与文件页、相册页一样渐变出模糊材质。
  * 返回键和标题放在 stackBuilder 里自绘（HDS 原生返回键与标题做不了入场动效）：先内容后标题栏，

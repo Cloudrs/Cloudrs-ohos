@@ -229,6 +229,9 @@ export class CloudThemeToken {
   static readonly uploadSourceSheetTopPadding: number = 18
   static readonly uploadSourceSheetBottomPadding: number = 28
   static readonly sheetHeaderHeight: number = 70
+  // 系统半模态标题区：右侧给关闭键让出的宽度比左边距多出的部分（Pura 实测约 48vp）；
+  // 自定义标题左侧补上这段，内容才落在整张半模态的正中
+  static readonly sheetTitleCloseInset: number = 48
   static readonly sheetConfirmHeight: number = 36
   static readonly pathRowHeight: number = 45
   static readonly pathInnerRowHeight: number = 43
@@ -347,10 +350,12 @@ export class CloudThemeToken {
   static readonly filesHeaderCollapsedContentLift: number = 10
   static readonly filesHeaderZIndex: number = 5
   static readonly filesHeaderTransitionDuration: number = 200
-  static readonly filesTransportTitleSize: number = 18
   static readonly filesTransportContentTopMargin: number = 10
   static readonly filesTransportPaddingBottom: number = 20
   static readonly filesSegmentWidth: number = 160
+  // 传输进度半模态标题行里的下载 / 上传分段：比离线下载页的宽、高一些，便于点按（高约 40vp）
+  static readonly transferSegmentWidth: number = 240
+  static readonly transferSegmentButtonPaddingVertical: number = 10
   static readonly filesTitleMainSize: number = 22
   static readonly filesTitleSubtitleSize: number = 12
   static readonly filesTitleTextHeight: number = 44

@@ -311,7 +311,14 @@ export struct TabFiles {
   @State selectCapsuleOptions: SegmentButtonOptions = SegmentButtonOptions.capsule({
     buttons: [{ text: $r('app.string.task_download') }, { text: $r('app.string.task_upload') }] as SegmentButtonItemTuple,
     multiply: false,
-    backgroundBlurStyle: BlurStyle.BACKGROUND_THICK
+    backgroundBlurStyle: BlurStyle.BACKGROUND_THICK,
+    // 默认上下 4vp（实际被最小高度撑到约 32vp），加到 10vp 让整条约 40vp 高，便于点按
+    buttonPadding: {
+      top: CloudThemeToken.transferSegmentButtonPaddingVertical,
+      bottom: CloudThemeToken.transferSegmentButtonPaddingVertical,
+      left: CloudThemeToken.spacingXl,
+      right: CloudThemeToken.spacingXl
+    }
   })
   @State selectedIndexes: number[] = [CloudThemeToken.primarySegmentIndex]
   private inputRenameIndex: number = -1
@@ -2302,7 +2309,7 @@ export struct TabFiles {
             detents: [SheetSize.MEDIUM, SheetSize.LARGE],
             backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.surface),
             systemMaterial: CloudMaterial.sheetMaterial(),
-            title: { title: $r('app.string.transport_title') },
+            title: () => { this.transportSheetTitle() },
             showClose: true,
             preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
             width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
@@ -2910,74 +2917,22 @@ export struct TabFiles {
     .justifyContent(FlexAlign.SpaceBetween)
   }
 
-  @Builder transportSheetTitle(title: ResourceStr) {
+  // 半模态标题行：下载 / 上传分段替代「传输进度」文字，与系统关闭键同一行，居中在整张半模态正中
+  @Builder transportSheetTitle() {
     Row() {
-      Row({ space: CloudThemeToken.topBarActionGap }) {
-        Stack()
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
-        if (this.hasCompletedTransfers()) {
-          Stack()
-            .width(CloudThemeToken.iconBoxSm)
-            .height(CloudThemeToken.iconBoxSm)
-        }
-      }
-
-      Text(title)
-        .fontSize(CloudThemeToken.filesTransportTitleSize)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-
-      Row({ space: CloudThemeToken.topBarActionGap }) {
-        if (this.hasCompletedTransfers()) {
-          Button({ type: ButtonType.Normal }) {
-            Image($r('app.media.ic_trash_close'))
-              .width(CloudThemeToken.sheetActionIconSize)
-              .height(CloudThemeToken.sheetActionIconSize)
-              .fillColor(CloudThemeToken.textSecondary)
-              .draggable(false)
-          }
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .onClick(() => {
-            this.clearCompletedTransfers()
-          })
-        }
-      }
+      SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
+        .width(CloudThemeToken.transferSegmentWidth)
+        // 窄屏（如 360vp 宽）标题区放不下时缩到可用宽度
+        .flexShrink(1)
     }
     .width('100%')
+    .padding({ left: CloudThemeToken.sheetTitleCloseInset })
+    .justifyContent(FlexAlign.Center)
     .alignItems(VerticalAlign.Center)
-  }
-
-  private hasCompletedTransfers(): boolean {
-    const ds = this.downloadObjects.getDataList()
-    for (let i = 0; i < ds.length; i++) {
-      if (ds[i].state === FileModelState.COMPLETED) return true
-    }
-    const us = this.uploadObjects.getDataList()
-    for (let i = 0; i < us.length; i++) {
-      if (us[i].state === FileModelState.COMPLETED) return true
-    }
-    return false
-  }
-
-  private clearCompletedTransfers(): void {
-    TransferDatabase.clearCompleted()
-    const completedDownloads = this.downloadObjects.getDataList().filter((o: TransportObject) =>
-      o.state === FileModelState.COMPLETED)
-    completedDownloads.forEach((o: TransportObject) => this.downloadObjects.deleteDataByItem(o))
-    const completedUploads = this.uploadObjects.getDataList().filter((o: TransportObject) =>
-      o.state === FileModelState.COMPLETED)
-    completedUploads.forEach((o: TransportObject) => this.uploadObjects.deleteDataByItem(o))
   }
 
   @Builder transportSheetBuilder() {
     Column() {
-      SegmentButton({ options: this.selectCapsuleOptions, selectedIndexes: $selectedIndexes })
       Column() {
         if (this.selectedIndexes[CloudThemeToken.primarySegmentIndex] == CloudThemeToken.primarySegmentIndex) {
           Downloads({

@@ -289,10 +289,6 @@
       "value": "文件上传"
     },
     {
-      "name": "transport_title",
-      "value": "传输进度"
-    },
-    {
       "name": "user_id",
       "value": "UID"
     },

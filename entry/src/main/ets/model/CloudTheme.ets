@@ -109,10 +109,6 @@ export class CloudThemeToken {
   static readonly fileGrid4xlColumns: number = 9
   static readonly fileNameDisplayMaxLength: number = 28
   static readonly fileNameEdgeSegmentLength: number = 8
-  static readonly aria2DetailPhoneColumns: number = 1
-  static readonly aria2DetailMediumColumns: number = 2
-  static readonly aria2DetailTabletColumns: number = 2
-  static readonly aria2DetailWideColumns: number = 3
   static readonly photoBackupGridPhoneColumns: number = 3
   static readonly photoBackupGridMediumColumns: number = 4
   static readonly photoBackupGridTabletColumns: number = 5
@@ -370,30 +366,12 @@ export class CloudThemeToken {
   static readonly aria2ButtonIconSize: number = 22
   static readonly aria2ButtonTextSize: number = 16
   static readonly aria2SheetTopPadding: number = 18
-  static readonly aria2DetailGap: number = 15
-  static readonly aria2DetailTitleSize: number = 24
-  static readonly aria2DetailTitleRightPadding: number = 40
-  static readonly aria2DetailStatusGap: number = 10
-  static readonly aria2DetailStatusIconSize: number = 20
-  static readonly aria2DetailStatusTextSize: number = 14
-  static readonly aria2DetailStatusHeight: number = 40
-  static readonly aria2DetailStatusHorizontalPadding: number = 10
-  static readonly aria2DetailSectionTitleSize: number = 18
-  static readonly aria2DetailGridGap: number = 10
-  static readonly aria2DetailCardTextGap: number = 5
-  static readonly aria2DetailCardTitleSize: number = 14
-  static readonly aria2DetailCardContentSize: number = 16
-  static readonly aria2DetailCardIconSize: number = 24
-  static readonly aria2DetailCardHeight: number = 70
-  static readonly aria2DetailCardPadding: number = 15
-  static readonly aria2DetailFileListGap: number = 5
-  static readonly aria2DetailFileTextSize: number = 16
-  static readonly aria2DetailFilePadding: number = 20
-  static readonly aria2DetailToolIconSize: number = 24
-  static readonly aria2DetailToolHeight: number = 30
-  static readonly aria2DetailToolHorizontalPadding: number = 10
-  static readonly aria2DetailToolBottomPadding: number = 20
-  static readonly aria2DetailSheetTopPadding: number = 25
+  // 离线下载详情：失败原因块最多 3 行；文件名最多 2 行（剧集号等区分信息常在中段）；超过预览数先折叠
+  static readonly aria2DetailErrorLineHeight: number = 18
+  static readonly aria2DetailErrorMaxLines: number = 3
+  static readonly aria2DetailFileNameLineHeight: number = 20
+  static readonly aria2DetailFileNameMaxLines: number = 2
+  static readonly aria2DetailFilePreviewCount: number = 3
   static readonly aria2CancelButtonSize: number = 30
   static readonly aria2CancelButtonRadius: number = 15
   static readonly aria2CancelIconSize: number = 16
@@ -639,13 +617,6 @@ export class CloudThemeToken {
 
   static sheetWidthForWidth(widthVp: number): number | undefined {
     return CloudThemeToken.sheetWidthForBreakpoint(CloudThemeToken.getBreakpoint(widthVp))
-  }
-
-  // wide 段返回 [LARGE] 让居中 sheet 占大部分高度避免内部 layoutWeight 区被挤扁；其它返回传入 fallback
-  static sheetDetentsForWidth(widthVp: number, fallback: SheetSize): [SheetSize] {
-    return [CloudThemeToken.isWideBreakpoint(CloudThemeToken.getBreakpoint(widthVp))
-      ? SheetSize.LARGE
-      : fallback]
   }
 }
 

@@ -962,7 +962,9 @@ export struct TabRemoteDown {
         }
       })
       .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
-        detents: CloudThemeToken.sheetDetentsForWidth(this.sheetLayoutWidth, SheetSize.FIT_CONTENT),
+        detents: [SheetSize.FIT_CONTENT],
+        // 宽屏居中弹窗不认 detents，高度单独给成按内容
+        height: SheetSize.FIT_CONTENT,
         title: { title: '下载详情' },
         showClose: true,
         backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),

@@ -566,7 +566,8 @@ export struct HomePage {
         .visibility(this.currentIndex === TabId.PICTURES ? Visibility.Visible : Visibility.Hidden)
 
       if (this.currentIndex === TabId.FILES) {
-        TabFiles({ overLap: this.overLap, isActive: true })
+        // 宽屏：搜索在文件页内容区内原地打开，保留左侧导航栏
+        TabFiles({ overLap: this.overLap, isActive: true, inlineSubPages: true })
       } else if (this.currentIndex === TabId.REMOTE_DOWN) {
         TabRemoteDown({ overLap: this.overLap, isActive: true })
       } else if (this.currentIndex === TabId.MINE) {

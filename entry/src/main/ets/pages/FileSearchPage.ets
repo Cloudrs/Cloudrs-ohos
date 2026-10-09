@@ -35,14 +35,19 @@ enum FileSearchScope {
 @Component
 export struct FileSearchPage {
   routeParam?: FileSearchParam
+  // 宽屏在文件页内容区内原地打开时由 TabFiles 传入：关闭回调与标题栏起始内边距（侧栏收起时让出悬浮折叠键）；
+  // 未传时 undefined / -1，走 CloudRouter.pop() 与 HDS 默认边距
+  onClose?: () => void
+  @Prop titleStartPadding: number = -1
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
   // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧给它让位；其它设备为 0
   @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
   @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
-  @Provide thumbImage: Map<string, PixelMap> = new Map<string, PixelMap>()
-  @Provide thumbSource: Map<string, string> = new Map<string, string>()
+  // 宽屏原地打开时本页嵌在 TabFiles 里，两者都提供同名缩略图表，需声明覆盖，结果条目用本页自己的
+  @Provide({ allowOverride: 'thumbImage' }) thumbImage: Map<string, PixelMap> = new Map<string, PixelMap>()
+  @Provide({ allowOverride: 'thumbSource' }) thumbSource: Map<string, string> = new Map<string, string>()
   @State searchKeyword: string = ''
   @State activeSearchKeyword: string = ''
   @State results: ObjectInfo[] = []
@@ -586,10 +591,18 @@ export struct FileSearchPage {
     })
   }
 
+  private close(): void {
+    if (this.onClose) {
+      this.onClose()
+    } else {
+      CloudRouter.pop()
+    }
+  }
+
   private dispatchOpenResult(item: ObjectInfo): void {
     this.recordSearchHistory(this.activeSearchKeyword)
     if (item.type === Constant.OBJECT_DIR_TYPE && this.routeParam?.onOpen) {
-      CloudRouter.pop()
+      this.close()
       this.routeParam.onOpen(item)
       return
     }
@@ -611,7 +624,7 @@ export struct FileSearchPage {
       return
     }
     if (type === FileMenuType.DIR_ENTER && this.routeParam?.onOpen) {
-      CloudRouter.pop()
+      this.close()
       this.routeParam.onOpen(item)
       return
     }
@@ -774,7 +787,7 @@ export struct FileSearchPage {
         backIcon: {
           icon: $r('app.media.ic_back'),
           action: () => {
-            CloudRouter.pop()
+            this.close()
           }
         },
         stackBuilder: () => {
@@ -809,6 +822,7 @@ export struct FileSearchPage {
         }
       },
       padding: {
+        start: this.titleStartPadding >= 0 ? LengthMetrics.vp(this.titleStartPadding) : undefined,
         end: this.titleButtonInsetEnd > 0 ?
           LengthMetrics.vp(this.titleButtonInsetEnd + CloudThemeToken.spacingCard) : undefined
       },
@@ -935,7 +949,9 @@ export struct FileSearchPage {
   // 宽屏（PC/平板自由窗口）下 HDS 返回按钮更宽且贴近窗口边缘，
   // 预留宽度需要在手机基准上再加一段间隙，否则搜索框会顶到返回按钮。
   private getSearchFieldLeftInset(): number {
-    const base = CloudThemeToken.filesTitleHorizontalPadding + CloudThemeToken.iconButtonSize
+    // stackBuilder 不随 titleBar.padding.start 平移：传入起始内边距时，返回键随之右移，搜索框也要跟着让
+    const backStart = this.titleStartPadding >= 0 ? this.titleStartPadding : CloudThemeToken.filesTitleHorizontalPadding
+    const base = backStart + CloudThemeToken.iconButtonSize
     return base + (CloudThemeToken.isWideWidth(this.windowWidthVp)
       ? CloudThemeToken.spacingPage : CloudThemeToken.spacingMd)
   }

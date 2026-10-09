@@ -9,6 +9,7 @@ import { showApiFailureToast, showToast, showToastTips, ToastType } from "../../
 import { ApiErrorUtil, NETWORK_ERROR_MESSAGE } from "../../utils/ApiErrorUtil";
 import { ObjectItem } from "../../components/ObjectItem";
 import { FileSearchParam, ImagePreview, PreviewFile, VideoPreview } from "../../model/Params";
+import { FileSearchPage } from "../FileSearchPage";
 import { FileMenuType, MoreMenuType, ShowType, SortType } from "../../model/MenuModel";
 import { filePreview } from "@kit.PreviewKit";
 import { DetailData } from "../../model/DetailData";
@@ -203,6 +204,10 @@ export struct TabFiles {
   @Link overLap: boolean
   @Watch('onActiveChanged')
   @Prop isActive: boolean = true
+  // 宽屏（HomePage 侧栏布局）为 true：搜索页在本页内容区内原地打开，左侧导航栏保留；手机为 false，走 CloudRouter 整页推入
+  @Prop inlineSubPages: boolean = false
+  // 宽屏原地打开的搜索页参数，null 为未打开；文件列表留在底下不卸载，关掉搜索后滚动位置还在
+  @State inlineSearchParam: FileSearchParam | null = null
   // 首页常驻，切换账号不会重建本组件，靠这个信号丢弃上一账号的目录数据
   @Watch('onAccountChanged')
   @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
@@ -546,7 +551,7 @@ export struct TabFiles {
 
   private openFileSearchPage(): void {
     const objects = this.objectsInfo.dirObjects.concat(this.objectsInfo.fileObjects)
-    CloudRouter.push(Constant.FILE_SEARCH_PAGE, new FileSearchParam(this.currentPath, objects,
+    const param = new FileSearchParam(this.currentPath, objects,
       (item: ObjectInfo) => {
         this.onSearchResultOpen(item)
       },
@@ -558,7 +563,29 @@ export struct TabFiles {
       this.thumbSource,
       () => {
         this.getFileList(true, this.currentPath)
-      }))
+      })
+    // 宽屏在本页内容区内原地打开，左侧导航栏保留（同「我的」的设置类二级页）；手机整页推入
+    if (this.inlineSubPages) {
+      this.inlineSearchParam = param
+      return
+    }
+    CloudRouter.push(Constant.FILE_SEARCH_PAGE, param)
+  }
+
+  private isInlineSearchVisible(): boolean {
+    return this.inlineSearchParam !== null
+  }
+
+  private closeInlineSearch(): void {
+    this.inlineSearchParam = null
+  }
+
+  // 原地打开的搜索页标题栏起始内边距：宽屏侧栏收起时让出 HomePage 的悬浮折叠键，否则用 HDS 默认
+  private getInlineSearchTitleStartPadding(): number {
+    if (!this.sidebarVisible) {
+      return CloudThemeToken.spacingCard + CloudThemeToken.sideBarToggleSize + CloudThemeToken.spacingSection
+    }
+    return -1
   }
 
   private onSearchResultOpen(item: ObjectInfo): void {
@@ -880,6 +907,11 @@ export struct TabFiles {
 
   onBackPressedCallback(): boolean {
     console.debug(TAG, 'onBackPressedCallback ....')
+    // 宽屏原地打开的搜索页先退回文件页
+    if (this.isInlineSearchVisible()) {
+      this.closeInlineSearch()
+      return true
+    }
     if (this.currentPath === '/') {
       return false
     }
@@ -2228,6 +2260,17 @@ export struct TabFiles {
           this.multiSelectActionBar()
         }
 
+        // 宽屏原地打开的搜索页：盖住文件列表（含 FAB、多选栏），文件页标题栏同时隐藏，由搜索页自带的标题栏接管
+        if (this.inlineSearchParam !== null) {
+          FileSearchPage({
+            routeParam: this.inlineSearchParam,
+            titleStartPadding: this.getInlineSearchTitleStartPadding(),
+            onClose: () => this.closeInlineSearch()
+          })
+            .width('100%')
+            .height('100%')
+        }
+
         this.fileMoreMenuAnchor()
 
         if (this.albumSaving) {
@@ -2437,7 +2480,8 @@ export struct TabFiles {
     .height('100%')
     .mode(NavigationMode.Stack)
     .hideToolBar(true)
-    .hideTitleBar(false)
+    // 宽屏原地打开搜索页时，标题栏交给搜索页自己的那条
+    .hideTitleBar(this.isInlineSearchVisible())
     .hideBackButton(this.isRoot)
     .titleMode(HdsNavigationTitleMode.MINI)
     .titleBar({
@@ -4152,6 +4196,7 @@ export struct TabFiles {
     if (CloudRouter.currentOverlay() === Constant.FILE_SEARCH_PAGE) {
       CloudRouter.pop()
     }
+    this.closeInlineSearch()
     this.getFileList(true, path)
   }
 

@@ -58,11 +58,6 @@ export struct PhotoBackupPage {
               this.uploadGroup()
             }
             .width('100%')
-            Text('备份进度可在「相册」页标题旁查看')
-              .fontSize(CloudThemeToken.textSizeSmall)
-              .fontColor(CloudThemeToken.textSecondary)
-              .width('100%')
-              .textAlign(TextAlign.Center)
           }
           .width('100%')
           .padding({
@@ -90,7 +85,7 @@ export struct PhotoBackupPage {
     SettingGroup() {
       SettingSwitchRow({
         title: '开启自动备份',
-        desc: '扫描本地图片并上传到云端',
+        desc: '自动上传本地照片',
         isOn: this.settings.enabled,
         onChange: (isOn: boolean) => {
           this.update((s: PhotoBackupSettings) => { s.enabled = isOn })
@@ -111,7 +106,7 @@ export struct PhotoBackupPage {
     SettingGroup() {
       SettingSwitchRow({
         title: '仅 Wi-Fi 下备份',
-        desc: '关闭后将使用移动网络备份',
+        desc: '关闭后可用移动数据备份',
         isOn: this.settings.wifiOnly,
         onChange: (isOn: boolean) => {
           this.update((s: PhotoBackupSettings) => { s.wifiOnly = isOn })
@@ -119,7 +114,7 @@ export struct PhotoBackupPage {
       })
       SettingStepperRow({
         title: '同时上传数量',
-        desc: '同时上传的照片数，弱网时建议调低',
+        desc: '弱网时建议调低',
         value: this.settings.uploadConcurrent,
         min: Constant.UPLOAD_CONCURRENT_MIN,
         max: Constant.UPLOAD_CONCURRENT_MAX,

@@ -93,11 +93,6 @@ export struct SettingsPage {
             this.privacyGroup()
           }
           .width('100%')
-          Text('以上设置只保存在本机，不同步到服务器')
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-            .width('100%')
-            .textAlign(TextAlign.Center)
         }
         .width('100%')
         .padding({
@@ -133,7 +128,7 @@ export struct SettingsPage {
     SettingGroup() {
       SettingStepperRow({
         title: '同时上传任务数',
-        desc: '数量越多越占带宽，弱网时建议调低',
+        desc: '弱网时建议调低',
         value: this.uploadConcurrent,
         min: Constant.UPLOAD_CONCURRENT_MIN,
         max: Constant.UPLOAD_CONCURRENT_MAX,
@@ -148,7 +143,7 @@ export struct SettingsPage {
     SettingGroup() {
       SettingSwitchRow({
         title: '图片拖拽',
-        desc: '预览时长按可把图片拖到其他应用',
+        desc: '长按拖到其他应用',
         isOn: this.imageDraggable,
         onChange: (isOn: boolean) => {
           this.imageDraggable = isOn
@@ -157,7 +152,7 @@ export struct SettingsPage {
       })
       SettingSwitchRow({
         title: '长按智能识图',
-        desc: '预览时长按提取主体或文字',
+        desc: '提取主体或文字',
         isOn: this.imageAiAnalyzer,
         divider: true,
         onChange: (isOn: boolean) => {
@@ -173,7 +168,7 @@ export struct SettingsPage {
       if (this.smartGripSupported) {
         SettingSwitchRow({
           title: '智感握姿',
-          desc: '文件页上传按钮、相册切换按钮跟随握持手靠左或靠右',
+          desc: '按钮跟随握持手左右换边',
           isOn: this.smartGrip,
           onChange: (isOn: boolean) => {
             this.smartGrip = isOn
@@ -201,7 +196,7 @@ export struct SettingsPage {
       })
       SettingRow({
         title: '撤回隐私政策同意',
-        desc: '撤回后退出当前账号，再次使用需重新同意',
+        desc: '撤回后将退出登录',
         danger: true,
         divider: true,
         onTap: () => {
@@ -248,7 +243,7 @@ export struct SettingsPage {
     SettingGroup() {
       SettingSwitchRow({
         title: '发送分享链接',
-        desc: '未下载到本机的文件改为发送分享链接',
+        desc: '未下载的文件改发链接',
         isOn: this.knockUseShareLink,
         onChange: (isOn: boolean) => {
           this.knockUseShareLink = isOn
@@ -268,7 +263,7 @@ export struct SettingsPage {
         })
         SettingSwitchRow({
           title: '附带提取码',
-          desc: '生成随机提取码，碰完后提示',
+          desc: '碰完后提示提取码',
           isOn: this.knockPassword,
           divider: true,
           onChange: (isOn: boolean) => {

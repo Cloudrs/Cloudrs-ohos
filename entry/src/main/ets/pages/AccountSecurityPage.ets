@@ -119,7 +119,7 @@ export struct AccountSecurityPage {
 
   @Builder v3Banner() {
     Column({ space: CloudThemeToken.spacingXs }) {
-      Text('当前服务器为 Cloudreve v3，资料与登录安全需要在网页端修改。')
+      Text('Cloudreve v3 请在网页端修改资料与安全设置')
         .fontSize(CloudThemeToken.textSizeSmallPlus)
         .fontColor(CloudThemeToken.primary)
       Text('在浏览器中打开')
@@ -227,7 +227,7 @@ export struct AccountSecurityPage {
           })
         } else {
           if (this.store.account?.passwordless === true) {
-            SettingRow({ title: '修改密码', desc: '此账号未设置密码', tappable: false })
+            SettingRow({ title: '修改密码', desc: '未设置密码', tappable: false })
           } else {
             SettingRow({
               title: '修改密码',
@@ -239,7 +239,7 @@ export struct AccountSecurityPage {
           }
           SettingRow({
             title: '两步验证',
-            desc: '登录时额外输入 6 位动态码',
+            desc: '登录时需输入动态码',
             chipText: this.store.account ? (this.store.account.two_fa_enabled ? '已开启' : '未开启') : '',
             chipTone: this.store.account?.two_fa_enabled === true ? ChipTone.SUCCESS : ChipTone.NEUTRAL,
             divider: true,
@@ -248,7 +248,7 @@ export struct AccountSecurityPage {
           })
           SettingRow({
             title: '通行密钥',
-            desc: '在网页端添加，这里可查看和删除',
+            desc: '需在网页端添加',
             value: this.passkeyCountText(),
             divider: true,
             rowEnabled: this.store.account !== undefined,
@@ -268,21 +268,21 @@ export struct AccountSecurityPage {
       SettingGroup() {
         SettingSwitchRow({
           title: '应用锁',
-          desc: this.appLockBusy ? '正在等待系统认证' : '回到应用时验证人脸或指纹',
+          desc: this.appLockBusy ? '正在验证' : '进入应用时验证身份',
           isOn: this.appLockEnabled,
           busy: this.appLockBusy,
           onChange: (isOn: boolean) => this.toggleAppLock(isOn)
         })
         SettingRow({
           title: '登录凭证',
-          desc: `服务器 ${this.serverUrl()}`,
+          desc: this.serverUrl(),
           value: this.credentialText(),
           divider: true,
           tappable: false
         })
         SettingRow({
           title: '删除本机凭证',
-          desc: '从账号列表中移除此账号，需要重新登录',
+          desc: '移除后需重新登录',
           danger: true,
           showChevron: false,
           divider: true,

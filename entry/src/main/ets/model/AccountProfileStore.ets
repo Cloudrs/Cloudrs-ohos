@@ -88,6 +88,7 @@ export class AccountProfileStore {
   refresh(): void {
     this.lastRefreshAt = Date.now()
     const key = this.keyOf()
+    AppLogger.info(TAG, 'refresh account profile')
     CloudApi.getSiteConfig({
       onSuccess: (data: SiteConfig) => {
         if (key !== this.keyOf()) {

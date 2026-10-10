@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit'
+import { BusinessError } from '@kit.BasicServicesKit'
 import Constant from '../model/Constant'
 import { CloudThemeToken } from '../model/CloudTheme'
 import { CloudMaterial } from '../model/CloudMaterial'
@@ -502,8 +503,10 @@ export struct AccountSecurityPage {
           }
         })
       })
-      .catch((err: Error) => {
-        AppLogger.error(TAG, `pick avatar failed: ${err.message}`)
+      .catch((err: BusinessError | string) => {
+        // Image Kit 解码失败 reject 的是纯字符串而不是 BusinessError，按类型分别记，否则只剩 undefined
+        const detail = typeof err === 'string' ? err : `code=${err?.code}, msg=${err?.message}`
+        AppLogger.error(TAG, `pick avatar failed: ${detail}`)
         showToast('无法读取图片')
       })
   }

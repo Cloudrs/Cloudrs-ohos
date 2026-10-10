@@ -16,7 +16,7 @@ export struct MineProfileCard {
 
   build() {
     Row({ space: CloudThemeToken.spacingPanel }) {
-      this.avatarView(CloudThemeToken.avatarLargeSize)
+      ProfileAvatar({ avatarSize: CloudThemeToken.avatarLargeSize })
       Column({ space: CloudThemeToken.spacingXs }) {
         Text(this.store.displayName())
           .fontSize(CloudThemeToken.textSizeHero)
@@ -70,31 +70,39 @@ export struct MineProfileCard {
     })
   }
 
-  @Builder avatarView(size: number) {
+}
+
+// 当前账号的圆形头像：读共享账号状态，换头像后「我的」资料卡与宽屏侧栏账号卡一起刷新
+@Component
+export struct ProfileAvatar {
+  @StorageLink(ACCOUNT_PROFILE_STORE_KEY) store: AccountProfileStore = AccountProfileStore.instance
+  @Prop avatarSize: number = CloudThemeToken.avatarLargeSize
+
+  build() {
     Stack() {
       Text(this.store.displayName().substring(0, 1).toUpperCase())
-        .fontSize(size * 0.36)
+        .fontSize(this.avatarSize * 0.36)
         .fontWeight(FontWeight.Bold)
         .fontColor(CloudThemeToken.primary)
       if (this.store.avatarCacheUri.length > 0) {
         Image(this.store.avatarCacheUri)
-          .width(size).height(size)
+          .width(this.avatarSize).height(this.avatarSize)
           .objectFit(ImageFit.Cover)
           .syncLoad(true)
-          .borderRadius(size / CloudThemeToken.halfDivisor)
+          .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
           .draggable(false)
       }
       if (this.store.avatar) {
         Image(this.store.avatar)
-          .width(size).height(size)
+          .width(this.avatarSize).height(this.avatarSize)
           .objectFit(ImageFit.Cover)
-          .borderRadius(size / CloudThemeToken.halfDivisor)
+          .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
           .draggable(false)
       }
     }
-    .width(size)
-    .height(size)
-    .borderRadius(size / CloudThemeToken.halfDivisor)
+    .width(this.avatarSize)
+    .height(this.avatarSize)
+    .borderRadius(this.avatarSize / CloudThemeToken.halfDivisor)
     .borderWidth(CloudThemeToken.lineWidth)
     .borderColor(CloudThemeToken.line)
     .backgroundColor(CloudThemeToken.primarySoft)

@@ -19,7 +19,8 @@ import { WindowMover } from '../utils/WindowMover';
 import UserPreferences from '../model/UserPreferences';
 import UserDatabase from '../model/UserDatabase';
 import { DbUserInfo } from '../model/net/ApiTypes';
-import { AccountAvatar } from '../components/AccountAvatar';
+import { ProfileAvatar } from '../components/settings/MineCards';
+import { ACCOUNT_PROFILE_STORE_KEY, AccountProfileStore } from '../model/AccountProfileStore';
 import { UserSwitchSheet } from '../components/UserSwitchSheet';
 
 const HOME_TAB_NAMES: Record<number, string> = { 0: 'files', 1: 'pictures', 2: 'remoteDown', 3: 'mine' };
@@ -43,6 +44,8 @@ export struct HomePage {
   @Watch('loadAccountCard')
   @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
   @State accountInfo: DbUserInfo | null = null
+  // 侧栏账号卡的头像与昵称读这里，账号与安全页改了头像/昵称会同步过来（DB 快照不会）
+  @StorageLink(ACCOUNT_PROFILE_STORE_KEY) profileStore: AccountProfileStore = AccountProfileStore.instance
   @State showAccountSheet: boolean = false
   private accountUser: string = ''
   private accountUrl: string = ''
@@ -62,6 +65,10 @@ export struct HomePage {
 
   private onForegroundTickChanged(): void {
     this.scheduleVerifyAppLock()
+    // 回到前台重拉一次账号资料（30s 内不重复），网页端改的昵称/头像切回来就能看到
+    if (this.accountUser.length > 0) {
+      this.profileStore.refreshIfStale()
+    }
   }
 
   aboutToDisappear(): void {
@@ -221,6 +228,9 @@ export struct HomePage {
     this.accountUser = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_KEY, '') as string
     this.accountUrl = UserPreferences.getSync(Constant.USER_PREFERENCES, Constant.ACTIVE_USER_URL_KEY, '') as string
     this.accountInfo = this.accountUser.length > 0 ? UserDatabase.getUserInfo(this.accountUser, this.accountUrl) : null
+    if (this.accountUser.length > 0) {
+      this.profileStore.activate(this.accountUser, this.accountUrl)
+    }
   }
 
   private accountHost(): string {
@@ -413,19 +423,10 @@ export struct HomePage {
   @Builder sideAccountCard() {
     Row({ space: CloudThemeToken.spacingCard }) {
       if (this.accountInfo) {
-        AccountAvatar({
-          baseUrl: this.accountInfo.url,
-          userId: this.accountInfo.userinfo.id,
-          avatar: this.accountInfo.userinfo.avatar,
-          cookie: this.accountInfo.cookie,
-          refreshToken: this.accountInfo.refresh_token,
-          username: this.accountInfo.username,
-          avatarSize: CloudThemeToken.iconBoxXs,
-          radius: CloudThemeToken.iconBoxXs / CloudThemeToken.halfDivisor
-        })
+        ProfileAvatar({ avatarSize: CloudThemeToken.iconBoxXs })
       }
       Column({ space: CloudThemeToken.spacingTiny }) {
-        Text(this.accountInfo?.userinfo.nickname || this.accountUser)
+        Text(this.profileStore.displayName() || this.accountUser)
           .fontSize(CloudThemeToken.textSizeBody)
           .fontWeight(FontWeight.Medium)
           .fontColor(CloudThemeToken.textPrimary)

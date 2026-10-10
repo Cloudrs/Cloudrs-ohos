@@ -32,9 +32,12 @@ export class AvatarPicker {
         y: Math.floor((info.size.height - side) / 2),
         size: { width: side, height: side }
       }
+      // 区域和尺寸同时给时必须指定先裁后缩：不指定时 JPEG 先按 desiredSize 降采样再裁，
+      // 而区域是按原图坐标算的，原图短边超过 512（如 3072x4096）时必然越界，解码直接失败
       pixelMap = await source.createPixelMap({
         desiredRegion: region,
-        desiredSize: { width: target, height: target }
+        desiredSize: { width: target, height: target },
+        cropAndScaleStrategy: image.CropAndScaleStrategy.CROP_FIRST
       })
       packer = image.createImagePacker()
       const packOptions: image.PackingOption = { format: 'image/jpeg', quality: JPEG_QUALITY }

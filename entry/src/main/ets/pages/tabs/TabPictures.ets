@@ -59,14 +59,14 @@ function toMillis(value: number): number {
 }
 
 // Vertically centered frosted capsule for switching the 时间 / 相册 grouping;
-// sits on the left by default, follows the holding hand when 智感握姿 is on.
+// sits on the right by default, follows the holding hand when 智感握姿 is on.
 const SWITCHER_ITEM_SIZE: number = 44;
 const SWITCHER_PADDING: number = 4;
 const SWITCHER_GAP: number = 4;
 const SWITCHER_WIDTH: number = SWITCHER_ITEM_SIZE + SWITCHER_PADDING * 2;
-// 换边：原位淡出缩小 → 瞬移到另一侧 → 弹性淡入，避免胶囊横扫过照片
-const SWITCHER_FADE_OUT_MS: number = 150;
-const SWITCHER_HIDDEN_SCALE: number = 0.85;
+// 换边：弹簧曲线横向滑过去，略带回弹；中途握姿再变时弹簧从当前位置直接转向
+const GRIP_SLIDE_RESPONSE: number = 0.45;
+const GRIP_SLIDE_DAMPING: number = 0.8;
 // 网络/设置/扫描事件后，自动备份评估的防抖间隔（合并短时间内的多次网络事件）。
 const AUTO_BACKUP_DEBOUNCE_MS: number = 1500;
 // 相册激活时远端目录对账的最小间隔：一次对账 = 一次目录列表请求，
@@ -110,10 +110,8 @@ export struct TabPictures {
   @StorageProp(Constant.SMART_GRIP_ENABLED) @Watch('syncHoldingHand') smartGripEnabled: boolean = true;
   // 默认在右侧（与文件页上传按钮一致），智感握姿识别到左手时换到左侧
   @State switcherSide: GripSide = GripSide.RIGHT;
-  @State switcherOpacity: number = CloudThemeToken.fullOpacity;
-  @State switcherScale: number = 1;
-  private switcherTargetSide: GripSide = GripSide.RIGHT;
-  private switcherFading: boolean = false;
+  // 胶囊所在容器宽度，换到左侧时据此算横移距离
+  @State switcherAreaWidth: number = 0;
   private readonly onGripSide = (side: GripSide): void => { this.moveSwitcher(side); };
   @State settingsEnabled: boolean = false;
   @State settingsRemotePath: string = '/Photos/Camera';
@@ -3447,32 +3445,25 @@ export struct TabPictures {
   }
 
   private moveSwitcher(side: GripSide): void {
-    this.switcherTargetSide = side;
-    // 淡出中途又变了：等淡出结束时按最新目标落位
-    if (this.switcherFading || side === this.switcherSide) {
+    if (side === this.switcherSide) {
       return;
     }
-    // 页面不可见时直接换边：不可见节点上的动画回调时机不可靠，别让 switcherFading 卡死
+    // 页面不可见时直接换边，没必要播动画
     if (!this.isActive) {
       this.switcherSide = side;
       return;
     }
-    this.switcherFading = true;
-    this.getUIContext().animateTo({
-      duration: SWITCHER_FADE_OUT_MS,
-      curve: Curve.EaseIn,
-      onFinish: () => {
-        this.switcherSide = this.switcherTargetSide;
-        this.switcherFading = false;
-        this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.7) }, () => {
-          this.switcherOpacity = CloudThemeToken.fullOpacity;
-          this.switcherScale = 1;
-        });
-      }
-    }, () => {
-      this.switcherOpacity = CloudThemeToken.zero;
-      this.switcherScale = SWITCHER_HIDDEN_SCALE;
+    this.getUIContext().animateTo({ curve: curves.springMotion(GRIP_SLIDE_RESPONSE, GRIP_SLIDE_DAMPING) }, () => {
+      this.switcherSide = side;
     });
+  }
+
+  /** 左侧时的横移量：落点固定在右侧，向左平移「容器宽 - 胶囊宽 - 两侧边距」。 */
+  private switcherOffsetX(): number {
+    if (this.switcherSide === GripSide.RIGHT) {
+      return 0;
+    }
+    return -Math.max(0, this.switcherAreaWidth - SWITCHER_WIDTH - CloudThemeToken.spacingSm * 2);
   }
 
   private selectSegment(value: GallerySegment): void {
@@ -3511,11 +3502,11 @@ export struct TabPictures {
     .backgroundColor('rgba(120, 120, 128, 0.22)')
     .backdropBlur(18)
     .borderRadius(SWITCHER_ITEM_SIZE / 2 + SWITCHER_PADDING)
-    // 右侧：锚点放在胶囊右缘外 spacingSm 处，再钉到容器右边缘
-    .position({ x: this.switcherSide === GripSide.RIGHT ? '100%' : CloudThemeToken.spacingSm, y: '50%' })
-    .markAnchor({ x: this.switcherSide === GripSide.RIGHT ? SWITCHER_WIDTH + CloudThemeToken.spacingSm : 0, y: '50%' })
-    .opacity(this.switcherOpacity)
-    .scale({ x: this.switcherScale, y: this.switcherScale })
+    // 落点固定在右侧（锚点放在胶囊右缘外 spacingSm 处再钉到容器右边缘），换到左侧靠 translate 横移，
+    // 首帧还不知道容器宽度时默认的右侧也能直接摆对
+    .position({ x: '100%', y: '50%' })
+    .markAnchor({ x: SWITCHER_WIDTH + CloudThemeToken.spacingSm, y: '50%' })
+    .translate({ x: this.switcherOffsetX() })
   }
 
   @Builder emptyStateBody(icon: ResourceStr, title: string, description: string, actionText: string) {
@@ -3625,6 +3616,12 @@ export struct TabPictures {
         }
         .width('100%')
         .height('100%')
+        .onAreaChange((_old: Area, area: Area) => {
+          const width = Number(area.width);
+          if (Math.abs(width - this.switcherAreaWidth) > 0.5) {
+            this.switcherAreaWidth = width;
+          }
+        })
       }
     }
     .width('100%')

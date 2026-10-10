@@ -86,9 +86,9 @@ const CONFLICT_DIALOG_MAX_WIDTH: number = 420
 const BATCH_SHEET_SHOW_DELAY_MS: number = 400
 /** 面板一旦露面就至少驻留这么久，避免刚展开就被收起 */
 const BATCH_SHEET_MIN_VISIBLE_MS: number = 500
-/** 智感握姿换边：上传 FAB 原位淡出的时长与缩小比例（与相册页切换胶囊一致） */
-const FAB_GRIP_FADE_OUT_MS: number = 150
-const FAB_GRIP_HIDDEN_SCALE: number = 0.85
+/** 智感握姿换边：上传 FAB 横向滑过去的弹簧参数（与相册页切换胶囊一致） */
+const GRIP_SLIDE_RESPONSE: number = 0.45
+const GRIP_SLIDE_DAMPING: number = 0.8
 
 interface BatchItemResult {
   item: ObjectInfo
@@ -224,10 +224,8 @@ export struct TabFiles {
   @StorageProp(Constant.APP_IN_FOREGROUND) @Watch('syncHoldingHand') appInForeground: boolean = true;
   @StorageProp(Constant.SMART_GRIP_ENABLED) @Watch('syncHoldingHand') smartGripEnabled: boolean = true;
   @State fabSide: GripSide = GripSide.RIGHT;
-  @State fabGripOpacity: number = CloudThemeToken.fullOpacity;
-  @State fabGripScale: number = 1;
-  private fabTargetSide: GripSide = GripSide.RIGHT;
-  private fabFading: boolean = false;
+  // FAB 所在容器宽度，换到左侧时据此算横移距离
+  @State fabAreaWidth: number = 0;
   private readonly onGripSide = (side: GripSide): void => { this.moveFab(side); };
   @StorageLink(Constant.CURRENT_SHOW_TYPE) showType: ShowType = ShowType.SHOW_ICON
   @StorageLink(Constant.CURRENT_SORT_TYPE) sortType: SortType = SortType.SORT_BY_NAME
@@ -969,34 +967,27 @@ export struct TabFiles {
     }
   }
 
-  // 换边：原位淡出缩小，换到另一侧后弹性淡入（同相册页切换胶囊）
+  // 换边：弹簧曲线横向滑过去（同相册页切换胶囊），中途握姿再变时弹簧从当前位置直接转向
   private moveFab(side: GripSide): void {
-    this.fabTargetSide = side
-    // 淡出中途又变了：等淡出结束时按最新目标落位
-    if (this.fabFading || side === this.fabSide) {
+    if (side === this.fabSide) {
       return
     }
-    // 页面不可见时直接换边：不可见节点上的动画回调时机不可靠，别让 fabFading 卡死
+    // 页面不可见时直接换边，没必要播动画
     if (!this.isActive) {
       this.fabSide = side
       return
     }
-    this.fabFading = true
-    this.getUIContext().animateTo({
-      duration: FAB_GRIP_FADE_OUT_MS,
-      curve: Curve.EaseIn,
-      onFinish: () => {
-        this.fabSide = this.fabTargetSide
-        this.fabFading = false
-        this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.7) }, () => {
-          this.fabGripOpacity = CloudThemeToken.fullOpacity
-          this.fabGripScale = 1
-        })
-      }
-    }, () => {
-      this.fabGripOpacity = CloudThemeToken.zero
-      this.fabGripScale = FAB_GRIP_HIDDEN_SCALE
+    this.getUIContext().animateTo({ curve: curves.springMotion(GRIP_SLIDE_RESPONSE, GRIP_SLIDE_DAMPING) }, () => {
+      this.fabSide = side
     })
+  }
+
+  /** 左侧时的横移量：落点固定在右侧，向左平移「容器宽 - 按钮宽 - 两侧边距」。 */
+  private fabOffsetX(): number {
+    if (this.fabSide === GripSide.RIGHT) {
+      return 0
+    }
+    return -Math.max(0, this.fabAreaWidth - CloudThemeToken.iconBox3xl - CloudThemeToken.spacingPage * 2)
   }
 
   // ---- 碰一碰沙箱接收(平板/2in1 作为接收端):手机轻碰屏幕,文件进沙箱后自动上传到当前目录 ----
@@ -2263,6 +2254,12 @@ export struct TabFiles {
         }
         .width('100%')
         .height('100%')
+        .onAreaChange((_old: Area, area: Area) => {
+          const width = Number(area.width)
+          if (Math.abs(width - this.fabAreaWidth) > 0.5) {
+            this.fabAreaWidth = width
+          }
+        })
 
         if (this.isMultiSelectMode) {
           this.multiSelectActionBar()
@@ -2646,15 +2643,14 @@ export struct TabFiles {
       })
       .onClick(() => { this.openSelectFileSheet() })
     }
-    // 外层管落点与智感握姿换边的淡出淡入，内层管按压缩放，两套动画互不覆盖。
-    // 右侧：锚点放在按钮右缘外 spacingPage 处再钉到容器右边缘；左侧：距左缘 spacingPage
-    .position({ x: this.fabSide === GripSide.RIGHT ? '100%' : CloudThemeToken.spacingPage, y: '100%' })
+    // 外层管落点与智感握姿换边的横移，内层管按压缩放，两套动画互不覆盖。
+    // 落点固定在右侧（锚点放在按钮右缘外 spacingPage 处再钉到容器右边缘），换到左侧靠 translate 横移
+    .position({ x: '100%', y: '100%' })
     .markAnchor({
-      x: this.fabSide === GripSide.RIGHT ? CloudThemeToken.iconBox3xl + CloudThemeToken.spacingPage : 0,
+      x: CloudThemeToken.iconBox3xl + CloudThemeToken.spacingPage,
       y: CloudThemeToken.rowHeight4xl + this.getFabBottomMargin()
     })
-    .opacity(this.fabGripOpacity)
-    .scale({ x: this.fabGripScale, y: this.fabGripScale })
+    .translate({ x: this.fabOffsetX() })
   }
   @Builder multiSelectTitle() {
     Row({ space: CloudThemeToken.spacingCard }) {

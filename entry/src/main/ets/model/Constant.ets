@@ -22,6 +22,12 @@ class Constant {
 
   PRIVACY_POLICY_URL: string = 'https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=1579234134935491520'
 
+  /** 登录页隐私同意记录：存同意时的隐私政策版本号，存在 USER_PREFERENCES 下 */
+  PRIVACY_CONSENT_KEY: string = 'PrivacyLoginConsentVersion'
+
+  /** 读不到托管隐私政策版本时（本地 hdc 安装未接入托管）用的内置版本号 */
+  PRIVACY_POLICY_FALLBACK_VERSION: number = 1
+
   IMAGE_PREVIEW_MAX_DOWNLOAD_BYTES: number = 100 * 1024 * 1024
 
   // 文本预览走全量渲染，没有虚拟化的文本控件兜底，超过该大小不给入口

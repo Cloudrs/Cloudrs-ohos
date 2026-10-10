@@ -119,4 +119,16 @@ export class SettingsRules {
     const match = API_ERROR_PATTERN.exec(raw)
     return match && match[1] ? match[1] : raw
   }
+
+  /**
+   * 登录页的隐私同意记录对当前隐私政策是否仍有效：没记录（0 或非法值）无效；政策升了版本要重新同意。
+   * 记录版本不低于当前版本就算有效——本地 hdc 安装的包读不到托管版本、回落到内置的低版本号，
+   * 不该因此把应用市场包里记下的高版本同意作废。
+   */
+  static isPrivacyConsentValid(agreedVersion: number | undefined, currentVersion: number): boolean {
+    if (agreedVersion === undefined || !Number.isFinite(agreedVersion) || agreedVersion <= 0) {
+      return false
+    }
+    return agreedVersion >= currentVersion
+  }
 }

@@ -22,6 +22,7 @@ import { WindowMover } from '../utils/WindowMover';
 import { common } from '@kit.AbilityKit';
 import { KeyCode, inputDevice } from '@kit.InputKit';
 import { LoginHistoryStore } from '../model/LoginHistoryStore';
+import { PrivacyConsentStore } from '../model/PrivacyConsentStore';
 import { LoginHistoryEntry, LoginHistoryRules } from '../utils/LoginHistoryRules';
 import { LoginSuggestItem, LoginSuggestPanel } from '../components/LoginSuggestPanel';
 
@@ -199,6 +200,8 @@ export struct LoginPage {
   @State loginInvalid: boolean = false;
   @State needs2FA: boolean = false;
   @State privacyAccepted: boolean = false;
+  // 进页面时已同意过当前版本的隐私政策：底部不再要求勾选，只提示已同意（本次会话内不随勾选变化，免得版式跳动）
+  @State private privacyRemembered: boolean = false
   @State loginTitle: string|Resource = $r('app.string.website_title');
   @State websiteLogo: Resource|PixelMap = $r('app.media.cloudrs')
   @State showUserSwitchSheet: boolean = false
@@ -242,7 +245,7 @@ export struct LoginPage {
   private privacyDialogController: CustomDialogController = new CustomDialogController({
     builder: PrivacyConfirmDialog({
       onAgree: () => {
-        this.privacyAccepted = true
+        this.setPrivacyAccepted(true)
         const action = this.pendingPrivacyAgree
         this.pendingPrivacyAgree = undefined
         if (action) {
@@ -374,6 +377,9 @@ export struct LoginPage {
 
     this.history = LoginHistoryStore.list()
     this.watchPhysicalKeyboard()
+    // 同意过当前版本的隐私政策就不再要求勾选（官方 FAQ 建议持久化这份选择），见 PrivacyConsentStore
+    this.privacyAccepted = PrivacyConsentStore.hasConsented()
+    this.privacyRemembered = this.privacyAccepted
     if (this.routeParam) {
       this.nextPage = this.routeParam.nextPage
       this.applyRouteLoginParam(this.routeParam)
@@ -1535,30 +1541,63 @@ export struct LoginPage {
   }
 
   @Builder privacyText() {
-    Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
-      Checkbox({ name: 'login_privacy', group: 'login' })
-        .select(this.privacyAccepted)
-        .selectedColor(CloudThemeToken.primary)
-        .width(CloudThemeToken.loginPrivacyCheckboxSize)
-        .height(CloudThemeToken.loginPrivacyCheckboxSize)
-        .margin({ right: CloudThemeToken.loginPrivacyCheckboxGap })
-        .onChange((value: boolean) => {
-          this.privacyAccepted = value
-        })
-
-      Text($r('app.string.login_service_prefix'))
-        .fontSize(CloudThemeToken.loginPrivacyTextSize)
-        .fontColor(CloudThemeToken.textSecondary)
-        .onClick(() => {
-          this.privacyAccepted = !this.privacyAccepted
-        })
-
-      Hyperlink(Constant.PRIVACY_POLICY_URL, $r("app.string.hyperlink_app_privacy")) {
+    if (this.privacyRemembered) {
+      // 同意过当前版本：不再摆一个打好勾的框（容易被当成默认勾选），只提示已同意并保留查看入口
+      Row({ space: CloudThemeToken.loginPrivacyCheckboxGap }) {
+        Image($r('app.media.ic_checkmark_circle'))
+          .width(CloudThemeToken.loginPrivacyCheckboxSize)
+          .height(CloudThemeToken.loginPrivacyCheckboxSize)
+          .fillColor(CloudThemeToken.primary)
+          .draggable(false)
+        // 文字与链接紧挨着：全角书名号自带留白，再加行间距就像多了个空格
+        Row() {
+          Text('已同意')
+            .fontSize(CloudThemeToken.loginPrivacyTextSize)
+            .fontColor(CloudThemeToken.textSecondary)
+          Hyperlink(PrivacyConsentStore.policyUrl(), '《隐私政策》') {
+          }
+          .color(CloudThemeToken.primary)
+          .height(CloudThemeToken.loginPrivacyLinkHeight)
+        }
       }
-      .color(CloudThemeToken.primary)
-      .height(CloudThemeToken.loginPrivacyLinkHeight)
+      .width("100%")
+      .justifyContent(FlexAlign.Center)
+    } else {
+      Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Center, alignItems: ItemAlign.Center }) {
+        Checkbox({ name: 'login_privacy', group: 'login' })
+          .select(this.privacyAccepted)
+          .selectedColor(CloudThemeToken.primary)
+          .width(CloudThemeToken.loginPrivacyCheckboxSize)
+          .height(CloudThemeToken.loginPrivacyCheckboxSize)
+          .margin({ right: CloudThemeToken.loginPrivacyCheckboxGap })
+          .onChange((value: boolean) => {
+            this.setPrivacyAccepted(value)
+          })
+
+        Text($r('app.string.login_service_prefix'))
+          .fontSize(CloudThemeToken.loginPrivacyTextSize)
+          .fontColor(CloudThemeToken.textSecondary)
+          .onClick(() => {
+            this.setPrivacyAccepted(!this.privacyAccepted)
+          })
+
+        Hyperlink(PrivacyConsentStore.policyUrl(), $r("app.string.hyperlink_app_privacy")) {
+        }
+        .color(CloudThemeToken.primary)
+        .height(CloudThemeToken.loginPrivacyLinkHeight)
+      }
+      .width("100%")
     }
-    .width("100%")
+  }
+
+  // 勾选框、文字、确认框三处同意入口共用：同意即落盘，登录前又取消勾选则清掉
+  private setPrivacyAccepted(accepted: boolean): void {
+    this.privacyAccepted = accepted
+    if (accepted) {
+      PrivacyConsentStore.recordConsent()
+    } else {
+      PrivacyConsentStore.clearConsent()
+    }
   }
 
   private onSuggestFocus(field: string): void {
@@ -1881,7 +1920,7 @@ export struct LoginPage {
     }
     (hostContext as common.UIAbilityContext).startAbility({
       action: 'ohos.want.action.viewData',
-      uri: Constant.PRIVACY_POLICY_URL,
+      uri: PrivacyConsentStore.policyUrl(),
       entities: ['entity.system.browsable']
     }).catch((err: BusinessError) => {
       AppLogger.error('LoginPage', `open privacy policy failed: ${err.code}, ${err.message}`)

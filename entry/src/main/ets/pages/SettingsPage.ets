@@ -1,12 +1,22 @@
 import { common } from '@kit.AbilityKit'
+import { BusinessError } from '@kit.BasicServicesKit'
 import Constant from '../model/Constant'
 import { CloudThemeToken } from '../model/CloudTheme'
 import { AppSettings } from '../model/AppSettings'
+import { PrivacyConsentStore } from '../model/PrivacyConsentStore'
+import { CloudApi } from '../model/net/CloudApi'
 import { HoldingHandUtil } from '../utils/HoldingHandUtil'
+import { ActiveAccount } from '../utils/ActiveAccount'
+import { CloudRouter } from '../utils/CloudRouter'
+import { showCloudConfirmDialog } from '../utils/CloudDialogUtil'
+import { showToast } from '../utils/ToastUtil'
+import AppLogger from '../utils/AppLogger'
 import { SubPageScaffold } from '../components/SubPageScaffold'
 import {
-  SettingGroup, SettingSectionTitle, SettingSegmentRow, SettingStepperRow, SettingSwitchRow
+  SettingGroup, SettingRow, SettingSectionTitle, SettingSegmentRow, SettingStepperRow, SettingSwitchRow
 } from '../components/settings/SettingRows'
+
+const TAG: string = 'SettingsPage'
 
 const THEME_MODES: string[] = [Constant.APP_THEME_LIGHT, Constant.APP_THEME_DARK, Constant.APP_THEME_SYSTEM]
 const THEME_LABELS: string[] = ['浅色', '深色', '跟随系统']
@@ -76,6 +86,11 @@ export struct SettingsPage {
           Column({ space: CloudThemeToken.spacingXl }) {
             SettingSectionTitle({ title: '碰一碰分享' })
             this.knockGroup()
+          }
+          .width('100%')
+          Column({ space: CloudThemeToken.spacingXl }) {
+            SettingSectionTitle({ title: '隐私' })
+            this.privacyGroup()
           }
           .width('100%')
           Text('以上设置只保存在本机，不同步到服务器')
@@ -173,6 +188,60 @@ export struct SettingsPage {
         .opacity(CloudThemeToken.disabledOpacity)
       }
     }
+  }
+
+  // 规范要求应用内能查看隐私政策、能撤回同意；登录后原本只有登录页才有隐私政策链接
+  @Builder privacyGroup() {
+    SettingGroup() {
+      SettingRow({
+        title: '隐私政策',
+        onTap: () => {
+          this.openPrivacyPolicy()
+        }
+      })
+      SettingRow({
+        title: '撤回隐私政策同意',
+        desc: '撤回后退出当前账号，再次使用需重新同意',
+        danger: true,
+        divider: true,
+        onTap: () => {
+          this.confirmRevokePrivacy()
+        }
+      })
+    }
+  }
+
+  private openPrivacyPolicy(): void {
+    const hostContext = this.getUIContext().getHostContext()
+    if (!hostContext) {
+      showToast('无法打开链接')
+      return
+    }
+    (hostContext as common.UIAbilityContext).startAbility({
+      action: 'ohos.want.action.viewData',
+      uri: PrivacyConsentStore.policyUrl(),
+      entities: ['entity.system.browsable']
+    }).catch((err: BusinessError) => {
+      AppLogger.error(TAG, `open privacy policy failed: ${err.code}, ${err.message}`)
+      showToast('无法打开浏览器')
+    })
+  }
+
+  private confirmRevokePrivacy(): void {
+    showCloudConfirmDialog(this.getUIContext(), {
+      title: '撤回隐私政策同意？',
+      message: '撤回后将退出当前账号，下次打开应用需重新阅读并同意隐私政策才能继续使用。\n' +
+        '本机保存的账号记录不会删除，可在登录页「已保存账号」中删除。',
+      confirmText: '撤回',
+      onConfirm: () => {
+        AppLogger.info(TAG, 'revoke privacy consent')
+        PrivacyConsentStore.revoke()
+        // 与「我的 → 退出登录」同一套：先丢掉 native 里的 refresh token，免得登录页的请求续期轮换掉已保存的凭据
+        CloudApi.clearSession()
+        ActiveAccount.clear()
+        CloudRouter.resetToLogin()
+      }
+    })
   }
 
   @Builder knockGroup() {

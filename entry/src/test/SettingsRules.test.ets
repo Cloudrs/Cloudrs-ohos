@@ -63,5 +63,17 @@ export default function settingsRulesTest() {
       expect(SettingsRules.apiMessage('API error: Incorrect password (code: 40004)')).assertEqual('Incorrect password')
       expect(SettingsRules.apiMessage('网络连接失败')).assertEqual('网络连接失败')
     })
+    it('privacy_consent_validity', 0, () => {
+      // 没同意过 / 脏数据
+      expect(SettingsRules.isPrivacyConsentValid(undefined, 1)).assertFalse()
+      expect(SettingsRules.isPrivacyConsentValid(0, 1)).assertFalse()
+      expect(SettingsRules.isPrivacyConsentValid(-1, 1)).assertFalse()
+      expect(SettingsRules.isPrivacyConsentValid(Number.NaN, 1)).assertFalse()
+      // 同版本有效，政策升版本后要重新同意
+      expect(SettingsRules.isPrivacyConsentValid(3, 3)).assertTrue()
+      expect(SettingsRules.isPrivacyConsentValid(2, 3)).assertFalse()
+      // 应用市场包记下高版本，本地包回落到内置低版本时仍有效
+      expect(SettingsRules.isPrivacyConsentValid(3, 1)).assertTrue()
+    })
   })
 }

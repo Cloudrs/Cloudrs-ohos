@@ -167,6 +167,12 @@ class Constant {
   /** 本地续播记录表，整表一个 JSON 数组存在 USER_PREFERENCES 下 */
   VIDEO_PROGRESS_KEY: string = 'VideoPlayProgress'
 
+  /** 登录页的网址 / 用户名历史候选，整表一个 JSON 数组存在 USER_PREFERENCES 下 */
+  LOGIN_HISTORY_KEY: string = 'LoginHistory'
+
+  /** 扫码令牌登录拿不到用户名时的占位名：只用来区分账号记录，不能拿去登录，不进历史候选 */
+  SCAN_LOGIN_FALLBACK_USERNAME: string = 'scan-login'
+
   // 片头片尾各留这么大比例的"不记录区"：开头没看几眼的不记，接近看完的清掉。
   // 按比例而非绝对秒数，才能同时伺候十几秒的短片和几十分钟的长片
   VIDEO_PROGRESS_EDGE_RATIO: number = 0.05

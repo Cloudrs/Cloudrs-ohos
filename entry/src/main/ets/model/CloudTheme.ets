@@ -440,6 +440,16 @@ export class CloudThemeToken {
   static readonly loginInputGroupGap: number = 10
   static readonly loginPasswordTransitionOffsetY: number = -30
   static readonly loginInputDisappearDuration: number = 150
+  // 网址 / 用户名历史候选浮层：贴在输入框下沿，临时盖住下方「继续」按钮；最多露 4.5 行，半行提示还能滚
+  static readonly loginSuggestGap: number = 6
+  static readonly loginSuggestPadding: number = 4
+  static readonly loginSuggestHeaderHeight: number = 28
+  static readonly loginSuggestItemHeight: number = 56
+  static readonly loginSuggestMaxVisibleRows: number = 4.5
+  static readonly loginSuggestAvatarSize: number = 32
+  static readonly loginSuggestRemoveSize: number = 32
+  // 获焦后等软键盘回调的兜底上限，只防异常（没接实体键盘却始终等不到软键盘），正常都由键盘回调接管
+  static readonly loginSuggestKeyboardWaitMs: number = 1000
   // 底部「扫码登录 / 已保存账号」：线性图标 + 文字，与我的页图标同一套
   static readonly loginFooterButtonGap: number = 28
   static readonly loginFooterIconSize: number = 24
@@ -484,6 +494,8 @@ export class CloudThemeToken {
   static readonly surface: ResourceColor = $r('app.color.cloud_surface')
   static readonly surfaceSubtle: ResourceColor = $r('app.color.cloud_surface_subtle')
   static readonly surfaceTranslucent: ResourceColor = $r('app.color.cloud_surface_translucent')
+  // 登录页历史候选的选中 / 按压底：半透明叠色，压在气泡材质上不成实色块，<26 实底上也是浅灰
+  static readonly suggestHighlight: ResourceColor = $r('app.color.cloud_suggest_highlight')
   static readonly surfaceGlassStrong: ResourceColor = $r('app.color.cloud_surface_glass_strong')
   // 光边：HDS 标题栏键 / 底部悬浮页签边缘那圈 2~3px 的白光（Pura X View 实测），自绘控件同款
   static readonly controlRim: ResourceColor = $r('app.color.cloud_control_rim')

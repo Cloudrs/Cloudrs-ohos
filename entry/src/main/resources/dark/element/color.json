@@ -25,6 +25,10 @@
       "value": "#D9151B23"
     },
     {
+      "name": "cloud_suggest_highlight",
+      "value": "#1AFFFFFF"
+    },
+    {
       "name": "cloud_surface_glass_strong",
       "value": "#CC151B23"
     },

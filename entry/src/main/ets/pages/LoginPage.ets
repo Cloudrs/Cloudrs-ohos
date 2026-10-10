@@ -1,4 +1,4 @@
-import { KeyboardAvoidMode, LengthMetrics, window } from '@kit.ArkUI'
+import { FrameCallback, KeyboardAvoidMode, LengthMetrics, window } from '@kit.ArkUI'
 import { DbUserInfo, SiteConfig, UserInfo, TwoFactorCallback } from '../model/net/ApiTypes';
 import { showToastTips, ToastType } from '../utils/ToastUtil';
 import Constant from '../model/Constant';
@@ -20,6 +20,65 @@ import { OtpInput } from '../components/OtpInput';
 import AppLogger from '../utils/AppLogger';
 import { WindowMover } from '../utils/WindowMover';
 import { common } from '@kit.AbilityKit';
+import { KeyCode, inputDevice } from '@kit.InputKit';
+import { LoginHistoryStore } from '../model/LoginHistoryStore';
+import { LoginHistoryEntry, LoginHistoryRules } from '../utils/LoginHistoryRules';
+import { LoginSuggestItem, LoginSuggestPanel } from '../components/LoginSuggestPanel';
+
+// 历史候选挂在哪个输入框上
+const SUGGEST_NONE: string = ''
+const SUGGEST_SITE: string = 'site'
+const SUGGEST_USER: string = 'user'
+const SUGGEST_NO_ACTIVE: number = -1
+// 系统意外关掉候选气泡后最多自动重开几次（每次获焦 / 输入重新计数），防止反复开关
+const SUGGEST_REOPEN_LIMIT: number = 2
+const SUGGEST_STEP: number = 1
+const SINGLE_ACCOUNT: number = 1
+const DOUBLE: number = 2
+
+/** 输入框在页面中的位置（vp）；候选浮层按它与根 Stack 的差值定位到输入框下沿 */
+class SuggestAnchor {
+  x: number = 0
+  y: number = 0
+  width: number = 0
+  height: number = 0
+}
+
+/** 接着的是不是实体字母键盘：hdc 注入、模拟器转发等虚拟设备不算 */
+function isPhysicalKeyboard(deviceId: number): boolean {
+  try {
+    if (inputDevice.getKeyboardTypeSync(deviceId) !== inputDevice.KeyboardType.ALPHABETIC_KEYBOARD) {
+      return false
+    }
+    return inputDevice.getDeviceInfoSync(deviceId).isVirtual !== true
+  } catch (err) {
+    AppLogger.warn('LoginPage', `query input device ${deviceId} failed: ${(err as Error)?.message ?? err}`)
+    return false
+  }
+}
+
+/** 在下一帧渲染时执行一次 */
+class NextFrameCallback extends FrameCallback {
+  private readonly action: () => void
+
+  constructor(action: () => void) {
+    super()
+    this.action = action
+  }
+
+  onFrame(_frameTimeInNano: number): void {
+    this.action()
+  }
+}
+
+function anchorOf(area: Area): SuggestAnchor {
+  const anchor = new SuggestAnchor()
+  anchor.x = Number(area.globalPosition.x ?? 0)
+  anchor.y = Number(area.globalPosition.y ?? 0)
+  anchor.width = Number(area.width)
+  anchor.height = Number(area.height)
+  return anchor
+}
 
 @Extend(Row)
 function rowCommonStyle() {
@@ -150,6 +209,27 @@ export struct LoginPage {
   @State private username: string = ''
   @State private password: string = ''
   @State private otpCode: string = ''
+  // 网址 / 用户名历史候选：挂在哪个获焦输入框上、是否被收起（Esc、点空白、收键盘、刚选中）、外接键盘选中的行
+  @State private history: LoginHistoryEntry[] = []
+  @State private suggestField: string = SUGGEST_NONE
+  @State private suggestDismissed: boolean = false
+  @State private suggestActive: number = SUGGEST_NO_ACTIVE
+  // 布局还在变时先不弹候选，三种情况各一个开关（全部为 false 才弹），原因见 beginKeyboardResize：
+  // 软键盘缩放动画进行中（animateTo 的 onFinish 解除）/ 刚获焦、等软键盘回调 / 系统意外关掉后等一帧重开
+  @State private suggestKeyboardResizing: boolean = false
+  @State private suggestAwaitingKeyboard: boolean = false
+  @State private suggestReopening: boolean = false
+  private suggestResizeSeq: number = 0
+  private suggestKeyboardWaitTimer: number = -1
+  private suggestReopenBudget: number = SUGGEST_REOPEN_LIMIT
+  // 接着实体键盘时系统不弹软键盘，获焦后候选不必等软键盘回调；插拔时刷新
+  private physicalKeyboardAttached: boolean = false
+  private inputDeviceListener?: (info: inputDevice.DeviceListener) => void
+  @State private siteAnchor: SuggestAnchor = new SuggestAnchor()
+  @State private userAnchor: SuggestAnchor = new SuggestAnchor()
+  @State private bodyAnchor: SuggestAnchor = new SuggestAnchor()
+  // 用户名候选配头像和昵称用；用户名框每次获焦时重读，底部「已保存账号」里删了账号也能跟上
+  private savedAccounts: DbUserInfo[] = []
   scroller: Scroller = new Scroller();
   private nextPage: string|null = Constant.HOME_PAGE
   private readonly otpInputId: string = 'loginOtpInput'
@@ -259,8 +339,27 @@ export struct LoginPage {
         // 监听软键盘的隐藏和显示；logo 缩放与底部区域显隐一起过渡
         this.avoidAreaListener = (data: window.AvoidAreaOptions) => {
           if (data.type == window.AvoidAreaType.TYPE_KEYBOARD) {
-            uiContext.animateTo({ duration: CloudThemeToken.loginTransitionDuration, curve: Curve.EaseOut }, () => {
-              this.keyHeight = uiContext.px2vp(data.area.bottomRect.height);
+            const height = uiContext.px2vp(data.area.bottomRect.height)
+            // 收起软键盘时输入框焦点还在，候选浮层跟着收起，免得盖着「继续」按钮；键盘再弹出时恢复
+            const wasVisible = this.isKeyboardVisible()
+            // 页面要跟着键盘缩放一段动画：从这里到动画的 onFinish 之间先不弹候选
+            const resizing = height !== this.keyHeight
+            const resizeSeq = resizing ? this.beginKeyboardResize() : this.suggestResizeSeq
+            if (height > CloudThemeToken.zero && !wasVisible) {
+              this.suggestDismissed = false
+            } else if (height <= CloudThemeToken.zero && wasVisible) {
+              this.suggestDismissed = true
+            }
+            uiContext.animateTo({
+              duration: CloudThemeToken.loginTransitionDuration,
+              curve: Curve.EaseOut,
+              onFinish: () => {
+                if (resizing) {
+                  this.endKeyboardResize(resizeSeq)
+                }
+              }
+            }, () => {
+              this.keyHeight = height;
             });
           }
         };
@@ -273,6 +372,8 @@ export struct LoginPage {
       AppLogger.error('LoginPage', `getLastWindow failed: ${err.message}`)
     })
 
+    this.history = LoginHistoryStore.list()
+    this.watchPhysicalKeyboard()
     if (this.routeParam) {
       this.nextPage = this.routeParam.nextPage
       this.applyRouteLoginParam(this.routeParam)
@@ -283,6 +384,15 @@ export struct LoginPage {
   }
 
   aboutToDisappear(): void {
+    clearTimeout(this.suggestKeyboardWaitTimer)
+    if (this.inputDeviceListener) {
+      try {
+        inputDevice.off('change', this.inputDeviceListener)
+      } catch (err) {
+        AppLogger.warn('LoginPage', `off input device change failed: ${(err as Error)?.message ?? err}`)
+      }
+      this.inputDeviceListener = undefined
+    }
     // 键盘避让是整个窗口的设置，离开登录页恢复系统默认
     this.getUIContext().setKeyboardAvoidMode(KeyboardAvoidMode.OFFSET)
     if (this.keyboardWindow && this.avoidAreaListener) {
@@ -479,6 +589,8 @@ export struct LoginPage {
                   left: CloudThemeToken.loginTipsHorizontalMargin,
                   right: CloudThemeToken.loginTipsHorizontalMargin
                 })
+                // 候选浮层盖在它上面时会露出半行，先藏起来；只藏不移除，免得内容高度变化带动底部区域显隐
+                .visibility(this.isSuggestVisible() ? Visibility.Hidden : Visibility.Visible)
             }
           }
           .width('100%')
@@ -540,9 +652,34 @@ export struct LoginPage {
       .height("100%")
       .backgroundColor(CloudThemeToken.background)
       .justifyContent(FlexAlign.Center)
+      // 点 logo、标题、空白处收起候选；输入框、按钮等自带点击的子组件优先响应，不会走到这里
+      .onClick(() => {
+        this.dismissSuggest()
+      })
     }
     .width("100%")
     .height("100%")
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
+      this.bodyAnchor = anchorOf(newArea)
+    })
+  }
+
+  // 气泡内容：网址 / 用户名两个输入框共用，按当前获焦的那个出候选
+  @Builder suggestPanel() {
+    LoginSuggestPanel({
+      header: this.suggestField === SUGGEST_USER ? '在这个站点用过的账号' : '最近使用的站点',
+      items: this.suggestItems(),
+      query: this.suggestQuery(),
+      activeIndex: this.suggestActive,
+      isUser: this.suggestField === SUGGEST_USER,
+      maxPanelHeight: this.suggestMaxHeight(),
+      onPick: (index: number) => {
+        this.pickSuggestion(index)
+      },
+      onRemove: (index: number) => {
+        this.removeSuggestion(index)
+      }
+    })
   }
 
   private websiteTest(allowHttpFallback: boolean = false, focusNextStep: boolean = false) {
@@ -556,6 +693,9 @@ export struct LoginPage {
           onSuccess: (data: SiteConfig) => {
             this.loginTitle = data.title
             this.websiteInvalid = true
+            LoginHistoryStore.recordSite(this.protocol + this.address)
+            this.history = LoginHistoryStore.list()
+            this.prefillRecentUsername()
             if (this.scanShouldAutoLogin && this.username.length > 0 && this.password.length > 0) {
               this.scanShouldAutoLogin = false
               showToastTips('已识别账号密码，正在登录', ToastType.Info)
@@ -612,6 +752,7 @@ export struct LoginPage {
     }
     ActiveAccount.apply(this.username, dbUserInfo.url)
     UserDatabase.insertUserInfo(dbUserInfo)
+    LoginHistoryStore.recordLogin(dbUserInfo.url, this.username)
     AvatarUtil.refreshDbUserAvatar(dbUserInfo).catch((err: Error) => {
       AppLogger.warn('LoginPage', `refresh avatar cache failed: ${err.message}`)
     })
@@ -957,7 +1098,7 @@ export struct LoginPage {
         this.username = this.getScannedUserName(userInfo)
         this.password = ''
         if (this.username.length === 0) {
-          this.username = 'scan-login'
+          this.username = Constant.SCAN_LOGIN_FALLBACK_USERNAME
         }
         this.saveUserAndNavigate(userInfo)
       },
@@ -1165,13 +1306,55 @@ export struct LoginPage {
         .placeholderColor(CloudThemeToken.textSecondary)
         .enterKeyType(EnterKeyType.Next)
         .onChange((value) => {
-          this.address = value
+          // 选中候选回填网址时也会回调到这里，值没变就别把刚收起的候选又弹出来
+          if (value !== this.address) {
+            this.address = value
+            this.resetSuggest()
+          }
         })
+        .onFocus(() => {
+          this.onSuggestFocus(SUGGEST_SITE)
+        })
+        // 已获焦时再点不会回调 onFocus：点空白收起候选后，再点输入框要能重新弹出来
+        .onClick(() => {
+          this.resetSuggest()
+        })
+        .onBlur(() => {
+          this.onSuggestBlur(SUGGEST_SITE)
+        })
+        .onKeyPreIme((event: KeyEvent) => this.handleSuggestKey(event))
         .onSubmit(() => {
+          if (this.suggestActive !== SUGGEST_NO_ACTIVE && this.isSuggestVisible()) {
+            this.pickSuggestion(this.suggestActive)
+            return
+          }
           this.submitLoginStep()
         })
     }
     .rowCommonStyle()
+    .onAreaChange((_oldArea: Area, newArea: Area) => {
+      this.siteAnchor = anchorOf(newArea)
+    })
+    // 候选用系统气泡承载：Popup 在沉浸光感生效范围内，26+ 由材质接管底色、描边和投影；
+    // 气泡默认不抢焦点，输入框焦点和软键盘都保留，显隐完全由状态驱动
+    .bindPopup(this.isSuggestShownFor(SUGGEST_SITE), {
+      builder: this.suggestPanel,
+      placement: Placement.Bottom,
+      enableArrow: false,
+      targetSpace: CloudThemeToken.loginSuggestGap,
+      width: this.siteAnchor.width,
+      radius: CloudThemeToken.controlRadiusLg,
+      mask: false,
+      popupColor: CloudMaterial.materialSurface(CloudThemeToken.surface),
+      backgroundBlurStyle: BlurStyle.NONE,
+      systemMaterial: CloudMaterial.popupMaterial(),
+      onStateChange: (event: PopupStateChangeParam) => {
+        this.onSuggestPopupStateChange(SUGGEST_SITE, event.isVisible)
+      },
+      onWillDismiss: (_action: DismissPopupAction) => {
+        this.dismissSuggest()
+      }
+    })
   }
 
   @Builder showOtpInput() {
@@ -1212,9 +1395,26 @@ export struct LoginPage {
           .placeholderColor(CloudThemeToken.textSecondary)
           .enterKeyType(EnterKeyType.Next)
           .onChange((value) => {
-            this.username = value
+            if (value !== this.username) {
+              this.username = value
+              this.resetSuggest()
+            }
           })
+          .onFocus(() => {
+            this.onSuggestFocus(SUGGEST_USER)
+          })
+          .onClick(() => {
+            this.resetSuggest()
+          })
+          .onBlur(() => {
+            this.onSuggestBlur(SUGGEST_USER)
+          })
+          .onKeyPreIme((event: KeyEvent) => this.handleSuggestKey(event))
           .onSubmit(() => {
+            if (this.suggestActive !== SUGGEST_NO_ACTIVE && this.isSuggestVisible()) {
+              this.pickSuggestion(this.suggestActive)
+              return
+            }
             if (this.password.length === CloudThemeToken.zero) {
               this.focusInput(this.passwordInputId)
               return
@@ -1223,6 +1423,29 @@ export struct LoginPage {
           })
       }
       .rowCommonStyle()
+      .onAreaChange((_oldArea: Area, newArea: Area) => {
+        this.userAnchor = anchorOf(newArea)
+      })
+      // 候选用系统气泡承载：Popup 在沉浸光感生效范围内，26+ 由材质接管底色、描边和投影；
+      // 气泡默认不抢焦点，输入框焦点和软键盘都保留，显隐完全由状态驱动
+      .bindPopup(this.isSuggestShownFor(SUGGEST_USER), {
+        builder: this.suggestPanel,
+        placement: Placement.Bottom,
+        enableArrow: false,
+        targetSpace: CloudThemeToken.loginSuggestGap,
+        width: this.userAnchor.width,
+        radius: CloudThemeToken.controlRadiusLg,
+        mask: false,
+        popupColor: CloudMaterial.materialSurface(CloudThemeToken.surface),
+        backgroundBlurStyle: BlurStyle.NONE,
+        systemMaterial: CloudMaterial.popupMaterial(),
+        onStateChange: (event: PopupStateChangeParam) => {
+          this.onSuggestPopupStateChange(SUGGEST_USER, event.isVisible)
+        },
+        onWillDismiss: (_action: DismissPopupAction) => {
+          this.dismissSuggest()
+        }
+      })
 
       // 密码
       Row() {
@@ -1336,6 +1559,281 @@ export struct LoginPage {
       .height(CloudThemeToken.loginPrivacyLinkHeight)
     }
     .width("100%")
+  }
+
+  private onSuggestFocus(field: string): void {
+    if (field === SUGGEST_USER) {
+      this.savedAccounts = UserDatabase.listUserInfo()
+    }
+    this.suggestField = field
+    this.resetSuggest()
+    this.awaitKeyboardIfNeeded()
+  }
+
+  /**
+   * 软键盘开始弹出 / 收起：页面跟着缩放、输入框随 logo 动画移动，这段期间不弹候选，由动画的 onFinish 解除。
+   * 原因（Pura X View 实测）：键盘弹起时页面立刻缩到键盘上方，输入框却还在动画起点，气泡按起点位置排版，
+   * 矮屏上放不下就被系统直接关掉（不走 onWillDismiss），而 show 一直是 true、没有从关到开的变化，
+   * 要等下一次刷新才重新弹出，表现为「闪一下就没了，打字又出来」。等动画结束、输入框到位再弹就不会放不下。
+   * 返回本段序号：键盘高度连续变化时只认最后一段动画的结束。
+   */
+  private beginKeyboardResize(): number {
+    this.suggestResizeSeq++
+    this.suggestKeyboardResizing = true
+    // 等到了键盘回调，获焦时的兜底等待就不用了
+    clearTimeout(this.suggestKeyboardWaitTimer)
+    this.suggestKeyboardWaitTimer = -1
+    this.suggestAwaitingKeyboard = false
+    return this.suggestResizeSeq
+  }
+
+  private endKeyboardResize(seq: number): void {
+    if (seq === this.suggestResizeSeq) {
+      this.suggestKeyboardResizing = false
+    }
+  }
+
+  /**
+   * 刚获焦且软键盘没弹着：没接实体键盘时软键盘一定会弹（实测 60~190ms 才开始，输入法冷启动时更晚），
+   * 先等它的回调（beginKeyboardResize）接管，免得先弹出来又被收走。接着实体键盘时系统不弹软键盘，直接显示。
+   * 兜底计时只防异常（没接实体键盘却始终等不到软键盘），不承担判断键盘来不来的职责。
+   */
+  private awaitKeyboardIfNeeded(): void {
+    if (this.isKeyboardVisible() || this.suggestKeyboardResizing || this.physicalKeyboardAttached) {
+      return
+    }
+    this.suggestAwaitingKeyboard = true
+    clearTimeout(this.suggestKeyboardWaitTimer)
+    this.suggestKeyboardWaitTimer = setTimeout(() => {
+      this.suggestKeyboardWaitTimer = -1
+      this.suggestAwaitingKeyboard = false
+    }, CloudThemeToken.loginSuggestKeyboardWaitMs)
+  }
+
+  private watchPhysicalKeyboard(): void {
+    this.refreshPhysicalKeyboard()
+    this.inputDeviceListener = (_info: inputDevice.DeviceListener) => {
+      this.refreshPhysicalKeyboard()
+    }
+    try {
+      inputDevice.on('change', this.inputDeviceListener)
+    } catch (err) {
+      AppLogger.warn('LoginPage', `watch input device change failed: ${(err as Error)?.message ?? err}`)
+    }
+  }
+
+  private refreshPhysicalKeyboard(): void {
+    inputDevice.getDeviceList().then((ids: number[]) => {
+      this.physicalKeyboardAttached = ids.some((id: number) => isPhysicalKeyboard(id))
+    }).catch((err: BusinessError) => {
+      AppLogger.warn('LoginPage', `list input devices failed: ${err.code}, ${err.message}`)
+    })
+  }
+
+  /**
+   * 兜底：气泡被系统自己关掉（不走 onWillDismiss）而这边仍要显示时，show 一直是 true，不会自己重开。
+   * 先让 show 落到 false 并至少渲染一帧，下一帧再放开，造出一次从关到开；次数有上限，防止反复开关。
+   * 期间若正好赶上键盘缩放，会继续等到动画结束才放开。
+   */
+  private onSuggestPopupStateChange(field: string, visible: boolean): void {
+    if (visible || this.suggestReopening || !this.isSuggestShownFor(field) ||
+      this.suggestReopenBudget <= CloudThemeToken.zero) {
+      return
+    }
+    this.suggestReopenBudget--
+    this.suggestReopening = true
+    const uiContext = this.getUIContext()
+    uiContext.postFrameCallback(new NextFrameCallback(() => {
+      uiContext.postFrameCallback(new NextFrameCallback(() => {
+        this.suggestReopening = false
+      }))
+    }))
+  }
+
+  private onSuggestBlur(field: string): void {
+    if (this.suggestField === field) {
+      this.suggestField = SUGGEST_NONE
+    }
+  }
+
+  private resetSuggest(): void {
+    this.suggestDismissed = false
+    this.suggestActive = SUGGEST_NO_ACTIVE
+    this.suggestReopenBudget = SUGGEST_REOPEN_LIMIT
+  }
+
+  private dismissSuggest(): void {
+    if (this.suggestField !== SUGGEST_NONE && !this.suggestDismissed) {
+      this.suggestDismissed = true
+      this.suggestActive = SUGGEST_NO_ACTIVE
+    }
+  }
+
+  private siteSuggestions(): LoginHistoryEntry[] {
+    return LoginHistoryRules.matchSites(this.history, this.address)
+  }
+
+  private userSuggestions(): string[] {
+    const site = LoginHistoryRules.findSite(this.history, this.protocol + this.address)
+    return site ? LoginHistoryRules.matchUsernames(site.usernames, this.username) : []
+  }
+
+  // 只认当前步骤里那个输入框：步骤切换时旧输入框被销毁，未必来得及回调 onBlur
+  private suggestCount(): number {
+    if (this.suggestField === SUGGEST_SITE && !this.websiteInvalid) {
+      return this.siteSuggestions().length
+    }
+    if (this.suggestField === SUGGEST_USER && this.websiteInvalid && !this.needs2FA) {
+      return this.userSuggestions().length
+    }
+    return CloudThemeToken.zero
+  }
+
+  private isSuggestVisible(): boolean {
+    const minHeight = CloudThemeToken.loginSuggestHeaderHeight + CloudThemeToken.loginSuggestItemHeight +
+      (CloudThemeToken.loginSuggestPadding + CloudThemeToken.lineWidth) * DOUBLE
+    return !this.suggestDismissed && !this.suggestKeyboardResizing && !this.suggestAwaitingKeyboard &&
+      !this.suggestReopening && this.suggestCount() > CloudThemeToken.zero &&
+      this.suggestMaxHeight() >= minHeight
+  }
+
+  private isSuggestShownFor(field: string): boolean {
+    return this.suggestField === field && this.isSuggestVisible()
+  }
+
+  private suggestAnchor(): SuggestAnchor {
+    return this.suggestField === SUGGEST_USER ? this.userAnchor : this.siteAnchor
+  }
+
+  private suggestPanelTop(): number {
+    const anchor = this.suggestAnchor()
+    return anchor.y - this.bodyAnchor.y + anchor.height + CloudThemeToken.loginSuggestGap
+  }
+
+  // 往下最多铺到页面底部留一道间隙。软键盘弹出时页面已缩到键盘上方，但缩后的高度要晚一帧才量到，
+  // 跟底部区域显隐一样按「未弹键盘时的总高 − 键盘高」推算
+  private suggestMaxHeight(): number {
+    const bodyHeight = this.isKeyboardVisible() ?
+      Math.min(this.bodyAnchor.height, this.loginBodyHeight - this.keyHeight) : this.bodyAnchor.height
+    const available = bodyHeight - this.suggestPanelTop() - CloudThemeToken.spacingSection
+    const preferred = CloudThemeToken.loginSuggestHeaderHeight +
+      CloudThemeToken.loginSuggestItemHeight * CloudThemeToken.loginSuggestMaxVisibleRows +
+      (CloudThemeToken.loginSuggestPadding + CloudThemeToken.lineWidth) * DOUBLE
+    return Math.min(available, preferred)
+  }
+
+  private suggestQuery(): string {
+    if (this.suggestField === SUGGEST_USER) {
+      return this.username.trim()
+    }
+    return LoginHistoryRules.hostOf(LoginHistoryRules.normalizeUrl(this.address))
+  }
+
+  private suggestItems(): LoginSuggestItem[] {
+    if (this.suggestField === SUGGEST_USER) {
+      const siteUrl = this.protocol + this.address
+      return this.userSuggestions().map((name: string) => {
+        const item = new LoginSuggestItem()
+        item.key = name
+        item.title = name
+        item.account = this.savedAccounts.find((account: DbUserInfo) =>
+          LoginHistoryRules.isSameUrl(account.url, siteUrl) && LoginHistoryRules.isSameUsername(account.username, name))
+        // 昵称和「已保存账号」列表一样用来认人；与用户名相同就不重复显示
+        const nickname = item.account?.userinfo?.nickname ?? ''
+        item.subtitle = nickname.length > 0 && nickname !== name ? nickname : ''
+        return item
+      })
+    }
+    return this.siteSuggestions().map((site: LoginHistoryEntry) => {
+      const item = new LoginSuggestItem()
+      item.key = site.url
+      item.title = LoginHistoryRules.hostOf(site.url)
+      // 默认是 https，只给 http 站点标出来，免得选中后协议悄悄变了
+      item.tag = site.url.toLowerCase().startsWith(Constant.PROTOCOL_HTTP_SCHEME) ? 'HTTP' : ''
+      item.subtitle = this.siteSuggestSubtitle(site)
+      return item
+    })
+  }
+
+  private siteSuggestSubtitle(site: LoginHistoryEntry): string {
+    const count = site.usernames.length
+    if (count === CloudThemeToken.zero) {
+      return '还没在这里登录过'
+    }
+    return count === SINGLE_ACCOUNT ? site.usernames[0] : `${site.usernames[0]} 等 ${count} 个账号`
+  }
+
+  private pickSuggestion(index: number): void {
+    this.suggestDismissed = true
+    this.suggestActive = SUGGEST_NO_ACTIVE
+    if (this.suggestField === SUGGEST_USER) {
+      const names = this.userSuggestions()
+      if (index < names.length) {
+        this.username = names[index]
+        this.focusInput(this.passwordInputId)
+      }
+      return
+    }
+    const sites = this.siteSuggestions()
+    if (index >= sites.length) {
+      return
+    }
+    // 选站点 = 填网址 + 直接校验站点；校验通过后带出在那里最近用的用户名，焦点落到密码框
+    this.applyStoredUrl(sites[index].url)
+    this.username = ''
+    this.password = ''
+    this.submitLoginStep()
+  }
+
+  // 进入账号步时带出该站点最近用的用户名，手输网址和点候选都一样；已经有用户名（重登预填、扫码带的）不覆盖。
+  // 「添加账号」是要登另一个号，不带出，用户名框里仍可从候选选
+  private prefillRecentUsername(): void {
+    if (this.username.length > 0 || this.routeParam?.isAdd) {
+      return
+    }
+    const site = LoginHistoryRules.findSite(this.history, this.protocol + this.address)
+    if (site && site.usernames.length > 0) {
+      this.username = site.usernames[0]
+    }
+  }
+
+  private removeSuggestion(index: number): void {
+    if (this.suggestField === SUGGEST_USER) {
+      const names = this.userSuggestions()
+      if (index < names.length) {
+        LoginHistoryStore.removeUsername(this.protocol + this.address, names[index])
+      }
+    } else {
+      const sites = this.siteSuggestions()
+      if (index < sites.length) {
+        LoginHistoryStore.removeSite(sites[index].url)
+      }
+    }
+    this.history = LoginHistoryStore.list()
+    this.suggestActive = SUGGEST_NO_ACTIVE
+  }
+
+  // 外接键盘：↑↓ 在候选里移动、Esc 收起；回车仍走 onSubmit（有选中行时选它）。
+  // 用 onKeyPreIme 是为了赶在输入法之前拿到按键，返回 true 表示已消费
+  private handleSuggestKey(event: KeyEvent): boolean {
+    if (event.type !== KeyType.Down || !this.isSuggestVisible()) {
+      return false
+    }
+    const count = this.suggestCount()
+    switch (event.keyCode) {
+      case KeyCode.KEYCODE_DPAD_DOWN:
+        this.suggestActive = (this.suggestActive + SUGGEST_STEP) % count
+        return true
+      case KeyCode.KEYCODE_DPAD_UP:
+        this.suggestActive = this.suggestActive <= CloudThemeToken.zero ? count - SUGGEST_STEP :
+          this.suggestActive - SUGGEST_STEP
+        return true
+      case KeyCode.KEYCODE_ESCAPE:
+        this.dismissSuggest()
+        return true
+      default:
+        return false
+    }
   }
 
   private continueLoginStep(): void {

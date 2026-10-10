@@ -201,6 +201,10 @@
       "value": "#DFFFFFFF"
     },
     {
+      "name": "cloud_suggest_highlight",
+      "value": "#0F000000"
+    },
+    {
       "name": "cloud_surface_glass_strong",
       "value": "#CCFFFFFF"
     },

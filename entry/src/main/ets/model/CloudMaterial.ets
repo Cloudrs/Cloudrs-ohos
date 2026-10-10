@@ -36,6 +36,7 @@ export class CloudMaterial {
   private static cachedPanel: SystemUiMaterial | undefined = undefined
   private static cachedTitleControl: SystemUiMaterial | undefined = undefined
   private static cachedDialog: SystemUiMaterial | undefined = undefined
+  private static cachedPopup: SystemUiMaterial | undefined = undefined
 
   /** 当前 ROM 是否支持沉浸光感。只在首次访问时算一次，并把结论记进启动日志。 */
   static get supported(): boolean {
@@ -120,6 +121,22 @@ export class CloudMaterial {
         })
       }
       return CloudMaterial.cachedDialog
+    }
+    return undefined
+  }
+
+  /**
+   * 自绘内容的气泡（bindPopup 的 systemMaterial 选项，Popup 在生效范围内）：登录页的网址 / 用户名历史候选。
+   * 与半模态同档 THICK，压在下方的蓝色按钮上时文字仍清楚；popupColor 配合 materialSurface 置透明。
+   */
+  static popupMaterial(): SystemUiMaterial | undefined {
+    if (deviceInfo.apiAvailable('26.0.0')) {
+      if (CloudMaterial.cachedPopup === undefined) {
+        CloudMaterial.cachedPopup = new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THICK
+        })
+      }
+      return CloudMaterial.cachedPopup
     }
     return undefined
   }

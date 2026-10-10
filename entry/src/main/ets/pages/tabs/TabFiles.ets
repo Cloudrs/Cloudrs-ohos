@@ -262,8 +262,16 @@ export struct TabFiles {
 
   @State downloadingCount: number = 0;
   @State uploadingCount: number = 0;
-  @State albumSaving: boolean = false;
-  @State albumSaveText: string = '';
+  @State albumSaveVisible: boolean = false
+  @State albumSaveDone: number = 0
+  @State albumSaveTotal: number = 0
+  private albumSaveRunning: boolean = false
+  private albumSaveSheetCtrl: SheetPhaseController = new SheetPhaseController()
+  /** 延迟弹面板的定时器，同批量操作面板：存得够快就不弹 */
+  private albumSaveShowTimer: number = -1
+  /** 兑现最短驻留后再收起的定时器；在等的期间重复收起请求直接忽略 */
+  private albumSaveCloseTimer: number = -1
+  private albumSaveShownAt: number = 0
   @State batchOperationVisible: boolean = false
   @State batchOperationTitle: string = ''
   @State batchOperationTotal: number = 0
@@ -2273,10 +2281,6 @@ export struct TabFiles {
 
         this.fileMoreMenuAnchor()
 
-        if (this.albumSaving) {
-          this.albumSavingOverlay()
-        }
-
         Column()
           .width(CloudThemeToken.zero)
           .height(CloudThemeToken.zero)
@@ -2440,6 +2444,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.batchOperationVisible, this.batchOperationSheet(), {
             detents: [SheetSize.FIT_CONTENT],
+            // 宽屏居中弹窗不认 detents，高度单独给成按内容
+            height: SheetSize.FIT_CONTENT,
             title: {
               title: this.batchOperationTitle,
               // 暂停状态由按钮自己说清楚（它会变成"继续"），不必再复述一遍
@@ -2468,6 +2474,42 @@ export struct TabFiles {
                 this.batchOperationVisible = value
               }, () => {
                 this.batchOperationVisible = false
+              })
+            }
+          })
+
+        // 保存到相册的进度：走系统半模态才能盖住悬浮 Tab 栏，宽屏也随其他面板变居中弹窗
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.albumSaveVisible, this.albumSaveSheet(), {
+            detents: [SheetSize.FIT_CONTENT],
+            // 宽屏居中弹窗不认 detents，不给高度就是默认 560vp，内容只有两行会空出一大截
+            height: SheetSize.FIT_CONTENT,
+            title: { title: '正在保存到相册' },
+            showClose: false,
+            enableOutsideInteractive: false,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+            systemMaterial: CloudMaterial.sheetMaterial(),
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            // 保存不可中断，面板只随保存结束收起
+            shouldDismiss: (_sheetDismiss: SheetDismiss) => {
+            },
+            onWillAppear: () => {
+              this.albumSaveSheetCtrl.onWillAppear()
+            },
+            onAppear: () => {
+              this.albumSaveSheetCtrl.onAppear()
+            },
+            onWillDisappear: () => {
+              this.albumSaveSheetCtrl.onWillDisappear()
+            },
+            onDisappear: () => {
+              this.albumSaveSheetCtrl.onDisappear((value: boolean) => {
+                this.albumSaveVisible = value
+              }, () => {
+                this.albumSaveVisible = false
               })
             }
           })
@@ -5167,62 +5209,40 @@ export struct TabFiles {
     requestDownload.downloadFileBackground(fileModel, context, begins)
   }
 
-  @Builder albumSavingOverlay() {
-    Column() {
-      Blank()
-      Column({ space: CloudThemeToken.spacingSection }) {
-        Row()
-          .width(CloudThemeToken.iconBoxXs)
-          .height(CloudThemeToken.strongLineWidth)
-          .borderRadius(CloudThemeToken.controlRadiusRoundLg)
-          .backgroundColor(CloudThemeToken.line)
-        Row({ space: CloudThemeToken.spacingCard }) {
-          LoadingProgress()
-            .width(CloudThemeToken.iconBoxMd)
-            .height(CloudThemeToken.iconBoxMd)
-            .color(CloudThemeToken.primary)
-          Column({ space: CloudThemeToken.spacingXs }) {
-            Text('正在保存图片')
-              .fontSize(CloudThemeToken.textSizeTitle)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(CloudThemeToken.textPrimary)
-            Text(this.albumSaveText)
-              .fontSize(CloudThemeToken.textSizeBody)
-              .fontColor(CloudThemeToken.textSecondary)
-          }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+  @Builder albumSaveSheet() {
+    Column({ space: CloudThemeToken.spacingCard }) {
+      Row({ space: CloudThemeToken.spacingMd }) {
+        Text(`${this.albumSaveDone}`)
+          .fontSize(CloudThemeToken.textSizeMetric)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
+        Text(`/ ${this.albumSaveTotal}`)
+          .fontSize(CloudThemeToken.textSizeLargePlus)
+          .fontColor(CloudThemeToken.textSecondary)
       }
       .width('100%')
-      .constraintSize({ maxWidth: 560 })
-      .padding({
-        left: CloudThemeToken.spacingPage,
-        right: CloudThemeToken.spacingPage,
-        top: CloudThemeToken.spacingSm,
-        bottom: this.bottomRectHeight + CloudThemeToken.spacingPage
+      .alignItems(VerticalAlign.Bottom)
+
+      Progress({
+        value: this.albumSaveDone,
+        total: Math.max(this.albumSaveTotal, 1),
+        type: ProgressType.Capsule
       })
-      .borderRadius({
-        topLeft: CloudThemeToken.controlRadiusXl,
-        topRight: CloudThemeToken.controlRadiusXl
-      })
-      // 自绘底部面板在内容区、不在沉浸光感生效范围（挂材质无效）：半透明 surface + 手写模糊出磨砂，观感贴近真 bindSheet
-      .backgroundColor(CloudThemeToken.surfaceTranslucent)
-      .backdropBlur(CloudThemeToken.controlFrostBlur)
-      .shadow({
-        radius: CloudThemeToken.spacingSection,
-        color: 'rgba(0,0,0,0.22)',
-        offsetX: 0,
-        offsetY: -CloudThemeToken.spacingXs
-      })
+        .width('100%')
+        .height(CloudThemeToken.spacingSm)
+        .color(CloudThemeToken.primary)
+        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        // 胶囊 Progress 自带悬停/聚焦交互态，纯展示条要关掉，否则 2in1 鼠标划过会晃
+        .focusable(false)
+        .hitTestBehavior(HitTestMode.None)
     }
     .width('100%')
-    .height('100%')
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor('rgba(0,0,0,0.24)')
-    .hitTestBehavior(HitTestMode.Block)
+    .padding({
+      left: CloudThemeToken.spacingPage,
+      right: CloudThemeToken.spacingPage,
+      top: CloudThemeToken.spacingCard,
+      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    })
   }
 
   @Builder batchOperationSheet() {
@@ -5580,16 +5600,78 @@ export struct TabFiles {
     return `${CommonUtil.formatBytes(request.size)} · ${action} ${request.destination}`
   }
 
+  /** 与批量操作面板同一套节奏：BATCH_SHEET_SHOW_DELAY_MS 内存完的不弹面板，只给结果 toast */
+  private showAlbumSaveSheetLater(): void {
+    if (this.albumSaveShowTimer >= 0) {
+      clearTimeout(this.albumSaveShowTimer)
+    }
+    this.albumSaveShownAt = 0
+    this.albumSaveShowTimer = setTimeout(() => {
+      this.albumSaveShowTimer = -1
+      if (!this.albumSaveRunning || this.albumSaveDone >= this.albumSaveTotal) {
+        return
+      }
+      this.albumSaveShownAt = Date.now()
+      this.albumSaveSheetCtrl.requestOpen(
+        () => this.albumSaveVisible,
+        (value: boolean) => {
+          this.albumSaveVisible = value
+        })
+    }, BATCH_SHEET_SHOW_DELAY_MS)
+  }
+
+  /** 收起保存面板并兑现最短驻留；下载完和保存结束各会调一次，等驻留期间的重复调用直接忽略 */
+  private hideAlbumSaveSheet(): void {
+    if (this.albumSaveShowTimer >= 0) {
+      clearTimeout(this.albumSaveShowTimer)
+      this.albumSaveShowTimer = -1
+    }
+    if (this.albumSaveCloseTimer >= 0) {
+      return
+    }
+    const setVisible: (value: boolean) => void = (value: boolean) => {
+      this.albumSaveVisible = value
+    }
+    const shownAt = this.albumSaveShownAt
+    this.albumSaveShownAt = 0
+    const remain = shownAt > 0 ? BATCH_SHEET_MIN_VISIBLE_MS - (Date.now() - shownAt) : 0
+    if (remain <= 0) {
+      this.albumSaveSheetCtrl.requestClose(setVisible)
+      return
+    }
+    this.albumSaveCloseTimer = setTimeout(() => {
+      this.albumSaveCloseTimer = -1
+      this.albumSaveSheetCtrl.requestClose(setVisible)
+    }, remain)
+  }
+
   private async saveImagesFlow(context: common.UIAbilityContext, images: ObjectInfo[]): Promise<void> {
     if (images.length === 0) {
       return
     }
-    this.albumSaving = true
-    this.albumSaveText = `正在保存到相册 0/${images.length}`
-    const result: SaveAlbumResult = await saveImagesToAlbum(images, context, (done: number, total: number) => {
-      this.albumSaveText = `正在保存到相册 ${done}/${total}`
-    })
-    this.albumSaving = false
+    // 面板延迟才出现，这段时间里还能再点一次保存
+    if (this.albumSaveRunning) {
+      showToast('正在保存图片，请稍候')
+      return
+    }
+    this.albumSaveRunning = true
+    this.albumSaveDone = 0
+    this.albumSaveTotal = images.length
+    this.showAlbumSaveSheetLater()
+    let result: SaveAlbumResult
+    try {
+      result = await saveImagesToAlbum(images, context, (done: number, total: number) => {
+        this.albumSaveDone = done
+        this.albumSaveTotal = total
+        // 图都下完了：没相册权限时接下来要弹系统保存确认框，先让位，免得两层弹窗叠在一起
+        if (done >= total) {
+          this.hideAlbumSaveSheet()
+        }
+      })
+    } finally {
+      this.albumSaveRunning = false
+      this.hideAlbumSaveSheet()
+    }
     if (result.canceled) {
       showToast('已取消保存')
     } else if (result.failed === 0) {

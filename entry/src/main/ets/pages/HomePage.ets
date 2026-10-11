@@ -47,8 +47,9 @@ export struct HomePage {
   // 侧栏账号卡的头像与昵称读这里，账号与安全页改了头像/昵称会同步过来（DB 快照不会）
   @StorageLink(ACCOUNT_PROFILE_STORE_KEY) profileStore: AccountProfileStore = AccountProfileStore.instance
   @State showAccountSheet: boolean = false
-  private accountUser: string = ''
-  private accountUrl: string = ''
+  // 账号卡与切换面板都要渲染，必须是状态变量：普通字段切账号后改了值也不会触发重画
+  @State accountUser: string = ''
+  @State accountUrl: string = ''
   private appLockVerifyTimer: number = -1
 
   aboutToAppear(): void {
@@ -233,10 +234,6 @@ export struct HomePage {
     }
   }
 
-  private accountHost(): string {
-    return this.accountUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
-  }
-
   // 折叠键：XL 展开时收进侧栏顶行右端，LG 展开时居中于图标栏顶部，收起时停在内容区左上角
   private sideBarToggleLeft(): number {
     if (!this.showSideBar) {
@@ -419,7 +416,7 @@ export struct HomePage {
     .backgroundColor(CloudThemeToken.background)
   }
 
-  // 当前账号：头像 + 昵称 + 站点，点击弹出账号切换
+  // 当前账号：头像 + 昵称 + 邮箱（登录账号），点击弹出账号切换
   @Builder sideAccountCard() {
     Row({ space: CloudThemeToken.spacingCard }) {
       if (this.accountInfo) {
@@ -432,7 +429,7 @@ export struct HomePage {
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.accountHost())
+        Text(this.profileStore.accountName() || this.accountUser)
           .fontSize(CloudThemeToken.textSizeMicro)
           .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)

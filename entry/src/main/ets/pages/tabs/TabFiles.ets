@@ -50,7 +50,9 @@ import { DateFormatUtil } from "../../utils/DateFormatUtil";
 import {
   DividerShowType, HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
 } from "@kit.UIDesignKit";
-import { curves, LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
+import {
+  curves, LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions, SymbolGlyphModifier
+} from "@kit.ArkUI";
 import { GripSide, HoldingHandUtil } from "../../utils/HoldingHandUtil";
 import { Downloads, TransferAction } from "../../components/Downloads";
 import { Uploads } from "../../components/Uploads";
@@ -94,6 +96,23 @@ const BATCH_SHEET_MIN_VISIBLE_MS: number = 500
 /** 智感握姿换边：上传 FAB 横向滑过去的弹簧参数（与相册页切换胶囊一致） */
 const GRIP_SLIDE_RESPONSE: number = 0.45
 const GRIP_SLIDE_DAMPING: number = 0.8
+// 「更多」菜单选中项行尾的蓝色对勾，所有项共用一个
+const MORE_MENU_CHECK: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.checkmark'))
+  .fontSize(CloudThemeToken.objectMenuIconSize)
+  .fontColor([CloudThemeToken.primary])
+
+// 「更多」菜单项一律用系统 MenuItem 的标准写法（startIcon/content/labelInfo/symbolEndIcon）：
+// 自绘 builder 内容的菜单项在 PC 上鼠标移过去不出悬停预选框，标准写法的悬停、按压与键盘焦点由系统绘制
+@Extend(MenuItem)
+function moreMenuItemStyle() {
+  .contentFont({ size: CloudThemeToken.objectMenuTextSize, weight: FontWeight.Medium })
+  .contentFontColor(CloudThemeToken.textPrimary)
+  .labelFont({ size: CloudThemeToken.textSizeSmall })
+  .labelFontColor(CloudThemeToken.textSecondary)
+  // 系统 MenuItem 左内边距默认约 12，按原自绘项的边距和行高设置，菜单疏密不变
+  .padding({ left: CloudThemeToken.objectMenuHorizontalPadding })
+  .height(CloudThemeToken.menuItemLabelHeight)
+}
 
 interface BatchItemResult {
   item: ObjectInfo
@@ -640,13 +659,6 @@ export struct TabFiles {
     const allObjects = item.type === Constant.OBJECT_DIR_TYPE ?
     this.objectsInfo.dirObjects : this.objectsInfo.fileObjects
     return allObjects.findIndex((object: ObjectInfo) => object.id === item.id)
-  }
-
-  private getSortIcon(type: SortType): Resource {
-    if (this.sortType !== type) {
-      return $r('app.media.ic_sort_arrow_up')
-    }
-    return this.isSortTypeReverse(type) ? $r('app.media.ic_sort_arrow_down') : $r('app.media.ic_sort_arrow_up')
   }
 
   private toggleFileShowType(): void {
@@ -3005,9 +3017,10 @@ export struct TabFiles {
   @Builder fileMoreMenu() {
     Menu() {
       MenuItemGroup() {
-        // 用 checklist 图标而不是 ic_selected：后者是行尾表示"当前选中"的对勾，
-        // 同一个菜单里拿它当"多选"入口，会被读成"多选这项已被选中"
-        MenuItem(this.fileMoreItemContent($r('app.string.more_multi_select'), $r('app.media.ic_multi_select'), false))
+        // 用 checklist 图标而不是对勾：对勾在本菜单行尾表示"当前选中"，
+        // 拿它当"多选"入口会被读成"多选这项已被选中"
+        MenuItem({ startIcon: $r('app.media.ic_multi_select'), content: $r('app.string.more_multi_select') })
+          .moreMenuItemStyle()
           .onClick(() => {
             this.closeFileMoreMenu()
             this.onMoreClick(MoreMenuType.MULTI_SELECT)
@@ -3015,14 +3028,22 @@ export struct TabFiles {
       }
 
       MenuItemGroup() {
-        MenuItem(this.fileMoreItemContent($r('app.string.more_show_icon'), $r('app.media.ic_grid'),
-          this.showType === ShowType.SHOW_ICON))
+        MenuItem({
+          startIcon: $r('app.media.ic_grid'),
+          content: $r('app.string.more_show_icon'),
+          symbolEndIcon: this.showType === ShowType.SHOW_ICON ? MORE_MENU_CHECK : undefined
+        })
+          .moreMenuItemStyle()
           .onClick(() => {
             this.closeFileMoreMenu()
             this.changeShowType(ShowType.SHOW_ICON)
           })
-        MenuItem(this.fileMoreItemContent($r('app.string.more_show_list'), $r('app.media.ic_list_bullet_circle'),
-          this.showType === ShowType.SHOW_LIST))
+        MenuItem({
+          startIcon: $r('app.media.ic_list_bullet_circle'),
+          content: $r('app.string.more_show_list'),
+          symbolEndIcon: this.showType === ShowType.SHOW_LIST ? MORE_MENU_CHECK : undefined
+        })
+          .moreMenuItemStyle()
           .onClick(() => {
             this.closeFileMoreMenu()
             this.changeShowType(ShowType.SHOW_LIST)
@@ -3036,12 +3057,14 @@ export struct TabFiles {
       }
 
       MenuItemGroup() {
-        MenuItem(this.fileMoreItemContent($r('app.string.more_new_dir'), $r('app.media.ic_folder_badge_plus'), false))
+        MenuItem({ startIcon: $r('app.media.ic_folder_badge_plus'), content: $r('app.string.more_new_dir') })
+          .moreMenuItemStyle()
           .onClick(() => {
             this.closeFileMoreMenu()
             this.onMoreClick(MoreMenuType.NEW_DIR)
           })
-        MenuItem(this.fileMoreItemContent($r('app.string.more_new_file'), $r('app.media.ic_doc_badge_plus'), false))
+        MenuItem({ startIcon: $r('app.media.ic_doc_badge_plus'), content: $r('app.string.more_new_file') })
+          .moreMenuItemStyle()
           .onClick(() => {
             this.closeFileMoreMenu()
             this.onMoreClick(MoreMenuType.NEW_FILE)
@@ -3049,7 +3072,8 @@ export struct TabFiles {
       }
 
       MenuItemGroup() {
-        MenuItem(this.fileMoreItemContent($r('app.string.more_upload_file'), $r('app.media.ic_arrowshape_up'), false))
+        MenuItem({ startIcon: $r('app.media.ic_upload_file'), content: $r('app.string.more_upload_file') })
+          .moreMenuItemStyle()
           .onClick(() => {
             this.closeFileMoreMenu()
             this.onMoreClick(MoreMenuType.UPLOAD_FILE)
@@ -3063,38 +3087,15 @@ export struct TabFiles {
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
   }
 
-  @Builder fileMoreItemContent(content: ResourceStr, icon: Resource, isSelected: boolean) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Image(icon)
-        .width(CloudThemeToken.objectMenuIconSize)
-        .height(CloudThemeToken.objectMenuIconSize)
-        .fillColor(CloudThemeToken.textPrimary)
-        .draggable(false)
-
-      Text(content)
-        .fontSize(CloudThemeToken.objectMenuTextSize)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-        .height(CloudThemeToken.menuItemLabelHeight)
-
-      Image(isSelected ? $r('app.media.ic_selected') : '')
-        .width(CloudThemeToken.objectMenuIconSize)
-        .height(CloudThemeToken.objectMenuIconSize)
-        .fillColor(CloudThemeToken.primary)
-        .draggable(false)
-    }
-    .padding({
-      left: CloudThemeToken.objectMenuHorizontalPadding,
-      right: CloudThemeToken.objectMenuHorizontalPadding
-    })
-    .width('100%')
-    .height(CloudThemeToken.menuItemLabelHeight)
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.SpaceBetween)
-  }
+  // 排序项：选中的那一项行尾用灰色小字标升降序 + 蓝色对勾（系统菜单项行尾只有一个图标位，放不下箭头加对勾）
   @Builder fileMoreSortItem(content: ResourceStr, type: SortType) {
-    MenuItem(this.fileMoreSortContent(content, type))
+    MenuItem({
+      startIcon: $r('app.media.ic_sort_arrow_up'),
+      content: content,
+      labelInfo: this.sortType === type ? (this.isSortTypeReverse(type) ? '降序' : '升序') : undefined,
+      symbolEndIcon: this.sortType === type ? MORE_MENU_CHECK : undefined
+    })
+      .moreMenuItemStyle()
       .onClick(() => {
         this.closeFileMoreMenu()
         if (type === SortType.SORT_BY_NAME) {
@@ -3105,47 +3106,6 @@ export struct TabFiles {
           this.changeSortType(SortType.SORT_BY_SIZE, MoreMenuType.SORT_BY_SIZE)
         }
       })
-  }
-
-  @Builder fileMoreSortContent(content: ResourceStr, type: SortType) {
-    Row({ space: CloudThemeToken.spacingSection }) {
-      Image($r('app.media.ic_sort_arrow_up'))
-        .width(CloudThemeToken.objectMenuIconSize)
-        .height(CloudThemeToken.objectMenuIconSize)
-        .fillColor(CloudThemeToken.textPrimary)
-        .draggable(false)
-
-      Text(content)
-        .fontSize(CloudThemeToken.objectMenuTextSize)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(CloudThemeToken.textPrimary)
-        .layoutWeight(1)
-        .height(CloudThemeToken.menuItemLabelHeight)
-
-      Row({ space: CloudThemeToken.filesSortIconGroupGap }) {
-        Image(this.sortType === type ? this.isSortTypeReverse(type) ? $r('app.media.ic_sort_arrow_down') :
-        $r('app.media.ic_sort_arrow_up') : '')
-          .width(CloudThemeToken.objectMenuIconSize)
-          .height(CloudThemeToken.objectMenuIconSize)
-          .fillColor(CloudThemeToken.primary)
-          .draggable(false)
-        Image(this.sortType === type ? $r('app.media.ic_selected') : '')
-          .width(CloudThemeToken.objectMenuIconSize)
-          .height(CloudThemeToken.objectMenuIconSize)
-          .fillColor(CloudThemeToken.primary)
-          .draggable(false)
-      }
-      .width(CloudThemeToken.filesSortIconGroupWidthPercent)
-      .justifyContent(FlexAlign.SpaceBetween)
-    }
-    .padding({
-      left: CloudThemeToken.objectMenuHorizontalPadding,
-      right: CloudThemeToken.objectMenuHorizontalPadding
-    })
-    .width('100%')
-    .height(CloudThemeToken.menuItemLabelHeight)
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.SpaceBetween)
   }
 
   // 半模态标题行：下载 / 上传分段替代「传输进度」文字，与系统关闭键同一行，居中在整张半模态正中

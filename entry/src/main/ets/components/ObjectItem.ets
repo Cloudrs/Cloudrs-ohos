@@ -1,5 +1,5 @@
 import { ObjectInfo } from "../model/net/ApiTypes";
-import { LengthMetrics, LengthUnit, SymbolGlyphModifier } from "@kit.ArkUI";
+import { SymbolGlyphModifier } from "@kit.ArkUI";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
 import { CommonUtil, FileType } from "../utils/CommonUtil";
@@ -27,6 +27,17 @@ function itemStyle(selected: boolean = false) {
     width: CloudThemeToken.lineWidth,
     color: selected ? CloudThemeToken.primary : CloudThemeToken.transparent
   })
+}
+
+// 文件菜单项一律用系统 MenuItem 的 content 写法：自绘 builder 内容的菜单项在 PC 上鼠标移过去不出悬停预选框，
+// 标准写法的悬停、按压与键盘焦点都由系统绘制
+@Extend(MenuItem)
+function fileMenuItemStyle(color: ResourceColor) {
+  .contentFont({ size: CloudThemeToken.objectMenuTextSize, weight: FontWeight.Medium })
+  .contentFontColor(color)
+  // 系统 MenuItem 左内边距默认约 12，按原自绘项的边距和行高设置，菜单疏密不变
+  .padding({ left: CloudThemeToken.objectMenuHorizontalPadding })
+  .height(CloudThemeToken.menuItemLabelHeight)
 }
 
 @Extend(Text)
@@ -374,10 +385,7 @@ export struct ObjectItem {
             // 侧边展开时系统不画 › （MateBook 实测）；层叠展开自带会旋转的箭头，不覆盖
             symbolEndIcon: this.isSideExpand() ? MORE_CHEVRON : undefined
           })
-            .contentFont({ size: CloudThemeToken.objectMenuTextSize, weight: FontWeight.Medium })
-            .contentFontColor(CloudThemeToken.textPrimary)
-            // 系统 MenuItem 的左内边距默认约 12，比自绘菜单项小；设成同一个值让文字对齐
-            .padding({ left: CloudThemeToken.objectMenuHorizontalPadding })
+            .fileMenuItemStyle(CloudThemeToken.textPrimary)
         } else {
           this.commonMenuItem($r('app.string.cloud_share'), FileMenuType.CREATE_SHARE)
         }
@@ -394,8 +402,8 @@ export struct ObjectItem {
       }
 
       MenuItemGroup() {
-        MenuItem(this.commonMenuBuilder($r('app.string.delete')))
-          .contentFontColor(CloudThemeToken.danger)
+        MenuItem({ content: $r('app.string.delete') })
+          .fileMenuItemStyle(CloudThemeToken.danger)
           .onClick(() => {
             if (this.onMenuClick) {
               this.onMenuClick(item, FileMenuType.DELETE)
@@ -408,17 +416,9 @@ export struct ObjectItem {
     .subMenuExpandingMode(this.isSideExpand() ? SubMenuExpandingMode.SIDE_EXPAND : SubMenuExpandingMode.STACK_EXPAND)
     .padding(CloudThemeToken.zero)
     .margin(CloudThemeToken.zero)
+    // 分隔用系统默认（组间一条内缩细线、组内不画线），与文件页右上角「更多」菜单一致；
+    // 实色项间线和整宽粗分组带压在磨砂材质上会把菜单切成几段
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
-    .menuItemDivider({
-      color: CloudThemeToken.line,
-      strokeWidth: {value: CloudThemeToken.strongLineWidth, unit: LengthUnit.PX}
-    })
-    .menuItemGroupDivider({
-      color: CloudThemeToken.surfaceSubtle,
-      strokeWidth: LengthMetrics.vp(CloudThemeToken.spacingSm),
-      startMargin: LengthMetrics.vp(CloudThemeToken.zero),
-      endMargin: LengthMetrics.vp(CloudThemeToken.zero)
-    })
   }
 
   private isSideExpand(): boolean {
@@ -435,42 +435,16 @@ export struct ObjectItem {
     }
     .width(CloudThemeToken.menuWidth)
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
-    .menuItemDivider({
-      color: CloudThemeToken.line,
-      strokeWidth: {value: CloudThemeToken.strongLineWidth, unit: LengthUnit.PX}
-    })
   }
 
   @Builder commonMenuItem(title: ResourceStr, type: FileMenuType) {
-    MenuItem(this.commonMenuBuilder(title))
+    MenuItem({ content: title })
+      .fileMenuItemStyle(CloudThemeToken.textPrimary)
       .onClick(() => {
         if (this.onMenuClick) {
           this.onMenuClick(this.item, type)
         }
       })
-  }
-
-  @Builder commonMenuBuilder(content: ResourceStr, isSelected?: boolean) {
-    Row() {
-      Text(content)
-        .fontSize(CloudThemeToken.objectMenuTextSize)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(CloudThemeToken.textPrimary)
-        .height(CloudThemeToken.menuItemLabelHeight)
-        .layoutWeight(1)
-
-      Image(isSelected ? $r('app.media.ic_selected') : '')
-        .width(CloudThemeToken.objectMenuIconSize)
-        .height(CloudThemeToken.objectMenuIconSize)
-    }
-    .padding({
-      left: CloudThemeToken.objectMenuHorizontalPadding,
-      right: CloudThemeToken.objectMenuHorizontalPadding
-    })
-    .width('100%')
-    .height(CloudThemeToken.menuItemLabelHeight)
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.SpaceBetween)
   }
 
   @Builder sharedBadge() {

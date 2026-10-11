@@ -357,8 +357,6 @@ export class CloudThemeToken {
   static readonly filesTitleBarContentOffsetY: number = 2
   static readonly filesTitleHeight: number = 56
   static readonly filesGridTopGap: number = 4
-  static readonly filesSortIconGroupGap: number = 10
-  static readonly filesSortIconGroupWidthPercent: string = '50%'
   static readonly aria2CreateGap: number = 15
   static readonly aria2InputHeight: number = 200
   static readonly aria2InputPadding: number = 12

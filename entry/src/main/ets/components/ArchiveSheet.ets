@@ -101,8 +101,9 @@ export struct ArchiveSheet {
     }
     .width('100%')
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
-    // 与离线下载（Aria2Create）的路径选择同一套参数
+    // 与离线下载（Aria2Create）的路径选择同一套参数：默认半屏，上拉切到全屏
     .bindSheet($$this.showFolderPicker, this.folderPickerSheet(), {
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       showClose: false,
       backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
       systemMaterial: CloudMaterial.sheetMaterial(),

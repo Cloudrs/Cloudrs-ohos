@@ -127,6 +127,9 @@ export struct Aria2Create {
     .justifyContent(FlexAlign.Start)
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
     .bindSheet($$this.isShowPathSelect, this.selectPathSheet(), {
+      // 默认半屏，上拉（或目录上滑）切到全屏，同「关于」；宽屏居中弹窗不认 detents。
+      // 拖动条不要浮动：浮动时会被路径选择自己的标题栏盖住
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       showClose: false,
       backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
       systemMaterial: CloudMaterial.sheetMaterial(),

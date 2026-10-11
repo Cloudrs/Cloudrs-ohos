@@ -88,6 +88,9 @@ class Constant {
 
   ARIA2_MIN_UPDATE_INTERVAL_SECONDS: number = 3
 
+  // 离线下载 / 任务队列一次最多拉这么多条，须与 native 的 TASK_LIST_MAX_ITEMS 一致
+  TASK_LIST_MAX_ITEMS: number = 1000
+
   // Cloudreve v4 离线下载任务真正挂在下载器上的阶段，只有这个阶段服务端才接受取消
   ARIA2_PHASE_MONITOR: string = 'monitor'
 

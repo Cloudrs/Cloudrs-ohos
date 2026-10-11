@@ -351,8 +351,8 @@ export function nativeAria2Downloading<T>(callback?: HttpCallback<T>): void {
   wrapJson(aria2Downloading(), callback);
 }
 
-export function nativeAria2Finished<T>(page: number, callback?: HttpCallback<T>): void {
-  wrapJson(aria2Finished(page), callback);
+export function nativeAria2Finished<T>(callback?: HttpCallback<T>): void {
+  wrapJson(aria2Finished(), callback);
 }
 
 export function nativeAria2CreateTask(dst: string, urls: string[], callback?: HttpCallback<null>): void {
@@ -383,8 +383,8 @@ export function nativeAria2CanDeleteFinished(callback?: HttpCallback<boolean>): 
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
-export function nativeGetUserTasks<T>(page: number, callback?: HttpCallback<T>): void {
-  wrapJson(getUserTasks(page), callback);
+export function nativeGetUserTasks<T>(callback?: HttpCallback<T>): void {
+  wrapJson(getUserTasks(), callback);
 }
 
 export function nativeGetThumb(id: string, callback?: HttpCallback<string>): void {

@@ -50,12 +50,12 @@ export const uploadLocalFileChunkWithProgress: (localPath: string, sessionId: st
 export const uploadLocalFileChunkToUrl: (localPath: string, uploadUrl: string, credential: string, index: number, offset: number, length: number) => Promise<number>;
 export const uploadLocalFileChunkToUrlWithProgress: (localPath: string, uploadUrl: string, credential: string, index: number, offset: number, length: number, progress: (uploaded: number) => void) => Promise<number>;
 export const aria2Downloading: () => Promise<string>;
-export const aria2Finished: (page: number) => Promise<string>;
+export const aria2Finished: () => Promise<string>;
 export const aria2CreateTask: (dst: string, urls: string[]) => Promise<void>;
 export const aria2CancelTask: (gid: string) => Promise<void>;
 export const aria2DeleteTask: (gid: string) => Promise<void>;
 export const aria2CanDeleteFinished: () => Promise<boolean>;
-export const getUserTasks: (page: number) => Promise<string>;
+export const getUserTasks: () => Promise<string>;
 export const getThumb: (id: string) => Promise<string>;
 export const createShareLink: (path: string, expireDays: number, password: string) => Promise<string>;
 export const listShareLinks: () => Promise<string>;

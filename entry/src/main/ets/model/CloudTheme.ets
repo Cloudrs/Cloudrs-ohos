@@ -386,6 +386,12 @@ export class CloudThemeToken {
   static readonly aria2CancelButtonSize: number = 30
   static readonly aria2CancelButtonRadius: number = 15
   static readonly aria2CancelIconSize: number = 16
+  // 离线下载 / 任务队列到底提示两侧的细线长度
+  static readonly aria2ListEndLineWidth: number = 40
+  // 任务队列卡片右上角状态标签的高度
+  static readonly aria2TaskChipHeight: number = 20
+  // 任务详情里路径行最多折几行（长路径完整显示）
+  static readonly aria2TaskDetailPathMaxLines: number = 3
   static readonly imagePreviewErrorImageSize: number = 128
   static readonly imagePreviewSaveTopPadding: number = 10
   static readonly imagePreviewSaveBottomPadding: number = 10
@@ -534,6 +540,7 @@ export class CloudThemeToken {
   static readonly dangerSoft: ResourceColor = $r('app.color.cloud_danger_soft')
   static readonly success: ResourceColor = $r('app.color.cloud_success')
   static readonly warning: ResourceColor = $r('app.color.cloud_warning')
+  static readonly warningSoft: ResourceColor = $r('app.color.cloud_warning_soft')
   static readonly successSoft: ResourceColor = $r('app.color.cloud_success_soft')
   static readonly uploadFileSoft: ResourceColor = '#EAF2FF'
   static readonly uploadPhotoSoft: ResourceColor = '#EAF9F0'

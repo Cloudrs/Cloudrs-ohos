@@ -25,7 +25,7 @@ import {
 } from '../../utils/CloudreveNative';
 import { FileType } from '../../utils/CommonUtil';
 import {
-  Aria2Downloading, Aria2Finished, DirectoryInfo,
+  Aria2Downloading, Aria2FinishedList, DirectoryInfo,
   BaseResponse, HttpCallback, ObjectDetail, ProgressCallback,
   ObjectInfo, SiteConfig, UploadRequestResponse,
   AccountSettings, UserInfo, UserStorage, UserTasks,
@@ -511,12 +511,12 @@ export class CloudApi {
     nativeAria2Downloading(CloudApi.withApiLogging('aria2Downloading', callback));
   }
 
-  static aria2Finished(page: number, callback?: HttpCallback<Aria2Finished[]>): void {
-    nativeAria2Finished(page, CloudApi.withApiLogging('aria2Finished', callback));
+  static aria2Finished(callback?: HttpCallback<Aria2FinishedList>): void {
+    nativeAria2Finished(CloudApi.withApiLogging('aria2Finished', callback));
   }
 
-  static userTasks(page: number, callback?: HttpCallback<UserTasks>): void {
-    nativeGetUserTasks(page, CloudApi.withApiLogging('userTasks', callback));
+  static userTasks(callback?: HttpCallback<UserTasks>): void {
+    nativeGetUserTasks(CloudApi.withApiLogging('userTasks', callback));
   }
 
   static aria2TaskCreate(dst: string, urls: string[], callback?: HttpCallback<null>): void {

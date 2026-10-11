@@ -1,8 +1,7 @@
 import Constant from "../../model/Constant";
 import { Aria2Downloading,
   Aria2Files,
-  Aria2Finished, Aria2Status,
-  TaskError,
+  Aria2Finished, Aria2FinishedList, Aria2Status,
   UserTask, UserTasks } from "../../model/net/ApiTypes";
 import { CloudApi } from "../../model/net/CloudApi";
 import { ContentItem, LengthMetrics, SegmentButton, SegmentButtonItemTuple, SegmentButtonOptions } from "@kit.ArkUI";
@@ -11,6 +10,8 @@ import {
 } from "@kit.UIDesignKit";
 import LazyDataSource from "../../utils/LazyDataSource";
 import { Aria2FinishedDetail } from "../../components/Aria2FinishedDetail";
+import { TaskQueueDetail } from "../../components/TaskQueueDetail";
+import { TASK_STATUS_COMPLETED, TASK_STATUS_ERROR, TASK_STATUS_PROCESSING, TaskQueueText } from "../../utils/TaskQueueText";
 import { CommonUtil } from "../../utils/CommonUtil";
 import { Aria2Create } from "../../components/Aria2Create";
 import { showToast, showToastTips, ToastType } from "../../utils/ToastUtil";
@@ -56,15 +57,21 @@ export struct TabRemoteDown {
   @State tasksQueueRefresh: boolean = false
   // 下拉距离，驱动标题栏下方的刷新提示（两个分段同一时刻只挂一个 Refresh，共用即可）
   @State refreshPullOffset: number = 0
-  private finishedPage: number = 1
-  private isLastFinishedPage: boolean = false
-  private tasksQueuePage: number = 1
-  private isLastTasksQueuePage: boolean = false
+  // 两个列表都由 native 一次拉全，不再翻页；超过上限时 truncated 为 true，底部提示更早的没拉
+  @State finishedTruncated: boolean = false
+  @State tasksQueueTruncated: boolean = false
+  // 列表请求序号：每次整表拉取 +1（换账号也 +1），回调序号对不上就丢弃，
+  // 免得慢回来的旧响应盖掉新结果
+  private finishedRequestSeq: number = 0
+  private tasksQueueRequestSeq: number = 0
   private scroller: Scroller = new Scroller()
   private tasksQueueScroller: Scroller = new Scroller()
   @State currentFinishedDetail: Aria2Finished|undefined = undefined
   @State currentFinishedIndex: number = -1
   @State showTaskDetailSheet: boolean = false
+  // 任务队列点卡片看详情：卡片放不下的长文件名 / 路径 / 失败原因
+  @State currentQueueTask: UserTask|undefined = undefined
+  @State showQueueTaskSheet: boolean = false
   private timerId?: number = undefined
   @State showCreateSheet: boolean = false
   // v4 只有管理员能删已结束的任务记录（普通用户压根没有这个接口），v3 谁都能删。
@@ -110,15 +117,17 @@ export struct TabRemoteDown {
     this.totalDownloading = 0
     this.aria2FinishedSource.clear()
     this.totalFinished = 0
-    this.finishedPage = 1
-    this.isLastFinishedPage = false
+    this.finishedTruncated = false
+    this.finishedRequestSeq++
     this.tasksQueueSource.clear()
     this.totalTasks = 0
-    this.tasksQueuePage = 1
-    this.isLastTasksQueuePage = false
+    this.tasksQueueTruncated = false
+    this.tasksQueueRequestSeq++
     this.showTaskDetailSheet = false
     this.currentFinishedDetail = undefined
     this.currentFinishedIndex = -1
+    this.showQueueTaskSheet = false
+    this.currentQueueTask = undefined
     this.canDeleteFinished = false
     this.deletePermissionResolved = false
     this.initialDataRequested = false
@@ -132,8 +141,8 @@ export struct TabRemoteDown {
     }
     this.initialDataRequested = true
     this.getAria2Downloading()
-    this.getAria2Finished(true)
-    this.getUserTasks(true)
+    this.getAria2Finished()
+    this.getUserTasks()
   }
 
   private refreshDeletePermission(): void {
@@ -169,8 +178,7 @@ export struct TabRemoteDown {
     }
     if (this.timerId === undefined) {
       this.timerId = setInterval(() => {
-        this.getAria2Downloading()
-        this.getAria2Finished(true, true)
+        this.getAria2Downloading(true)
       }, interval)
     }
   }
@@ -182,7 +190,11 @@ export struct TabRemoteDown {
     }
   }
 
-  getAria2Downloading() {
+  /**
+   * @param refreshFinishedOnEnd 轮询时传 true：有任务从「下载中」消失（结束了）才重拉已完成列表，
+   *   不再每轮都整表重拉
+   */
+  getAria2Downloading(refreshFinishedOnEnd: boolean = false) {
     if (!this.isActive) {
       return
     }
@@ -190,6 +202,9 @@ export struct TabRemoteDown {
       onSuccess: (data) => {
         if (!this.isActive) {
           return
+        }
+        if (refreshFinishedOnEnd && this.hasEndedDownload(this.aria2Downloading, data)) {
+          this.getAria2Finished()
         }
         if (data.length > 0) {
           this.aria2Downloading = data
@@ -214,74 +229,64 @@ export struct TabRemoteDown {
     })
   }
 
-  getAria2Finished(isFresh: boolean, softRefresh: boolean = false) {
+  /** 上一轮还在下载、这一轮不见了的任务，说明已经结束（进了已完成列表） */
+  private hasEndedDownload(previous: Aria2Downloading[], current: Aria2Downloading[]): boolean {
+    const currentGids = new Set<string>(current.map((item: Aria2Downloading) => this.getDownloadingGid(item)))
+    return previous.some((item: Aria2Downloading) => !currentGids.has(this.getDownloadingGid(item)))
+  }
+
+  // 拉取期间旧列表照常显示，回来后整表替换，不会先闪一下空状态。
+  // 切走本页时回来的结果也照收：首次加载只发一次，丢了就要等用户手动下拉
+  getAria2Finished() {
     if (!this.isActive) {
       return
     }
-    if (isFresh && !softRefresh) {
-      this.aria2FinishedSource.clear()
-      this.finishedPage = 1
-      this.isLastFinishedPage = false
-    }
-
-    const targetPage = isFresh ? 1 : this.finishedPage
-    CloudApi.aria2Finished(targetPage, {
-      onSuccess: (data) => {
-        if (!this.isActive) {
+    this.finishedRequestSeq++
+    const requestSeq = this.finishedRequestSeq
+    CloudApi.aria2Finished({
+      onSuccess: (data: Aria2FinishedList) => {
+        if (requestSeq !== this.finishedRequestSeq) {
+          AppLogger.info(TAG, 'drop stale finished list')
           return
         }
-        if (isFresh && softRefresh) {
-          this.aria2FinishedSource.replaceAll(data)
-          this.finishedPage = data.length > 0 ? 2 : 1
-          this.isLastFinishedPage = data.length === 0
-        } else if (data.length > 0) {
-          this.aria2FinishedSource.pushArrayData(data)
-          this.finishedPage++
-          console.debug(TAG, 'finished number: ' + this.totalFinished)
-        } else {
-          this.isLastFinishedPage = true
-          AppLogger.warn(TAG, 'finished no found in this page ' + this.finishedPage)
-        }
-        this.downloadRefresh = false
+        this.aria2FinishedSource.replaceAll(data.tasks)
         this.totalFinished = this.aria2FinishedSource.totalCount()
+        this.finishedTruncated = data.truncated
+        this.downloadRefresh = false
+        console.debug(TAG, `finished number: ${this.totalFinished}, truncated: ${data.truncated}`)
       },
       onFailure: (msg) => {
+        if (requestSeq !== this.finishedRequestSeq) {
+          return
+        }
         this.downloadRefresh = false
         AppLogger.error(TAG, 'Aria2 finished get failed, msg: ' + msg)
       }
     })
   }
 
-  getUserTasks(isFresh: boolean) {
+  getUserTasks() {
     if (!this.isActive) {
       return
     }
-    if (isFresh) {
-      this.tasksQueueSource.clear()
-      this.tasksQueuePage = 1
-      this.isLastTasksQueuePage = false
-    }
-
-    CloudApi.userTasks(this.tasksQueuePage, {
+    this.tasksQueueRequestSeq++
+    const requestSeq = this.tasksQueueRequestSeq
+    CloudApi.userTasks({
       onSuccess: (data: UserTasks) => {
-        if (!this.isActive) {
+        if (requestSeq !== this.tasksQueueRequestSeq) {
+          AppLogger.info(TAG, 'drop stale task queue')
           return
         }
-        if (data.tasks.length > 0) {
-          this.tasksQueueSource.pushArrayData(data.tasks)
-          this.tasksQueuePage++
-          this.totalTasks = this.tasksQueueSource.totalCount()
-          if (this.totalTasks >= data.total) {
-            this.isLastTasksQueuePage = true
-          }
-          this.tasksQueueRefresh = false
-        } else {
-          AppLogger.warn(TAG, 'tasks no found in this page ' + this.tasksQueuePage)
-          this.isLastTasksQueuePage = true
-        }
-        console.debug(TAG, 'task total number: ' + data.total)
+        this.tasksQueueSource.replaceAll(data.tasks)
+        this.totalTasks = this.tasksQueueSource.totalCount()
+        this.tasksQueueTruncated = data.truncated
+        this.tasksQueueRefresh = false
+        console.debug(TAG, `task number: ${this.totalTasks}, truncated: ${data.truncated}`)
       },
       onFailure: (msg) => {
+        if (requestSeq !== this.tasksQueueRequestSeq) {
+          return
+        }
         this.tasksQueueRefresh = false
         AppLogger.error(TAG, 'user tasks get failed, msg: ' + msg)
       }
@@ -462,8 +467,8 @@ export struct TabRemoteDown {
             this.aria2FinishedSource.deleteDataByItem(item)
             this.totalFinished = this.aria2FinishedSource.totalCount()
             this.getAria2Downloading()
-            this.getAria2Finished(true)
-            this.getUserTasks(true)
+            this.getAria2Finished()
+            this.getUserTasks()
             showToast($r('app.string.delete_task_success'))
           },
           onFailure: (msg) => {
@@ -511,8 +516,8 @@ export struct TabRemoteDown {
         CloudApi.cancelAria2Task(gid, {
           onSuccess: () => {
             this.getAria2Downloading()
-            this.getAria2Finished(true)
-            this.getUserTasks(true)
+            this.getAria2Finished()
+            this.getUserTasks()
             showToast($r('app.string.cancel_task_success'))
           },
           onFailure: (msg) => {
@@ -533,7 +538,7 @@ export struct TabRemoteDown {
   private notifyCancelTargetEnded(): void {
     AppLogger.info(TAG, 'cancel target already ended, refreshing lists')
     this.getAria2Downloading()
-    this.getAria2Finished(true)
+    this.getAria2Finished()
     showToastTips($r('app.string.cancel_task_already_ended'), ToastType.Info)
   }
 
@@ -578,7 +583,7 @@ export struct TabRemoteDown {
   @Builder taskCreateSheet() {
     Aria2Create({onFinished: () => {
       this.getAria2Downloading()
-      this.getAria2Finished(true)
+      this.getAria2Finished()
       this.closeCreateSheet()
     }})
   }
@@ -883,13 +888,59 @@ export struct TabRemoteDown {
           this.finishedItem(index, item)
         }
       }, (item: Aria2Finished, index:number) => item.name + index)
+      this.listEndFooter(false)
     }
+  }
+
+  // 到底提示的文案：一共多少条；超过上限时说明更早的没拉。
+  // 条数在方法里直接读状态——当成 @Builder 参数按值传进去不会随刷新更新
+  private getListEndText(isTaskQueue: boolean): string {
+    const truncated = isTaskQueue ? this.tasksQueueTruncated : this.finishedTruncated
+    if (truncated) {
+      return `仅显示最近 ${Constant.TASK_LIST_MAX_ITEMS} 条`
+    }
+    return `已显示全部 ${isTaskQueue ? this.totalTasks : this.totalFinished} 条`
+  }
+
+  @Builder listEndLine() {
+    Row()
+      .width(CloudThemeToken.aria2ListEndLineWidth)
+      .height(CloudThemeToken.lineWidth)
+      .backgroundColor(CloudThemeToken.line)
+  }
+
+  // 列表一次拉全，末尾告诉用户已经到底
+  @Builder listEndFooter(isTaskQueue: boolean) {
+    GridItem() {
+      Row({ space: CloudThemeToken.spacingXl }) {
+        this.listEndLine()
+        Text(this.getListEndText(isTaskQueue))
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
+        this.listEndLine()
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .padding({ top: CloudThemeToken.spacingSm, bottom: CloudThemeToken.spacingSm })
+    }
+    .selectable(false)
   }
 
   // 首项占位：让列表从标题栏下方开始，滚动时可从标题栏底下穿过
   @Builder gridTopSpacer() {
     GridItem() {
       Row().height(this.getGridTopSpacerHeight())
+    }
+    .selectable(false)
+  }
+
+  // 末尾占位：给悬浮 Tab 栏让位（同文件页）。不能用 Grid 的 bottom padding：
+  // Grid 只把 padding 以内当可见区，卡片要整张越过那条线才画出来，滚动时一张张蹦出来
+  @Builder gridBottomSpacer() {
+    GridItem() {
+      Row().height(Math.max(CloudThemeToken.zero,
+        this.tabBarHeight + CloudThemeToken.tabContentBottomGap - CloudThemeToken.spacingCard))
     }
     .selectable(false)
   }
@@ -942,10 +993,10 @@ export struct TabRemoteDown {
           Row().height(CloudThemeToken.spacingCard)
         }
         this.finished()
+        this.gridBottomSpacer()
       }
       .width('100%')
       .height('100%')
-      .padding({ bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
       .columnsTemplate(CloudThemeToken.singleColumnTemplate)
@@ -954,13 +1005,6 @@ export struct TabRemoteDown {
       .columnsGap(CloudThemeToken.spacingCard)
       .rowsGap(CloudThemeToken.spacingCard)
       .animation({duration: CloudThemeToken.defaultAnimationDuration})
-      .onReachEnd(() => {
-        if (!this.isLastFinishedPage) {
-          this.getAria2Finished(false)
-        } else {
-          AppLogger.warn(TAG, 'last finished page！！！')
-        }
-      })
       .bindSheet($$this.showTaskDetailSheet, this.taskDetailSheet(this.currentFinishedIndex, this.currentFinishedDetail), {
         detents: [SheetSize.FIT_CONTENT],
         // 宽屏居中弹窗不认 detents，高度单独给成按内容
@@ -984,7 +1028,7 @@ export struct TabRemoteDown {
     })
     .onRefreshing(() => {
       this.getAria2Downloading();
-      this.getAria2Finished(true);
+      this.getAria2Finished();
     })
   }
 
@@ -1001,12 +1045,13 @@ export struct TabRemoteDown {
             GridItem() {
               this.taskQueueItem(item)
             }
-          }, (item: UserTask, index:number) => (item.id ?? item.create_date) + index)
+          }, (item: UserTask, index:number) => (item.id.length > 0 ? item.id : item.create_date) + index)
+          this.listEndFooter(true)
         }
+        this.gridBottomSpacer()
       }
       .width('100%')
       .height('100%')
-      .padding({ bottom: this.tabBarHeight + CloudThemeToken.tabContentBottomGap })
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring, {alwaysEnabled: true})
       .columnsTemplate(CloudThemeToken.singleColumnTemplate)
@@ -1014,11 +1059,18 @@ export struct TabRemoteDown {
       .cachedCount(CloudThemeToken.compactListCachedCount)
       .columnsGap(CloudThemeToken.spacingCard)
       .rowsGap(CloudThemeToken.spacingCard)
-      .onReachEnd(() => {
-        if (!this.isLastTasksQueuePage) {
-          this.getUserTasks(false)
-        } else {
-          AppLogger.warn(TAG, 'last task queue page！！！')
+      .bindSheet($$this.showQueueTaskSheet, this.queueTaskDetailSheet(), {
+        detents: [SheetSize.FIT_CONTENT],
+        // 宽屏居中弹窗不认 detents，高度单独给成按内容
+        height: SheetSize.FIT_CONTENT,
+        title: { title: '任务详情' },
+        showClose: true,
+        backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+        systemMaterial: CloudMaterial.sheetMaterial(),
+        preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+        width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+        onDisappear: () => {
+          this.showQueueTaskSheet = false
         }
       })
     }
@@ -1029,102 +1081,152 @@ export struct TabRemoteDown {
       this.refreshPullOffset = Math.max(CloudThemeToken.zero, offset)
     })
     .onRefreshing(() => {
-      this.getUserTasks(true);
+      this.getUserTasks();
     })
+  }
+
+  @Builder queueTaskDetailSheet() {
+    if (this.currentQueueTask) {
+      TaskQueueDetail({ task: this.currentQueueTask })
+    }
   }
 
   @Builder taskQueueItem(task: UserTask) {
     Row({ space: CloudThemeToken.spacingSection }) {
-      Column({ space: CloudThemeToken.spacingXl }) {
-        Row({ space: CloudThemeToken.spacingXl }) {
-          Image($r('app.media.ic_calendar'))
-            .width(CloudThemeToken.iconXs)
-            .height(CloudThemeToken.iconXs)
-            .fillColor(CloudThemeToken.textSecondary)
-          Text(DateFormatUtil.format(new Date(task.create_date), 'yyyy-MM-dd'))
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-        }
+      Stack() {
+        SymbolGlyph(this.getTaskIcon(task.kind))
+          .fontSize(CloudThemeToken.icon2xl)
+          .fontColor([CloudThemeToken.textPrimary])
+      }
+      .width(CloudThemeToken.iconBoxLg)
+      .height(CloudThemeToken.iconBoxLg)
+      .borderRadius(CloudThemeToken.controlRadiusMd)
+      .backgroundColor(CloudThemeToken.surfaceSubtle)
 
-        Text(this.getTaskName(task.name))
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontWeight(FontWeight.Medium)
+      Column({ space: CloudThemeToken.spacingSm }) {
+        Row({ space: CloudThemeToken.spacingXl }) {
+          Text(TaskQueueText.kind(task.kind))
+            .fontSize(CloudThemeToken.textSizeLarge)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(CloudThemeToken.textPrimary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          Text(TaskQueueText.status(task))
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.getTaskStatusColor(task.status))
+            .backgroundColor(this.getTaskStatusBackground(task.status))
+            .height(CloudThemeToken.aria2TaskChipHeight)
+            .padding({ left: CloudThemeToken.spacingXl, right: CloudThemeToken.spacingXl })
+            .borderRadius(CloudThemeToken.controlRadiusMd)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        if (task.src.length > 0 || task.dst.length > 0) {
+          Text() {
+            Span(TaskQueueText.source(task))
+            if (task.src.length > 0 && task.dst.length > 0) {
+              Span(' → ').fontColor(CloudThemeToken.textSecondary)
+            }
+            Span(task.dst)
+          }
+          .fontSize(CloudThemeToken.textSizeSmallPlus)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
-          .textOverflow({overflow: TextOverflow.Ellipsis})
-
-        Progress({value: task.progress, total: CloudThemeToken.percentageFull, type: ProgressType.Capsule})
-          .width('100%')
-          .height(CloudThemeToken.thinProgressHeight)
-          .color(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-
-        Row({ space: CloudThemeToken.spacingXl }) {
-          Image(task.status == Aria2Status.FINISHED ?
-            $r('app.media.ic_checkmark_circle_fill') : $r('app.media.ic_xmark_circle_fill'))
-              .width(CloudThemeToken.iconXs)
-              .height(CloudThemeToken.iconXs)
-              .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
-
-          Text($r('app.string.last_progress'))
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-
-          Text(`${task.progress}%`)
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
-
-          Text(task.status == Aria2Status.FINISHED ?
-            $r("app.string.finished") : $r("app.string.failed"))
-            .fontSize(CloudThemeToken.textSizeSmall)
-            .fontColor(CloudThemeToken.textSecondary)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        } else if (TaskQueueText.progress(task).length > 0) {
+          Text(TaskQueueText.progress(task))
+            .fontSize(CloudThemeToken.textSizeSmallPlus)
+            .fontColor(CloudThemeToken.textPrimary)
+            .maxLines(1)
         }
 
-        if (task.status != Aria2Status.FINISHED) {
-          Row({ space: CloudThemeToken.spacingSm }) {
-            Image($r('app.media.ic_info_circle'))
-              .width(CloudThemeToken.iconXs)
-              .height(CloudThemeToken.iconXs)
-              .fillColor(CloudThemeToken.textSecondary)
+        Text(this.getTaskMetaText(task))
+          .fontSize(CloudThemeToken.textSizeSmall)
+          .fontColor(CloudThemeToken.textSecondary)
 
-            Text(this.getErrorInfo(task.error))
-              .fontSize(CloudThemeToken.textSizeSmall)
-              .fontColor(CloudThemeToken.danger)
-              .maxLines(2)
-              .textOverflow({overflow: TextOverflow.Ellipsis})
-              .layoutWeight(1)
-          }
+        if (task.failed > 0) {
+          Text(TaskQueueText.failedObjects(task))
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.warning)
+        }
+
+        if (task.status === TASK_STATUS_ERROR) {
+          Text(TaskQueueText.error(task))
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.danger)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
       }
-      .alignItems(HorizontalAlign.Start)
-      .justifyContent(FlexAlign.Center)
       .layoutWeight(1)
-
-      Image($r('app.media.ic_task_circle'))
-        .width(CloudThemeToken.iconBoxLg)
-        .height(CloudThemeToken.iconBoxLg)
-        .fillColor(task.status == Aria2Status.FINISHED ? CloudThemeToken.success : CloudThemeToken.danger)
+      .alignItems(HorizontalAlign.Start)
     }
     .width('100%')
-    .constraintSize({ minHeight: CloudThemeToken.cardHeight3xl })
-    .alignItems(VerticalAlign.Center)
-    .justifyContent(FlexAlign.SpaceBetween)
+    .alignItems(VerticalAlign.Top)
     .borderRadius(CloudThemeToken.cardRadius)
     .padding(CloudThemeToken.spacingSection)
     .backgroundColor(CloudThemeToken.surface)
+    .onClick(() => {
+      this.currentQueueTask = task
+      this.showQueueTaskSheet = true
+    })
   }
 
-  getErrorInfo(errorJson: string) {
-    if (!errorJson || errorJson.trim().length === 0) {
-      return '任务执行失败'
+  private getTaskIcon(kind: string): Resource {
+    switch (kind) {
+      case 'compress':
+        return $r('sys.symbol.doc_zipper')
+      case 'extract':
+        return $r('sys.symbol.decompress')
+      case 'import':
+      case 'transfer':
+        return $r('sys.symbol.square_and_arrow_down')
+      case 'relocate':
+        return $r('sys.symbol.externaldrive')
+      case 'recycle':
+        return $r('sys.symbol.trash')
+      default:
+        return $r('sys.symbol.archivebox')
     }
+  }
 
-    try {
-      let error: TaskError = JSON.parse(errorJson)
-      return `${error.msg}:${error.error}`
-    } catch (e) {
-      return errorJson
+  private getTaskStatusColor(status: string): ResourceColor {
+    switch (status) {
+      case TASK_STATUS_PROCESSING:
+        return CloudThemeToken.primary
+      case TASK_STATUS_COMPLETED:
+        return CloudThemeToken.success
+      case TASK_STATUS_ERROR:
+        return CloudThemeToken.danger
+      default:
+        return CloudThemeToken.textSecondary
     }
+  }
+
+  private getTaskStatusBackground(status: string): ResourceColor {
+    switch (status) {
+      case TASK_STATUS_PROCESSING:
+        return CloudThemeToken.primarySoft
+      case TASK_STATUS_COMPLETED:
+        return CloudThemeToken.successSoft
+      case TASK_STATUS_ERROR:
+        return CloudThemeToken.dangerSoft
+      default:
+        return CloudThemeToken.surfaceSubtle
+    }
+  }
+
+  private getTaskMetaText(task: UserTask): string {
+    const created = new Date(task.create_date)
+    const now = new Date()
+    const isToday = created.getFullYear() === now.getFullYear() && created.getMonth() === now.getMonth() &&
+      created.getDate() === now.getDate()
+    const time = isToday ? `今天 ${DateFormatUtil.format(created, 'HH:mm')}` :
+      DateFormatUtil.format(created, 'yyyy-MM-dd HH:mm')
+    return task.duration > 0 ? `${time} · 耗时 ${TaskQueueText.duration(task.duration)}` : time
   }
 
   private openCreateSheet(): void {

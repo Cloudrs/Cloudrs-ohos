@@ -356,6 +356,12 @@ export interface Aria2Finished {
   node: string
 }
 
+/** 已完成列表一次拉全；truncated 表示超过上限、更早的记录没拉 */
+export interface Aria2FinishedList {
+  tasks: Aria2Finished[]
+  truncated: boolean
+}
+
 interface Aria2BittorrentInfo {
   name: string;
 }
@@ -409,24 +415,40 @@ export interface Aria2Downloading {
   phase?: string
 }
 
-export enum UserTaskType {
-  FileTransfer = 2,
-  PolicyTransfer = 4
-}
-
+/**
+ * 任务队列的一条，v3 / v4 由 native 整理成同一形状。kind / status / stage 是语义键，界面自己翻成文案：
+ * - kind: compress | extract | import | relocate | transfer | recycle | unknown
+ * - status: queued | processing | suspending | error | canceled | completed | unknown
+ * - stage: 进行中停在哪一步（preparing、compressing、transferring…），不知道时为空
+ * src / dst 只有 v4 有；transferred 只有 v3 中转任务有
+ */
 export interface UserTask {
-  id?: string
-  name?: string
-  status: number
-  type: number
+  id: string
+  kind: string
+  status: string
   create_date: string
-  progress: number
+  src: string
+  /** src 一共几项，大于 1 时显示「等 N 项」 */
+  src_count: number
+  /** 完整的源路径列表，详情页用 */
+  src_list: string[]
+  dst: string
+  stage: string
+  transferred: number
+  /** 跳过的失败对象数（v4） */
+  failed: number
+  /** 执行耗时，毫秒（v4） */
+  duration: number
+  /** 处理节点名（v4，服务端给了才有） */
+  node: string
   error: string
 }
 
 export interface UserTasks {
   tasks: UserTask[]
   total: number
+  /** 一次拉全；超过上限时为 true，更早的记录没拉 */
+  truncated: boolean
 }
 
 export interface Aria2TaskParam {

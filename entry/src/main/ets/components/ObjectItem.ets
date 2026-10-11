@@ -1,13 +1,19 @@
 import { ObjectInfo } from "../model/net/ApiTypes";
-import { LengthMetrics, LengthUnit } from "@kit.ArkUI";
+import { LengthMetrics, LengthUnit, SymbolGlyphModifier } from "@kit.ArkUI";
 import { FileMenuType, ShowType } from "../model/MenuModel";
 import Constant from "../model/Constant";
 import { CommonUtil, FileType } from "../utils/CommonUtil";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
 import { DateFormatUtil } from "../utils/DateFormatUtil";
+import { ArchiveRules } from "../utils/ArchiveRules";
+import { CloudApi } from "../model/net/CloudApi";
 
 const TAG = 'ObjectItem';
+// 「更多」侧边展开时的 › ，所有卡片共用一个
+const MORE_CHEVRON: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.chevron_right'))
+  .fontSize(CloudThemeToken.iconMd)
+  .fontColor([CloudThemeToken.textSecondary]);
 
 @Extend(Column)
 function itemStyle(selected: boolean = false) {
@@ -53,6 +59,9 @@ export struct ObjectItem {
   @Prop multiSelectMode: boolean = false
   @Prop selected: boolean = false
   @Prop shared: boolean = false
+  // 账号有压缩权限时，分享 / 压缩 / 解压收进「更多」二级菜单；没有时「分享」留在一级
+  @StorageProp(Constant.ARCHIVE_ENABLED) archiveEnabled: boolean = false
+  @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
 
   getThumbData(id: string): PixelMap|undefined {
     if (this.thumbImage.has(id)) {
@@ -358,7 +367,20 @@ export struct ObjectItem {
         this.commonMenuItem($r('app.string.rename'), FileMenuType.RENAME)
         this.commonMenuItem($r('app.string.copy'), FileMenuType.COPY)
         this.commonMenuItem($r('app.string.move'), FileMenuType.MOVE)
-        this.commonMenuItem($r('app.string.cloud_share'), FileMenuType.CREATE_SHARE)
+        if (this.archiveEnabled) {
+          MenuItem({
+            content: '更多',
+            builder: (): void => this.moreSubMenu(item),
+            // 侧边展开时系统不画 › （MateBook 实测）；层叠展开自带会旋转的箭头，不覆盖
+            symbolEndIcon: this.isSideExpand() ? MORE_CHEVRON : undefined
+          })
+            .contentFont({ size: CloudThemeToken.objectMenuTextSize, weight: FontWeight.Medium })
+            .contentFontColor(CloudThemeToken.textPrimary)
+            // 系统 MenuItem 的左内边距默认约 12，比自绘菜单项小；设成同一个值让文字对齐
+            .padding({ left: CloudThemeToken.objectMenuHorizontalPadding })
+        } else {
+          this.commonMenuItem($r('app.string.cloud_share'), FileMenuType.CREATE_SHARE)
+        }
       }
 
       if (item.type == 'file') {
@@ -382,6 +404,8 @@ export struct ObjectItem {
       }
     }
     .width(CloudThemeToken.menuWidth)
+    // 手机层叠展开（子菜单盖在原菜单上，菜单不变高）；宽屏侧边展开
+    .subMenuExpandingMode(this.isSideExpand() ? SubMenuExpandingMode.SIDE_EXPAND : SubMenuExpandingMode.STACK_EXPAND)
     .padding(CloudThemeToken.zero)
     .margin(CloudThemeToken.zero)
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
@@ -394,6 +418,26 @@ export struct ObjectItem {
       strokeWidth: LengthMetrics.vp(CloudThemeToken.spacingSm),
       startMargin: LengthMetrics.vp(CloudThemeToken.zero),
       endMargin: LengthMetrics.vp(CloudThemeToken.zero)
+    })
+  }
+
+  private isSideExpand(): boolean {
+    return this.windowWidthVp >= CloudThemeToken.breakpointMd
+  }
+
+  @Builder moreSubMenu(item: ObjectInfo) {
+    Menu() {
+      this.commonMenuItem($r('app.string.cloud_share'), FileMenuType.CREATE_SHARE)
+      this.commonMenuItem('压缩', FileMenuType.COMPRESS)
+      if (item.type != Constant.OBJECT_DIR_TYPE && ArchiveRules.canExtract(item.name, CloudApi.isV4())) {
+        this.commonMenuItem('解压到…', FileMenuType.EXTRACT)
+      }
+    }
+    .width(CloudThemeToken.menuWidth)
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
+    .menuItemDivider({
+      color: CloudThemeToken.line,
+      strokeWidth: {value: CloudThemeToken.strongLineWidth, unit: LengthUnit.PX}
     })
   }
 

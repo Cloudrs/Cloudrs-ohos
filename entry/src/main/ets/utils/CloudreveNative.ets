@@ -16,10 +16,10 @@ import {
   uploadLocalFileChunkToUrl, uploadLocalFileChunkToUrlWithProgress,
   aria2Downloading, aria2Finished,
   aria2CreateTask, aria2DeleteTask, aria2CancelTask, aria2CanDeleteFinished,
-  getUserTasks,
+  getUserTasks, getRecentUserTasks,
   getThumb,
   createShareLink, listShareLinks, deleteShareLink,
-  createArchive, extractArchive
+  archiveSupported, createArchive, extractArchive
 } from 'libcloudreve.so';
 import { HttpCallback } from '../model/net/ApiTypes';
 import { ApiErrorUtil } from './ApiErrorUtil';
@@ -387,6 +387,10 @@ export function nativeGetUserTasks<T>(callback?: HttpCallback<T>): void {
   wrapJson(getUserTasks(), callback);
 }
 
+export function nativeGetRecentUserTasks<T>(callback?: HttpCallback<T>): void {
+  wrapJson(getRecentUserTasks(), callback);
+}
+
 export function nativeGetThumb(id: string, callback?: HttpCallback<string>): void {
   if (callback?.onStart) { callback.onStart(); }
   getThumb(id)
@@ -409,10 +413,16 @@ export function nativeDeleteShareLink(shareId: string, callback?: HttpCallback<n
     .catch((err: Error) => callback?.onFailure(err.message ?? String(err)));
 }
 
-export function nativeCreateArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
-  wrap(createArchive(srcPaths, dstPath), callback);
+export function nativeArchiveSupported(callback?: HttpCallback<boolean>): void {
+  wrap(archiveSupported(), callback);
 }
 
-export function nativeExtractArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
-  wrap(extractArchive(srcPaths, dstPath), callback);
+export function nativeCreateArchive(ids: string[], isDirs: boolean[], dstFolder: string, name: string,
+  callback?: HttpCallback<string>): void {
+  wrap(createArchive(ids, isDirs, dstFolder, name), callback);
+}
+
+export function nativeExtractArchive(srcPath: string, dstFolder: string, encoding: string, password: string,
+  callback?: HttpCallback<string>): void {
+  wrap(extractArchive(srcPath, dstFolder, encoding, password), callback);
 }

@@ -37,6 +37,11 @@ import { showCloudActionDialog, showCloudConfirmDialog } from "../../utils/Cloud
 import { CloudRouter } from "../../utils/CloudRouter";
 import { TextPreviewEntry } from "../../utils/TextPreviewEntry";
 import { ActiveAccount } from "../../utils/ActiveAccount";
+import { ArchiveCapability } from "../../utils/ArchiveCapability";
+import { ArchiveTaskTracker } from "../../utils/ArchiveTaskTracker";
+import { ArchiveTaskBanner } from "../../components/ArchiveTaskBanner";
+import { ArchiveRules, ArchiveSourceName } from "../../utils/ArchiveRules";
+import { ArchiveCompressInput, ArchiveExtractInput, ArchiveSheet, ArchiveSheetMode } from "../../components/ArchiveSheet";
 import UserPreferences from "../../model/UserPreferences";
 import { PhotoBackupSettingsStore } from "../../model/PhotoBackupSettingsStore";
 import { SheetPhaseController } from "../../utils/SheetPhaseController";
@@ -215,6 +220,22 @@ export struct TabFiles {
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.KEYBOARD_HEIGHT_VP) keyboardHeightVp: number = 0;
+  // 当前账号能否压缩 / 解压，决定多选栏有没有「压缩」
+  @StorageProp(Constant.ARCHIVE_ENABLED) archiveEnabled: boolean = false
+  // 压缩 / 解压完成后的「目标文件夹有变化」信号（ArchiveTaskTracker 写）
+  @StorageProp(Constant.ARCHIVE_REFRESH_PATH) archiveRefreshPath: string = ''
+  @StorageProp(Constant.ARCHIVE_REFRESH_KIND) archiveRefreshKind: string = ''
+  @Watch('onArchiveRefresh')
+  @StorageProp(Constant.ARCHIVE_REFRESH_TICK) archiveRefreshTick: number = 0
+  // 压缩 / 解压面板
+  @State showArchiveSheet: boolean = false
+  @State archiveMode: ArchiveSheetMode = ArchiveSheetMode.COMPRESS
+  @State archiveDefaultName: string = ''
+  @State archiveTargetName: string = ''
+  @State archiveFocusTick: number = 0
+  private archiveSources: ObjectInfo[] = []
+  private archiveTarget?: ObjectInfo
+  private archiveSheetCtrl: SheetPhaseController = new SheetPhaseController()
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   @StorageProp(Constant.SIDEBAR_VISIBLE) sidebarVisible: boolean = true;
   // 2in1 隐藏系统标题栏后窗口三键浮在右上角，标题栏右侧菜单要给它让位；其它设备为 0
@@ -391,6 +412,8 @@ export struct TabFiles {
     if (this.dirDataSource.totalCount() > 0 || this.fileDataSource.totalCount() > 0) {
       this.scheduleShareLinksRefresh()
     }
+    // 压缩权限没问出结果（网络抖动）就每次切回本页再问；已有结论或正在问时是空操作
+    ArchiveCapability.refresh(this.loadedAccountScope)
   }
 
   /**
@@ -404,6 +427,9 @@ export struct TabFiles {
     }
     AppLogger.info(TAG, `account switched, reload root directory`)
     this.loadedAccountScope = scope
+    ArchiveCapability.clear()
+    ArchiveCapability.refresh(scope)
+    ArchiveTaskTracker.clear()
     this.exitMultiSelectMode()
     this.cancelScheduledShareRefresh()
     this.shareLinks = []
@@ -929,6 +955,7 @@ export struct TabFiles {
   aboutToAppear() {
     this.loadCurrentUser()
     this.loadedAccountScope = ActiveAccount.current()
+    ArchiveCapability.refresh(this.loadedAccountScope)
     this.fileDataSource.onDataGet = (index: number, item: ObjectInfo) => {
       //console.debug(TAG, `onDataGet: index:${index}`)
       this.getThumbFile(index, item)
@@ -2261,6 +2288,20 @@ export struct TabFiles {
           }
         })
 
+        // 压缩 / 解压浮条：停在上传按钮上方，不挡按钮；多选时让位给多选栏
+        if (!this.isMultiSelectMode) {
+          Column() {
+            ArchiveTaskBanner()
+          }
+          .width('100%')
+          .padding({
+            left: CloudThemeToken.pagePadding,
+            right: CloudThemeToken.pagePadding,
+            bottom: this.getFabBottomMargin() + CloudThemeToken.rowHeight4xl + CloudThemeToken.archiveBannerBottomGap
+          })
+          .hitTestBehavior(HitTestMode.Transparent)
+        }
+
         if (this.isMultiSelectMode) {
           this.multiSelectActionBar()
         }
@@ -2369,6 +2410,38 @@ export struct TabFiles {
               }, () => {
                 this.showInputSheet = false
                 this.resetInputSheetState()
+              })
+            }
+          })
+
+        Column()
+          .width(CloudThemeToken.zero)
+          .height(CloudThemeToken.zero)
+          .bindSheet($$this.showArchiveSheet, this.archiveSheetBuilder(), {
+            detents: [SheetSize.FIT_CONTENT],
+            height: SheetSize.FIT_CONTENT,
+            title: { title: this.archiveMode === ArchiveSheetMode.COMPRESS ? '压缩' : '解压缩' },
+            showClose: true,
+            keyboardAvoidMode: SheetKeyboardAvoidMode.NONE,
+            backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
+            systemMaterial: CloudMaterial.sheetMaterial(),
+            preferType: CloudThemeToken.sheetTypeForWidth(this.sheetLayoutWidth),
+            width: CloudThemeToken.sheetWidthForWidth(this.sheetLayoutWidth),
+            onWillAppear: () => {
+              this.archiveSheetCtrl.onWillAppear()
+            },
+            onAppear: () => {
+              this.archiveSheetCtrl.onAppear()
+              this.archiveFocusTick++
+            },
+            onWillDisappear: () => {
+              this.archiveSheetCtrl.onWillDisappear()
+            },
+            onDisappear: () => {
+              this.archiveSheetCtrl.onDisappear((value: boolean) => {
+                this.showArchiveSheet = value
+              }, () => {
+                this.showArchiveSheet = false
               })
             }
           })
@@ -2715,6 +2788,11 @@ export struct TabFiles {
         this.multiActionButton($r('app.media.ic_move_to'), '移动', () => {
           this.startSelectedCopyMove(FileMenuType.MOVE)
         })
+        if (this.archiveEnabled) {
+          this.multiActionButton($r('app.media.ic_archive'), '压缩', () => {
+            this.openCompressSheet(this.selectedObjects.slice())
+          })
+        }
         this.multiActionButton($r('app.media.ic_arrowshape_down'), '下载', () => {
           this.downloadSelectedObjects()
         })
@@ -3858,7 +3936,121 @@ export struct TabFiles {
       case FileMenuType.DELETE:
         this.itemDelete(index, item)
         break
+      case FileMenuType.COMPRESS:
+        this.openCompressSheet([item])
+        break
+      case FileMenuType.EXTRACT:
+        this.openExtractSheet(item)
+        break
     }
+  }
+
+  private openCompressSheet(items: ObjectInfo[]): void {
+    if (items.length === 0) {
+      return
+    }
+    this.archiveSources = items
+    this.archiveMode = ArchiveSheetMode.COMPRESS
+    const names: ArchiveSourceName[] = items.map((o: ObjectInfo) => {
+      const n: ArchiveSourceName = { name: o.name, isDir: o.type === Constant.OBJECT_DIR_TYPE }
+      return n
+    })
+    this.archiveDefaultName = ArchiveRules.defaultArchiveName(names, this.currentPath)
+    this.archiveSheetCtrl.requestOpen(() => this.showArchiveSheet, (v: boolean) => this.showArchiveSheet = v)
+  }
+
+  private openExtractSheet(item: ObjectInfo): void {
+    this.archiveTarget = item
+    this.archiveTargetName = item.name
+    this.archiveMode = ArchiveSheetMode.EXTRACT
+    this.archiveSheetCtrl.requestOpen(() => this.showArchiveSheet, (v: boolean) => this.showArchiveSheet = v)
+  }
+
+  private closeArchiveSheet(): void {
+    this.archiveSheetCtrl.requestClose((v: boolean) => this.showArchiveSheet = v)
+  }
+
+  private submitCompress(input: ArchiveCompressInput): void {
+    const items = this.archiveSources.slice()
+    this.closeArchiveSheet()
+    const ids = items.map((o: ObjectInfo) => o.id)
+    const isDirs = items.map((o: ObjectInfo) => o.type === Constant.OBJECT_DIR_TYPE)
+    const submittedAt = Date.now()
+    const scope = this.loadedAccountScope
+    // 面板已经关了，服务器慢的时候也要马上看得到「正在提交」
+    const token = ArchiveTaskTracker.beginSubmit('compress', input.name)
+    CloudApi.createArchive(ids, isDirs, input.dstFolder, input.name, {
+      onSuccess: (taskId: string) => {
+        if (this.isMultiSelectMode) {
+          this.exitMultiSelectMode()
+        }
+        this.onArchiveSubmitted('compress', input.name, input.dstFolder, taskId, submittedAt, scope, token)
+      },
+      onFailure: (msg: string) => {
+        ArchiveTaskTracker.endSubmit(token)
+        this.onArchiveFailed(msg)
+      }
+    })
+  }
+
+  private submitExtract(input: ArchiveExtractInput): void {
+    const target = this.archiveTarget
+    this.closeArchiveSheet()
+    if (!target) {
+      return
+    }
+    const submittedAt = Date.now()
+    const scope = this.loadedAccountScope
+    const token = ArchiveTaskTracker.beginSubmit('extract', target.name)
+    CloudApi.extractArchive(ArchiveRules.joinPath(target.path, target.name), input.dstFolder, input.encoding,
+      input.password, {
+        onSuccess: (taskId: string) => {
+          this.onArchiveSubmitted('extract', target.name, input.dstFolder, taskId, submittedAt, scope, token)
+        },
+        onFailure: (msg: string) => {
+          ArchiveTaskTracker.endSubmit(token)
+          this.onArchiveFailed(msg)
+        }
+      })
+  }
+
+  private onArchiveSubmitted(kind: string, label: string, dstFolder: string, taskId: string, submittedAt: number,
+    scope: string, token: number): void {
+    AppLogger.info(TAG, `archive submitted kind=${kind} task=${taskId} dst=${dstFolder} at=${submittedAt} ` +
+      `took=${Date.now() - submittedAt}ms`)
+    ArchiveTaskTracker.submit({
+      kind: kind, label: label, dstFolder: dstFolder, taskId: taskId, submittedAt: submittedAt, scope: scope
+    }, token)
+  }
+
+  /** 压缩 / 解压完成：当前目录受影响就静默刷新（不清空列表、不弹「刷新成功」） */
+  private onArchiveRefresh(): void {
+    const current = this.currentPath.length > 0 ? this.currentPath : '/'
+    if (ArchiveRules.shouldRefreshFolder(this.archiveRefreshKind, this.archiveRefreshPath, current)) {
+      this.getFileList(true, current)
+    }
+  }
+
+  private onArchiveFailed(msg: string): void {
+    AppLogger.warn(TAG, 'archive submit failed: ' + msg)
+    if (ArchiveRules.isNotAllowed(msg)) {
+      ArchiveCapability.markUnsupported()
+    }
+    showToastTips(ArchiveRules.errorText(msg), ToastType.Error)
+  }
+
+  @Builder archiveSheetBuilder() {
+    ArchiveSheet({
+      mode: this.archiveMode,
+      archiveName: this.archiveTargetName,
+      selectedCount: this.archiveSources.length,
+      defaultName: this.archiveDefaultName,
+      initialFolder: this.currentPath,
+      isV4: CloudApi.isV4(),
+      focusTick: this.archiveFocusTick,
+      onCompress: (input: ArchiveCompressInput) => this.submitCompress(input),
+      onExtract: (input: ArchiveExtractInput) => this.submitExtract(input)
+    })
   }
 
   onMoreClick(type: MoreMenuType, isReserve?: boolean) {

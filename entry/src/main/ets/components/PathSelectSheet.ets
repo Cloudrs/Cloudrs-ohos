@@ -1,5 +1,9 @@
+import {
+  DividerShowType, HdsNavigation, HdsNavigationTitleMode, ScrollEffectType, hdsMaterial
+} from "@kit.UIDesignKit";
 import Constant from "../model/Constant";
 import { EmptyState } from "./EmptyState";
+import { TitleControlButton } from "./TitleControlButton";
 import { CloudThemeToken } from "../model/CloudTheme";
 import { CloudMaterial } from "../model/CloudMaterial";
 import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
@@ -19,6 +23,7 @@ export struct PathSelectSheet {
   @State loadFailed: boolean = false
   onClose?: (isFinished: boolean, path?: string) => void
 
+  private scroller: Scroller = new Scroller()
   private normalIcon: Resource = $r('app.media.ic_folder_fill');
   private downIcon: Resource = $r('app.media.ic_chevron_down');
   private rightIcon: Resource = $r('app.media.ic_chevron_right');
@@ -86,20 +91,66 @@ export struct PathSelectSheet {
 
   }
 
+  // 头部放进 HdsNavigation 标题栏：× / ✓ 用标题栏按钮，才在沉浸光感生效范围内（半模态的内容区挂材质无效）。
+  // 半模态里用官方的 MODAL 标题栏样式（MINI 是整页用的，会多让出一截状态栏高度），
+  // 标题栏设为组件级安全区，目录自动避让到标题栏下方
   build() {
-    Column({ space: CloudThemeToken.pathSheetGap }) {
-      this.header()
-
-      this.pathContent()
+    HdsNavigation() {
+      Column() {
+        this.pathContent()
+      }
+      .width('100%')
+      .height('100%')
+      .padding({ bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom })
+      .justifyContent(FlexAlign.Start)
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
-    .padding({
-      top: CloudThemeToken.pathSheetTopPadding,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingSheetBottom
+    .mode(NavigationMode.Stack)
+    .hideToolBar(true)
+    .hideBackButton(true)
+    .titleMode(HdsNavigationTitleMode.MODAL)
+    .titleBar({
+      content: {
+        title: {
+          mainTitle: ' '
+        },
+        stackBuilder: () => {
+          this.titleStack()
+        },
+        divider: {
+          showType: DividerShowType.OFF
+        }
+      },
+      style: {
+        scrollEffectOpts: {
+          enableScrollEffect: true,
+          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+        },
+        // 标题是空占位，两态都要给标题色，否则开了滚动效果 HDS 会按缺省推状态栏深浅
+        originalStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        scrollEffectStyle: {
+          contentStyle: {
+            titleStyle: {
+              mainTitleColor: CloudThemeToken.textPrimary
+            }
+          }
+        },
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      },
+      enableComponentSafeArea: true
     })
-    .justifyContent(FlexAlign.Start)
+    .bindToScrollable([this.scroller])
+    .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.background))
   }
 
   @Builder pathContent() {
@@ -146,7 +197,7 @@ export struct PathSelectSheet {
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
     } else {
-      List() {
+      List({ scroller: this.scroller }) {
         ForEach(this.getDirs('/'), (item: ObjectInfo, index) => {
           this.dirItem(item)
         })
@@ -158,98 +209,52 @@ export struct PathSelectSheet {
     }
   }
 
-  @Builder header() {
-    Column() {
-      Row({ space: CloudThemeToken.pathSheetTitleGap }) {
-        Text(this.title ?? '')
-          .fontSize(CloudThemeToken.pathSheetTitleSize)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textSecondary)
-          .maxLines(1)
-
-        Text(this.currentPath)
-          .fontSize(CloudThemeToken.pathSheetTitleSize)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(CloudThemeToken.textSecondary)
-          .maxLines(1)
-          .textAlign(TextAlign.Center)
-          .wordBreak(WordBreak.BREAK_ALL)
-          .textOverflow({ overflow: TextOverflow.MARQUEE })
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
-
-      Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
-
-        Row({ space: CloudThemeToken.pathSheetHeaderActionGap }) {
-          // 圆按钮用容器代替 Button（Button 挂不上材质），与系统 sheet 关闭键同为材质观感
-          Stack() {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(CloudThemeToken.sheetActionIconSize)
-              .fontColor([CloudThemeToken.textSecondary])
-          }
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
-          .borderRadius(CloudThemeToken.iconBoxSm / CloudThemeToken.halfDivisor)
-          .clip(true)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .hoverEffect(HoverEffect.Highlight)
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .focusable(true)
-          .accessibilityText('关闭')
-          .onClick(() => {
-            if (this.onClose) {
-              this.onClose(false)
-            }
-          })
-
-          Text($r('app.string.select_path'))
-            .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(CloudThemeToken.textPrimary)
-            .textAlign(TextAlign.Center)
-            .wordBreak(WordBreak.BREAK_ALL)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.MARQUEE })
-            .layoutWeight(1)
-
-          Stack() {
-            SymbolGlyph($r('sys.symbol.checkmark'))
-              .fontSize(CloudThemeToken.sheetActionIconSize)
-              .fontColor([CloudThemeToken.primary])
-          }
-          .width(CloudThemeToken.iconBoxSm)
-          .height(CloudThemeToken.iconBoxSm)
-          .borderRadius(CloudThemeToken.iconBoxSm / CloudThemeToken.halfDivisor)
-          .clip(true)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
-          .hoverEffect(HoverEffect.Highlight)
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .focusable(true)
-          .accessibilityText('确认')
-          .onClick(() => {
-            if (this.onClose) {
-              this.onClose(true, this.currentPath)
-            }
-          })
-        }
-        .layoutWeight(1)
-        .alignItems(VerticalAlign.Center)
-        .justifyContent(FlexAlign.SpaceBetween)
-      }
-      .padding({
-        left: CloudThemeToken.pathSheetHeaderHorizontalPadding,
-        right: CloudThemeToken.pathSheetHeaderHorizontalPadding
+  // 标题栏：× 取消、✓ 确认用标题栏按钮（同文件页搜索 / 排序键、二级页返回键），中间主标题 + 当前目标
+  @Builder titleStack() {
+    Row({ space: CloudThemeToken.spacingSection }) {
+      TitleControlButton({
+        icon: $r('app.media.ic_window_close'),
+        label: '取消',
+        inTitleBar: true,
+        onAction: () => this.onClose?.(false)
       })
+
+      Column({ space: CloudThemeToken.pathSheetTitleGap }) {
+        Text($r('app.string.select_path'))
+          .fontSize(CloudThemeToken.textSizeTitle)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(CloudThemeToken.textPrimary)
+          .maxLines(1)
+        Row({ space: CloudThemeToken.pathSheetTitleGap }) {
+          Text(this.title ?? '')
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+          Text(this.currentPath)
+            .fontSize(CloudThemeToken.textSizeSmall)
+            .fontColor(CloudThemeToken.textSecondary)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .ellipsisMode(EllipsisMode.START)
+            .flexShrink(1)
+        }
+        .justifyContent(FlexAlign.Center)
+      }
       .layoutWeight(1)
-      .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.SpaceBetween)
+      .alignItems(HorizontalAlign.Center)
+
+      TitleControlButton({
+        icon: $r('app.media.ic_check'),
+        label: '确认',
+        inTitleBar: true,
+        onAction: () => this.onClose?.(true, this.currentPath)
+      })
     }
-    .justifyContent(FlexAlign.SpaceBetween)
-    .height(CloudThemeToken.sheetHeaderHeight)
     .width('100%')
-    .outline({width: {bottom: CloudThemeToken.strongLineWidth}})
-    .outlineColor(CloudThemeToken.line)
+    .height('100%')
+    // stackBuilder 从标题栏左缘排起，左右边距在这里给
+    .padding({ left: CloudThemeToken.pagePadding, right: CloudThemeToken.pagePadding })
+    .alignItems(VerticalAlign.Center)
   }
 
   @Builder dirItem(item: ObjectInfo) {

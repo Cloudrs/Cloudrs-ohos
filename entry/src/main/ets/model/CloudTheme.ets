@@ -227,7 +227,6 @@ export class CloudThemeToken {
   static readonly uploadSourceSheetHorizontalPadding: number = 20
   static readonly uploadSourceSheetTopPadding: number = 18
   static readonly uploadSourceSheetBottomPadding: number = 28
-  static readonly sheetHeaderHeight: number = 70
   // 系统半模态标题区：右侧给关闭键让出的宽度比左边距多出的部分（Pura 实测约 48vp）；
   // 自定义标题左侧补上这段，内容才落在整张半模态的正中
   static readonly sheetTitleCloseInset: number = 48
@@ -238,14 +237,8 @@ export class CloudThemeToken {
   static readonly pathFolderIconSize: number = 30
   static readonly pathChevronWidth: number = 24
   static readonly pathChevronHeight: number = 12
-  static readonly pathSheetGap: number = 5
-  static readonly pathSheetTopPadding: number = 10
   static readonly pathSheetTitleGap: number = 2
-  static readonly pathSheetTitleSize: number = 14
-  static readonly pathSheetHeaderActionGap: number = 10
-  static readonly pathSheetHeaderHorizontalPadding: number = 15
   static readonly pathSheetConfirmTextSize: number = 16
-  static readonly pathSheetConfirmPadding: number = 5
   static readonly pathItemGap: number = 10
   static readonly pathItemNameGap: number = 5
   static readonly pathItemBasePadding: number = 15
@@ -392,6 +385,11 @@ export class CloudThemeToken {
   static readonly aria2TaskChipHeight: number = 20
   // 任务详情里路径行最多折几行（长路径完整显示）
   static readonly aria2TaskDetailPathMaxLines: number = 3
+  // 压缩 / 解压浮条：高度、圆角、与上传按钮之间的间距、「查看」按钮高度
+  static readonly archiveBannerHeight: number = 48
+  static readonly archiveBannerRadius: number = 24
+  static readonly archiveBannerBottomGap: number = 12
+  static readonly archiveBannerActionHeight: number = 32
   static readonly imagePreviewErrorImageSize: number = 128
   static readonly imagePreviewSaveTopPadding: number = 10
   static readonly imagePreviewSaveBottomPadding: number = 10

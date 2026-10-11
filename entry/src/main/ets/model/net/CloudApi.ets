@@ -18,10 +18,10 @@ import {
   nativeUploadLocalFileChunkToUrlWithProgress,
   nativeAria2Downloading, nativeAria2Finished,
   nativeAria2CreateTask, nativeAria2DeleteTask, nativeAria2CancelTask, nativeAria2CanDeleteFinished,
-  nativeGetUserTasks,
+  nativeGetUserTasks, nativeGetRecentUserTasks,
   nativeGetThumb,
   nativeCreateShareLink, nativeListShareLinks, nativeDeleteShareLink,
-  nativeCreateArchive, nativeExtractArchive
+  nativeArchiveSupported, nativeCreateArchive, nativeExtractArchive
 } from '../../utils/CloudreveNative';
 import { FileType } from '../../utils/CommonUtil';
 import {
@@ -519,6 +519,11 @@ export class CloudApi {
     nativeGetUserTasks(CloudApi.withApiLogging('userTasks', callback));
   }
 
+  /** 任务队列最新一页（新提交的任务一定在里面），给压缩 / 解压的后台跟踪轮询用 */
+  static recentUserTasks(callback?: HttpCallback<UserTasks>): void {
+    nativeGetRecentUserTasks(CloudApi.withApiLogging('recentUserTasks', callback));
+  }
+
   static aria2TaskCreate(dst: string, urls: string[], callback?: HttpCallback<null>): void {
     nativeAria2CreateTask(dst, urls, CloudApi.withApiLogging('aria2TaskCreate', callback));
   }
@@ -640,11 +645,17 @@ export class CloudApi {
     nativeDeleteShareLink(shareId, CloudApi.withApiLogging('deleteShareLink', callback));
   }
 
-  static createArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
-    nativeCreateArchive(srcPaths, dstPath, CloudApi.withApiLogging('createArchive', callback));
+  static archiveSupported(callback?: HttpCallback<boolean>): void {
+    nativeArchiveSupported(CloudApi.withApiLogging('archiveSupported', callback));
   }
 
-  static extractArchive(srcPaths: string[], dstPath: string, callback?: HttpCallback<string>): void {
-    nativeExtractArchive(srcPaths, dstPath, CloudApi.withApiLogging('extractArchive', callback));
+  static createArchive(ids: string[], isDirs: boolean[], dstFolder: string, name: string,
+    callback?: HttpCallback<string>): void {
+    nativeCreateArchive(ids, isDirs, dstFolder, name, CloudApi.withApiLogging('createArchive', callback));
+  }
+
+  static extractArchive(srcPath: string, dstFolder: string, encoding: string, password: string,
+    callback?: HttpCallback<string>): void {
+    nativeExtractArchive(srcPath, dstFolder, encoding, password, CloudApi.withApiLogging('extractArchive', callback));
   }
 }

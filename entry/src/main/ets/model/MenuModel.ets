@@ -10,6 +10,8 @@ export enum FileMenuType {
   DOWNLOAD,
   DELETE,
   MULTI_SELECT,
+  COMPRESS,
+  EXTRACT,
 }
 
 export enum MoreMenuType {

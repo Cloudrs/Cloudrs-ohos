@@ -31,6 +31,9 @@ export struct HomePage {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0;
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidth: number = 0;
+  // 其它页面请求切到某个 Tab（如压缩浮条的「查看」），处理完复位为 -1
+  @Watch('onHomeTabRequest')
+  @StorageLink(Constant.HOME_TAB_REQUEST) homeTabRequest: number = -1
   @Watch('onForegroundTickChanged')
   @StorageProp(Constant.APP_FOREGROUND_TICK) foregroundTick: number = 0;
   @StorageProp(Constant.APP_LOCKED) appLocked: boolean = false
@@ -132,6 +135,15 @@ export struct HomePage {
         selectedColor: CloudThemeToken.primary,
         unselectedColor: CloudThemeToken.textPrimary
       })
+  }
+
+  private onHomeTabRequest(): void {
+    if (this.homeTabRequest < 0) {
+      return
+    }
+    const index = this.homeTabRequest
+    this.homeTabRequest = -1
+    this.switchTab(index)
   }
 
   private switchTab(index: number): void {

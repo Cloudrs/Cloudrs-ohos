@@ -37,6 +37,9 @@ export struct TabRemoteDown {
   @Watch('onAccountChanged')
   @StorageProp(Constant.ACTIVE_ACCOUNT_SCOPE) accountScope: string = ''
   @StorageProp(Constant.TAB_BAR_HEIGHT) tabBarHeight: number = 0;
+  // 其它页面请求切到某个分段（如压缩浮条的「查看」→ 任务队列），处理完复位为 -1
+  @Watch('onSegmentRequest')
+  @StorageLink(Constant.ARIA2_SEGMENT_REQUEST) segmentRequest: number = -1
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
   // 2in1 窗口三键区宽度；其它设备为 0
   @StorageProp(Constant.TITLE_BUTTON_INSET_END) titleButtonInsetEnd: number = 0;
@@ -80,10 +83,14 @@ export struct TabRemoteDown {
   // 只有真的问出结果才算数；失败不置位，留给下次切回本页重试
   private deletePermissionResolved: boolean = false
   private initialDataRequested: boolean = false
+  // 浮条「查看」跳来时任务队列可能是早先拉的，看不到刚提交的任务；等本页变成活动页再拉一次
+  private queueRefreshPending: boolean = false
   private loadedAccountScope: string = ''
 
   aboutToAppear(): void {
     this.loadedAccountScope = ActiveAccount.current()
+    // TabContent 首次切到才创建，分段请求可能在创建前就写进了 AppStorage，@Watch 不会对初始值触发
+    this.onSegmentRequest()
     this.loadInitialDataIfActive()
     this.refreshDeletePermission()
   }
@@ -98,6 +105,7 @@ export struct TabRemoteDown {
       return
     }
     this.loadInitialDataIfActive()
+    this.refreshQueueIfPending()
     // 和列表不同，权限只要还没问出结果就每次切回本页重试一次：
     // 本组件首页常驻，被 initialDataRequested 挡住的话一次网络抖动
     // 就会让管理员整个会话都看不到删除按钮
@@ -131,8 +139,31 @@ export struct TabRemoteDown {
     this.canDeleteFinished = false
     this.deletePermissionResolved = false
     this.initialDataRequested = false
+    this.queueRefreshPending = false
     this.loadInitialDataIfActive()
     this.refreshDeletePermission()
+  }
+
+  private onSegmentRequest(): void {
+    if (this.segmentRequest < 0) {
+      return
+    }
+    const index = this.segmentRequest
+    this.segmentRequest = -1
+    this.selectedIndexes = [index]
+    // 还没拉过的话首拉就是最新的，不用补
+    if (index === Constant.ARIA2_TASK_QUEUE_SEGMENT && this.initialDataRequested) {
+      this.queueRefreshPending = true
+      this.refreshQueueIfPending()
+    }
+  }
+
+  private refreshQueueIfPending(): void {
+    if (!this.queueRefreshPending || !this.isActive) {
+      return
+    }
+    this.queueRefreshPending = false
+    this.getUserTasks()
   }
 
   private loadInitialDataIfActive(): void {

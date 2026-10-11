@@ -217,6 +217,25 @@ class Constant {
 
   WINDOW_HEIGHT_VP: string = 'windowHeightVp'
 
+  // 当前账号能否压缩 / 解压（ArchiveCapability 维护），false 时文件页不出现相关入口
+  ARCHIVE_ENABLED: string = 'archiveEnabled'
+
+  // 压缩 / 解压后台跟踪的浮条状态与「目标文件夹有变化」信号（ArchiveTaskTracker 写，文件页读）
+  ARCHIVE_BANNER_MODE: string = 'archiveBannerMode'
+  ARCHIVE_BANNER_TEXT: string = 'archiveBannerText'
+  ARCHIVE_REFRESH_PATH: string = 'archiveRefreshPath'
+  ARCHIVE_REFRESH_KIND: string = 'archiveRefreshKind'
+  ARCHIVE_REFRESH_TICK: string = 'archiveRefreshTick'
+  // 跨页跳转请求：首页切到指定 Tab、离线下载页切到指定分段；处理完复位为 -1
+  HOME_TAB_REQUEST: string = 'homeTabRequest'
+  ARIA2_SEGMENT_REQUEST: string = 'aria2SegmentRequest'
+  ARCHIVE_POLL_INTERVAL_MS: number = 3000
+  ARCHIVE_TRACK_TIMEOUT_MS: number = 600000
+  ARCHIVE_V3_MATCH_TIMEOUT_MS: number = 60000
+  ARCHIVE_BANNER_DONE_MS: number = 3000
+  ARCHIVE_BANNER_NOTICE_MS: number = 5000
+  ARIA2_TASK_QUEUE_SEGMENT: number = 1
+
   LAYOUT_MODE: string = 'layoutMode'
 
   SIDEBAR_VISIBLE: string = 'sidebarVisible'

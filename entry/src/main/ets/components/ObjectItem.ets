@@ -369,17 +369,24 @@ export struct ObjectItem {
     Menu() {
       MenuItemGroup() {
         if (item.type == Constant.OBJECT_DIR_TYPE) {
-          this.commonMenuItem($r('app.string.dir_enter'), FileMenuType.DIR_ENTER)
+          this.commonMenuItem($r('app.string.dir_enter'), $r('app.media.ic_menu_open'), FileMenuType.DIR_ENTER)
         } else {
-          this.commonMenuItem($r('app.string.preview'), FileMenuType.PREVIEW)
+          this.commonMenuItem($r('app.string.preview'), $r('app.media.ic_menu_preview'), FileMenuType.PREVIEW)
         }
-        this.commonMenuItem($r('app.string.more_multi_select'), FileMenuType.MULTI_SELECT)
-        this.commonMenuItem($r('app.string.file_details'), FileMenuType.DETAIL)
-        this.commonMenuItem($r('app.string.rename'), FileMenuType.RENAME)
-        this.commonMenuItem($r('app.string.copy'), FileMenuType.COPY)
-        this.commonMenuItem($r('app.string.move'), FileMenuType.MOVE)
+        this.commonMenuItem($r('app.string.more_multi_select'), $r('app.media.ic_menu_multi_select'),
+          FileMenuType.MULTI_SELECT)
+        // 图片的「保存到相册」是高频操作，提到第一组详细信息之前；其它文件的「下载」仍单独成组
+        if (this.isImageFile(item)) {
+          this.commonMenuItem($r('app.string.save_to_gallery'), $r('app.media.ic_menu_save_image'),
+            FileMenuType.DOWNLOAD)
+        }
+        this.commonMenuItem($r('app.string.file_details'), $r('app.media.ic_menu_info'), FileMenuType.DETAIL)
+        this.commonMenuItem($r('app.string.rename'), $r('app.media.ic_menu_rename'), FileMenuType.RENAME)
+        this.commonMenuItem($r('app.string.copy'), $r('app.media.ic_menu_copy'), FileMenuType.COPY)
+        this.commonMenuItem($r('app.string.move'), $r('app.media.ic_menu_move'), FileMenuType.MOVE)
         if (this.archiveEnabled) {
           MenuItem({
+            startIcon: $r('app.media.ic_menu_more'),
             content: '更多',
             builder: (): void => this.moreSubMenu(item),
             // 侧边展开时系统不画 › （MateBook 实测）；层叠展开自带会旋转的箭头，不覆盖
@@ -387,22 +394,19 @@ export struct ObjectItem {
           })
             .fileMenuItemStyle(CloudThemeToken.textPrimary)
         } else {
-          this.commonMenuItem($r('app.string.cloud_share'), FileMenuType.CREATE_SHARE)
+          this.commonMenuItem($r('app.string.cloud_share'), $r('app.media.ic_menu_share'), FileMenuType.CREATE_SHARE)
         }
       }
 
-      if (item.type == 'file') {
+      if (item.type == 'file' && !this.isImageFile(item)) {
         MenuItemGroup() {
-          this.commonMenuItem(
-            CommonUtil.getFileType(item.name) === FileType.IMAGE
-              ? $r('app.string.save_to_gallery')
-              : $r('app.string.file_download'),
-            FileMenuType.DOWNLOAD)
+          this.commonMenuItem($r('app.string.file_download'), $r('app.media.ic_menu_download'), FileMenuType.DOWNLOAD)
         }
       }
 
       MenuItemGroup() {
-        MenuItem({ content: $r('app.string.delete') })
+        // 图标本身就是危险红（深浅色各一份），系统菜单项不给 startIcon 着色
+        MenuItem({ startIcon: $r('app.media.ic_menu_delete'), content: $r('app.string.delete') })
           .fileMenuItemStyle(CloudThemeToken.danger)
           .onClick(() => {
             if (this.onMenuClick) {
@@ -421,24 +425,29 @@ export struct ObjectItem {
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
   }
 
+  private isImageFile(item: ObjectInfo): boolean {
+    return item.type == 'file' && CommonUtil.getFileType(item.name) === FileType.IMAGE
+  }
+
   private isSideExpand(): boolean {
     return this.windowWidthVp >= CloudThemeToken.breakpointMd
   }
 
   @Builder moreSubMenu(item: ObjectInfo) {
     Menu() {
-      this.commonMenuItem($r('app.string.cloud_share'), FileMenuType.CREATE_SHARE)
-      this.commonMenuItem('压缩', FileMenuType.COMPRESS)
+      this.commonMenuItem($r('app.string.cloud_share'), $r('app.media.ic_menu_share'), FileMenuType.CREATE_SHARE)
+      this.commonMenuItem('压缩', $r('app.media.ic_menu_compress'), FileMenuType.COMPRESS)
       if (item.type != Constant.OBJECT_DIR_TYPE && ArchiveRules.canExtract(item.name, CloudApi.isV4())) {
-        this.commonMenuItem('解压到…', FileMenuType.EXTRACT)
+        this.commonMenuItem('解压到…', $r('app.media.ic_menu_extract'), FileMenuType.EXTRACT)
       }
     }
     .width(CloudThemeToken.menuWidth)
     .backgroundColor(CloudMaterial.materialSurface(CloudThemeToken.surface))
   }
 
-  @Builder commonMenuItem(title: ResourceStr, type: FileMenuType) {
-    MenuItem({ content: title })
+  // 图标是与「我的」页同款的线性图标（ic_menu_*），系统菜单项不给 startIcon 着色，故按深浅色各备一份
+  @Builder commonMenuItem(title: ResourceStr, icon: Resource, type: FileMenuType) {
+    MenuItem({ startIcon: icon, content: title })
       .fileMenuItemStyle(CloudThemeToken.textPrimary)
       .onClick(() => {
         if (this.onMenuClick) {

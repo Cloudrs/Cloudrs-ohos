@@ -319,11 +319,14 @@ export struct PathSelectSheet {
           .fontWeight(FontWeight.Bold)
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
+        // 宽度锁在 × 与 ✓ 之间：不给宽度时这一行按内容撑开，长路径会伸到 ✓ 底下。
+        // 前缀不缩，只缩路径，省略号放在路径前面，保留末尾的目标文件夹名
         Row({ space: CloudThemeToken.pathSheetTitleGap }) {
           Text(this.title ?? '')
             .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
             .maxLines(1)
+            .flexShrink(0)
           Text(this.currentPath)
             .fontSize(CloudThemeToken.textSizeSmall)
             .fontColor(CloudThemeToken.textSecondary)
@@ -332,6 +335,7 @@ export struct PathSelectSheet {
             .ellipsisMode(EllipsisMode.START)
             .flexShrink(1)
         }
+        .width('100%')
         .justifyContent(FlexAlign.Center)
       }
       .layoutWeight(1)

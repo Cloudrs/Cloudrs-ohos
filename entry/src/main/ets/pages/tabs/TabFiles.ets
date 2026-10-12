@@ -97,6 +97,11 @@ const BATCH_SHEET_MIN_VISIBLE_MS: number = 500
 /** 智感握姿换边：上传 FAB 横向滑过去的弹簧参数（与相册页切换胶囊一致） */
 const GRIP_SLIDE_RESPONSE: number = 0.45
 const GRIP_SLIDE_DAMPING: number = 0.8
+/** 换目录新列表滑入的缓动：快出慢停（减速曲线 0.2, 0, 0.2, 1） */
+const DIR_ENTER_CURVE_X1: number = 0.2
+const DIR_ENTER_CURVE_Y1: number = 0
+const DIR_ENTER_CURVE_X2: number = 0.2
+const DIR_ENTER_CURVE_Y2: number = 1
 // 「更多」菜单选中项行尾的对勾，所有项共用一个：主文字色、20 号、加粗到与左侧线性图标同笔画，
 // 品牌蓝的 24 号细勾在一片黑白灰里太跳
 const MORE_MENU_CHECK: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.checkmark'))
@@ -361,6 +366,10 @@ export struct TabFiles {
   @State gridWidth: number = 0
   @State headerCollapseProgress: number = 0
   @State refreshPullOffset: number = 0
+  // 换目录过渡（见 getFileList）：旧列表变淡并锁点击，新列表按进入方向滑入
+  @State dirSwitching: boolean = false
+  @State dirListOpacity: number = 1
+  @State dirListOffsetX: number = 0
   @State currentUser: string = ''
   @State currentUrl: string = ''
   @State isMultiSelectMode: boolean = false
@@ -407,6 +416,8 @@ export struct TabFiles {
   private shareRefreshTimer: number = -1
   private initialFileListRequested: boolean = false
   private loadingFilePath: string = ''
+  // 换目录时转圈的兜底计时：超过 dirSwitchLoadingDelay 数据还没回来才清空旧列表、出整页转圈
+  private dirLoadingTimer: number = -1
   // 当前列表数据属于哪个账号，用来识别账号切换并丢弃迟到的旧账号响应
   private loadedAccountScope: string = ''
   // 列表在本页不可见时加载完成，缩略图请求被推迟到本页重新变为活动时
@@ -990,6 +1001,7 @@ export struct TabFiles {
   }
 
   aboutToDisappear(): void {
+    this.cancelDirLoadingTimer()
     HoldingHandUtil.stop(this.onGripSide)
     this.unregisterKnockReceive()
     // 兜底:组件销毁时详情面板可能未走完关闭流程,监听未及反注册
@@ -1510,13 +1522,18 @@ export struct TabFiles {
       return
     }
     this.loadingFilePath = path
-    const isSamePath = path === this.currentPath
+    const previousPath = this.currentPath
+    const isSamePath = path === previousPath
     if (!isSamePath) {
       AppLogger.info(TAG, `enter dir ${path}`)
       this.exitMultiSelectMode()
     }
     const hasVisibleData = this.dirDataSource.totalCount() > 0 || this.fileDataSource.totalCount() > 0
     const shouldKeepContent = isRefresh && isSamePath && hasVisibleData
+    // 换目录（账号切换时 currentPath 已清空，不算）：旧列表先留着变淡，数据回来再换掉并按方向滑入；
+    // 内网几十毫秒就回来，不再先清空闪一下整页转圈。慢的话由 beginDirSwitch 的兜底计时出转圈
+    const switchesDir = !isSamePath && previousPath.length > 0
+    const enterDirection = this.dirEnterDirection(previousPath, path)
     if (path === '/') {
       this.isRoot = true
     }
@@ -1537,15 +1554,17 @@ export struct TabFiles {
         if (requestScope !== this.loadedAccountScope) {
           return
         }
-        this.filePageState = shouldKeepContent ? FilePageState.IDLE : FilePageState.LOADING
-        if (isRefresh && !shouldKeepContent) {
-          this.dirDataSource.clear()
-          this.fileDataSource.clear()
-          this.thumbImage = new Map()
-          this.thumbSource = FileThumbSourceCache.snapshot(this.getThumbScopeKey())
-          this.resetThumbQueue()
-          this.resetHeaderScrollState()
-          this.scrollerForList.scrollEdge(Edge.Start)
+        this.cancelDirLoadingTimer()
+        if (shouldKeepContent) {
+          this.filePageState = FilePageState.IDLE
+        } else if (switchesDir) {
+          this.beginDirSwitch(path)
+        } else {
+          this.endDirSwitch()
+          this.filePageState = FilePageState.LOADING
+          if (isRefresh) {
+            this.clearDirectoryContent()
+          }
         }
       },
       onSuccess: (data: DirectoryInfo) => {
@@ -1554,9 +1573,20 @@ export struct TabFiles {
           settle()
           return
         }
+        if (path !== this.currentPath) {
+          // 等待期间又换到了别的目录，这是被跳过那一层的迟到响应，不能把列表换成它
+          AppLogger.info(TAG, 'drop stale file list response')
+          settle()
+          return
+        }
+        this.cancelDirLoadingTimer()
         this.loadingFilePath = ''
         if (!shouldKeepContent) {
           this.searchKeyword = ''
+          if (switchesDir) {
+            // 旧目录的列表留到这时才换掉（兜底转圈已出过的话这里是空清一次）
+            this.clearDirectoryContent()
+          }
         }
         this.subTitle = data.policy.name
         this.objectsInfo = new DirFileInfo(data.parent, data.objects, data.policy)
@@ -1567,6 +1597,9 @@ export struct TabFiles {
         this.isRefreshing = false
         this.refreshPullOffset = CloudThemeToken.zero
         this.filePageState = FilePageState.IDLE
+        if (!shouldKeepContent) {
+          this.playDirEnter(switchesDir ? enterDirection : 0)
+        }
         this.scheduleShareLinksRefresh()
         if (fromPullRefresh) {
           showToast('刷新成功')
@@ -1574,11 +1607,17 @@ export struct TabFiles {
         settle()
       },
       onFailure: (msg) => {
-        if (requestScope !== this.loadedAccountScope) {
+        if (requestScope !== this.loadedAccountScope || path !== this.currentPath) {
           settle()
           return
         }
+        this.cancelDirLoadingTimer()
         this.loadingFilePath = ''
+        if (switchesDir) {
+          // 同原来：换目录失败时旧目录的列表不留，标题已是新目录，出失败页
+          this.clearDirectoryContent()
+        }
+        this.endDirSwitch()
         if (ApiErrorUtil.isNetworkMessage(msg)) {
           showToast(NETWORK_ERROR_MESSAGE)
         } else {
@@ -1592,6 +1631,76 @@ export struct TabFiles {
       }
       })
     })
+  }
+
+  /** 换目录的方向：进子目录 1（新列表从右滑入）、回上级 -1（从左）、跳到别的分支 0（只淡入） */
+  private dirEnterDirection(from: string, to: string): number {
+    if (from.length === 0 || from === to) {
+      return 0
+    }
+    const asParent = (dir: string): string => dir.endsWith('/') ? dir : `${dir}/`
+    if (to.startsWith(asParent(from))) {
+      return 1
+    }
+    if (from.startsWith(asParent(to))) {
+      return -1
+    }
+    return 0
+  }
+
+  // 换目录开始：旧列表变淡并锁点击，等新数据；超过 dirSwitchLoadingDelay 还没回来才清空旧列表、出整页转圈
+  private beginDirSwitch(path: string): void {
+    this.dirSwitching = true
+    this.getUIContext().animateTo({ duration: CloudThemeToken.dirSwitchDimDuration, curve: Curve.EaseOut }, () => {
+      this.dirListOpacity = CloudThemeToken.dirSwitchDimOpacity
+    })
+    this.dirLoadingTimer = setTimeout(() => {
+      this.dirLoadingTimer = -1
+      if (this.loadingFilePath !== path) {
+        return
+      }
+      this.clearDirectoryContent()
+      this.endDirSwitch()
+      this.filePageState = FilePageState.LOADING
+    }, CloudThemeToken.dirSwitchLoadingDelay)
+  }
+
+  private cancelDirLoadingTimer(): void {
+    if (this.dirLoadingTimer >= 0) {
+      clearTimeout(this.dirLoadingTimer)
+      this.dirLoadingTimer = -1
+    }
+  }
+
+  private endDirSwitch(): void {
+    this.dirSwitching = false
+    this.dirListOpacity = CloudThemeToken.fullOpacity
+    this.dirListOffsetX = CloudThemeToken.zero
+  }
+
+  // 新目录的数据落地：列表从进入方向错开一段、透明起步，滑回原位并淡入（direction 为 0 时只淡入）
+  private playDirEnter(direction: number): void {
+    this.dirSwitching = false
+    this.dirListOpacity = CloudThemeToken.zero
+    this.dirListOffsetX = direction * CloudThemeToken.dirSwitchEnterOffset
+    this.getUIContext().animateTo({
+      duration: CloudThemeToken.dirSwitchEnterDuration,
+      curve: curves.cubicBezierCurve(DIR_ENTER_CURVE_X1, DIR_ENTER_CURVE_Y1, DIR_ENTER_CURVE_X2, DIR_ENTER_CURVE_Y2)
+    }, () => {
+      this.dirListOpacity = CloudThemeToken.fullOpacity
+      this.dirListOffsetX = CloudThemeToken.zero
+    })
+  }
+
+  // 清掉当前目录的列表、缩略图与滚动位置，换目录或整页重拉前调用
+  private clearDirectoryContent(): void {
+    this.dirDataSource.clear()
+    this.fileDataSource.clear()
+    this.thumbImage = new Map()
+    this.thumbSource = FileThumbSourceCache.snapshot(this.getThumbScopeKey())
+    this.resetThumbQueue()
+    this.resetHeaderScrollState()
+    this.scrollerForList.scrollEdge(Edge.Start)
   }
 
   private beginBatchOperation(title: string, total: number,
@@ -2264,6 +2373,10 @@ export struct TabFiles {
           }
           .width('100%')
           .height('100%')
+          // 换目录过渡：旧列表变淡并锁点击，新列表滑入（Grid 上挂了隐式 .animation，过渡属性放在外层）
+          .opacity(this.dirListOpacity)
+          .translate({ x: this.dirListOffsetX })
+          .hitTestBehavior(this.dirSwitching ? HitTestMode.None : HitTestMode.Default)
           .refreshOffset(CloudThemeToken.refreshOffset)
           .pullToRefresh(true)
           .onOffsetChange((offset: number) => {
@@ -3180,6 +3293,8 @@ export struct TabFiles {
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .backgroundColor(CloudThemeToken.background)
+    // 换目录慢时兜底出现、数据到了消失，都淡入淡出，和列表滑入衔接
+    .transition(TransitionEffect.OPACITY.animation({ duration: CloudThemeToken.loadingFadeDuration }))
   }
 
   @Builder hiddenRefreshHint() {

@@ -146,6 +146,14 @@ export class CloudThemeToken {
   // 二级页标题栏入场：先内容后标题栏，页面滑到约四分之三时返回键和标题再从屏幕最右侧滑入
   static readonly subPageTitleEnterDelay: number = 160
   static readonly subPageTitleEnterDuration: number = 260
+  // 文件页换目录：旧列表先淡到 dirSwitchDimOpacity 并锁点击，超过 dirSwitchLoadingDelay 还没回来才清空出转圈
+  // （内网几十毫秒就回来，不闪转圈）；新列表从进入方向（进子目录从右、回上级从左）位移 dirSwitchEnterOffset 滑入并淡入
+  static readonly dirSwitchDimOpacity: number = 0.45
+  static readonly dirSwitchDimDuration: number = 120
+  static readonly dirSwitchLoadingDelay: number = 300
+  static readonly dirSwitchEnterOffset: number = 24
+  static readonly dirSwitchEnterDuration: number = 260
+  static readonly loadingFadeDuration: number = 150
   static readonly fullOpacity: number = 1
   static readonly pressedScale: number = 0.95
   static readonly invisibleOpacity: number = 0.01

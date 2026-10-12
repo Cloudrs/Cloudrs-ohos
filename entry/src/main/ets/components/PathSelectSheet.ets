@@ -21,17 +21,19 @@ export struct PathSelectSheet {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
   @State currentPath: string = ''
-  // 整页转圈 / 失败只用于首次拉根目录；展开子目录时只在 loadingPath 那一行的箭头位置转小圈，列表不动
+  // 整页转圈 / 失败只用于首次拉根目录；展开子目录时只在那一行的箭头位置转小圈，列表不动
   @State isLoading: boolean = false
   @State loadFailed: boolean = false
-  @State loadingPath: string = ''
+  // 正在转小圈的行：网差时可能同时等好几个文件夹
+  @State loadingPaths: Map<string, boolean> = new Map()
   // 紧挨在选中行上面的那一行：它的分隔线会贴着选中块的顶边，不画
   @State pathAboveSelected: string = ''
   onClose?: (isFinished: boolean, path?: string) => void
 
   private scroller: Scroller = new Scroller()
-  private downIcon: Resource = $r('app.media.ic_chevron_down');
   private rightIcon: Resource = $r('app.media.ic_chevron_right');
+  // 已发出还没回来的目录请求 → 延迟出小转圈的计时（整页加载的根目录记 -1）
+  private pendingLoads: Map<string, number> = new Map()
   @State allDirs: Map<string, ObjectInfo[]> = new Map()
   @State pathShow: Map<string, boolean> = new Map()
 
@@ -39,9 +41,9 @@ export struct PathSelectSheet {
     if (path == '/') {
       return CloudThemeToken.pathItemBasePadding
     }
-
-    let num = path.split('/').length-1
-    return CloudThemeToken.pathItemBasePadding + num * CloudThemeToken.pathItemDepthPadding
+    const depth = path.split('/').length - 1
+    return CloudThemeToken.pathItemBasePadding + CloudThemeToken.pathItemDepthPadding +
+      (depth - 1) * CloudThemeToken.pathItemLevelIndent
   }
 
   putDirs(path: string, dirs: ObjectInfo[]) {
@@ -65,7 +67,7 @@ export struct PathSelectSheet {
   }
 
   async getFileList(path: string) {
-    if (this.loadingPath === path) {
+    if (this.pendingLoads.has(path)) {
       return
     }
     this.currentPath = path
@@ -75,20 +77,35 @@ export struct PathSelectSheet {
     if (fullPage) {
       this.isLoading = true
       this.loadFailed = false
+      this.pendingLoads.set(path, -1)
     } else {
-      this.loadingPath = path
+      // 超过 pathLoadingSpinnerDelay 还没回来才转小圈，内网几十毫秒回来时箭头处不闪
+      this.pendingLoads.set(path, setTimeout(() => {
+        if (this.pendingLoads.has(path)) {
+          this.loadingPaths.set(path, true)
+        }
+      }, CloudThemeToken.pathLoadingSpinnerDelay))
     }
     CloudApi.getFilesInfo(path, {
       onSuccess: (data: DirectoryInfo) => {
-        let dirs = new DirFileInfo(data.parent, data.objects, data.policy).dirObjects
-        this.putDirs(path, dirs.filter(item => item.id != this.filterDirId))
-        this.putPathShow(path, true)
+        this.finishLoad(path)
+        const dirs = new DirFileInfo(data.parent, data.objects, data.policy).dirObjects
+          .filter(item => item.id != this.filterDirId)
+        if (fullPage) {
+          this.putDirs(path, dirs)
+          this.putPathShow(path, true)
+        } else {
+          // 撑开子目录区域：下面的行平滑让位，子目录行按 transition 淡入下滑，箭头同时转成 ⌄
+          this.getUIContext().animateTo(this.expandAnimation(), () => {
+            this.putDirs(path, dirs)
+            this.putPathShow(path, true)
+          })
+        }
         this.isLoading = false
-        this.clearLoadingPath(path)
         this.refreshPathAboveSelected()
       },
       onFailure: (msg) => {
-        this.clearLoadingPath(path)
+        this.finishLoad(path)
         if (fullPage) {
           this.isLoading = false
           this.loadFailed = true
@@ -102,10 +119,26 @@ export struct PathSelectSheet {
     })
   }
 
-  private clearLoadingPath(path: string): void {
-    if (this.loadingPath === path) {
-      this.loadingPath = ''
+  // 请求结束（成功或失败）：撤掉延迟转圈的计时和该行的小转圈。失败的行 pathShow 仍未定义，再点就重试
+  private finishLoad(path: string): void {
+    const timer = this.pendingLoads.get(path)
+    if (timer !== undefined && timer >= 0) {
+      clearTimeout(timer)
     }
+    this.pendingLoads.delete(path)
+    if (this.loadingPaths.has(path)) {
+      this.loadingPaths.delete(path)
+    }
+  }
+
+  private expandAnimation(): AnimateParam {
+    return { duration: CloudThemeToken.pathExpandDuration, curve: Curve.FastOutSlowIn }
+  }
+
+  /** 已加载过且没有子目录：末级目录，不放箭头 */
+  private isLeaf(item: ObjectInfo): boolean {
+    const path = CloudApi.getTotalPath(item)
+    return this.allDirs.has(path) && this.getDirs(path).length === 0
   }
 
   private isSelected(item: ObjectInfo): boolean {
@@ -142,7 +175,12 @@ export struct PathSelectSheet {
   }
 
   aboutToDisappear(): void {
-
+    this.pendingLoads.forEach((timer: number) => {
+      if (timer >= 0) {
+        clearTimeout(timer)
+      }
+    })
+    this.pendingLoads.clear()
   }
 
   // 头部放进 HdsNavigation 标题栏：× / ✓ 用标题栏按钮，才在沉浸光感生效范围内（半模态的内容区挂材质无效）。
@@ -252,9 +290,11 @@ export struct PathSelectSheet {
       .justifyContent(FlexAlign.Center)
     } else {
       List({ scroller: this.scroller }) {
-        ForEach(this.getDirs('/'), (item: ObjectInfo, index) => {
-          this.dirItem(item)
-        })
+        ForEach(this.getDirs('/'), (item: ObjectInfo) => {
+          ListItem() {
+            this.dirItem(item)
+          }
+        }, (item: ObjectInfo) => item.id)
       }
       .width('100%')
       .height('100%')
@@ -333,21 +373,29 @@ export struct PathSelectSheet {
               .height(CloudThemeToken.pathLabelHeight)
               .layoutWeight(1)
 
-            if (this.loadingPath === CloudApi.getTotalPath(item)) {
+            if (this.loadingPaths.has(CloudApi.getTotalPath(item))) {
               LoadingProgress()
                 .width(CloudThemeToken.pathChevronWidth)
                 .height(CloudThemeToken.pathRowLoadingSize)
                 .color(CloudThemeToken.primary)
-            } else {
-              Image(this.getPathShow(item) ? this.downIcon : this.rightIcon)
+            } else if (this.isLeaf(item)) {
+              // 末级目录不放箭头，留出同宽的位置，名字的截断宽度不变
+              Column()
                 .width(CloudThemeToken.pathChevronWidth)
-                .height(CloudThemeToken.pathChevronHeight)
-                .padding({
-                  left: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding,
-                  right: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding
-                })
-                .fillColor(this.isSelected(item) ? CloudThemeToken.primary : CloudThemeToken.textSecondary)
-                .draggable(false)
+                .height(CloudThemeToken.pathChevronGlyphHeight)
+            } else {
+              // 同一个 › 展开时转 90° 成 ⌄，不再两张图硬换
+              Stack() {
+                Image(this.rightIcon)
+                  .width(CloudThemeToken.pathChevronGlyphWidth)
+                  .height(CloudThemeToken.pathChevronGlyphHeight)
+                  .fillColor(this.isSelected(item) ? CloudThemeToken.primary : CloudThemeToken.textSecondary)
+                  .rotate({ angle: this.getPathShow(item) ? 90 : 0 })
+                  .animation({ duration: CloudThemeToken.pathChevronRotateDuration, curve: Curve.FastOutSlowIn })
+                  .draggable(false)
+              }
+              .width(CloudThemeToken.pathChevronWidth)
+              .height(CloudThemeToken.pathChevronGlyphHeight)
             }
           }
           .height(CloudThemeToken.pathInnerRowHeight)
@@ -370,12 +418,16 @@ export struct PathSelectSheet {
         // 未选中行透明，让位给 sheet 材质；选中行是半透明主色浅染，不用 primarySoft 实色块盖住材质
         .backgroundColor(this.isSelected(item) ? CloudThemeToken.selectedTint : CloudThemeToken.transparent)
         .onClick(() => {
-          this.currentPath = CloudApi.getTotalPath(item)
-          let isShow = this.getPathShow(item)
+          const path = CloudApi.getTotalPath(item)
+          this.currentPath = path
+          const isShow = this.getPathShow(item)
           if (isShow === undefined) {
-            this.getFileList(this.currentPath)
+            this.getFileList(path)
           } else {
-            this.putPathShow(this.currentPath, !isShow)
+            // 已加载过：撑开 / 收拢子目录区域，下面的行跟着平滑移动
+            this.getUIContext().animateTo(this.expandAnimation(), () => {
+              this.putPathShow(path, !isShow)
+            })
           }
           this.refreshPathAboveSelected()
         })
@@ -390,5 +442,9 @@ export struct PathSelectSheet {
       }
     }
     .width('100%')
+    // 收拢时子目录行在本块内淡出，不画到下面让上来的行上
+    .clip(true)
+    // 子目录行插入 / 移除：淡入并从上方 pathExpandOffset 滑下，收起反向（时长跟随外层 animateTo）
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: -CloudThemeToken.pathExpandOffset })))
   }
 }

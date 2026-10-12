@@ -253,15 +253,24 @@ export class CloudThemeToken {
   static readonly pathInnerRowHeight: number = 43
   static readonly pathLabelHeight: number = 32
   static readonly pathFolderIconSize: number = 30
+  // 行尾箭头：占 pathChevronWidth 见方的位置，里面是原尺寸的 › （12×24），展开时转 90° 成 ⌄
   static readonly pathChevronWidth: number = 24
-  static readonly pathChevronHeight: number = 12
+  static readonly pathChevronGlyphWidth: number = 12
+  static readonly pathChevronGlyphHeight: number = 24
   static readonly pathSheetTitleGap: number = 2
   static readonly pathSheetConfirmTextSize: number = 16
   static readonly pathItemGap: number = 10
   static readonly pathItemNameGap: number = 5
+  // 缩进：顶层目录 pathItemBasePadding + pathItemDepthPadding，往下每深一级再加 pathItemLevelIndent
   static readonly pathItemBasePadding: number = 15
   static readonly pathItemDepthPadding: number = 10
-  static readonly pathChevronCollapsedPadding: number = 6
+  static readonly pathItemLevelIndent: number = 20
+  // 展开 / 收起：子目录区域随 animateTo 撑开 / 收拢，子目录行淡入并从上方 pathExpandOffset 滑下；箭头旋转稍快
+  static readonly pathExpandDuration: number = 240
+  static readonly pathExpandOffset: number = 6
+  static readonly pathChevronRotateDuration: number = 200
+  // 展开还没加载过的文件夹：超过这个时间数据还没回来，箭头位置才换成小转圈（内网不闪）
+  static readonly pathLoadingSpinnerDelay: number = 200
   // 路径选择的选中行：左右各内缩 pathRowInset 的圆角块，底色 selectedTint；展开子目录加载时箭头位置换成小转圈
   static readonly pathRowInset: number = 8
   static readonly pathRowRadius: number = 12

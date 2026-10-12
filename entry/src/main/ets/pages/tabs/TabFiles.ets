@@ -96,10 +96,12 @@ const BATCH_SHEET_MIN_VISIBLE_MS: number = 500
 /** 智感握姿换边：上传 FAB 横向滑过去的弹簧参数（与相册页切换胶囊一致） */
 const GRIP_SLIDE_RESPONSE: number = 0.45
 const GRIP_SLIDE_DAMPING: number = 0.8
-// 「更多」菜单选中项行尾的蓝色对勾，所有项共用一个
+// 「更多」菜单选中项行尾的对勾，所有项共用一个：主文字色、20 号、加粗到与左侧线性图标同笔画，
+// 品牌蓝的 24 号细勾在一片黑白灰里太跳
 const MORE_MENU_CHECK: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.checkmark'))
-  .fontSize(CloudThemeToken.objectMenuIconSize)
-  .fontColor([CloudThemeToken.primary])
+  .fontSize(CloudThemeToken.iconXl)
+  .fontWeight(FontWeight.Bold)
+  .fontColor([CloudThemeToken.textPrimary])
 
 // 「更多」菜单项一律用系统 MenuItem 的标准写法（startIcon/content/labelInfo/symbolEndIcon）：
 // 自绘 builder 内容的菜单项在 PC 上鼠标移过去不出悬停预选框，标准写法的悬停、按压与键盘焦点由系统绘制

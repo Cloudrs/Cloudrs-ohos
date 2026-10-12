@@ -21,8 +21,12 @@ export struct PathSelectSheet {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
   @State currentPath: string = ''
+  // 整页转圈 / 失败只用于首次拉根目录；展开子目录时只在 loadingPath 那一行的箭头位置转小圈，列表不动
   @State isLoading: boolean = false
   @State loadFailed: boolean = false
+  @State loadingPath: string = ''
+  // 紧挨在选中行上面的那一行：它的分隔线会贴着选中块的顶边，不画
+  @State pathAboveSelected: string = ''
   onClose?: (isFinished: boolean, path?: string) => void
 
   private scroller: Scroller = new Scroller()
@@ -61,24 +65,73 @@ export struct PathSelectSheet {
   }
 
   async getFileList(path: string) {
+    if (this.loadingPath === path) {
+      return
+    }
     this.currentPath = path
-    this.isLoading = true
-    this.loadFailed = false
+    this.refreshPathAboveSelected()
+    // 根目录还没拉到时整页转圈；之后展开子目录只在那一行转小圈，整页换成转圈会闪一下并丢掉滚动位置
+    const fullPage = !this.allDirs.has('/')
+    if (fullPage) {
+      this.isLoading = true
+      this.loadFailed = false
+    } else {
+      this.loadingPath = path
+    }
     CloudApi.getFilesInfo(path, {
       onSuccess: (data: DirectoryInfo) => {
         let dirs = new DirFileInfo(data.parent, data.objects, data.policy).dirObjects
         this.putDirs(path, dirs.filter(item => item.id != this.filterDirId))
-        this.putPathShow(this.currentPath, true)
+        this.putPathShow(path, true)
         this.isLoading = false
+        this.clearLoadingPath(path)
+        this.refreshPathAboveSelected()
       },
       onFailure: (msg) => {
-        this.isLoading = false
-        this.loadFailed = true
+        this.clearLoadingPath(path)
+        if (fullPage) {
+          this.isLoading = false
+          this.loadFailed = true
+        }
         if (ApiErrorUtil.isNetworkMessage(msg)) {
           showToast(NETWORK_ERROR_MESSAGE)
         } else {
           showToastTips($r('app.string.get_failed'), ToastType.Error)
         }
+      }
+    })
+  }
+
+  private clearLoadingPath(path: string): void {
+    if (this.loadingPath === path) {
+      this.loadingPath = ''
+    }
+  }
+
+  private isSelected(item: ObjectInfo): boolean {
+    return this.currentPath === CloudApi.getTotalPath(item)
+  }
+
+  /** 选中行自己和它上面那一行都不画分隔线，选中块上下不压线 */
+  private showsDivider(item: ObjectInfo): boolean {
+    const path = CloudApi.getTotalPath(item)
+    return path !== this.currentPath && path !== this.pathAboveSelected
+  }
+
+  // 选中或展开 / 收起后，按当前可见行的显示顺序重新找出选中行的上一行
+  private refreshPathAboveSelected(): void {
+    const order: string[] = []
+    this.collectVisiblePaths('/', order)
+    const index = order.indexOf(this.currentPath)
+    this.pathAboveSelected = index > 0 ? order[index - 1] : ''
+  }
+
+  private collectVisiblePaths(parent: string, out: string[]): void {
+    this.getDirs(parent).forEach((dir: ObjectInfo) => {
+      const path = CloudApi.getTotalPath(dir)
+      out.push(path)
+      if (this.pathShow.get(path)) {
+        this.collectVisiblePaths(path, out)
       }
     })
   }
@@ -260,62 +313,75 @@ export struct PathSelectSheet {
 
   @Builder dirItem(item: ObjectInfo) {
     Column() {
-      Row({ space: CloudThemeToken.pathItemGap }) {
-        Image(FileIcons.folderIcon(this.fileIconTheme))
-          .width(CloudThemeToken.pathFolderIconSize)
-          .height(CloudThemeToken.pathFolderIconSize)
-          .draggable(false)
-
-        Row({ space: CloudThemeToken.pathItemNameGap }) {
-          Text(item.name)
-            .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(CloudThemeToken.textPrimary)
-            .wordBreak(WordBreak.BREAK_ALL)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .height(CloudThemeToken.pathLabelHeight)
-            .layoutWeight(1)
-
-          Image(this.getPathShow(item) ? this.downIcon : this.rightIcon)
-            .width(CloudThemeToken.pathChevronWidth)
-            .height(CloudThemeToken.pathChevronHeight)
-            .padding({
-              left: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding,
-              right: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding
-            })
-            .fillColor(CloudThemeToken.textSecondary)
+      // 外层只负责左右内缩：选中块是内缩的圆角块（width 100% 加 margin 会溢出，用外层 padding + layoutWeight）
+      Row() {
+        Row({ space: CloudThemeToken.pathItemGap }) {
+          Image(FileIcons.folderIcon(this.fileIconTheme))
+            .width(CloudThemeToken.pathFolderIconSize)
+            .height(CloudThemeToken.pathFolderIconSize)
             .draggable(false)
+
+          Row({ space: CloudThemeToken.pathItemNameGap }) {
+            Text(item.name)
+              .fontSize(CloudThemeToken.pathSheetConfirmTextSize)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.isSelected(item) ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
+              .wordBreak(WordBreak.BREAK_ALL)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+              .height(CloudThemeToken.pathLabelHeight)
+              .layoutWeight(1)
+
+            if (this.loadingPath === CloudApi.getTotalPath(item)) {
+              LoadingProgress()
+                .width(CloudThemeToken.pathChevronWidth)
+                .height(CloudThemeToken.pathRowLoadingSize)
+                .color(CloudThemeToken.primary)
+            } else {
+              Image(this.getPathShow(item) ? this.downIcon : this.rightIcon)
+                .width(CloudThemeToken.pathChevronWidth)
+                .height(CloudThemeToken.pathChevronHeight)
+                .padding({
+                  left: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding,
+                  right: this.getPathShow(item) ? CloudThemeToken.zero : CloudThemeToken.pathChevronCollapsedPadding
+                })
+                .fillColor(this.isSelected(item) ? CloudThemeToken.primary : CloudThemeToken.textSecondary)
+                .draggable(false)
+            }
+          }
+          .height(CloudThemeToken.pathInnerRowHeight)
+          .layoutWeight(1)
+          .alignItems(VerticalAlign.Center)
+          .justifyContent(FlexAlign.Start)
+          .outline({ width: { bottom: this.showsDivider(item) ? CloudThemeToken.lineWidth : CloudThemeToken.zero } })
+          .outlineColor(CloudThemeToken.line)
         }
-        .height(CloudThemeToken.pathInnerRowHeight)
         .layoutWeight(1)
+        .height(CloudThemeToken.pathRowHeight)
+        .padding({
+          left: this.getPathPadding(CloudApi.getTotalPath(item)) - CloudThemeToken.pathRowInset,
+          right: CloudThemeToken.pathItemBasePadding - CloudThemeToken.pathRowInset
+        })
+        .borderRadius(CloudThemeToken.pathRowRadius)
+        .clip(true)
         .alignItems(VerticalAlign.Center)
-        .justifyContent(FlexAlign.Start)
-        .outline({ width: { bottom: CloudThemeToken.strongLineWidth } })
-        .outlineColor(CloudThemeToken.line)
+        .justifyContent(FlexAlign.Center)
+        // 未选中行透明，让位给 sheet 材质；选中行是半透明主色浅染，不用 primarySoft 实色块盖住材质
+        .backgroundColor(this.isSelected(item) ? CloudThemeToken.selectedTint : CloudThemeToken.transparent)
+        .onClick(() => {
+          this.currentPath = CloudApi.getTotalPath(item)
+          let isShow = this.getPathShow(item)
+          if (isShow === undefined) {
+            this.getFileList(this.currentPath)
+          } else {
+            this.putPathShow(this.currentPath, !isShow)
+          }
+          this.refreshPathAboveSelected()
+        })
       }
-      .height(CloudThemeToken.pathRowHeight)
       .width('100%')
-      .padding({
-        left: this.getPathPadding(CloudApi.getTotalPath(item)),
-        right: CloudThemeToken.pathItemBasePadding
-      })
-      .clip(true)
-      .alignItems(VerticalAlign.Center)
-      .justifyContent(FlexAlign.Center)
-      // 未选中行让位给 sheet 材质（多行不逐行挂材质，避免材质叠材质发浑）；选中行保留高亮
-      .backgroundColor(this.currentPath === CloudApi.getTotalPath(item)
-        ? CloudThemeToken.primarySoft : CloudMaterial.materialSurface(CloudThemeToken.background))
-      .onClick(() => {
-        this.currentPath = CloudApi.getTotalPath(item)
-        let isShow = this.getPathShow(item)
-        if (isShow === undefined) {
-          this.getFileList(this.currentPath)
-        } else {
-          this.putPathShow(this.currentPath, !isShow)
-        }
-      })
+      .padding({ left: CloudThemeToken.pathRowInset, right: CloudThemeToken.pathRowInset })
 
       if (this.getPathShow(item)) {
         ForEach(this.getDirs(CloudApi.getTotalPath(item)), (item: ObjectInfo, index) => {

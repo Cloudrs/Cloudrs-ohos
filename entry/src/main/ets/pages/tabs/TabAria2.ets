@@ -456,6 +456,8 @@ export struct TabRemoteDown {
     .bindSheet($$this.showCreateSheet, this.taskCreateSheet(), {
       showClose: true,
       detents: [SheetSize.FIT_CONTENT],
+      // 宽屏居中弹窗不认 detents，高度单独给成按内容，否则固定高、内容下方大片留白
+      height: SheetSize.FIT_CONTENT,
       title: {title: $r('app.string.download_offline')},
       backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
       systemMaterial: CloudMaterial.sheetMaterial(),

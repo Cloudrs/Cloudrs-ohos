@@ -5,6 +5,7 @@ export class CloudThemeToken {
   static readonly lineWidth: number = 1
   static readonly searchBorderWidth: number = 1.5
   static readonly strongLineWidth: number = 2
+  static readonly inputFocusLineWidth: number = 1.5
   static readonly halfDivisor: number = 2
   static readonly hairlinePx: number = 1
   static readonly strongProgressStrokeWidth: number = 4
@@ -80,6 +81,8 @@ export class CloudThemeToken {
   static readonly controlRadiusSm: number = 8
   static readonly controlRadiusMd: number = 10
   static readonly controlRadiusLg: number = 12
+  // 输入框圆角：与半模态里的按钮（controlRadiusLg）一致，不做胶囊
+  static readonly inputRadius: number = 12
   static readonly controlRadiusXl: number = 14
   static readonly controlRadiusRoundMd: number = 18
   static readonly controlRadiusRoundLg: number = 19
@@ -259,6 +262,12 @@ export class CloudThemeToken {
   static readonly pathItemBasePadding: number = 15
   static readonly pathItemDepthPadding: number = 10
   static readonly pathChevronCollapsedPadding: number = 6
+  // 路径选择的选中行：左右各内缩 pathRowInset 的圆角块，底色 selectedTint；展开子目录加载时箭头位置换成小转圈
+  static readonly pathRowInset: number = 8
+  static readonly pathRowRadius: number = 12
+  // 半模态里的选中态底色：半透明主色浅染，透出材质（路径选择选中行、两步验证当前步骤标签）
+  static readonly selectedTint: ResourceColor = $r('app.color.selected_tint')
+  static readonly pathRowLoadingSize: number = 16
   static readonly objectItemGap: number = 12
   static readonly objectMetaGap: number = 3
   static readonly objectListIconSize: number = 36
@@ -653,6 +662,12 @@ export class CloudThemeToken {
       return CloudThemeToken.sheetCenterWidth
     }
     return undefined
+  }
+
+  /** 半模态里输入框的描边：平时 1px 分隔线色，聚焦时换主色并略加粗（底色见 CloudMaterial.fieldBackground） */
+  static inputBorder(focused: boolean): BorderOptions {
+    return focused ? { width: CloudThemeToken.inputFocusLineWidth, color: CloudThemeToken.primary } :
+      { width: CloudThemeToken.lineWidth, color: CloudThemeToken.line }
   }
 
   static sheetTypeForWidth(widthVp: number): SheetType | undefined {

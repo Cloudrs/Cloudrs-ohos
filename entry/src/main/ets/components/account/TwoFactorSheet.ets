@@ -1,5 +1,6 @@
 import Constant from '../../model/Constant'
 import { CloudThemeToken } from '../../model/CloudTheme'
+import { CloudMaterial } from '../../model/CloudMaterial'
 import { CloudApi } from '../../model/net/CloudApi'
 import { SettingsRules } from '../../utils/SettingsRules'
 import { OtpInput } from '../OtpInput'
@@ -21,7 +22,9 @@ struct StepChip {
       .fontSize(CloudThemeToken.textSizeSmall)
       .fontColor(this.active ? CloudThemeToken.primary : CloudThemeToken.textSecondary)
       .fontWeight(this.active ? FontWeight.Medium : FontWeight.Normal)
-      .backgroundColor(this.active ? CloudThemeToken.primarySoft : CloudThemeToken.surfaceSubtle)
+      // 半模态材质上不用实色块：当前步半透明主色浅染，其余透明 + 细描边（描边宽度两态一致，切换时不跳动）
+      .backgroundColor(this.active ? CloudThemeToken.selectedTint : CloudThemeToken.transparent)
+      .border({ width: CloudThemeToken.lineWidth, color: this.active ? CloudThemeToken.transparent : CloudThemeToken.line })
       .padding({ left: CloudThemeToken.spacingCard, right: CloudThemeToken.spacingCard,
         top: CloudThemeToken.spacingTiny, bottom: CloudThemeToken.spacingTiny })
       .borderRadius(CloudThemeToken.settingChipRadius)
@@ -134,7 +137,9 @@ export struct TwoFactorSheet {
     .width('100%')
     .padding(CloudThemeToken.spacingPanel)
     .borderRadius(CloudThemeToken.settingGroupRadius)
-    .backgroundColor(CloudThemeToken.surfaceSubtle)
+    // 同输入框：半透明底 + 细描边，不用 surfaceSubtle 实色块盖住半模态材质
+    .backgroundColor(CloudMaterial.fieldBackground())
+    .border(CloudThemeToken.inputBorder(false))
 
     Text('同一台手机扫不了码时，复制密钥粘贴到华为验证器、Google Authenticator 等应用。密钥 10 分钟内有效。')
       .fontSize(CloudThemeToken.textSizeSmall)
@@ -163,10 +168,12 @@ export struct TwoFactorSheet {
     })
     Row({ space: CloudThemeToken.spacingCard }) {
       if (this.enabling) {
+        // 次要按钮同重命名面板的「取消」：surface 底 + 细描边
         Button('上一步', { type: ButtonType.Capsule })
           .layoutWeight(1)
           .height(CloudThemeToken.rowHeightXl)
-          .backgroundColor(CloudThemeToken.surfaceSubtle)
+          .backgroundColor(CloudThemeToken.surface)
+          .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
           .fontColor(CloudThemeToken.textPrimary)
           .onClick(() => {
             this.step = 0

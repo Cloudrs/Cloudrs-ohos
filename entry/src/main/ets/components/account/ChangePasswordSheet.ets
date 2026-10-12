@@ -1,5 +1,6 @@
 import Constant from '../../model/Constant'
 import { CloudThemeToken } from '../../model/CloudTheme'
+import { CloudMaterial } from '../../model/CloudMaterial'
 import { CloudApi } from '../../model/net/CloudApi'
 import { SettingsRules } from '../../utils/SettingsRules'
 
@@ -14,6 +15,8 @@ export struct ChangePasswordSheet {
   @State confirm: string = ''
   @State busy: boolean = false
   @State serverError: string = ''
+  // 当前聚焦的输入框 id，聚焦的那个描边换主色
+  @State focusedId: string = ''
 
   build() {
     Column({ space: CloudThemeToken.spacingSection }) {
@@ -50,7 +53,17 @@ export struct ChangePasswordSheet {
         .type(InputType.Password)
         .maxLength(SettingsRules.PASSWORD_MAX)
         .height(CloudThemeToken.inputHeight)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .borderRadius(CloudThemeToken.inputRadius)
+        .backgroundColor(CloudMaterial.fieldBackground())
+        .border(CloudThemeToken.inputBorder(this.focusedId === id))
+        .onFocus(() => {
+          this.focusedId = id
+        })
+        .onBlur(() => {
+          if (this.focusedId === id) {
+            this.focusedId = ''
+          }
+        })
         .onChange((v: string) => {
           onChange(v)
           this.serverError = ''

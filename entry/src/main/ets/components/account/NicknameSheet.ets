@@ -1,5 +1,6 @@
 import Constant from '../../model/Constant'
 import { CloudThemeToken } from '../../model/CloudTheme'
+import { CloudMaterial } from '../../model/CloudMaterial'
 import { CloudApi } from '../../model/net/CloudApi'
 import { SettingsRules } from '../../utils/SettingsRules'
 
@@ -13,6 +14,7 @@ export struct NicknameSheet {
   @State value: string = ''
   @State busy: boolean = false
   @State error: string = ''
+  @State inputFocused: boolean = false
 
   aboutToAppear(): void {
     this.value = this.initial
@@ -25,7 +27,15 @@ export struct NicknameSheet {
         .maxLength(SettingsRules.NICKNAME_MAX)
         .height(CloudThemeToken.inputHeight)
         .fontSize(CloudThemeToken.textSizeLarge)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .borderRadius(CloudThemeToken.inputRadius)
+        .backgroundColor(CloudMaterial.fieldBackground())
+        .border(CloudThemeToken.inputBorder(this.inputFocused))
+        .onFocus(() => {
+          this.inputFocused = true
+        })
+        .onBlur(() => {
+          this.inputFocused = false
+        })
         .onChange((v: string) => {
           this.value = v
           this.error = ''

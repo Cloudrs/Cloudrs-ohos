@@ -65,6 +65,14 @@ export class CloudMaterial {
     return CloudMaterial.supported ? CloudThemeToken.surfaceTranslucent : fallback
   }
 
+  /**
+   * 半模态里输入框、可点路径行和信息卡片（两步验证密钥、通行密钥列表）的底色：26+ 半透明透出材质，<26 实色 surface。
+   * 别用 surfaceSubtle 实底，压在材质上像一块贴片；描边见 CloudThemeToken.inputBorder。
+   */
+  static fieldBackground(): ResourceColor {
+    return CloudMaterial.cardBackground(CloudThemeToken.surface)
+  }
+
   /** bindSheet 的系统材质（半模态在生效范围内）。低版本返回 undefined 即系统默认。 */
   static sheetMaterial(): SystemUiMaterial | undefined {
     if (deviceInfo.apiAvailable('26.0.0')) {

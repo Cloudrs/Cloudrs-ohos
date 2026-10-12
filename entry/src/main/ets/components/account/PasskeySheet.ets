@@ -1,5 +1,6 @@
 import Constant from '../../model/Constant'
 import { CloudThemeToken } from '../../model/CloudTheme'
+import { CloudMaterial } from '../../model/CloudMaterial'
 import { CloudApi } from '../../model/net/CloudApi'
 import { AccountPasskey } from '../../model/net/ApiTypes'
 import { ACCOUNT_PROFILE_STORE_KEY, AccountProfileStore } from '../../model/AccountProfileStore'
@@ -54,7 +55,9 @@ export struct PasskeySheet {
         }
         .width('100%')
         .borderRadius(CloudThemeToken.settingGroupRadius)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        // 同输入框：半透明底 + 细描边，不用 surfaceSubtle 实色块盖住半模态材质
+        .backgroundColor(CloudMaterial.fieldBackground())
+        .border(CloudThemeToken.inputBorder(false))
         .clip(true)
       }
     }

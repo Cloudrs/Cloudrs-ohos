@@ -18,6 +18,7 @@ export struct Aria2Create {
   @State inputUrls: string = ''
   @State path: string|undefined = undefined
   @State isShowPathSelect: boolean = false
+  @State urlInputFocused: boolean = false
   private urls: string[] = []
   onFinished?: () => void
 
@@ -53,13 +54,20 @@ export struct Aria2Create {
         .wordBreak(WordBreak.BREAK_ALL)
         .width('100%')
         .height(CloudThemeToken.aria2InputHeight)
-        .borderRadius(CloudThemeToken.cardRadius)
+        .borderRadius(CloudThemeToken.inputRadius)
         .padding(CloudThemeToken.aria2InputPadding)
         .textAlign(TextAlign.Start)
         .align(Alignment.TopStart)
         .fontColor(CloudThemeToken.textPrimary)
         .placeholderColor(CloudThemeToken.textSecondary)
-        .backgroundColor(CloudThemeToken.surfaceSubtle)
+        .backgroundColor(CloudMaterial.fieldBackground())
+        .border(CloudThemeToken.inputBorder(this.urlInputFocused))
+        .onFocus(() => {
+          this.urlInputFocused = true
+        })
+        .onBlur(() => {
+          this.urlInputFocused = false
+        })
         .onChange((value) => {
           this.urls = value.split(/\r\n|\r|\n/)
             .map((url: string) => url.trim())
@@ -84,10 +92,11 @@ export struct Aria2Create {
       }
       .width('100%')
       .padding(CloudThemeToken.aria2PathPadding)
-      .borderRadius(CloudThemeToken.cardRadius)
+      .borderRadius(CloudThemeToken.inputRadius)
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
-      .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
+      .backgroundColor(CloudMaterial.fieldBackground())
+      .border(CloudThemeToken.inputBorder(false))
       .onClick(() => {
         this.isShowPathSelect = true
       })

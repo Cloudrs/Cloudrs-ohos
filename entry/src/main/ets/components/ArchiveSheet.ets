@@ -26,6 +26,7 @@ enum ArchiveStep {
 }
 
 const ARCHIVE_NAME_INPUT_ID: string = 'archive_sheet_name_input'
+const ARCHIVE_PASSWORD_INPUT_ID: string = 'archive_sheet_password_input'
 
 // 压缩 / 解压面板。选目标文件夹同离线下载：在面板上方另弹路径选择（只有它自己的标题栏，不会出现两层标题）；
 // 选编码只是一张短列表，留在面板内切换
@@ -48,6 +49,8 @@ export struct ArchiveSheet {
   @State dstFolder: string = '/'
   @State encoding: string = ''
   @State password: string = ''
+  // 当前聚焦的输入框（名称 / 密码），聚焦的那个描边换主色
+  @State focusedField: string = ''
   private nameController: TextInputController = new TextInputController()
   onCompress?: (input: ArchiveCompressInput) => void
   onExtract?: (input: ArchiveExtractInput) => void
@@ -69,6 +72,12 @@ export struct ArchiveSheet {
     }
     const dot = this.name.lastIndexOf('.')
     this.nameController.setTextSelection(0, dot > 0 ? dot : this.name.length)
+  }
+
+  private onFieldBlur(field: string): void {
+    if (this.focusedField === field) {
+      this.focusedField = ''
+    }
   }
 
   private encodingLabel(): string {
@@ -137,11 +146,17 @@ export struct ArchiveSheet {
           .fontSize(CloudThemeToken.textSizeLarge)
           .fontColor(CloudThemeToken.textPrimary)
           .placeholderColor(CloudThemeToken.textSecondary)
-          .backgroundColor(CloudThemeToken.surface)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+          .backgroundColor(CloudMaterial.fieldBackground())
+          .borderRadius(CloudThemeToken.inputRadius)
+          .border(CloudThemeToken.inputBorder(this.focusedField === ARCHIVE_NAME_INPUT_ID))
           .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
           .id(ARCHIVE_NAME_INPUT_ID)
+          .onFocus(() => {
+            this.focusedField = ARCHIVE_NAME_INPUT_ID
+          })
+          .onBlur(() => {
+            this.onFieldBlur(ARCHIVE_NAME_INPUT_ID)
+          })
           .onChange((value: string) => {
             this.name = value
           })
@@ -187,10 +202,17 @@ export struct ArchiveSheet {
           .width('100%')
           .height(CloudThemeToken.rowHeight2xl)
           .fontSize(CloudThemeToken.textSizeLarge)
-          .backgroundColor(CloudThemeToken.surface)
-          .borderRadius(CloudThemeToken.controlRadius)
-          .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+          .backgroundColor(CloudMaterial.fieldBackground())
+          .borderRadius(CloudThemeToken.inputRadius)
+          .border(CloudThemeToken.inputBorder(this.focusedField === ARCHIVE_PASSWORD_INPUT_ID))
           .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
+          .id(ARCHIVE_PASSWORD_INPUT_ID)
+          .onFocus(() => {
+            this.focusedField = ARCHIVE_PASSWORD_INPUT_ID
+          })
+          .onBlur(() => {
+            this.onFieldBlur(ARCHIVE_PASSWORD_INPUT_ID)
+          })
           .onChange((value: string) => {
             this.password = value
           })

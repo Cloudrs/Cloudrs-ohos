@@ -330,6 +330,8 @@ export struct HomePage {
         .height(0)
         .bindSheet($$this.showAccountSheet, this.accountSwitchSheet(), {
           detents: [SheetSize.FIT_CONTENT],
+          // 宽屏居中弹窗不认 detents，高度单独给成按内容，否则固定高、内容下方大片留白
+          height: SheetSize.FIT_CONTENT,
           title: { title: '选择账号' },
           showClose: true,
           backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),

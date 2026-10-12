@@ -407,6 +407,10 @@
     {
       "name": "file_tile_windows",
       "value": "#EDF6FC"
+    },
+    {
+      "name": "selected_tint",
+      "value": "#1C0A59F7"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { CloudThemeToken } from '../model/CloudTheme'
+import { CloudMaterial } from '../model/CloudMaterial'
 
 function buildIndexes(): number[] {
   const indexes: number[] = []
@@ -35,11 +36,11 @@ export struct OtpInput {
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .borderRadius(CloudThemeToken.otpCellRadius)
-          .backgroundColor(CloudThemeToken.surface)
-          .border({
-            width: CloudThemeToken.loginOtpBorderWidth,
-            color: this.code.length === item ? CloudThemeToken.primary : CloudThemeToken.transparent
-          })
+          // 同其它输入框：半透明底 + 1px 描边，待输入的那格描边换主色加粗
+          .backgroundColor(CloudMaterial.fieldBackground())
+          .border(this.code.length === item
+            ? { width: CloudThemeToken.loginOtpBorderWidth, color: CloudThemeToken.primary }
+            : CloudThemeToken.inputBorder(false))
         }, (item: number) => item.toString())
       }
       .justifyContent(FlexAlign.Center)

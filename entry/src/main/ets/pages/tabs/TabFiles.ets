@@ -363,6 +363,9 @@ export struct TabFiles {
   @State inputTitle: string|Resource = ''
   @State inputPlaceholder: string|Resource = ''
   @State inputValue: string = ''
+  // 新建 / 重命名输入框与分享提取码输入框是否聚焦：聚焦时描边换主色
+  @State inputSheetFocused: boolean = false
+  @State sharePasswordFocused: boolean = false
   @State gridWidth: number = 0
   @State headerCollapseProgress: number = 0
   @State refreshPullOffset: number = 0
@@ -2453,6 +2456,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showObjectDetail, this.detailBindSheet(), {
             detents: [SheetSize.FIT_CONTENT],
+            // 宽屏居中弹窗不认 detents，高度单独给成按内容，否则固定高、内容下方大片留白
+            height: SheetSize.FIT_CONTENT,
             title: { title: $r('app.string.detail_title') },
             showClose: true,
             backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
@@ -2484,6 +2489,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showSelectFileSheet, this.selectFileSheetBuilder(), {
             detents: [SheetSize.FIT_CONTENT],
+            // 宽屏居中弹窗不认 detents，高度单独给成按内容，否则固定高、内容下方大片留白
+            height: SheetSize.FIT_CONTENT,
             title: { title: $r('app.string.upload') },
             showClose: true,
             backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
@@ -2513,6 +2520,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showInputSheet, this.inputSheetBuilder(), {
             detents: [SheetSize.FIT_CONTENT],
+            // 宽屏居中弹窗不认 detents，高度单独给成按内容，否则固定高、内容下方大片留白
+            height: SheetSize.FIT_CONTENT,
             title: { title: this.inputTitle },
             showClose: true,
             // 单挡 FIT_CONTENT 下系统避让只保证光标可见，按钮仍被键盘挡住；
@@ -2580,6 +2589,8 @@ export struct TabFiles {
           .height(CloudThemeToken.zero)
           .bindSheet($$this.showShareSheet, this.shareSheetBuilder(), {
             detents: [SheetSize.FIT_CONTENT],
+            // 宽屏居中弹窗不认 detents，高度单独给成按内容，否则固定高、内容下方大片留白
+            height: SheetSize.FIT_CONTENT,
             title: { title: this.shareLinkText.length > 0 ? '分享链接' : '创建分享' },
             showClose: true,
             backgroundColor: CloudMaterial.materialSurface(CloudThemeToken.background),
@@ -3357,29 +3368,26 @@ export struct TabFiles {
     .justifyContent(FlexAlign.Center)
   }
 
+  // 标题由 bindSheet 的标题栏显示，内容里不再重复一行
   @Builder inputSheetBuilder() {
     Column({ space: CloudThemeToken.spacingSheetTop }) {
-      Row() {
-        Text(this.inputTitle)
-          .fontSize(CloudThemeToken.textSizeTitle)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(CloudThemeToken.textPrimary)
-          .layoutWeight(1)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
       TextInput({ text: this.inputValue, placeholder: this.inputPlaceholder, controller: this.inputTextController })
         .width('100%')
         .height(CloudThemeToken.rowHeight2xl)
         .fontSize(CloudThemeToken.textSizeLarge)
         .fontColor(CloudThemeToken.textPrimary)
         .placeholderColor(CloudThemeToken.textSecondary)
-        .backgroundColor(CloudThemeToken.surface)
-        .borderRadius(CloudThemeToken.controlRadius)
-        .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+        .backgroundColor(CloudMaterial.fieldBackground())
+        .borderRadius(CloudThemeToken.inputRadius)
+        .border(CloudThemeToken.inputBorder(this.inputSheetFocused))
         .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
         .id(INPUT_SHEET_TEXT_ID)
+        .onFocus(() => {
+          this.inputSheetFocused = true
+        })
+        .onBlur(() => {
+          this.inputSheetFocused = false
+        })
         .onChange((value: string) => {
           this.inputValue = value
         })
@@ -3613,11 +3621,17 @@ export struct TabFiles {
         .fontSize(CloudThemeToken.textSizeLarge)
         .fontColor(CloudThemeToken.textPrimary)
         .placeholderColor(CloudThemeToken.textSecondary)
-        .backgroundColor(CloudMaterial.cardBackground(CloudThemeToken.surface))
-        .borderRadius(CloudThemeToken.controlRadius)
-        .border({ width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+        .backgroundColor(CloudMaterial.fieldBackground())
+        .borderRadius(CloudThemeToken.inputRadius)
+        .border(CloudThemeToken.inputBorder(this.sharePasswordFocused))
         .padding({ left: CloudThemeToken.spacingSection, right: CloudThemeToken.spacingSection })
         .type(InputType.Password)
+        .onFocus(() => {
+          this.sharePasswordFocused = true
+        })
+        .onBlur(() => {
+          this.sharePasswordFocused = false
+        })
         .onChange((value: string) => {
           this.sharePassword = value
         })

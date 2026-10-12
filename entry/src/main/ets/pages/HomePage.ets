@@ -246,6 +246,11 @@ export struct HomePage {
     }
   }
 
+  // 侧栏账号卡第二行显示站点：邮箱在这个宽度下大多显示不全；读 @State accountUrl，切账号即刷新
+  private accountHost(): string {
+    return this.accountUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
+  }
+
   // 折叠键：XL 展开时收进侧栏顶行右端，LG 展开时居中于图标栏顶部，收起时停在内容区左上角
   private sideBarToggleLeft(): number {
     if (!this.showSideBar) {
@@ -428,7 +433,7 @@ export struct HomePage {
     .backgroundColor(CloudThemeToken.background)
   }
 
-  // 当前账号：头像 + 昵称 + 邮箱（登录账号），点击弹出账号切换
+  // 当前账号：头像 + 昵称 + 站点，点击弹出账号切换
   @Builder sideAccountCard() {
     Row({ space: CloudThemeToken.spacingCard }) {
       if (this.accountInfo) {
@@ -441,7 +446,7 @@ export struct HomePage {
           .fontColor(CloudThemeToken.textPrimary)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.profileStore.accountName() || this.accountUser)
+        Text(this.accountHost())
           .fontSize(CloudThemeToken.textSizeMicro)
           .fontColor(CloudThemeToken.textSecondary)
           .maxLines(1)

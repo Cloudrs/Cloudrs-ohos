@@ -8,6 +8,14 @@ export enum ChipTone {
   WARNING
 }
 
+// 设置类行的主标题：16 号中粗，与系统设置列表主标题、文件菜单项一致（常规体在浅色底上显得发虚）
+@Extend(Text)
+function settingRowTitle(color: ResourceColor) {
+  .fontSize(CloudThemeToken.textSizeLarge)
+  .fontWeight(FontWeight.Medium)
+  .fontColor(color)
+}
+
 @Component
 export struct SettingSectionTitle {
   @Prop title: ResourceStr = ''
@@ -116,8 +124,7 @@ export struct SettingRow {
         }
         Column({ space: CloudThemeToken.spacingTiny }) {
           Text(this.title)
-            .fontSize(CloudThemeToken.textSizeLarge)
-            .fontColor(this.danger ? CloudThemeToken.danger : CloudThemeToken.textPrimary)
+            .settingRowTitle(this.danger ? CloudThemeToken.danger : CloudThemeToken.textPrimary)
           if (this.desc.length > 0) {
             Text(this.desc)
               .fontSize(CloudThemeToken.textSizeSmall)
@@ -191,7 +198,7 @@ export struct SettingSwitchRow {
       }
       Row({ space: CloudThemeToken.spacingSection }) {
         Column({ space: CloudThemeToken.spacingTiny }) {
-          Text(this.title).fontSize(CloudThemeToken.textSizeLarge).fontColor(CloudThemeToken.textPrimary)
+          Text(this.title).settingRowTitle(CloudThemeToken.textPrimary)
           if (this.desc.length > 0) {
             Text(this.desc).fontSize(CloudThemeToken.textSizeSmall).fontColor(CloudThemeToken.textSecondary)
           }
@@ -235,8 +242,7 @@ export struct SettingSegmentRow {
     Column({ space: CloudThemeToken.spacingCard }) {
       if (this.label.length > 0) {
         Text(this.label)
-          .fontSize(CloudThemeToken.textSizeLarge)
-          .fontColor(CloudThemeToken.textPrimary)
+          .settingRowTitle(CloudThemeToken.textPrimary)
           .width('100%')
       }
       Row({ space: CloudThemeToken.lineWidth }) {
@@ -296,7 +302,7 @@ export struct SettingStepperRow {
       }
       Row({ space: CloudThemeToken.spacingSection }) {
         Column({ space: CloudThemeToken.spacingTiny }) {
-          Text(this.title).fontSize(CloudThemeToken.textSizeLarge).fontColor(CloudThemeToken.textPrimary)
+          Text(this.title).settingRowTitle(CloudThemeToken.textPrimary)
           if (this.desc.length > 0) {
             Text(this.desc).fontSize(CloudThemeToken.textSizeSmall).fontColor(CloudThemeToken.textSecondary)
           }

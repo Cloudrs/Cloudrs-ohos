@@ -101,10 +101,6 @@
       "value": "#A7B1C2"
     },
     {
-      "name": "file_icon_background",
-      "value": "#1F2937"
-    },
-    {
       "name": "cloud_danger",
       "value": "#FF6B70"
     },
@@ -163,6 +159,102 @@
     {
       "name": "cloud_segment_selected",
       "value": "#2D3746"
+    },
+    {
+      "name": "file_tile_image",
+      "value": "#172A2C"
+    },
+    {
+      "name": "file_tile_video",
+      "value": "#212434"
+    },
+    {
+      "name": "file_tile_audio",
+      "value": "#27222F"
+    },
+    {
+      "name": "file_tile_pdf",
+      "value": "#272229"
+    },
+    {
+      "name": "file_tile_word",
+      "value": "#1B2634"
+    },
+    {
+      "name": "file_tile_excel",
+      "value": "#192B2A"
+    },
+    {
+      "name": "file_tile_ppt",
+      "value": "#272525"
+    },
+    {
+      "name": "file_tile_archive",
+      "value": "#272823"
+    },
+    {
+      "name": "file_tile_text",
+      "value": "#1F262F"
+    },
+    {
+      "name": "file_tile_code",
+      "value": "#182834"
+    },
+    {
+      "name": "file_tile_markdown",
+      "value": "#212730"
+    },
+    {
+      "name": "file_tile_other",
+      "value": "#1D242C"
+    },
+    {
+      "name": "file_icon_option_selected",
+      "value": "#18243A"
+    },
+    {
+      "name": "file_tile_app",
+      "value": "#1E2434"
+    },
+    {
+      "name": "file_tile_disk",
+      "value": "#172A2F"
+    },
+    {
+      "name": "file_tile_font",
+      "value": "#272922"
+    },
+    {
+      "name": "file_tile_ebook",
+      "value": "#202B24"
+    },
+    {
+      "name": "file_tile_design",
+      "value": "#262334"
+    },
+    {
+      "name": "file_tile_database",
+      "value": "#162A33"
+    },
+    {
+      "name": "file_tile_config",
+      "value": "#21262D"
+    },
+    {
+      "name": "file_tile_torrent",
+      "value": "#272525"
+    },
+    {
+      "name": "file_tile_cert",
+      "value": "#272521"
+    },
+    {
+      "name": "file_tile_subtitle",
+      "value": "#212434"
+    },
+    {
+      "name": "file_tile_web",
+      "value": "#1D2A34"
     }
   ]
 }

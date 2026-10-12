@@ -10,6 +10,7 @@ import UserDatabase from '../model/UserDatabase';
 import TransferDatabase from '../model/TransferDatabase';
 import UserPreferences from '../model/UserPreferences';
 import { AppSettings } from '../model/AppSettings';
+import { FileIcons } from '../utils/FileIcons';
 import { AvatarUtil } from '../utils/AvatarUtil';
 import { AppLockUtil } from '../utils/AppLockUtil';
 import { AppBoot } from '../utils/AppBoot';
@@ -378,6 +379,7 @@ export default class MainAbility extends UIAbility {
   applySavedThemeMode(): string {
     const themeMode = AppSettings.getThemeMode()
     AppSettings.applyTheme(this.context, themeMode)
+    FileIcons.mirrorTheme()
     return themeMode
   }
 }

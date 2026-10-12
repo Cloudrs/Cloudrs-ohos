@@ -5,6 +5,8 @@ import { CloudThemeToken } from "../model/CloudTheme"
 import { CloudMaterial } from "../model/CloudMaterial"
 import { TransportObject } from "../model/TransportObject"
 import { CommonUtil } from "../utils/CommonUtil"
+import { FILE_ICON_THEME_TILE, FileIcons } from "../utils/FileIcons"
+import Constant from "../model/Constant"
 import LazyDataSource from "../utils/LazyDataSource"
 import { TransferStateUtil } from "../utils/TransferStateUtil"
 import { TransferAction } from "./Downloads"
@@ -14,6 +16,7 @@ const TAG = 'Uploads'
 @Component
 export struct Uploads {
   @ObjectLink uploadObjects: LazyDataSource<TransportObject>
+  @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
   onAction?: (object: TransportObject, action: TransferAction) => void
 
   build() {
@@ -69,7 +72,7 @@ export struct Uploads {
 
   @Builder uploadItem(object: TransportObject) {
     Row({ space: CloudThemeToken.transferItemGap }) {
-      Image(CommonUtil.getFileIconInfo(object.item.name).icon)
+      Image(FileIcons.fileIcon(this.fileIconTheme, object.item.name))
         .width(CloudThemeToken.transferFileIconSize)
         .height(CloudThemeToken.transferFileIconSize)
 

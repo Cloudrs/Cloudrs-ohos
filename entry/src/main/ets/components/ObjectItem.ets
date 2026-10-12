@@ -8,6 +8,7 @@ import { CloudMaterial } from "../model/CloudMaterial";
 import { DateFormatUtil } from "../utils/DateFormatUtil";
 import { ArchiveRules } from "../utils/ArchiveRules";
 import { CloudApi } from "../model/net/CloudApi";
+import { FILE_ICON_THEME_TILE, FileIcons } from "../utils/FileIcons";
 
 const TAG = 'ObjectItem';
 // 「更多」侧边展开时的 › ，所有卡片共用一个
@@ -73,6 +74,10 @@ export struct ObjectItem {
   // 账号有压缩权限时，分享 / 压缩 / 解压收进「更多」二级菜单；没有时「分享」留在一级
   @StorageProp(Constant.ARCHIVE_ENABLED) archiveEnabled: boolean = false
   @StorageProp(Constant.WINDOW_WIDTH_VP) windowWidthVp: number = 0
+  // 文件图标主题，设置里切换后即时刷新
+  @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
+  // 文件名 Text 的实际宽度，判断名字是否被省略号截断用
+  @State nameBoxWidth: number = 0
 
   getThumbData(id: string): PixelMap|undefined {
     if (this.thumbImage.has(id)) {
@@ -106,13 +111,8 @@ export struct ObjectItem {
       item.metadata?.['sys:upload_session_id'] !== undefined
   }
 
-  getItemIcon(name: string, isDir: boolean) {
-    if (isDir) {
-      return $r("app.media.ic_folder_fill")
-    }
-    else {
-      return CommonUtil.getFileIconInfo(name).icon
-    }
+  getItemIcon(name: string, isDir: boolean): Resource {
+    return isDir ? FileIcons.folderIcon(this.fileIconTheme) : FileIcons.fileIcon(this.fileIconTheme, name)
   }
 
   getDisplayName(name: string, maxLength: number = CloudThemeToken.fileNameDisplayMaxLength): string {
@@ -126,6 +126,43 @@ export struct ObjectItem {
     const prefixLength = Math.max(CloudThemeToken.fileNameEdgeSegmentLength,
       maxLength - suffixLength - extension.length - CloudThemeToken.lineWidth)
     return `${baseName.substring(0, prefixLength)}…${baseName.substring(baseName.length - suffixLength)}${extension}`
+  }
+
+  /**
+   * PC 鼠标悬停卡片时显示的完整文件名；只在名字显示不全时有内容：
+   * 按字数截成了「前段…后段」，或宽度放不下被 Text 的省略号截断。名字完整可见时返回空串。
+   */
+  private nameTip(maxLength: number): string {
+    const display = this.getDisplayName(this.item.name, maxLength)
+    if (display !== this.item.name) {
+      return this.item.name
+    }
+    if (this.nameBoxWidth <= 0) {
+      return ''
+    }
+    const textWidthPx = this.getUIContext().getMeasureUtils().measureText({
+      textContent: display,
+      fontSize: CloudThemeToken.textSizeLarge,
+      fontWeight: FontWeight.Medium
+    })
+    return this.getUIContext().px2vp(textWidthPx) > this.nameBoxWidth ? this.item.name : ''
+  }
+
+  private onNameArea(area: Area): void {
+    this.nameBoxWidth = area.width as number
+  }
+
+  // 名字显示不全时才在卡片上叠一层透明覆盖层挂 bindTips：bindTips 传空串也会弹出一个空泡（MateBook 实测），
+  // 不能直接挂在卡片上按内容开关；覆盖层 HitTestMode.Transparent，点击、长按、右键仍由卡片响应
+  @Builder nameTipLayer(maxLength: number) {
+    if (this.nameTip(maxLength).length > 0) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .position({ x: 0, y: 0 })
+        .hitTestBehavior(HitTestMode.Transparent)
+        .bindTips(this.nameTip(maxLength))
+    }
   }
 
   getDateText(date: string): string {
@@ -174,6 +211,7 @@ export struct ObjectItem {
         Column({ space: CloudThemeToken.objectMetaGap }) {
           Text(this.getDisplayName(item.name, this.showType == ShowType.SHOW_LIST ? 42 : 26))
             .itemFileNameStyle()
+            .onAreaChange((_old: Area, area: Area) => this.onNameArea(area))
 
           Text(this.getDateText(item.date))
             .itemFileDateStyle()
@@ -195,6 +233,8 @@ export struct ObjectItem {
       .height('100%')
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
+
+      this.nameTipLayer(this.showType == ShowType.SHOW_LIST ? 42 : 26)
     }
     .height(this.showType == ShowType.SHOW_LIST ? CloudThemeToken.objectListRowHeight :
     CloudThemeToken.objectGridFolderHeight)
@@ -226,7 +266,7 @@ export struct ObjectItem {
             .draggable(false)
         } else {
           Stack({ alignContent: Alignment.BottomEnd }) {
-            Image(CommonUtil.getFileIconInfo(item.name).icon)
+            Image(this.getItemIcon(item.name, false))
               .width(CloudThemeToken.objectGridFileIconSize)
               .height(CloudThemeToken.objectGridFileIconSize)
               .draggable(false)
@@ -282,11 +322,12 @@ export struct ObjectItem {
       .layoutWeight(1)
       .borderRadius({ topLeft: CloudThemeToken.cardRadius, topRight: CloudThemeToken.cardRadius })
       .backgroundColor(this.hasThumb(item.id) ? CloudThemeToken.surfaceSubtle :
-        CommonUtil.getFileIconInfo(item.name).backgroundColor)
+        FileIcons.tileBackground(this.fileIconTheme, item.name))
 
       Column({ space: CloudThemeToken.objectMetaGap }) {
         Text(this.getDisplayName(item.name, CloudThemeToken.fileNameDisplayMaxLength))
           .itemFileNameStyle()
+          .onAreaChange((_old: Area, area: Area) => this.onNameArea(area))
 
         Text(this.getDateText(item.date))
           .itemFileDateStyle()
@@ -299,6 +340,8 @@ export struct ObjectItem {
       })
       .alignItems(HorizontalAlign.Start)
       .justifyContent(FlexAlign.Center)
+
+      this.nameTipLayer(CloudThemeToken.fileNameDisplayMaxLength)
     }
     .bindContextMenu(this.fileMenu(item), ResponseType.LongPress, {
       preview: MenuPreviewMode.IMAGE,
@@ -335,6 +378,7 @@ export struct ObjectItem {
         Column({ space: CloudThemeToken.objectMetaGap }) {
           Text(this.getDisplayName(item.name, 42))
             .itemFileNameStyle()
+            .onAreaChange((_old: Area, area: Area) => this.onNameArea(area))
 
           Text(this.getFileMetaText(item))
             .itemFileDateStyle()
@@ -352,6 +396,8 @@ export struct ObjectItem {
       .height('100%')
       .alignItems(VerticalAlign.Center)
       .justifyContent(FlexAlign.Start)
+
+      this.nameTipLayer(42)
     }
     .height(CloudThemeToken.objectListRowHeight)
     .padding({ left: CloudThemeToken.objectHorizontalPadding, right: CloudThemeToken.objectHorizontalPadding })

@@ -6,6 +6,9 @@ import { AppSettings } from '../model/AppSettings'
 import { PrivacyConsentStore } from '../model/PrivacyConsentStore'
 import { CloudApi } from '../model/net/CloudApi'
 import { HoldingHandUtil } from '../utils/HoldingHandUtil'
+import {
+  FILE_ICON_PREVIEW_ORDER, FILE_ICON_THEME_LABELS, FILE_ICON_THEMES, FileIconCategory, FileIcons
+} from '../utils/FileIcons'
 import { ActiveAccount } from '../utils/ActiveAccount'
 import { CloudRouter } from '../utils/CloudRouter'
 import { showCloudConfirmDialog } from '../utils/CloudDialogUtil'
@@ -22,6 +25,7 @@ const THEME_MODES: string[] = [Constant.APP_THEME_LIGHT, Constant.APP_THEME_DARK
 const THEME_LABELS: string[] = ['浅色', '深色', '跟随系统']
 const KNOCK_EXPIRE_DAYS: number[] = [1, 7, 30, 0]
 const KNOCK_EXPIRE_LABELS: string[] = ['1 天', '7 天', '30 天', '永久']
+const FILE_ICON_PREVIEW_FALLBACK_COUNT: number = 8
 
 /** 本机设置：所有项行内即改即存，不再弹窗 */
 @Component
@@ -34,6 +38,9 @@ export struct SettingsPage {
   @StorageProp(Constant.SYSTEM_TOP_RECT_HEIGHT) topRectHeight: number = 0
   private scroller: Scroller = new Scroller()
   @State themeIndex: number = 0
+  @State fileIconThemeIndex: number = 0
+  // 文件图标预览条的可用宽度，决定一行放几个图标
+  @State fileIconStripWidth: number = 0
   @State uploadConcurrent: number = Constant.UPLOAD_CONCURRENT_DEFAULT
   @State imageDraggable: boolean = false
   @State imageAiAnalyzer: boolean = true
@@ -46,6 +53,7 @@ export struct SettingsPage {
 
   aboutToAppear(): void {
     this.themeIndex = Math.max(0, THEME_MODES.indexOf(AppSettings.getThemeMode()))
+    this.fileIconThemeIndex = Math.max(0, FILE_ICON_THEMES.indexOf(FileIcons.getTheme()))
     this.uploadConcurrent = AppSettings.getUploadConcurrent()
     this.imageDraggable = AppSettings.getBool(Constant.IMAGE_DRAGGABLE_ENABLED, false)
     this.imageAiAnalyzer = AppSettings.getBool(Constant.IMAGE_AI_ANALYZER_ENABLED, true)
@@ -66,6 +74,11 @@ export struct SettingsPage {
           Column({ space: CloudThemeToken.spacingXl }) {
             SettingSectionTitle({ title: '外观' })
             this.themeGroup()
+          }
+          .width('100%')
+          Column({ space: CloudThemeToken.spacingXl }) {
+            SettingSectionTitle({ title: '文件图标' })
+            this.fileIconGroup()
           }
           .width('100%')
           Column({ space: CloudThemeToken.spacingXl }) {
@@ -122,6 +135,82 @@ export struct SettingsPage {
         }
       })
     }
+  }
+
+  // 文件 / 文件夹图标主题：一行一套，名字 + 一排预览图标；点整张卡即选中，文件页、传输列表、路径选择等即时换图标
+  @Builder fileIconGroup() {
+    SettingGroup() {
+      Column({ space: CloudThemeToken.spacingSection }) {
+        ForEach(FILE_ICON_THEMES, (theme: string, index: number) => {
+          this.fileIconOption(theme, index)
+        }, (theme: string) => theme)
+      }
+      .width('100%')
+      .padding(CloudThemeToken.spacingSection)
+    }
+  }
+
+  @Builder fileIconOption(theme: string, index: number) {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      Column({ space: CloudThemeToken.spacingSection }) {
+        Text(FILE_ICON_THEME_LABELS[index])
+          .fontSize(CloudThemeToken.textSizeLarge)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(index === this.fileIconThemeIndex ? CloudThemeToken.primary : CloudThemeToken.textPrimary)
+        Row() {
+          ForEach(this.fileIconPreviewCategories(), (category: FileIconCategory) => {
+            Image(FileIcons.iconOf(theme, category))
+              .width(CloudThemeToken.fileIconPreviewSize)
+              .height(CloudThemeToken.fileIconPreviewSize)
+              .draggable(false)
+          }, (category: FileIconCategory) => `${theme}-${category}`)
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.SpaceBetween)
+        .onAreaChange((_old: Area, area: Area) => {
+          this.fileIconStripWidth = area.width as number
+        })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding(CloudThemeToken.spacingSection)
+      .borderRadius(CloudThemeToken.controlRadiusLg)
+      .border(index === this.fileIconThemeIndex
+        ? { width: CloudThemeToken.strongLineWidth, color: CloudThemeToken.primary }
+        : { width: CloudThemeToken.lineWidth, color: CloudThemeToken.line })
+      .backgroundColor(index === this.fileIconThemeIndex ? CloudThemeToken.fileIconOptionSelected :
+        CloudThemeToken.transparent)
+
+      if (index === this.fileIconThemeIndex) {
+        Stack() {
+          SymbolGlyph($r('sys.symbol.checkmark'))
+            .fontSize(CloudThemeToken.fileIconOptionCheckGlyphSize)
+            .fontWeight(FontWeight.Bold)
+            .fontColor([CloudThemeToken.onPrimary])
+        }
+        .width(CloudThemeToken.fileIconOptionCheckSize)
+        .height(CloudThemeToken.fileIconOptionCheckSize)
+        .borderRadius(CloudThemeToken.fileIconOptionCheckSize / CloudThemeToken.halfDivisor)
+        .backgroundColor(CloudThemeToken.primary)
+        .translate({ x: CloudThemeToken.fileIconOptionCheckOffset, y: -CloudThemeToken.fileIconOptionCheckOffset })
+      }
+    }
+    .width('100%')
+    .onClick(() => {
+      if (index !== this.fileIconThemeIndex) {
+        this.fileIconThemeIndex = index
+        FileIcons.setTheme(theme)
+      }
+    })
+  }
+
+  // 预览条按实际宽度放尽量多的图标（手机约 8 个，宽屏十几个），放不下的按 FILE_ICON_PREVIEW_ORDER 从后往前截；宽度未量出前先放 8 个
+  private fileIconPreviewCategories(): FileIconCategory[] {
+    const size = CloudThemeToken.fileIconPreviewSize
+    const gap = CloudThemeToken.fileIconPreviewMinGap
+    const fit = this.fileIconStripWidth > 0 ? Math.floor((this.fileIconStripWidth + gap) / (size + gap)) :
+      FILE_ICON_PREVIEW_FALLBACK_COUNT
+    return FILE_ICON_PREVIEW_ORDER.slice(0, Math.max(1, Math.min(fit, FILE_ICON_PREVIEW_ORDER.length)))
   }
 
   @Builder transferGroup() {

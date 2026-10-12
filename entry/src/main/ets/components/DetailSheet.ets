@@ -4,11 +4,13 @@ import { CloudMaterial } from "../model/CloudMaterial"
 import { DetailData } from "../model/DetailData"
 import { CommonUtil } from "../utils/CommonUtil"
 import { DateFormatUtil } from "../utils/DateFormatUtil"
+import { FILE_ICON_THEME_TILE, FileIcons } from "../utils/FileIcons"
 
 @Component
 export struct DetailSheet {
   @Prop detailData: DetailData
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0
+  @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
   /** 点「所在目录」跳过去。搜索结果跨目录，这是从结果回到上下文的入口 */
   onNavigate?: (path: string) => void
 
@@ -55,16 +57,13 @@ export struct DetailSheet {
 
   @Builder summary() {
     Row({ space: CloudThemeToken.detailSheetSummaryGap }) {
-      Stack() {
-        Image(this.detailData.isDir ? $r('app.media.folder_fill') : $r('app.media.ic_doc_text_fill'))
-          .width(CloudThemeToken.detailSheetIconSize)
-          .height(CloudThemeToken.detailSheetIconSize)
-          .objectFit(ImageFit.Contain)
-      }
-      .width(CloudThemeToken.detailSheetIconBoxSize)
-      .height(CloudThemeToken.detailSheetIconBoxSize)
-      .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.primarySoft)
+      // 当前文件图标主题的图标自带底（色块 / 页面），不再外套方框
+      Image(this.detailData.isDir ? FileIcons.folderIcon(this.fileIconTheme) :
+        FileIcons.fileIcon(this.fileIconTheme, this.detailData.name))
+        .width(CloudThemeToken.detailSheetIconBoxSize)
+        .height(CloudThemeToken.detailSheetIconBoxSize)
+        .objectFit(ImageFit.Contain)
+        .draggable(false)
 
       Column({ space: CloudThemeToken.detailSheetTextGap }) {
         Text(this.detailData.name)

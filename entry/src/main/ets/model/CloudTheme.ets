@@ -126,6 +126,13 @@ export class CloudThemeToken {
   // 「我的」存储卡圆环中心「已用」小字
   static readonly storageRingCaptionSize: number = 11
   static readonly settingValueMaxWidth: number = 160
+  // 设置 →「文件图标」主题选项：预览图标尺寸、图标间最小间距、选中角标尺寸与探出卡片的距离
+  static readonly fileIconPreviewSize: number = 30
+  static readonly fileIconPreviewMinGap: number = 8
+  static readonly fileIconOptionCheckSize: number = 20
+  static readonly fileIconOptionCheckGlyphSize: number = 12
+  static readonly fileIconOptionCheckOffset: number = 7
+  static readonly fileIconOptionSelected: ResourceColor = $r('app.color.file_icon_option_selected')
   static readonly settingSectionTitleSize: number = 13
   static readonly settingChipRadius: number = 22
   static readonly settingSegmentHeight: number = 32
@@ -283,7 +290,6 @@ export class CloudThemeToken {
   static readonly detailSheetSummaryGap: number = 12
   static readonly detailSheetSummaryPadding: number = 14
   static readonly detailSheetIconBoxSize: number = 56
-  static readonly detailSheetIconSize: number = 30
   static readonly detailSheetTextGap: number = 6
   static readonly detailSheetListHorizontalPadding: number = 14
   static readonly detailSheetRowGap: number = 16
@@ -547,7 +553,6 @@ export class CloudThemeToken {
   static readonly settingIconAboutBackground: ResourceColor = $r('app.color.setting_icon_about')
   static readonly settingIconPhotoBackupBackground: ResourceColor = $r('app.color.setting_icon_photo_backup_background')
   static readonly settingIconWebJumpBackground: ResourceColor = $r('app.color.icon_web_jump')
-  static readonly fileIconBackground: ResourceColor = $r('app.color.file_icon_background')
   static readonly glassHighlight: ResourceColor = '#8CFFFFFF'
   static readonly floatingShadow: ResourceColor = '#260A59F7'
   static readonly selectedGlow: ResourceColor = '#33115DFC'

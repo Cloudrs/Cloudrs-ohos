@@ -73,10 +73,6 @@
       "value": "#8f8e94"
     },
     {
-      "name": "file_icon_background",
-      "value": "#e9e9eb"
-    },
-    {
       "name": "file_menu_background",
       "value": "#f1f1f3"
     },
@@ -311,6 +307,102 @@
     {
       "name": "cloud_segment_selected",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "file_tile_image",
+      "value": "#EEFAF6"
+    },
+    {
+      "name": "file_tile_video",
+      "value": "#F7F4FE"
+    },
+    {
+      "name": "file_tile_audio",
+      "value": "#FEF2F8"
+    },
+    {
+      "name": "file_tile_pdf",
+      "value": "#FEF2F2"
+    },
+    {
+      "name": "file_tile_word",
+      "value": "#F0F4FE"
+    },
+    {
+      "name": "file_tile_excel",
+      "value": "#EFF9F2"
+    },
+    {
+      "name": "file_tile_ppt",
+      "value": "#FFF5EF"
+    },
+    {
+      "name": "file_tile_archive",
+      "value": "#FCF5EE"
+    },
+    {
+      "name": "file_tile_text",
+      "value": "#F4F5F7"
+    },
+    {
+      "name": "file_tile_code",
+      "value": "#EEF9FD"
+    },
+    {
+      "name": "file_tile_markdown",
+      "value": "#F2F3F4"
+    },
+    {
+      "name": "file_tile_other",
+      "value": "#F8F9FA"
+    },
+    {
+      "name": "file_icon_option_selected",
+      "value": "#F5F8FF"
+    },
+    {
+      "name": "file_tile_app",
+      "value": "#F4F4FE"
+    },
+    {
+      "name": "file_tile_disk",
+      "value": "#EFFAF9"
+    },
+    {
+      "name": "file_tile_font",
+      "value": "#FBF7ED"
+    },
+    {
+      "name": "file_tile_ebook",
+      "value": "#F4F9EE"
+    },
+    {
+      "name": "file_tile_design",
+      "value": "#FCF2FE"
+    },
+    {
+      "name": "file_tile_database",
+      "value": "#EEF7FA"
+    },
+    {
+      "name": "file_tile_config",
+      "value": "#F6F5F5"
+    },
+    {
+      "name": "file_tile_torrent",
+      "value": "#FEF3EE"
+    },
+    {
+      "name": "file_tile_cert",
+      "value": "#FAF3EE"
+    },
+    {
+      "name": "file_tile_subtitle",
+      "value": "#F6F1FE"
+    },
+    {
+      "name": "file_tile_web",
+      "value": "#EDF4F8"
     }
   ]
 }

@@ -326,6 +326,8 @@ class Constant {
   IMAGE_AI_ANALYZER_ENABLED: string = 'image_ai_analyzer_enabled';
   // 智感握姿开关：首选项 key 与 AppStorage 镜像 key 共用，相册页 @StorageProp 实时响应
   SMART_GRIP_ENABLED: string = 'smart_grip_enabled';
+  // 文件图标主题（tile / page / line）：首选项 key 与 AppStorage 镜像 key 共用，切换后各处 @StorageProp 立即刷新
+  FILE_ICON_THEME: string = 'file_icon_theme';
 
   APP_THEME_LIGHT: string = 'light';
 

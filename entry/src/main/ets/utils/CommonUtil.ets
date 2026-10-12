@@ -1,5 +1,4 @@
 
-import { CloudThemeToken } from "../model/CloudTheme";
 import Constant from "../model/Constant";
 import UserPreferences from "../model/UserPreferences";
 import { visionImageAnalyzer } from "@kit.VisionKit";
@@ -24,12 +23,6 @@ export enum FileType {
   MARKDOWN = 'markdown',
   DOCUMENT = 'document',
   UNKNOWN = 'unknown'
-}
-
-export interface FileIconInfo {
-  icon: Resource,
-  color?: Resource,
-  backgroundColor?: ResourceColor,
 }
 
 export class CommonUtil {
@@ -340,127 +333,6 @@ export class CommonUtil {
   /** 判断一组文件名是否全部为图片类型（空数组返回 false）。 */
   static isAllImages(names: string[]): boolean {
     return names.length > 0 && names.every((n: string) => CommonUtil.getFileType(n) === FileType.IMAGE)
-  }
-
-  static getFileIconInfo(fileName: string): FileIconInfo {
-    let fileExtention = CommonUtil.getFileExtention(fileName).toLowerCase()
-    let lowerFileName = fileName.toLowerCase()
-    let fileType = CommonUtil.getFileType(fileName)
-    let fileIconInfo: FileIconInfo = {
-      icon: $r('app.media.mit_file_document'),
-      backgroundColor: CloudThemeToken.fileIconBackground
-    }
-
-    if (lowerFileName === 'dockerfile') {
-      fileIconInfo.icon = $r('app.media.mit_file_docker')
-      return fileIconInfo
-    }
-
-    switch (fileExtention) {
-      case 'js':
-        fileIconInfo.icon = $r('app.media.mit_file_javascript')
-        return fileIconInfo
-      case 'ts':
-      case 'ets':
-        fileIconInfo.icon = $r('app.media.mit_file_typescript')
-        return fileIconInfo
-      case 'html':
-      case 'htm':
-        fileIconInfo.icon = $r('app.media.mit_file_html')
-        return fileIconInfo
-      case 'css':
-      case 'scss':
-      case 'sass':
-        fileIconInfo.icon = $r('app.media.mit_file_css')
-        return fileIconInfo
-      case 'py':
-        fileIconInfo.icon = $r('app.media.mit_file_python')
-        return fileIconInfo
-      case 'java':
-        fileIconInfo.icon = $r('app.media.mit_file_java')
-        return fileIconInfo
-      case 'kt':
-      case 'kts':
-        fileIconInfo.icon = $r('app.media.mit_file_kotlin')
-        return fileIconInfo
-      case 'go':
-        fileIconInfo.icon = $r('app.media.mit_file_go')
-        return fileIconInfo
-      case 'rs':
-        fileIconInfo.icon = $r('app.media.mit_file_rust')
-        return fileIconInfo
-      case 'ps1':
-        fileIconInfo.icon = $r('app.media.mit_file_powershell')
-        return fileIconInfo
-      case 'c':
-      case 'h':
-        fileIconInfo.icon = $r('app.media.mit_file_c')
-        return fileIconInfo
-      case 'cpp':
-      case 'hpp':
-      case 'cc':
-      case 'cxx':
-        fileIconInfo.icon = $r('app.media.mit_file_cpp')
-        return fileIconInfo
-      case 'cs':
-        fileIconInfo.icon = $r('app.media.mit_file_csharp')
-        return fileIconInfo
-    }
-
-    switch (fileType) {
-      case FileType.IMAGE:
-        fileIconInfo.icon = $r('app.media.mit_file_image')
-        break;
-      case FileType.VIDEO:
-        fileIconInfo.icon = $r('app.media.mit_file_video')
-        break;
-      case FileType.MUSIC:
-        fileIconInfo.icon = $r('app.media.mit_file_audio')
-        break;
-      case FileType.WORD:
-        fileIconInfo.icon = $r('app.media.mit_file_word')
-        break;
-      case FileType.EXCEL:
-        fileIconInfo.icon = $r('app.media.mit_file_table')
-        break;
-      case FileType.PPT:
-        fileIconInfo.icon = $r('app.media.mit_file_powerpoint')
-        break;
-      case FileType.TXT:
-      case FileType.DOCUMENT:
-        fileIconInfo.icon = $r('app.media.mit_file_document')
-        break;
-      case FileType.COMPRESSED:
-        fileIconInfo.icon = $r('app.media.mit_file_zip')
-        break;
-      case FileType.XML:
-        fileIconInfo.icon = $r('app.media.mit_file_xml')
-        break;
-      case FileType.JSON:
-        fileIconInfo.icon = $r('app.media.mit_file_json')
-        break;
-      case FileType.YAML:
-        fileIconInfo.icon = $r('app.media.mit_file_yaml')
-        break;
-      case FileType.TOML:
-      case FileType.CONF:
-        fileIconInfo.icon = $r('app.media.mit_file_settings')
-        break;
-      case FileType.PDF:
-        fileIconInfo.icon = $r('app.media.mit_file_pdf')
-        break;
-      case FileType.DB:
-        fileIconInfo.icon = $r('app.media.mit_file_database')
-        break;
-      case FileType.CODE:
-        fileIconInfo.icon = $r('app.media.mit_file_settings')
-        break;
-      case FileType.MARKDOWN:
-        fileIconInfo.icon = $r('app.media.mit_file_markdown')
-        break;
-    }
-
-    return fileIconInfo
   }
 
   static getDaysDifference(date1: Date, date2: Date): number {

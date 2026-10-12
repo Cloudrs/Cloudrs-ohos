@@ -10,6 +10,7 @@ import { DirectoryInfo, DirFileInfo, ObjectInfo } from "../model/net/ApiTypes";
 import { CloudApi } from "../model/net/CloudApi";
 import { showToast, showToastTips, ToastType } from "../utils/ToastUtil";
 import { ApiErrorUtil, NETWORK_ERROR_MESSAGE } from "../utils/ApiErrorUtil";
+import { FILE_ICON_THEME_TILE, FileIcons } from "../utils/FileIcons";
 
 const TAG: string = 'PathSelectSheet'
 
@@ -18,13 +19,13 @@ export struct PathSelectSheet {
   @Prop title: ResourceStr
   @Prop filterDirId: string
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
+  @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
   @State currentPath: string = ''
   @State isLoading: boolean = false
   @State loadFailed: boolean = false
   onClose?: (isFinished: boolean, path?: string) => void
 
   private scroller: Scroller = new Scroller()
-  private normalIcon: Resource = $r('app.media.ic_folder_fill');
   private downIcon: Resource = $r('app.media.ic_chevron_down');
   private rightIcon: Resource = $r('app.media.ic_chevron_right');
   @State allDirs: Map<string, ObjectInfo[]> = new Map()
@@ -260,10 +261,9 @@ export struct PathSelectSheet {
   @Builder dirItem(item: ObjectInfo) {
     Column() {
       Row({ space: CloudThemeToken.pathItemGap }) {
-        Image(this.normalIcon)
+        Image(FileIcons.folderIcon(this.fileIconTheme))
           .width(CloudThemeToken.pathFolderIconSize)
           .height(CloudThemeToken.pathFolderIconSize)
-          .fillColor(CloudThemeToken.primary)
           .draggable(false)
 
         Row({ space: CloudThemeToken.pathItemNameGap }) {

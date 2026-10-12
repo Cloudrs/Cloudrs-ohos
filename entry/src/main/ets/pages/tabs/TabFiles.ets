@@ -61,6 +61,7 @@ import { harmonyShare, systemShare } from "@kit.ShareKit";
 import { KnockShareUtil } from "../../utils/KnockShareUtil";
 import { FileThumbSourceCache } from "../../utils/FileThumbSourceCache";
 import { FileGridLayout } from "../../utils/FileGridLayout";
+import { FILE_ICON_THEME_TILE, FileIcons } from "../../utils/FileIcons";
 
 const TAG = 'TabFiles';
 const INPUT_SHEET_TEXT_ID = 'tabFilesInputSheetText';
@@ -265,6 +266,7 @@ export struct TabFiles {
   // 智感握姿：上传 FAB 默认在右下，识别到左手握持换到左下；只在「文件页可见 + 前台 + 开关打开」时订阅
   @StorageProp(Constant.APP_IN_FOREGROUND) @Watch('syncHoldingHand') appInForeground: boolean = true;
   @StorageProp(Constant.SMART_GRIP_ENABLED) @Watch('syncHoldingHand') smartGripEnabled: boolean = true;
+  @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
   @State fabSide: GripSide = GripSide.RIGHT;
   // FAB 所在容器宽度，换到左侧时据此算横移距离
   @State fabAreaWidth: number = 0;
@@ -3381,18 +3383,13 @@ export struct TabFiles {
 
   @Builder shareTargetSummary() {
     Row({ space: CloudThemeToken.detailSheetSummaryGap }) {
-      Stack() {
-        Image(this.shareTarget?.type === Constant.OBJECT_DIR_TYPE ? $r('app.media.folder_fill') :
-        CommonUtil.getFileIconInfo(this.shareTarget?.name ?? '').icon)
-          .width(CloudThemeToken.detailSheetIconSize)
-          .height(CloudThemeToken.detailSheetIconSize)
-          .objectFit(ImageFit.Contain)
-          .draggable(false)
-      }
-      .width(CloudThemeToken.detailSheetIconBoxSize)
-      .height(CloudThemeToken.detailSheetIconBoxSize)
-      .borderRadius(CloudThemeToken.cardRadius)
-      .backgroundColor(CloudThemeToken.primarySoft)
+      // 当前文件图标主题的图标自带底（色块 / 页面），不再外套方框
+      Image(this.shareTarget?.type === Constant.OBJECT_DIR_TYPE ? FileIcons.folderIcon(this.fileIconTheme) :
+        FileIcons.fileIcon(this.fileIconTheme, this.shareTarget?.name ?? ''))
+        .width(CloudThemeToken.detailSheetIconBoxSize)
+        .height(CloudThemeToken.detailSheetIconBoxSize)
+        .objectFit(ImageFit.Contain)
+        .draggable(false)
 
       Column({ space: CloudThemeToken.detailSheetTextGap }) {
         Text(this.shareTarget?.name ?? '')

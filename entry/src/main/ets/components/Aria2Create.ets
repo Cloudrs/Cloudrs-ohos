@@ -6,6 +6,7 @@ import { CloudMaterial } from "../model/CloudMaterial";
 import { PathSelectSheet } from "./PathSelectSheet";
 import { showToastTips, ToastType } from "../utils/ToastUtil";
 import AppLogger from "../utils/AppLogger";
+import { FILE_ICON_THEME_TILE, FileIcons } from "../utils/FileIcons";
 
 const TAG: string = 'Aria2Create'
 
@@ -13,6 +14,7 @@ const TAG: string = 'Aria2Create'
 export struct Aria2Create {
   @StorageProp(Constant.NAV_BOTTOM_RECT_HEIGHT) bottomRectHeight: number = 0;
   @StorageProp(Constant.WINDOW_WIDTH_VP) sheetLayoutWidth: number = 0;
+  @StorageProp(Constant.FILE_ICON_THEME) fileIconTheme: string = FILE_ICON_THEME_TILE
   @State inputUrls: string = ''
   @State path: string|undefined = undefined
   @State isShowPathSelect: boolean = false
@@ -67,10 +69,10 @@ export struct Aria2Create {
         })
 
       Row({ space: CloudThemeToken.aria2PathGap }) {
-        Image($r('app.media.ic_folder_fill'))
+        Image(FileIcons.folderIcon(this.fileIconTheme))
           .width(CloudThemeToken.aria2PathIconSize)
           .height(CloudThemeToken.aria2PathIconSize)
-          .fillColor(CloudThemeToken.primary)
+          .draggable(false)
 
         Text(this.path == undefined ? $r('app.string.aria2_path_select') : this.path)
           .fontColor(CloudThemeToken.textPrimary)

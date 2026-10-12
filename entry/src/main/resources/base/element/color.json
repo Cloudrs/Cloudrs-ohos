@@ -403,6 +403,10 @@
     {
       "name": "file_tile_web",
       "value": "#EDF4F8"
+    },
+    {
+      "name": "file_tile_windows",
+      "value": "#EDF6FC"
     }
   ]
 }

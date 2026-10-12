@@ -28,7 +28,8 @@ export enum FileIconCategory {
   TORRENT = 20,
   CERT = 21,
   SUBTITLE = 22,
-  WEB = 23
+  WEB = 23,
+  WINDOWS = 24
 }
 
 export const FILE_ICON_THEME_TILE: string = 'tile'
@@ -43,7 +44,7 @@ export const FILE_ICON_PREVIEW_ORDER: FileIconCategory[] = [
   FileIconCategory.FOLDER, FileIconCategory.IMAGE, FileIconCategory.VIDEO, FileIconCategory.AUDIO,
   FileIconCategory.PDF, FileIconCategory.WORD, FileIconCategory.EXCEL, FileIconCategory.ARCHIVE,
   FileIconCategory.PPT, FileIconCategory.TEXT, FileIconCategory.CODE, FileIconCategory.MARKDOWN,
-  FileIconCategory.APP, FileIconCategory.DISK, FileIconCategory.EBOOK, FileIconCategory.DESIGN,
+  FileIconCategory.APP, FileIconCategory.WINDOWS, FileIconCategory.DISK, FileIconCategory.EBOOK, FileIconCategory.DESIGN,
   FileIconCategory.DATABASE, FileIconCategory.CONFIG, FileIconCategory.FONT, FileIconCategory.WEB,
   FileIconCategory.SUBTITLE, FileIconCategory.TORRENT, FileIconCategory.CERT, FileIconCategory.OTHER
 ]
@@ -154,6 +155,10 @@ const FILE_ICON_SETS: FileIconSet[] = [
   { // WEB
     tile: $r('app.media.ic_ft_tile_web'), page: $r('app.media.ic_ft_page_web'),
     line: $r('app.media.ic_ft_line_web'), tileBackground: $r('app.color.file_tile_web')
+  },
+  { // WINDOWS
+    tile: $r('app.media.ic_ft_tile_windows'), page: $r('app.media.ic_ft_page_windows'),
+    line: $r('app.media.ic_ft_line_windows'), tileBackground: $r('app.color.file_tile_windows')
   }
 ]
 
@@ -216,8 +221,13 @@ const EXTENSION_GROUPS: CategoryGroup[] = [
   },
   {
     category: FileIconCategory.APP,
-    keys: ['apk', 'apks', 'xapk', 'aab', 'hap', 'app', 'ipa', 'exe', 'msi', 'msix', 'msixbundle', 'appx',
-      'appxbundle', 'dmg', 'pkg', 'deb', 'rpm', 'appimage', 'run', 'snap', 'flatpak']
+    keys: ['apk', 'apks', 'xapk', 'aab', 'hap', 'app', 'ipa', 'dmg', 'pkg', 'deb', 'rpm', 'appimage', 'run', 'snap',
+      'flatpak']
+  },
+  {
+    // Windows 程序单独一类：exe 与 msi / msix / appx 安装包同一个图标
+    category: FileIconCategory.WINDOWS,
+    keys: ['exe', 'msi', 'msix', 'msixbundle', 'appx', 'appxbundle']
   },
   {
     category: FileIconCategory.DISK,

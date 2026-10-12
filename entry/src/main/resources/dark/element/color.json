@@ -255,6 +255,10 @@
     {
       "name": "file_tile_web",
       "value": "#1D2A34"
+    },
+    {
+      "name": "file_tile_windows",
+      "value": "#192835"
     }
   ]
 }

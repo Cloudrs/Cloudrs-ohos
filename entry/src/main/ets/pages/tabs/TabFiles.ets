@@ -919,7 +919,12 @@ export struct TabFiles {
   // FAB 底部 margin：手机端浮在底部 tab bar 之上 + 间距；wide 端无 tab bar，靠 safe area 即可
   getFabBottomMargin(): number {
     const bp = CloudThemeToken.getBreakpoint(this.sheetLayoutWidth)
-    if (this.isMultiSelectMode || CloudThemeToken.isWideBreakpoint(bp)) {
+    if (CloudThemeToken.isWideBreakpoint(bp)) {
+      // 宽屏：底边与左侧侧栏的账号卡齐平（同为 spacingCard）。手势导航条在屏幕底部正中，
+      // 碰不到靠边的按钮，不必再让出它的高度
+      return CloudThemeToken.spacingCard
+    }
+    if (this.isMultiSelectMode) {
       return this.bottomRectHeight + CloudThemeToken.spacingPage
     }
     return this.bottomRectHeight + CloudThemeToken.hdsTabBarBottomMargin +

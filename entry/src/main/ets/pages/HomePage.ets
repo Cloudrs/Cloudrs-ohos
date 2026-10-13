@@ -441,7 +441,8 @@ export struct HomePage {
       top: this.isTouchSideBar() ? this.statusBarInset() : CloudThemeToken.zero,
       left: CloudThemeToken.spacingCard,
       right: CloudThemeToken.spacingCard,
-      bottom: this.bottomRectHeight + CloudThemeToken.spacingCard
+      // 底部不让手势导航条：导航条在屏幕底部正中，碰不到左侧侧栏，让了反而在账号卡下面空出一大截
+      bottom: CloudThemeToken.spacingCard
     })
     .alignItems(HorizontalAlign.Start)
     .backgroundColor(CloudThemeToken.background)

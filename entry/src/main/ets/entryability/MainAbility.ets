@@ -277,7 +277,8 @@ export default class MainAbility extends UIAbility {
       const cfg = rm.getOverrideConfiguration()
       cfg.colorMode = (isDark ?? AppSettings.isDarkEffective(this.context))
         ? resourceManager.ColorMode.DARK : resourceManager.ColorMode.LIGHT
-      const argb = rm.getOverrideResourceManager(cfg).getColorSync($r('app.color.cloud_background'))
+      // getColorSync(Resource) 已废弃，改用资源 id 的重载
+      const argb = rm.getOverrideResourceManager(cfg).getColorSync($r('app.color.cloud_background').id)
       const color = '#' + (argb >>> 0).toString(16).padStart(8, '0').toUpperCase()
       win.setWindowBackgroundColor(color)
       win.setWindowContainerColor(color, color)

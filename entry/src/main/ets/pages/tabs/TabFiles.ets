@@ -2333,7 +2333,12 @@ export struct TabFiles {
       return
     }
     this.fileConflictDialogId = -1
-    this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
+    // 弹窗已被系统关掉（返回手势、页面销毁等）时 closeCustomDialog 会同步抛错，不捕获会直接闪退
+    try {
+      this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
+    } catch (err) {
+      AppLogger.warn(TAG, `close conflict dialog failed: ${(err as BusinessError).code ?? err}`)
+    }
   }
 
   /** 窄屏留边，宽屏封顶，避免平板上拉成一条 */
@@ -4439,7 +4444,12 @@ export struct TabFiles {
       return
     }
     this.occupiedDialogId = -1
-    this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
+    // 同 closeFileConflictDialog：弹窗可能已被系统关掉，同步抛错要接住
+    try {
+      this.getUIContext().getPromptAction().closeCustomDialog(dialogId)
+    } catch (err) {
+      AppLogger.warn(TAG, `close occupied dialog failed: ${(err as BusinessError).code ?? err}`)
+    }
   }
 
   private async relieveLocksAndRetry(summary: UploadSessionSummary, filePaths: string[],

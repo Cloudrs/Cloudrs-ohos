@@ -534,6 +534,12 @@ export struct TabRemoteDown {
     return item.info?.gid ?? ''
   }
 
+  // 列表 key 用的任务标识：优先 gid，取不到才退回「名字 + 下标」
+  private downloadingTaskId(item: Aria2Downloading, index: number): string {
+    const gid = this.getDownloadingGid(item)
+    return gid.length > 0 ? gid : `${item.name}-${index}`
+  }
+
   cancelTaskConfirm(item: Aria2Downloading) {
     const gid = this.getDownloadingGid(item)
     if (gid.length === 0) {
@@ -902,11 +908,14 @@ export struct TabRemoteDown {
         this.noTask($r('app.string.no_download_task'))
       }
     } else {
+      // key 要唯一且随进度变化：普通对象的条目 key 不变就不会重绘，进度会停在第一次的值；
+      // 只用「名字 + 下标」时，同名任务在前面插入 / 移除后还会串到别的任务上
       ForEach(this.aria2Downloading, (item: Aria2Downloading, index) => {
         GridItem(){
           this.downloadingItem(item)
         }
-      }, (item: Aria2Downloading, index:number) => item.name + index)
+      }, (item: Aria2Downloading, index: number) =>
+        `${this.downloadingTaskId(item, index)}-${item.status}-${item.downloaded}-${item.total}-${item.speed}`)
     }
   }
 
@@ -916,11 +925,13 @@ export struct TabRemoteDown {
         this.noTask($r('app.string.no_finished_task'))
       }
     } else {
+      // 用任务 id 做 key：「名字 + 下标」在同名任务前面插入新任务后会撞上旧 key，
+      // 条目被原样复用，显示成别的任务的保存路径
       LazyForEach(this.aria2FinishedSource, (item: Aria2Finished, index) => {
         GridItem() {
           this.finishedItem(index, item)
         }
-      }, (item: Aria2Finished, index:number) => item.name + index)
+      }, (item: Aria2Finished, index: number) => item.gid.length > 0 ? item.gid : `${item.name}-${index}`)
       this.listEndFooter(false)
     }
   }

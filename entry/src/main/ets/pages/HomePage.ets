@@ -277,15 +277,25 @@ export struct HomePage {
       CloudThemeToken.sideNavWidthLg, CloudThemeToken.sideNavWidthXl).getValue(this.currentBreakpoint())
   }
 
+  // 宽屏侧栏是否按触屏（平板 / 大屏折叠屏）排：顶部要让出状态栏，导航行用触屏尺寸。
+  // 2in1 隐藏了系统标题栏，品牌行就在窗口最顶上并兼作拖动区，导航行用紧凑行高
+  private isTouchSideBar(): boolean {
+    return deviceInfo.deviceType !== '2in1'
+  }
+
+  // 状态栏占的高度：2in1 装饰条已隐藏 topRectHeight=0；
+  // 平板/折叠屏 setWindowLayoutFullScreen 后 topRectHeight 是 status bar 高度，给个保底（~28vp）防它没生效
+  private statusBarInset(): number {
+    if (deviceInfo.deviceType === '2in1') {
+      return this.topRectHeight
+    }
+    return Math.max(this.topRectHeight, CloudThemeToken.statusBarFallbackHeight)
+  }
+
   // 控制按钮 top：避开状态栏区。
-  // 2in1 装饰条已隐藏 topRectHeight=0；
-  // 平板/折叠屏 setWindowLayoutFullScreen 后 topRectHeight 是 status bar 高度，给个保底（~28vp）防它没生效。
   // 偏移取 spacingCard 让按钮垂直中心与标题栏的返回/菜单按钮一致（实测中心线对齐）
   private controlButtonTop(): number {
-    if (deviceInfo.deviceType === '2in1') {
-      return this.topRectHeight + CloudThemeToken.spacingCard
-    }
-    return Math.max(this.topRectHeight, CloudThemeToken.statusBarFallbackHeight) + CloudThemeToken.spacingCard
+    return this.statusBarInset() + CloudThemeToken.spacingCard
   }
 
   @SuppressWarnings({ rules: [SuppressWarningsType.COMPATIBILITY] })
@@ -413,7 +423,7 @@ export struct HomePage {
           bottom: CloudThemeToken.spacingSm
         })
 
-      Column({ space: CloudThemeToken.sideNavRowGap }) {
+      Column({ space: this.isTouchSideBar() ? CloudThemeToken.sideNavRowGapTouch : CloudThemeToken.sideNavRowGap }) {
         ForEach(TabList, (tab: TabItem) => {
           this.sideNavItem(tab)
         }, (tab: TabItem) => `sideNav-${tab.tabId}`)
@@ -427,6 +437,8 @@ export struct HomePage {
     .width('100%')
     .height('100%')
     .padding({
+      // 平板 / 折叠屏顶部是状态栏：品牌行排在它下面，与内容区标题行、浮在右端的折叠键同高对齐
+      top: this.isTouchSideBar() ? this.statusBarInset() : CloudThemeToken.zero,
       left: CloudThemeToken.spacingCard,
       right: CloudThemeToken.spacingCard,
       bottom: this.bottomRectHeight + CloudThemeToken.spacingCard
@@ -522,14 +534,14 @@ export struct HomePage {
             CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .draggable(false)
         Text(tab.text)
-          .fontSize(CloudThemeToken.textSizeBody)
+          .fontSize(this.isTouchSideBar() ? CloudThemeToken.textSizeLarge : CloudThemeToken.textSizeBody)
           .fontColor(this.currentIndex === tab.tabId ?
             CloudThemeToken.primary : CloudThemeToken.textPrimary)
           .fontWeight(this.currentIndex === tab.tabId ? FontWeight.Medium : FontWeight.Regular)
           .layoutWeight(1)
       }
       .width('100%')
-      .height(CloudThemeToken.sideNavRowHeight)
+      .height(this.isTouchSideBar() ? CloudThemeToken.sideNavRowHeightTouch : CloudThemeToken.sideNavRowHeight)
       .padding({
         left: CloudThemeToken.spacingSection,
         right: CloudThemeToken.spacingSection

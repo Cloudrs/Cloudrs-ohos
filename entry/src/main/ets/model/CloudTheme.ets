@@ -637,6 +637,9 @@ export class CloudThemeToken {
   static readonly sideNavRowHeight: number = 40
   static readonly sideNavRowRadius: number = 10
   static readonly sideNavRowGap: number = 2
+  // 平板 / 大屏折叠屏（触屏）用同一套侧栏结构，导航行加高、文字用 textSizeLarge，手指点着更稳
+  static readonly sideNavRowHeightTouch: number = 48
+  static readonly sideNavRowGapTouch: number = 4
   static readonly sideNavLogoSize: number = 24
   static readonly sideNavItemHeight: number = 56
   static readonly sideNavItemRadius: number = 14
